@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +57,7 @@ fun PlayerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
+    var showSpeedDialog by remember { mutableStateOf(false) }
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -152,9 +156,67 @@ fun PlayerScreen(
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", modifier = Modifier.size(40.dp))
                 }
             }
+
+            TextButton(
+                onClick = { showSpeedDialog = true },
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text("Speed  ${formatSpeed(state.playbackSpeed)}×")
+            }
         }
     }
+
+    if (showSpeedDialog) {
+        SpeedDialog(
+            current = state.playbackSpeed,
+            onSelect = {
+                viewModel.setSpeed(it)
+                showSpeedDialog = false
+            },
+            onDismiss = { showSpeedDialog = false },
+        )
+    }
 }
+
+@Composable
+private fun SpeedDialog(
+    current: Float,
+    onSelect: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val presets = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Playback speed") },
+        text = {
+            Column {
+                presets.forEach { preset ->
+                    val selected = abs(preset - current) < 0.001f
+                    TextButton(
+                        onClick = { onSelect(preset) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "${formatSpeed(preset)}×",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Trims trailing zeros: 1.0 -> "1", 1.25 -> "1.25", 1.5 -> "1.5". */
+private fun formatSpeed(speed: Float): String =
+    "%.2f".format(speed).trimEnd('0').trimEnd('.')
 
 @Composable
 private fun PositionSlider(

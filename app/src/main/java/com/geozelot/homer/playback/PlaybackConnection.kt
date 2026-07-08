@@ -9,6 +9,8 @@ import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
+import com.geozelot.homer.data.settings.PlaybackSettings
+import kotlinx.coroutines.flow.first
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,7 @@ data class PlaybackUiState(
     val chapterCount: Int = 0,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val playbackSpeed: Float = 1f,
     /** Book-level cover (WebDAV URL string or a cached File), stable across chapters. */
     val coverModel: Any? = null,
     /** Embedded artwork parsed from the current file — fallback before a cover is cached. */
@@ -50,6 +53,7 @@ class PlaybackConnection @Inject constructor(
     private val playlistResolver: PlaylistResolver,
     private val playbackStateDao: PlaybackStateDao,
     private val durationEnricher: DurationEnricher,
+    private val playbackSettings: PlaybackSettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
@@ -97,6 +101,12 @@ class PlaybackConnection @Inject constructor(
         if (c.isPlaying) c.pause() else c.play()
     }
 
+    /** Sets playback speed and remembers it as the global default. */
+    fun setSpeed(speed: Float) {
+        controller?.setPlaybackSpeed(speed)
+        scope.launch { playbackSettings.setSpeed(speed) }
+    }
+
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
     }
@@ -118,6 +128,8 @@ class PlaybackConnection @Inject constructor(
                 val c = future.get()
                 controller = c
                 c.addListener(listener)
+                // Apply the persisted global speed to this session.
+                scope.launch { c.setPlaybackSpeed(playbackSettings.speed.first()) }
                 startPositionUpdates()
                 pushState()
                 cont.resume(c)
@@ -171,6 +183,7 @@ class PlaybackConnection @Inject constructor(
             chapterCount = c.mediaItemCount,
             positionMs = c.currentPosition.coerceAtLeast(0L),
             durationMs = c.duration.coerceAtLeast(0L),
+            playbackSpeed = c.playbackParameters.speed,
             coverModel = currentCoverModel,
             artworkData = if (currentCoverModel == null) metadata.artworkData else null,
         )
