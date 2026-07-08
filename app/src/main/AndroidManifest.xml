@@ -4,6 +4,11 @@
     <!-- WebDAV over HTTPS. Cleartext is disabled below (locked decision). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Background audio playback + its media notification. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ package visibility: resolve a browser / Custom Tabs provider
          for the Login Flow v2 web step. -->
     <queries>
@@ -34,6 +39,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Media3 playback service. Exported so system media controllers and
+             Android Auto can bind to it. -->
+        <service
+            android:name=".playback.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
 
     </application>
 
