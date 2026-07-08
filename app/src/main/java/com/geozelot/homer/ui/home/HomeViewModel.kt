@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -25,7 +26,7 @@ data class BookListItem(
     val author: String?,
     val isMultiFile: Boolean,
     val fileCount: Int,
-    val coverUrl: String?,
+    val coverModel: Any?,
 )
 
 @HiltViewModel
@@ -46,9 +47,7 @@ class HomeViewModel @Inject constructor(
                     author = book.author,
                     isMultiFile = book.isMultiFile,
                     fileCount = book.fileCount,
-                    coverUrl = book.coverFilePath?.let { path ->
-                        credentials?.let { webDavClient.urlFor(it, path).toString() }
-                    },
+                    coverModel = BookCover.model(book, credentials, webDavClient),
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

@@ -2,6 +2,7 @@ package com.geozelot.homer.data.library
 
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.metadata.CoverEnricher
 import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,7 @@ import javax.inject.Singleton
 class LibraryRepository @Inject constructor(
     private val scanner: LibraryScanner,
     private val librarySettings: LibrarySettings,
+    private val coverEnricher: CoverEnricher,
     bookDao: BookDao,
 ) {
     val books: Flow<List<BookEntity>> = bookDao.observeAll()
@@ -41,6 +43,8 @@ class LibraryRepository @Inject constructor(
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
             _scanState.value = ScanState.Done(result.bookCount)
+            // Fill in embedded covers for books without a folder image (background).
+            coverEnricher.enrichMissingCovers()
         } catch (e: CancellationException) {
             _scanState.value = ScanState.Idle
             throw e

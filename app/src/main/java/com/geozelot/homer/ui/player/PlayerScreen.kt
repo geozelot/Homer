@@ -86,7 +86,7 @@ fun PlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CoverImage(
-                model = state.coverUrl ?: state.artworkData,
+                model = state.coverModel ?: state.artworkData,
                 modifier = Modifier
                     .padding(bottom = 24.dp)
                     .size(240.dp)

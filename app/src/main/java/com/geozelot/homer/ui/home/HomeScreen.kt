@@ -117,7 +117,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CoverImage(
-                            model = book.coverUrl,
+                            model = book.coverModel,
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(6.dp)),

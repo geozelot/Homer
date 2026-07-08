@@ -32,8 +32,9 @@ data class PlaybackUiState(
     val chapterCount: Int = 0,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
-    val coverUrl: String? = null,
-    /** Embedded artwork the player parsed from the stream (fallback when no coverUrl). */
+    /** Book-level cover (WebDAV URL string or a cached File), stable across chapters. */
+    val coverModel: Any? = null,
+    /** Embedded artwork parsed from the current file — fallback before a cover is cached. */
     val artworkData: ByteArray? = null,
 )
 
@@ -51,7 +52,7 @@ class PlaybackConnection @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
     private var currentBookId: String? = null
-    private var currentCoverUrl: String? = null
+    private var currentCoverModel: Any? = null
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -74,7 +75,7 @@ class PlaybackConnection @Inject constructor(
             }
             val playlist = playlistResolver.resolve(bookId) ?: return@launch
             currentBookId = bookId
-            currentCoverUrl = playlist.coverUrl
+            currentCoverModel = playlist.coverModel
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {
@@ -166,8 +167,8 @@ class PlaybackConnection @Inject constructor(
             chapterCount = c.mediaItemCount,
             positionMs = c.currentPosition.coerceAtLeast(0L),
             durationMs = c.duration.coerceAtLeast(0L),
-            coverUrl = currentCoverUrl,
-            artworkData = if (currentCoverUrl == null) metadata.artworkData else null,
+            coverModel = currentCoverModel,
+            artworkData = if (currentCoverModel == null) metadata.artworkData else null,
         )
     }
 }
