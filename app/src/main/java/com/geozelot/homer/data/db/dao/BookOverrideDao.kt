@@ -12,6 +12,9 @@ interface BookOverrideDao {
     @Query("SELECT * FROM book_overrides")
     fun observeAll(): Flow<List<BookOverrideEntity>>
 
+    @Query("SELECT * FROM book_overrides")
+    suspend fun getAll(): List<BookOverrideEntity>
+
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     suspend fun findById(bookId: String): BookOverrideEntity?
 

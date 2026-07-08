@@ -4,9 +4,11 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.PreconditionFailedException
@@ -22,11 +24,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Reconciles resume positions and bookmarks with the central `.homer` manifest for
- * cross-device sync. One [sync] pass merges the remote manifest and local Room state:
- * the position and the bookmark list are each reconciled by last-write-wins on their own
- * timestamp (SCOPE D3), remote-newer data flows into Room, and the merged result is written
- * back under ETag optimistic concurrency (retry on conflict; final attempt unconditional).
+ * Reconciles resume positions, bookmarks and metadata overrides with the central `.homer`
+ * manifest for cross-device sync. One [sync] pass merges the remote manifest and local Room
+ * state: the position, the bookmark list and the override are each reconciled by
+ * last-write-wins on their own timestamp (SCOPE D3), remote-newer data flows into Room, and
+ * the merged result is written back under ETag optimistic concurrency (retry on conflict;
+ * final attempt unconditional).
  *
  * Bookmark ties (equal timestamps — notably pre-sync bookmarks at ts 0) union both sides so
  * nothing is dropped; a genuine concurrent edit still resolves last-write-wins.
@@ -40,6 +43,7 @@ class HomerSyncRepository @Inject constructor(
     private val playbackStateDao: PlaybackStateDao,
     private val bookmarkDao: BookmarkDao,
     private val bookmarkMetaDao: BookmarkMetaDao,
+    private val bookOverrideDao: BookOverrideDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
     private val json: Json,
@@ -83,13 +87,15 @@ class HomerSyncRepository @Inject constructor(
             val localPos = playbackStateDao.getAll().associateBy { it.bookId }
             val localBookmarks = bookmarkDao.getAll().groupBy { it.bookId }
             val localBmTs = bookmarkMetaDao.getAll().associate { it.bookId to it.updatedAt }
+            val localOverrides = bookOverrideDao.getAll().associateBy { it.bookId }
             Log.i(TAG, "remote=${remoteIndex.books.size} books (etag=${remoteEtag ?: "none"}), local=${localPos.size} positions")
 
             val merged = LinkedHashMap<String, HomerBookState>()
             val positionPulls = mutableListOf<PlaybackStateEntity>()
             val bookmarkPulls = mutableListOf<Triple<String, Long, List<HomerBookmark>>>()
+            val overridePulls = mutableListOf<BookOverrideEntity>()
 
-            for (id in remoteIndex.books.keys + localPos.keys + localBookmarks.keys) {
+            for (id in remoteIndex.books.keys + localPos.keys + localBookmarks.keys + localOverrides.keys) {
                 val remote = remoteIndex.books[id]
 
                 // --- position: LWW on updatedAt ---
@@ -132,7 +138,19 @@ class HomerSyncRepository @Inject constructor(
                     }
                 }
 
-                merged[id] = HomerBookState(posMediaId, posMs, posTs, winnerList, winnerTs)
+                // --- override: LWW on updatedAt ---
+                val localOv = localOverrides[id]
+                val remoteOv = remote?.override
+                val winnerOv: HomerOverride? = when {
+                    remoteOv != null && (localOv == null || remoteOv.updatedAt > localOv.updatedAt) -> {
+                        overridePulls += remoteOv.toEntity(id)
+                        remoteOv
+                    }
+                    localOv != null -> localOv.toHomer()
+                    else -> null
+                }
+
+                merged[id] = HomerBookState(posMediaId, posMs, posTs, winnerList, winnerTs, winnerOv)
             }
 
             // Bring Room forward where the manifest knows more.
@@ -142,8 +160,9 @@ class HomerSyncRepository @Inject constructor(
                 bookmarkDao.insertAll(list.map { it.toEntity(bookId) })
                 bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, ts))
             }
-            if (positionPulls.isNotEmpty() || bookmarkPulls.isNotEmpty()) {
-                Log.i(TAG, "pulled ${positionPulls.size} positions, ${bookmarkPulls.size} bookmark sets")
+            overridePulls.forEach { bookOverrideDao.upsert(it) }
+            if (positionPulls.isNotEmpty() || bookmarkPulls.isNotEmpty() || overridePulls.isNotEmpty()) {
+                Log.i(TAG, "pulled ${positionPulls.size} positions, ${bookmarkPulls.size} bookmark sets, ${overridePulls.size} overrides")
             }
 
             // Push only when we'd actually change what the server has.
@@ -206,4 +225,25 @@ private fun HomerBookmark.toEntity(bookId: String) =
         positionMs = positionMs,
         label = label,
         createdAt = createdAt,
+    )
+
+private fun BookOverrideEntity.toHomer() =
+    HomerOverride(
+        title = title,
+        author = author,
+        series = series,
+        seriesIndex = seriesIndex,
+        hidden = hidden,
+        updatedAt = updatedAt,
+    )
+
+private fun HomerOverride.toEntity(bookId: String) =
+    BookOverrideEntity(
+        bookId = bookId,
+        title = title,
+        author = author,
+        series = series,
+        seriesIndex = seriesIndex,
+        hidden = hidden,
+        updatedAt = updatedAt,
     )

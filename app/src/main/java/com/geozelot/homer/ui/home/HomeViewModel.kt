@@ -191,12 +191,30 @@ class HomeViewModel @Inject constructor(
                     updatedAt = System.currentTimeMillis(),
                 ),
             )
+            homerSync.sync()
         }
     }
 
-    /** Reverts a book to pure detection (clears metadata overrides and unhides it). */
+    /**
+     * Reverts a book to pure detection. Stored as an all-null "cleared" override (not a
+     * row delete) with a fresh timestamp, so the reset propagates to other devices via
+     * last-write-wins instead of being resurrected on the next pull.
+     */
     fun clearOverride(bookId: String) {
-        viewModelScope.launch { bookOverrideDao.delete(bookId) }
+        viewModelScope.launch {
+            bookOverrideDao.upsert(
+                BookOverrideEntity(
+                    bookId = bookId,
+                    title = null,
+                    author = null,
+                    series = null,
+                    seriesIndex = null,
+                    hidden = false,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            homerSync.sync()
+        }
     }
 
     fun logout() = authRepository.logout()

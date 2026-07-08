@@ -33,6 +33,7 @@ data class HomerBookState(
     val updatedAt: Long = 0,
     val bookmarks: List<HomerBookmark> = emptyList(),
     val bookmarksUpdatedAt: Long = 0,
+    val override: HomerOverride? = null,
 ) {
     val hasPosition: Boolean get() = mediaId != null && updatedAt > 0
 }
@@ -45,4 +46,19 @@ data class HomerBookmark(
     val chapterTitle: String,
     val label: String? = null,
     val createdAt: Long,
+)
+
+/**
+ * A synced metadata/hide override, reconciled last-write-wins on [updatedAt]. A "cleared"
+ * override is an all-null, not-hidden entry with a fresh timestamp, so a reset propagates
+ * to other devices rather than being resurrected.
+ */
+@Serializable
+data class HomerOverride(
+    val title: String? = null,
+    val author: String? = null,
+    val series: String? = null,
+    val seriesIndex: Int? = null,
+    val hidden: Boolean = false,
+    val updatedAt: Long,
 )
