@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Launch theme applied before Compose takes over. Kept intentionally minimal:
+      no action bar, platform Material base (no AppCompat/Material XML dependency).
+      All real theming happens in Compose via HomerTheme.
+    -->
+    <style name="Theme.Homer" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/parchment</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

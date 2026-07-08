@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stylized "H" in the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#FBF7F0"
+        android:pathData="M34,34 h10 v15 h20 v-15 h10 v40 h-10 v-15 h-20 v15 h-10 Z" />
+</vector>
