@@ -6,6 +6,7 @@ import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
@@ -13,6 +14,7 @@ import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
@@ -26,8 +28,9 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         BookmarkEntity::class,
         BookmarkMetaEntity::class,
         DownloadEntity::class,
+        BookOverrideEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class HomerDatabase : RoomDatabase() {
@@ -38,6 +41,7 @@ abstract class HomerDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun bookmarkMetaDao(): BookmarkMetaDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun bookOverrideDao(): BookOverrideDao
 
     companion object {
         const val NAME = "homer.db"

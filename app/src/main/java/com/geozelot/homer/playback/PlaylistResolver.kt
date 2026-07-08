@@ -6,10 +6,12 @@ import androidx.media3.common.MediaMetadata
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
+import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.webdav.WebDavClient
 import javax.inject.Inject
 
@@ -21,6 +23,7 @@ class PlaylistResolver @Inject constructor(
     private val webDavClient: WebDavClient,
     private val downloadDao: DownloadDao,
     private val downloadStorage: DownloadStorage,
+    private val bookOverrideDao: BookOverrideDao,
 ) {
     data class Playlist(
         val bookTitle: String,
@@ -32,7 +35,8 @@ class PlaylistResolver @Inject constructor(
 
     suspend fun resolve(bookId: String): Playlist? {
         val credentials = credentialStore.credentials.value ?: return null
-        val book = bookDao.findById(bookId) ?: return null
+        // Apply user overrides so the now-playing title/author match the library.
+        val book = bookDao.findById(bookId)?.applyOverride(bookOverrideDao.findById(bookId)) ?: return null
         val files = audioFileDao.findForBook(bookId)
         if (files.isEmpty()) return null
 

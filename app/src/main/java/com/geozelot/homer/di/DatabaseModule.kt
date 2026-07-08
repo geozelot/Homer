@@ -9,6 +9,7 @@ import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
@@ -81,11 +82,25 @@ object DatabaseModule {
         }
     }
 
+    /** v6 -> v7: add the book_overrides table (user metadata/hide corrections). */
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `book_overrides` (" +
+                    "`bookId` TEXT NOT NULL, `title` TEXT, `author` TEXT, `series` TEXT, " +
+                    "`seriesIndex` INTEGER, `hidden` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`bookId`))",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+            )
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()
             .build()
@@ -110,4 +125,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDownloadDao(db: HomerDatabase): DownloadDao = db.downloadDao()
+
+    @Provides
+    fun provideBookOverrideDao(db: HomerDatabase): BookOverrideDao = db.bookOverrideDao()
 }

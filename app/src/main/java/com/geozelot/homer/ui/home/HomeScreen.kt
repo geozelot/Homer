@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.home
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,10 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import com.geozelot.homer.ui.components.CoverImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -23,8 +27,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -33,6 +41,7 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.formatCompactDuration
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     onBookClick: (String) -> Unit,
@@ -45,6 +54,8 @@ fun HomeScreen(
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf<BookListItem?>(null) }
 
     val scanning = scanState is ScanState.Scanning
 
@@ -107,6 +118,17 @@ fun HomeScreen(
             Switch(checked = wifiOnly, onCheckedChange = viewModel::setWifiOnlyDownloads)
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Show hidden books", style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = showHidden, onCheckedChange = viewModel::setShowHidden)
+        }
+
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         if (books.isEmpty()) {
@@ -127,8 +149,12 @@ fun HomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onBookClick(book.id) }
-                            .padding(vertical = 8.dp),
+                            .combinedClickable(
+                                onClick = { onBookClick(book.id) },
+                                onLongClick = { editing = book },
+                            )
+                            .padding(vertical = 8.dp)
+                            .alpha(if (book.hidden) 0.5f else 1f),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CoverImage(
@@ -178,6 +204,92 @@ fun HomeScreen(
             }
         }
     }
+
+    editing?.let { book ->
+        EditBookDialog(
+            book = book,
+            onSave = { title, author, series, index, hidden ->
+                viewModel.saveOverride(book.id, title, author, series, index, hidden)
+                editing = null
+            },
+            onReset = {
+                viewModel.clearOverride(book.id)
+                editing = null
+            },
+            onDismiss = { editing = null },
+        )
+    }
+}
+
+@Composable
+private fun EditBookDialog(
+    book: BookListItem,
+    onSave: (title: String, author: String, series: String, index: String, hidden: Boolean) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by remember { mutableStateOf(book.title) }
+    var author by remember { mutableStateOf(book.author.orEmpty()) }
+    var series by remember { mutableStateOf(book.series.orEmpty()) }
+    var index by remember { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
+    var hidden by remember { mutableStateOf(book.hidden) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit book") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = author,
+                    onValueChange = { author = it },
+                    label = { Text("Author") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = series,
+                    onValueChange = { series = it },
+                    label = { Text("Series") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = index,
+                    onValueChange = { index = it },
+                    label = { Text("Series #") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Hide from library", style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = hidden, onCheckedChange = { hidden = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(title, author, series, index, hidden) }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReset) { Text("Reset") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable
