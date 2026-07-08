@@ -19,7 +19,10 @@ data class BookEntity(
     val series: String?,
     val seriesIndex: Int?,
     val relativePath: String,
+    /** Relative path of a cover image file in the book folder (remote), if any. */
     val coverFilePath: String?,
+    /** Absolute path of a locally cached cover (e.g. extracted embedded art), if any. */
+    val localCoverPath: String?,
     val chapterTier: Int,
     val isMultiFile: Boolean,
     val fileCount: Int,

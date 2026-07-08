@@ -107,6 +107,7 @@ class BookDetector @Inject constructor() {
             seriesIndex = null,
             relativePath = bookPath,
             coverFilePath = cover,
+            localCoverPath = null,
             chapterTier = CHAPTER_TIER_UNDETERMINED,
             isMultiFile = fileEntities.size > 1,
             fileCount = fileEntities.size,

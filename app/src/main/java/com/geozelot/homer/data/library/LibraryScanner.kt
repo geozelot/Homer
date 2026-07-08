@@ -75,7 +75,9 @@ class LibraryScanner @Inject constructor(
 
         val books = detector.buildBooks(audioFolders, root, now)
         for (detected in books) {
-            bookDao.upsert(listOf(detected.book))
+            // Preserve a previously cached cover across rescans (upsert replaces the row).
+            val existingCover = bookDao.findById(detected.book.id)?.localCoverPath
+            bookDao.upsert(listOf(detected.book.copy(localCoverPath = existingCover)))
             audioFileDao.deleteForBook(detected.book.id)
             audioFileDao.upsert(detected.files)
         }

@@ -18,6 +18,13 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun findById(id: String): BookEntity?
 
+    /** Books with no cover yet (no folder image and no cached art) — enrichment targets. */
+    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL")
+    suspend fun booksNeedingCover(): List<BookEntity>
+
+    @Query("UPDATE books SET localCoverPath = :path WHERE id = :bookId")
+    suspend fun updateLocalCover(bookId: String, path: String)
+
     /** Ids of books at or beneath [path] (used to preserve skipped subtrees on rescan). */
     @Query("SELECT id FROM books WHERE id = :path OR id LIKE :path || '/%'")
     suspend fun idsUnder(path: String): List<String>

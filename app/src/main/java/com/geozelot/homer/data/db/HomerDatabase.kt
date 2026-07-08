@@ -18,7 +18,7 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         CrawlDirEntity::class,
         PlaybackStateEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class HomerDatabase : RoomDatabase() {
