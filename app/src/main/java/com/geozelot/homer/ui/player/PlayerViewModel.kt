@@ -5,7 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.DownloadEntity
+import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
@@ -29,6 +32,8 @@ class PlayerViewModel @Inject constructor(
     audioFileDao: AudioFileDao,
     playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
+    private val downloadManager: DownloadManager,
+    downloadDao: DownloadDao,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
 
@@ -42,6 +47,12 @@ class PlayerViewModel @Inject constructor(
             if (id == null) flowOf(emptyList()) else bookmarkDao.observeForBook(id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val downloadState: StateFlow<DownloadEntity?> = bookId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(null) else downloadDao.observeByBookId(id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Whole-book length; fills in reactively as durations are measured on first open. */
     val bookDurationMs: StateFlow<Long?> = bookId
@@ -89,6 +100,8 @@ class PlayerViewModel @Inject constructor(
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
+    fun download() = bookId.value?.let(downloadManager::download)
+    fun deleteDownload() = bookId.value?.let(downloadManager::delete)
     fun nextChapter() = connection.nextChapter()
     fun previousChapter() = connection.previousChapter()
 }

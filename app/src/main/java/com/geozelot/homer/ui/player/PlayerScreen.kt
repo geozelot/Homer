@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import androidx.compose.material.icons.Icons
@@ -66,6 +67,7 @@ fun PlayerScreen(
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+    val download by viewModel.downloadState.collectAsStateWithLifecycle()
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
     var showBookmarksDialog by remember { mutableStateOf(false) }
@@ -203,6 +205,39 @@ fun PlayerScreen(
                     checked = skipSilence,
                     onCheckedChange = viewModel::setSkipSilence,
                 )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                when (download?.status) {
+                    DownloadStatus.DONE -> {
+                        Text("Downloaded", style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = viewModel::deleteDownload) { Text("Remove") }
+                    }
+                    DownloadStatus.DOWNLOADING -> {
+                        val d = download
+                        Text(
+                            "Downloading ${d?.downloadedFiles ?: 0}/${d?.totalFiles ?: 0}…",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    else -> {
+                        val failed = download?.status == DownloadStatus.FAILED
+                        Text(
+                            if (failed) "Download failed" else "Available offline",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                        TextButton(onClick = viewModel::download) {
+                            Text(if (failed) "Retry" else "Download")
+                        }
+                    }
+                }
             }
         }
     }

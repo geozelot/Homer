@@ -7,12 +7,14 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
+import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
+import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 
 @Database(
@@ -23,8 +25,9 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         PlaybackStateEntity::class,
         BookmarkEntity::class,
         BookmarkMetaEntity::class,
+        DownloadEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class HomerDatabase : RoomDatabase() {
@@ -34,6 +37,7 @@ abstract class HomerDatabase : RoomDatabase() {
     abstract fun playbackStateDao(): PlaybackStateDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun bookmarkMetaDao(): BookmarkMetaDao
+    abstract fun downloadDao(): DownloadDao
 
     companion object {
         const val NAME = "homer.db"

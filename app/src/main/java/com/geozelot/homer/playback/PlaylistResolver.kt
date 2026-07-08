@@ -6,6 +6,9 @@ import androidx.media3.common.MediaMetadata
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.DownloadDao
+import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.webdav.WebDavClient
 import javax.inject.Inject
@@ -16,6 +19,8 @@ class PlaylistResolver @Inject constructor(
     private val audioFileDao: AudioFileDao,
     private val credentialStore: CredentialStore,
     private val webDavClient: WebDavClient,
+    private val downloadDao: DownloadDao,
+    private val downloadStorage: DownloadStorage,
 ) {
     data class Playlist(val bookTitle: String, val coverModel: Any?, val items: List<MediaItem>)
 
@@ -30,8 +35,16 @@ class PlaylistResolver @Inject constructor(
         // every chapter (the notification's loader can't authenticate remote WebDAV).
         val artworkUri = book.localCoverPath?.let { Uri.fromFile(java.io.File(it)) }
 
+        // Play from local files when the book is fully downloaded; otherwise stream.
+        val offline = downloadDao.findByBookId(bookId)?.status == DownloadStatus.DONE
+
         val items = files.map { file ->
-            val url = webDavClient.urlFor(credentials, file.relativePath).toString()
+            val localFile = downloadStorage.fileFor(file.relativePath)
+            val url = if (offline && localFile.exists()) {
+                Uri.fromFile(localFile).toString()
+            } else {
+                webDavClient.urlFor(credentials, file.relativePath).toString()
+            }
             val chapterTitle = file.fileName.substringBeforeLast('.')
             MediaItem.Builder()
                 .setMediaId(file.relativePath)
