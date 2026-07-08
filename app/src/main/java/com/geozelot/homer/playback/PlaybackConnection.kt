@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -172,6 +173,8 @@ class PlaybackConnection @Inject constructor(
     fun extendSleepTimer(extraMs: Long) {
         if (sleepJob?.isActive != true) return
         sleepTargetRealtimeMs += extraMs
+        val remaining = (sleepTargetRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        Log.i(TAG, "shake: sleep timer extended by ${extraMs / 1000}s -> ${remaining / 1000}s left")
         pushState()
     }
 
@@ -305,6 +308,7 @@ class PlaybackConnection @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "HomerPlay"
         const val SHAKE_EXTEND_MS = 5 * 60 * 1000L
     }
 }
