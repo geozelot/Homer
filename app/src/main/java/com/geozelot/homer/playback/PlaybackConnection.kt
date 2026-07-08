@@ -9,7 +9,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -62,6 +64,7 @@ class PlaybackConnection @Inject constructor(
     private val playbackStateDao: PlaybackStateDao,
     private val durationEnricher: DurationEnricher,
     private val playbackSettings: PlaybackSettings,
+    private val bookmarkDao: BookmarkDao,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
@@ -175,6 +178,35 @@ class PlaybackConnection @Inject constructor(
     fun cancelSleepTimer() {
         clearSleepTimer()
         pushState()
+    }
+
+    /** Saves a bookmark at the current chapter + position of the playing book. */
+    fun addBookmark() {
+        val c = controller ?: return
+        val bookId = currentBookId ?: return
+        val mediaId = c.currentMediaItem?.mediaId ?: return
+        val chapterTitle = c.mediaMetadata.title?.toString().orEmpty()
+        val position = c.currentPosition.coerceAtLeast(0L)
+        scope.launch {
+            bookmarkDao.insert(
+                BookmarkEntity(
+                    bookId = bookId,
+                    mediaId = mediaId,
+                    chapterTitle = chapterTitle,
+                    positionMs = position,
+                    label = null,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
+    /** Seeks the current playlist to a bookmark's chapter + position. */
+    fun jumpToBookmark(mediaId: String, positionMs: Long) {
+        val c = controller ?: return
+        val index = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == mediaId }
+            ?: return
+        c.seekTo(index, positionMs)
     }
 
     private fun clearSleepTimer() {

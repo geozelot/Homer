@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -26,11 +29,18 @@ class PlayerViewModel @Inject constructor(
     bookDao: BookDao,
     audioFileDao: AudioFileDao,
     playbackSettings: PlaybackSettings,
+    private val bookmarkDao: BookmarkDao,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
 
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val bookmarks: StateFlow<List<BookmarkEntity>> = bookId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList()) else bookmarkDao.observeForBook(id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val bookId = MutableStateFlow<String?>(null)
 
@@ -75,6 +85,12 @@ class PlayerViewModel @Inject constructor(
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
     fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
     fun cancelSleepTimer() = connection.cancelSleepTimer()
+    fun addBookmark() = connection.addBookmark()
+    fun jumpToBookmark(bookmark: BookmarkEntity) =
+        connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch { bookmarkDao.deleteById(id) }
+    }
     fun nextChapter() = connection.nextChapter()
     fun previousChapter() = connection.previousChapter()
 }

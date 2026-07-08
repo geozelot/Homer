@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import dagger.Module
@@ -39,11 +40,27 @@ object DatabaseModule {
         }
     }
 
+    /** v3 -> v4: add the bookmarks table (DDL must match Room's generated schema). */
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `bookmarks` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`bookId` TEXT NOT NULL, `mediaId` TEXT NOT NULL, " +
+                    "`chapterTitle` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, " +
+                    "`label` TEXT, `createdAt` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) " +
+                    "ON UPDATE NO ACTION ON DELETE CASCADE )",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookmarks_bookId` ON `bookmarks` (`bookId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()
             .build()
@@ -59,4 +76,7 @@ object DatabaseModule {
 
     @Provides
     fun providePlaybackStateDao(db: HomerDatabase): PlaybackStateDao = db.playbackStateDao()
+
+    @Provides
+    fun provideBookmarkDao(db: HomerDatabase): BookmarkDao = db.bookmarkDao()
 }

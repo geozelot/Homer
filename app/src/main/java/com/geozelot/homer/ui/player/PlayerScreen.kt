@@ -4,18 +4,24 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Button
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -59,8 +65,10 @@ fun PlayerScreen(
     val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
+    val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
+    var showBookmarksDialog by remember { mutableStateOf(false) }
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -83,6 +91,9 @@ fun PlayerScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    TextButton(onClick = { showBookmarksDialog = true }) { Text("Bookmarks") }
                 },
             )
         },
@@ -207,6 +218,19 @@ fun PlayerScreen(
         )
     }
 
+    if (showBookmarksDialog) {
+        BookmarksDialog(
+            bookmarks = bookmarks,
+            onAdd = viewModel::addBookmark,
+            onJump = {
+                viewModel.jumpToBookmark(it)
+                showBookmarksDialog = false
+            },
+            onDelete = viewModel::deleteBookmark,
+            onDismiss = { showBookmarksDialog = false },
+        )
+    }
+
     if (showSleepDialog) {
         SleepDialog(
             isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
@@ -301,6 +325,68 @@ private fun SpeedDialog(
                                 MaterialTheme.colorScheme.onSurface
                             },
                         )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun BookmarksDialog(
+    bookmarks: List<BookmarkEntity>,
+    onAdd: () -> Unit,
+    onJump: (BookmarkEntity) -> Unit,
+    onDelete: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Bookmarks") },
+        text = {
+            Column {
+                Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add at current position")
+                }
+                if (bookmarks.isEmpty()) {
+                    Text(
+                        "No bookmarks yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .heightIn(max = 280.dp)
+                            .padding(top = 8.dp),
+                    ) {
+                        items(bookmarks, key = { it.id }) { bookmark ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onJump(bookmark) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        bookmark.chapterTitle.ifEmpty { "Chapter" },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        formatTime(bookmark.positionMs),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(onClick = { onDelete(bookmark.id) }) { Text("Remove") }
+                            }
+                        }
                     }
                 }
             }
