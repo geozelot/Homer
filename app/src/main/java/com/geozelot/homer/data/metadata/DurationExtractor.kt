@@ -46,41 +46,51 @@ class DurationExtractor @Inject constructor(
     suspend fun probe(mediaUri: String): Long? = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
         suspendCancellableCoroutine { cont ->
             handler.post {
-                val player = ExoPlayer.Builder(context)
-                    .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-                    .build()
                 val settled = AtomicBoolean(false)
+                var player: ExoPlayer? = null
+                try {
+                    val exo = ExoPlayer.Builder(context)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                        .build()
+                    player = exo
 
-                fun finish(duration: Long?) {
-                    if (!settled.compareAndSet(false, true)) return
-                    player.release()
-                    if (cont.isActive) cont.resume(duration)
-                }
+                    fun finish(duration: Long?) {
+                        if (!settled.compareAndSet(false, true)) return
+                        exo.release()
+                        if (cont.isActive) cont.resume(duration)
+                    }
 
-                player.addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) {
-                        when (state) {
-                            Player.STATE_READY -> {
-                                val d = player.duration
-                                finish(if (d > 0 && d != C.TIME_UNSET) d else null)
+                    exo.addListener(object : Player.Listener {
+                        override fun onPlaybackStateChanged(state: Int) {
+                            when (state) {
+                                Player.STATE_READY -> {
+                                    val d = exo.duration
+                                    finish(if (d > 0 && d != C.TIME_UNSET) d else null)
+                                }
+                                Player.STATE_ENDED -> finish(null)
                             }
-                            Player.STATE_ENDED -> finish(null)
                         }
+
+                        override fun onPlayerError(error: PlaybackException) {
+                            Log.w(TAG, "duration probe failed for $mediaUri", error)
+                            finish(null)
+                        }
+                    })
+
+                    exo.setMediaItem(MediaItem.fromUri(mediaUri))
+                    exo.playWhenReady = false
+                    exo.prepare()
+
+                    // Timeout / caller cancellation: tear the player down on its own thread.
+                    cont.invokeOnCancellation {
+                        handler.post { if (settled.compareAndSet(false, true)) exo.release() }
                     }
-
-                    override fun onPlayerError(error: PlaybackException) {
-                        Log.w(TAG, "duration probe failed for $mediaUri", error)
-                        finish(null)
-                    }
-                })
-
-                player.setMediaItem(MediaItem.fromUri(mediaUri))
-                player.playWhenReady = false
-                player.prepare()
-
-                // Timeout / caller cancellation: tear the player down on its own thread.
-                cont.invokeOnCancellation {
-                    handler.post { if (settled.compareAndSet(false, true)) player.release() }
+                } catch (e: Throwable) {
+                    // A synchronous failure (player build / prepare) would otherwise leave
+                    // the coroutine hanging until the 30s timeout — resolve it now.
+                    Log.w(TAG, "duration probe setup failed for $mediaUri", e)
+                    player?.release()
+                    if (settled.compareAndSet(false, true) && cont.isActive) cont.resume(null)
                 }
             }
         }

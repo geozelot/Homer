@@ -24,6 +24,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.io.IOException
 
 /**
@@ -56,22 +57,32 @@ class DownloadWorker @AssistedInject constructor(
         val notifId = bookId.hashCode()
         ensureChannel()
         // Promote to a foreground service so the download continues if the app is closed.
-        runCatching { setForeground(foregroundInfo(notifId, title, 0, files.size)) }
+        setForegroundSafely(foregroundInfo(notifId, title, 0, files.size))
 
         downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, 0, files.size, now()))
         try {
-            files.forEachIndexed { index, file ->
-                runCatching { setForeground(foregroundInfo(notifId, title, index, files.size)) }
+            for ((index, file) in files.withIndex()) {
+                // Stop promptly on cancellation (user removed the download / constraint lost)
+                // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
+                if (isStopped) return Result.failure()
+                setForegroundSafely(foregroundInfo(notifId, title, index, files.size))
                 val dest = storage.fileFor(file.relativePath)
                 dest.parentFile?.mkdirs()
+                // Write to a .part file and move into place only after a complete write, so a
+                // truncated file can never be mistaken for a finished download.
+                val part = File(dest.parentFile, dest.name + ".part")
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, file.relativePath)).build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
                     val body = response.body ?: throw IOException("empty body for ${file.relativePath}")
-                    body.byteStream().use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+                    body.byteStream().use { input -> part.outputStream().use { output -> input.copyTo(output) } }
                 }
+                if (dest.exists()) dest.delete()
+                if (!part.renameTo(dest)) throw IOException("could not finalize ${file.relativePath}")
+                if (isStopped) return Result.failure()
                 downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, index + 1, files.size, now()))
             }
+            if (isStopped) return Result.failure()
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DONE, files.size, files.size, now()))
             Log.i(TAG, "downloaded $bookId (${files.size} files)")
             return Result.success()
@@ -83,6 +94,18 @@ class DownloadWorker @AssistedInject constructor(
             storage.deleteBook(bookId)
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.FAILED, 0, files.size, now()))
             return Result.failure()
+        }
+    }
+
+    /** Promotes to foreground; a background-start restriction just degrades to a normal
+     *  worker, but cancellation must still unwind. */
+    private suspend fun setForegroundSafely(info: ForegroundInfo) {
+        try {
+            setForeground(info)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "setForeground failed; continuing as background worker", e)
         }
     }
 

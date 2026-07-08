@@ -11,6 +11,7 @@ import androidx.media3.extractor.metadata.flac.PictureFrame
 import androidx.media3.extractor.metadata.id3.ApicFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
@@ -27,7 +28,10 @@ class MetadataExtractor @Inject constructor(
         try {
             val mediaItem = MediaItem.fromUri(mediaUri)
             val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-            val trackGroups = MetadataRetriever.retrieveMetadata(mediaSourceFactory, mediaItem).get()
+            // Bounded wait: a stalled authed stream must not tie up the (sequential) cover
+            // enrichment pass indefinitely. TimeoutException is handled by the catch below.
+            val trackGroups = MetadataRetriever.retrieveMetadata(mediaSourceFactory, mediaItem)
+                .get(EXTRACT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             for (i in 0 until trackGroups.length) {
                 val group = trackGroups.get(i)
                 for (j in 0 until group.length) {
@@ -49,5 +53,6 @@ class MetadataExtractor @Inject constructor(
 
     private companion object {
         const val TAG = "HomerMeta"
+        const val EXTRACT_TIMEOUT_SECONDS = 30L
     }
 }
