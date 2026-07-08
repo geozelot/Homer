@@ -5,23 +5,27 @@ import androidx.room.RoomDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
+import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
+import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 
 @Database(
     entities = [
         BookEntity::class,
         AudioFileEntity::class,
         CrawlDirEntity::class,
+        PlaybackStateEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class HomerDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun audioFileDao(): AudioFileDao
     abstract fun crawlDirDao(): CrawlDirDao
+    abstract fun playbackStateDao(): PlaybackStateDao
 
     companion object {
         const val NAME = "homer.db"
