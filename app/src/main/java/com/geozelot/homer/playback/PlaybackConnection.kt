@@ -6,15 +6,20 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -71,12 +76,15 @@ class PlaybackConnection @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
     private val bookmarkMetaDao: BookmarkMetaDao,
+    private val downloadDao: DownloadDao,
     private val homerSync: HomerSyncRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
     private var currentBookId: String? = null
     private var currentCoverModel: Any? = null
+    private var currentOffline = false
+    private var downloadWatchJob: Job? = null
 
     private var sleepJob: Job? = null
     private var sleepTargetRealtimeMs = 0L
@@ -85,6 +93,18 @@ class PlaybackConnection @Inject constructor(
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
+
+    init {
+        // Flush position + sync when the app is backgrounded, so switching to another
+        // device resumes correctly even if the user never explicitly paused.
+        scope.launch {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    if (currentBookId != null) flushSync()
+                }
+            })
+        }
+    }
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -110,6 +130,10 @@ class PlaybackConnection @Inject constructor(
     fun playBook(bookId: String) {
         scope.launch {
             val c = awaitController()
+            // Pull the freshest cross-device state first (time-boxed so a slow/offline
+            // server never delays playback). Runs even when reopening the current book,
+            // so positions and bookmarks reflect other devices.
+            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { homerSync.sync() }
             // Already playing this book (e.g. reopening the player) — don't restart it.
             if (currentBookId == bookId && c.mediaItemCount > 0) {
                 if (!c.isPlaying) c.play()
@@ -118,11 +142,10 @@ class PlaybackConnection @Inject constructor(
             val playlist = playlistResolver.resolve(bookId) ?: return@launch
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
+            currentOffline = playlist.offline
+            watchDownloadStatus(bookId)
             // Measure per-file durations for the book total (once per book; cached).
             durationEnricher.enrich(bookId)
-            // Pull the freshest cross-device position before deciding where to resume.
-            // Time-boxed so a slow/offline server never delays playback start.
-            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { homerSync.sync() }
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {
@@ -133,6 +156,40 @@ class PlaybackConnection @Inject constructor(
             c.play()
             pushState()
         }
+    }
+
+    /**
+     * Re-resolves the loaded book (stream ↔ local) whenever its download status flips, so
+     * removing a download switches back to streaming instead of hitting deleted files, and
+     * a finished download can switch to local — all without interrupting the position.
+     */
+    private fun watchDownloadStatus(bookId: String) {
+        downloadWatchJob?.cancel()
+        downloadWatchJob = scope.launch {
+            downloadDao.observeByBookId(bookId).collect { download ->
+                val nowOffline = download?.status == DownloadStatus.DONE
+                if (currentBookId == bookId && nowOffline != currentOffline) {
+                    reloadCurrentBook()
+                }
+            }
+        }
+    }
+
+    /** Rebuilds the current playlist from the latest source, keeping chapter + position. */
+    private suspend fun reloadCurrentBook() {
+        val c = controller ?: return
+        val bookId = currentBookId ?: return
+        val playlist = playlistResolver.resolve(bookId) ?: return
+        currentOffline = playlist.offline
+        currentCoverModel = playlist.coverModel
+        val index = c.currentMediaItemIndex
+        val position = c.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = c.isPlaying
+        c.setMediaItems(playlist.items)
+        c.seekTo(index, position)
+        c.prepare()
+        if (wasPlaying) c.play()
+        pushState()
     }
 
     fun playPause() {

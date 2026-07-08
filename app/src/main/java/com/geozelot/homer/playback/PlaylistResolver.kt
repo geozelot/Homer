@@ -22,7 +22,13 @@ class PlaylistResolver @Inject constructor(
     private val downloadDao: DownloadDao,
     private val downloadStorage: DownloadStorage,
 ) {
-    data class Playlist(val bookTitle: String, val coverModel: Any?, val items: List<MediaItem>)
+    data class Playlist(
+        val bookTitle: String,
+        val coverModel: Any?,
+        val items: List<MediaItem>,
+        /** True when items point at downloaded local files rather than streamed URLs. */
+        val offline: Boolean,
+    )
 
     suspend fun resolve(bookId: String): Playlist? {
         val credentials = credentialStore.credentials.value ?: return null
@@ -61,6 +67,6 @@ class PlaylistResolver @Inject constructor(
                 )
                 .build()
         }
-        return Playlist(book.title, coverModel, items)
+        return Playlist(book.title, coverModel, items, offline)
     }
 }
