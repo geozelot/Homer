@@ -33,6 +33,8 @@ class PlayerViewModel @Inject constructor(
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
 
+    private val bookId = MutableStateFlow<String?>(null)
+
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -41,8 +43,6 @@ class PlayerViewModel @Inject constructor(
             if (id == null) flowOf(emptyList()) else bookmarkDao.observeForBook(id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    private val bookId = MutableStateFlow<String?>(null)
 
     /** Whole-book length; fills in reactively as durations are measured on first open. */
     val bookDurationMs: StateFlow<Long?> = bookId
