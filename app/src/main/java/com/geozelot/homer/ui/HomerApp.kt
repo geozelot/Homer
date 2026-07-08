@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.auth.AuthState
-import com.geozelot.homer.ui.home.HomeScreen
 import com.geozelot.homer.ui.login.LoginScreen
 
 /**
@@ -32,7 +31,7 @@ fun HomerApp() {
             ) { CircularProgressIndicator() }
 
             AuthState.LoggedOut -> LoginScreen()
-            is AuthState.LoggedIn -> HomeScreen()
+            is AuthState.LoggedIn -> LibraryNavHost()
         }
     }
 }

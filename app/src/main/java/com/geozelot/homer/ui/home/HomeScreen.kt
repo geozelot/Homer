@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import com.geozelot.homer.data.library.ScanState
 
 @Composable
 fun HomeScreen(
+    onBookClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -103,7 +105,12 @@ fun HomeScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(books, key = { it.id }) { book ->
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onBookClick(book.id) }
+                            .padding(vertical = 8.dp),
+                    ) {
                         Text(
                             book.title,
                             style = MaterialTheme.typography.titleMedium,
