@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -88,9 +87,8 @@ class PlayerViewModel @Inject constructor(
     fun addBookmark() = connection.addBookmark()
     fun jumpToBookmark(bookmark: BookmarkEntity) =
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
-    fun deleteBookmark(id: Long) {
-        viewModelScope.launch { bookmarkDao.deleteById(id) }
-    }
+    fun deleteBookmark(bookmark: BookmarkEntity) =
+        connection.deleteBookmark(bookmark.id, bookmark.bookId)
     fun nextChapter() = connection.nextChapter()
     fun previousChapter() = connection.previousChapter()
 }

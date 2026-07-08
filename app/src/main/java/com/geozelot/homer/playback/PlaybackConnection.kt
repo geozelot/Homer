@@ -11,8 +11,10 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -68,6 +70,7 @@ class PlaybackConnection @Inject constructor(
     private val durationEnricher: DurationEnricher,
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
+    private val bookmarkMetaDao: BookmarkMetaDao,
     private val homerSync: HomerSyncRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -201,6 +204,7 @@ class PlaybackConnection @Inject constructor(
         val chapterTitle = c.mediaMetadata.title?.toString().orEmpty()
         val position = c.currentPosition.coerceAtLeast(0L)
         scope.launch {
+            val now = System.currentTimeMillis()
             bookmarkDao.insert(
                 BookmarkEntity(
                     bookId = bookId,
@@ -208,9 +212,20 @@ class PlaybackConnection @Inject constructor(
                     chapterTitle = chapterTitle,
                     positionMs = position,
                     label = null,
-                    createdAt = System.currentTimeMillis(),
+                    createdAt = now,
                 ),
             )
+            bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
+            homerSync.sync()
+        }
+    }
+
+    /** Deletes a bookmark and syncs the change out. */
+    fun deleteBookmark(id: Long, bookId: String) {
+        scope.launch {
+            bookmarkDao.deleteById(id)
+            bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, System.currentTimeMillis()))
+            homerSync.sync()
         }
     }
 

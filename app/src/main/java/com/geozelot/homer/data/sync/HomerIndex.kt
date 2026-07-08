@@ -20,10 +20,29 @@ data class HomerIndex(
     }
 }
 
-/** Per-book synced state. Currently the resume position; extended in later phases. */
+/**
+ * Per-book synced state. The resume position and the bookmark set are reconciled
+ * independently, each last-write-wins on its own timestamp ([updatedAt] for the
+ * position, [bookmarksUpdatedAt] for the bookmark list). [mediaId] is null when the
+ * book has bookmarks but no saved position.
+ */
 @Serializable
 data class HomerBookState(
+    val mediaId: String? = null,
+    val positionMs: Long = 0,
+    val updatedAt: Long = 0,
+    val bookmarks: List<HomerBookmark> = emptyList(),
+    val bookmarksUpdatedAt: Long = 0,
+) {
+    val hasPosition: Boolean get() = mediaId != null && updatedAt > 0
+}
+
+/** A synced bookmark. No cross-device id: the whole list is replaced last-write-wins. */
+@Serializable
+data class HomerBookmark(
     val mediaId: String,
     val positionMs: Long,
-    val updatedAt: Long,
+    val chapterTitle: String,
+    val label: String? = null,
+    val createdAt: Long,
 )

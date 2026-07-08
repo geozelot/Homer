@@ -2,7 +2,11 @@ package com.geozelot.homer.data.sync
 
 import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
+import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.PreconditionFailedException
@@ -18,10 +22,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Reconciles resume positions with the central `.homer` manifest for cross-device resume.
- * One [sync] pass merges the remote manifest and local Room state by last-write-wins on
- * `updatedAt` (SCOPE D3): remote-newer entries flow into Room, and the merged result is
- * written back under ETag optimistic concurrency (retry once on a conflicting write).
+ * Reconciles resume positions and bookmarks with the central `.homer` manifest for
+ * cross-device sync. One [sync] pass merges the remote manifest and local Room state:
+ * the position and the bookmark list are each reconciled by last-write-wins on their own
+ * timestamp (SCOPE D3), remote-newer data flows into Room, and the merged result is written
+ * back under ETag optimistic concurrency (retry on conflict; final attempt unconditional).
+ *
+ * Bookmark ties (equal timestamps — notably pre-sync bookmarks at ts 0) union both sides so
+ * nothing is dropped; a genuine concurrent edit still resolves last-write-wins.
  *
  * Best-effort: any failure (offline, no account, server hiccup) is logged and swallowed so
  * sync never blocks or breaks playback.
@@ -30,6 +38,8 @@ import javax.inject.Singleton
 class HomerSyncRepository @Inject constructor(
     private val webDavClient: WebDavClient,
     private val playbackStateDao: PlaybackStateDao,
+    private val bookmarkDao: BookmarkDao,
+    private val bookmarkMetaDao: BookmarkMetaDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
     private val json: Json,
@@ -70,30 +80,71 @@ class HomerSyncRepository @Inject constructor(
                 ?.let { runCatching { json.decodeFromString<HomerIndex>(it) }.getOrNull() }
                 ?: HomerIndex()
 
-            val local = playbackStateDao.getAll().associateBy { it.bookId }
-            Log.i(TAG, "remote=${remoteIndex.books.size} books (etag=${remoteEtag ?: "none"}), local=${local.size} books")
+            val localPos = playbackStateDao.getAll().associateBy { it.bookId }
+            val localBookmarks = bookmarkDao.getAll().groupBy { it.bookId }
+            val localBmTs = bookmarkMetaDao.getAll().associate { it.bookId to it.updatedAt }
+            Log.i(TAG, "remote=${remoteIndex.books.size} books (etag=${remoteEtag ?: "none"}), local=${localPos.size} positions")
+
             val merged = LinkedHashMap<String, HomerBookState>()
-            val remoteWins = mutableListOf<PlaybackStateEntity>()
-            for (id in remoteIndex.books.keys + local.keys) {
+            val positionPulls = mutableListOf<PlaybackStateEntity>()
+            val bookmarkPulls = mutableListOf<Triple<String, Long, List<HomerBookmark>>>()
+
+            for (id in remoteIndex.books.keys + localPos.keys + localBookmarks.keys) {
                 val remote = remoteIndex.books[id]
-                val localState = local[id]
+
+                // --- position: LWW on updatedAt ---
+                val lp = localPos[id]
+                var posMediaId: String? = null
+                var posMs = 0L
+                var posTs = 0L
                 when {
-                    remote == null -> merged[id] = localState!!.toBookState()
-                    localState == null -> {
-                        merged[id] = remote
-                        remoteWins += remote.toEntity(id)
+                    remote?.hasPosition == true && (lp == null || remote.updatedAt > lp.updatedAt) -> {
+                        posMediaId = remote.mediaId; posMs = remote.positionMs; posTs = remote.updatedAt
+                        positionPulls += PlaybackStateEntity(id, remote.mediaId!!, remote.positionMs, remote.updatedAt)
                     }
-                    localState.updatedAt >= remote.updatedAt -> merged[id] = localState.toBookState()
+                    lp != null -> { posMediaId = lp.currentMediaId; posMs = lp.positionMs; posTs = lp.updatedAt }
+                }
+
+                // --- bookmarks: LWW on bookmarksUpdatedAt, union on tie ---
+                val localList = localBookmarks[id].orEmpty().map { it.toHomer() }
+                val localTs = localBmTs[id] ?: 0L
+                val remoteList = remote?.bookmarks.orEmpty()
+                val remoteTs = remote?.bookmarksUpdatedAt ?: 0L
+                val winnerList: List<HomerBookmark>
+                val winnerTs: Long
+                when {
+                    remoteTs > localTs -> {
+                        winnerList = remoteList; winnerTs = remoteTs
+                        bookmarkPulls += Triple(id, winnerTs, remoteList)
+                    }
+                    localTs > remoteTs -> {
+                        winnerList = localList; winnerTs = localTs
+                    }
                     else -> {
-                        merged[id] = remote
-                        remoteWins += remote.toEntity(id)
+                        val union = unionBookmarks(localList, remoteList)
+                        if (union.keySet() == localList.keySet()) {
+                            winnerList = localList; winnerTs = localTs
+                        } else {
+                            // Local was missing some — adopt the union with a fresh ts so it propagates.
+                            winnerList = union; winnerTs = System.currentTimeMillis()
+                            bookmarkPulls += Triple(id, winnerTs, union)
+                        }
                     }
                 }
+
+                merged[id] = HomerBookState(posMediaId, posMs, posTs, winnerList, winnerTs)
             }
 
-            // Bring Room forward for books the manifest knows more recently.
-            remoteWins.forEach { playbackStateDao.upsert(it) }
-            if (remoteWins.isNotEmpty()) Log.i(TAG, "pulled ${remoteWins.size} newer positions")
+            // Bring Room forward where the manifest knows more.
+            positionPulls.forEach { playbackStateDao.upsert(it) }
+            for ((bookId, ts, list) in bookmarkPulls) {
+                bookmarkDao.deleteForBook(bookId)
+                bookmarkDao.insertAll(list.map { it.toEntity(bookId) })
+                bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, ts))
+            }
+            if (positionPulls.isNotEmpty() || bookmarkPulls.isNotEmpty()) {
+                Log.i(TAG, "pulled ${positionPulls.size} positions, ${bookmarkPulls.size} bookmark sets")
+            }
 
             // Push only when we'd actually change what the server has.
             val mergedIndex = HomerIndex(books = merged)
@@ -134,13 +185,25 @@ class HomerSyncRepository @Inject constructor(
     }
 }
 
-private fun PlaybackStateEntity.toBookState() =
-    HomerBookState(mediaId = currentMediaId, positionMs = positionMs, updatedAt = updatedAt)
+/** Bookmark identity for dedup: same chapter + offset + creation time. */
+private fun HomerBookmark.key() = "$mediaId|$positionMs|$createdAt"
 
-private fun HomerBookState.toEntity(bookId: String) =
-    PlaybackStateEntity(
+private fun List<HomerBookmark>.keySet() = mapTo(HashSet()) { it.key() }
+
+private fun unionBookmarks(a: List<HomerBookmark>, b: List<HomerBookmark>): List<HomerBookmark> {
+    val seen = HashSet<String>()
+    return (a + b).filter { seen.add(it.key()) }.sortedBy { it.createdAt }
+}
+
+private fun BookmarkEntity.toHomer() =
+    HomerBookmark(mediaId = mediaId, positionMs = positionMs, chapterTitle = chapterTitle, label = label, createdAt = createdAt)
+
+private fun HomerBookmark.toEntity(bookId: String) =
+    BookmarkEntity(
         bookId = bookId,
-        currentMediaId = mediaId,
+        mediaId = mediaId,
+        chapterTitle = chapterTitle,
         positionMs = positionMs,
-        updatedAt = updatedAt,
+        label = label,
+        createdAt = createdAt,
     )

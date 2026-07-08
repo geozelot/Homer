@@ -8,6 +8,7 @@ import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import dagger.Module
@@ -56,11 +57,22 @@ object DatabaseModule {
         }
     }
 
+    /** v4 -> v5: add the bookmark_meta table (per-book bookmark sync timestamp). */
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `bookmark_meta` (" +
+                    "`bookId` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`bookId`))",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()
             .build()
@@ -79,4 +91,7 @@ object DatabaseModule {
 
     @Provides
     fun provideBookmarkDao(db: HomerDatabase): BookmarkDao = db.bookmarkDao()
+
+    @Provides
+    fun provideBookmarkMetaDao(db: HomerDatabase): BookmarkMetaDao = db.bookmarkMetaDao()
 }

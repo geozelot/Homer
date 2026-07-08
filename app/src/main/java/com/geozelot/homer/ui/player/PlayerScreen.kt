@@ -339,7 +339,7 @@ private fun BookmarksDialog(
     bookmarks: List<BookmarkEntity>,
     onAdd: () -> Unit,
     onJump: (BookmarkEntity) -> Unit,
-    onDelete: (Long) -> Unit,
+    onDelete: (BookmarkEntity) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -384,7 +384,7 @@ private fun BookmarksDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                TextButton(onClick = { onDelete(bookmark.id) }) { Text("Remove") }
+                                TextButton(onClick = { onDelete(bookmark) }) { Text("Remove") }
                             }
                         }
                     }
