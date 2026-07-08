@@ -1,0 +1,21 @@
+# Gradle / build
+.gradle/
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Kotlin
+.kotlin/
+
+# IDE (machine-specific; Android Studio regenerates these)
+.idea/
+*.iml
+/local.properties
+.DS_Store
+
+# Release signing — never commit secrets
+/keystore.properties
+*.jks
+*.keystore
