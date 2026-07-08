@@ -15,6 +15,9 @@ interface AudioFileDao {
     @Query("SELECT * FROM audio_files WHERE bookId = :bookId ORDER BY sortIndex")
     suspend fun findForBook(bookId: String): List<AudioFileEntity>
 
+    @Query("UPDATE audio_files SET durationMs = :durationMs WHERE relativePath = :relativePath")
+    suspend fun updateDuration(relativePath: String, durationMs: Long)
+
     @Upsert
     suspend fun upsert(files: List<AudioFileEntity>)
 

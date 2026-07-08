@@ -27,6 +27,7 @@ data class BookListItem(
     val isMultiFile: Boolean,
     val fileCount: Int,
     val coverModel: Any?,
+    val totalDurationMs: Long?,
 )
 
 @HiltViewModel
@@ -48,6 +49,7 @@ class HomeViewModel @Inject constructor(
                     isMultiFile = book.isMultiFile,
                     fileCount = book.fileCount,
                     coverModel = BookCover.model(book, credentials, webDavClient),
+                    totalDurationMs = book.totalDurationMs,
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

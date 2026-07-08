@@ -8,6 +8,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
+import com.geozelot.homer.data.metadata.DurationEnricher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class PlaybackConnection @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playlistResolver: PlaylistResolver,
     private val playbackStateDao: PlaybackStateDao,
+    private val durationEnricher: DurationEnricher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
@@ -76,6 +78,8 @@ class PlaybackConnection @Inject constructor(
             val playlist = playlistResolver.resolve(bookId) ?: return@launch
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
+            // Measure per-file durations for the book total (once per book; cached).
+            durationEnricher.enrich(bookId)
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {

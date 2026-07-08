@@ -51,6 +51,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -101,7 +102,10 @@ fun PlayerScreen(
             )
             if (state.chapterCount > 0) {
                 Text(
-                    text = "Chapter ${state.chapterIndex + 1} of ${state.chapterCount}",
+                    text = buildString {
+                        append("Chapter ${state.chapterIndex + 1} of ${state.chapterCount}")
+                        bookDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatTime(it)}") }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
