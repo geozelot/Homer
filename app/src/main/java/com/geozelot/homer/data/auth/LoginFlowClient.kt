@@ -1,5 +1,6 @@
 package com.geozelot.homer.data.auth
 
+import android.util.Log
 import com.geozelot.homer.di.Bootstrap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,8 +48,10 @@ class LoginFlowClient @Inject constructor(
     /** Begins a login flow against [rawServerUrl] (scheme optional; normalized to https). */
     suspend fun initiate(rawServerUrl: String): LoginV2Init = withContext(Dispatchers.IO) {
         val base = normalizeServerUrl(rawServerUrl)
+        val initUrl = "$base/index.php/login/v2"
+        Log.i(TAG, "initiate: POST $initUrl")
         val request = Request.Builder()
-            .url("$base/index.php/login/v2")
+            .url(initUrl)
             .header("User-Agent", USER_AGENT)
             .post(FormBody.Builder().build())
             .build()
@@ -57,7 +60,9 @@ class LoginFlowClient @Inject constructor(
                 throw IOException("Login init failed: HTTP ${response.code}")
             }
             val body = response.body?.string() ?: throw IOException("Empty login init response")
-            json.decodeFromString(LoginV2Init.serializer(), body)
+            val init = json.decodeFromString(LoginV2Init.serializer(), body)
+            Log.i(TAG, "initiate OK: login=${init.login} pollEndpoint=${init.poll.endpoint}")
+            init
         }
     }
 
@@ -72,11 +77,13 @@ class LoginFlowClient @Inject constructor(
             .post(FormBody.Builder().add("token", init.poll.token).build())
             .build()
         client.newCall(request).execute().use { response ->
+            Log.i(TAG, "poll: HTTP ${response.code} @ ${init.poll.endpoint}")
             when {
                 response.code == 404 -> null // still waiting for the user
                 response.isSuccessful -> {
                     val body = response.body?.string()
                         ?: throw IOException("Empty login poll response")
+                    Log.i(TAG, "poll OK: credentials received")
                     json.decodeFromString(LoginV2Poll.serializer(), body)
                 }
                 else -> throw IOException("Login poll failed: HTTP ${response.code}")
@@ -85,6 +92,7 @@ class LoginFlowClient @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "HomerAuth"
         const val USER_AGENT = "Homer"
 
         /** Ensures an https scheme and strips any trailing slash. */

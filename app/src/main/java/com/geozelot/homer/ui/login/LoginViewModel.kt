@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.login
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
@@ -54,6 +55,7 @@ class LoginViewModel @Inject constructor(
         loginJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(status = Status.Connecting, error = null)
             try {
+                Log.i(TAG, "startLogin: server='${_uiState.value.serverUrl}'")
                 val init = authRepository.beginLogin(_uiState.value.serverUrl)
                 _openBrowser.send(init.login)
                 _uiState.value = _uiState.value.copy(status = Status.WaitingForBrowser)
@@ -61,12 +63,17 @@ class LoginViewModel @Inject constructor(
                 var elapsed = 0L
                 while (elapsed < POLL_TIMEOUT_MS) {
                     val credentials = authRepository.pollOnce(init)
-                    if (credentials != null) return@launch // AuthRepository state flips app-wide
+                    if (credentials != null) {
+                        Log.i(TAG, "startLogin: success, credentials saved")
+                        return@launch // AuthRepository state flips app-wide
+                    }
                     delay(POLL_INTERVAL_MS)
                     elapsed += POLL_INTERVAL_MS
                 }
+                Log.w(TAG, "startLogin: timed out after ${POLL_TIMEOUT_MS}ms")
                 fail("Login timed out. Please try again.")
             } catch (e: Exception) {
+                Log.e(TAG, "startLogin failed", e)
                 fail(e.message ?: "Login failed. Check the server address and try again.")
             }
         }
@@ -82,6 +89,7 @@ class LoginViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "HomerAuth"
         const val POLL_INTERVAL_MS = 2_000L
         const val POLL_TIMEOUT_MS = 5 * 60 * 1_000L
     }

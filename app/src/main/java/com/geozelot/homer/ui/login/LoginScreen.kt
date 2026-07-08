@@ -63,6 +63,13 @@ fun LoginScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 16.dp),
                 )
+                Text(
+                    text = "After you grant access in the browser, tap Back to " +
+                        "return to Homer — you'll be signed in automatically.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
                 TextButton(
                     onClick = viewModel::cancelLogin,
                     modifier = Modifier.padding(top = 8.dp),
