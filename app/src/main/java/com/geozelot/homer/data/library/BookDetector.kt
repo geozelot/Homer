@@ -1,5 +1,6 @@
 package com.geozelot.homer.data.library
 
+import android.util.Log
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.webdav.DavResource
@@ -32,16 +33,20 @@ class BookDetector @Inject constructor() {
         val root = libraryRoot.trim('/')
         // Group audio folders by the book they belong to: a part folder folds into its
         // parent; everything else is its own book.
+        Log.i(TAG, "buildBooks: ${folders.size} audio folders under root='$root'")
         val byBook = LinkedHashMap<String, MutableList<AudioFolder>>()
         for (folder in folders) {
             val name = folder.path.substringAfterLast('/')
-            val bookPath = if (isPartName(name)) {
+            val part = isPartName(name)
+            val bookPath = if (part) {
                 folder.path.substringBeforeLast('/', missingDelimiterValue = folder.path)
             } else {
                 folder.path
             }
+            Log.i(TAG, "folder='${folder.path}' name='$name' isPart=$part -> book='$bookPath'")
             byBook.getOrPut(bookPath) { mutableListOf() }.add(folder)
         }
+        Log.i(TAG, "buildBooks: grouped ${folders.size} folders into ${byBook.size} books")
         return byBook.map { (bookPath, members) -> buildBook(bookPath, members, root, now) }
     }
 
@@ -129,6 +134,8 @@ class BookDetector @Inject constructor() {
     }
 
     companion object {
+        private const val TAG = "HomerScan"
+
         /** Chapter tier is resolved in P3 (embedded/sidecar/none); 0 = not yet determined. */
         const val CHAPTER_TIER_UNDETERMINED = 0
 
