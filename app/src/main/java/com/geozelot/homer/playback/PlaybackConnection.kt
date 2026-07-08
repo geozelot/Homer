@@ -2,7 +2,9 @@ package com.geozelot.homer.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +39,10 @@ data class PlaybackUiState(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val playbackSpeed: Float = 1f,
+    /** Milliseconds until the sleep timer pauses playback; null when off. */
+    val sleepRemainingMs: Long? = null,
+    /** Sleep timer set to pause at the end of the current chapter. */
+    val sleepEndOfChapter: Boolean = false,
     /** Book-level cover (WebDAV URL string or a cached File), stable across chapters. */
     val coverModel: Any? = null,
     /** Embedded artwork parsed from the current file — fallback before a cover is cached. */
@@ -60,6 +67,11 @@ class PlaybackConnection @Inject constructor(
     private var currentBookId: String? = null
     private var currentCoverModel: Any? = null
 
+    private var sleepJob: Job? = null
+    private var sleepTargetRealtimeMs = 0L
+    private var sleepEndOfChapter = false
+    private val shakeDetector = ShakeDetector(context) { extendSleepTimer(SHAKE_EXTEND_MS) }
+
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
@@ -67,6 +79,15 @@ class PlaybackConnection @Inject constructor(
         override fun onEvents(player: Player, events: Player.Events) {
             pushState()
             persistPosition()
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Sleep-at-end-of-chapter: pause as soon as the book auto-advances a chapter.
+            if (sleepEndOfChapter && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                controller?.pause()
+                clearSleepTimer()
+                pushState()
+            }
         }
     }
 
@@ -105,6 +126,52 @@ class PlaybackConnection @Inject constructor(
     fun setSpeed(speed: Float) {
         controller?.setPlaybackSpeed(speed)
         scope.launch { playbackSettings.setSpeed(speed) }
+    }
+
+    /** Pauses playback after [durationMs]; shake-to-extend is armed while it counts down. */
+    fun startSleepTimer(durationMs: Long) {
+        clearSleepTimer()
+        sleepTargetRealtimeMs = SystemClock.elapsedRealtime() + durationMs
+        shakeDetector.start()
+        sleepJob = scope.launch {
+            while (true) {
+                if (SystemClock.elapsedRealtime() >= sleepTargetRealtimeMs) {
+                    controller?.pause()
+                    clearSleepTimer()
+                    pushState()
+                    break
+                }
+                pushState()
+                delay(500)
+            }
+        }
+        pushState()
+    }
+
+    /** Pauses when the current chapter finishes (no shake-to-extend in this mode). */
+    fun startSleepTimerEndOfChapter() {
+        clearSleepTimer()
+        sleepEndOfChapter = true
+        pushState()
+    }
+
+    /** Adds [extraMs] to a running countdown; no-op for end-of-chapter or when off. */
+    fun extendSleepTimer(extraMs: Long) {
+        if (sleepJob?.isActive != true) return
+        sleepTargetRealtimeMs += extraMs
+        pushState()
+    }
+
+    fun cancelSleepTimer() {
+        clearSleepTimer()
+        pushState()
+    }
+
+    private fun clearSleepTimer() {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepEndOfChapter = false
+        shakeDetector.stop()
     }
 
     fun seekTo(positionMs: Long) {
@@ -184,8 +251,18 @@ class PlaybackConnection @Inject constructor(
             positionMs = c.currentPosition.coerceAtLeast(0L),
             durationMs = c.duration.coerceAtLeast(0L),
             playbackSpeed = c.playbackParameters.speed,
+            sleepRemainingMs = if (sleepJob?.isActive == true) {
+                (sleepTargetRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            } else {
+                null
+            },
+            sleepEndOfChapter = sleepEndOfChapter,
             coverModel = currentCoverModel,
             artworkData = if (currentCoverModel == null) metadata.artworkData else null,
         )
+    }
+
+    private companion object {
+        const val SHAKE_EXTEND_MS = 5 * 60 * 1000L
     }
 }

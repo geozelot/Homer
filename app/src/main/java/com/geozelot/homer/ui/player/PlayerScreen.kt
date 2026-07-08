@@ -58,6 +58,7 @@ fun PlayerScreen(
     val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     var showSpeedDialog by remember { mutableStateOf(false) }
+    var showSleepDialog by remember { mutableStateOf(false) }
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -157,11 +158,24 @@ fun PlayerScreen(
                 }
             }
 
-            TextButton(
-                onClick = { showSpeedDialog = true },
-                modifier = Modifier.padding(top = 8.dp),
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Text("Speed  ${formatSpeed(state.playbackSpeed)}×")
+                TextButton(onClick = { showSpeedDialog = true }) {
+                    Text("Speed  ${formatSpeed(state.playbackSpeed)}×")
+                }
+                TextButton(onClick = { showSleepDialog = true }) {
+                    Text(
+                        when {
+                            state.sleepEndOfChapter -> "Sleep  chapter end"
+                            state.sleepRemainingMs != null -> "Sleep  ${formatTime(state.sleepRemainingMs!!)}"
+                            else -> "Sleep"
+                        },
+                    )
+                }
             }
         }
     }
@@ -176,6 +190,72 @@ fun PlayerScreen(
             onDismiss = { showSpeedDialog = false },
         )
     }
+
+    if (showSleepDialog) {
+        SleepDialog(
+            isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+            onMinutes = {
+                viewModel.startSleepTimer(it * 60_000L)
+                showSleepDialog = false
+            },
+            onEndOfChapter = {
+                viewModel.startSleepTimerEndOfChapter()
+                showSleepDialog = false
+            },
+            onOff = {
+                viewModel.cancelSleepTimer()
+                showSleepDialog = false
+            },
+            onDismiss = { showSleepDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun SleepDialog(
+    isActive: Boolean,
+    onMinutes: (Int) -> Unit,
+    onEndOfChapter: () -> Unit,
+    onOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val presets = listOf(5, 10, 15, 30, 45, 60)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sleep timer") },
+        text = {
+            Column {
+                presets.forEach { minutes ->
+                    TextButton(
+                        onClick = { onMinutes(minutes) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("$minutes minutes", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                TextButton(
+                    onClick = onEndOfChapter,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("End of chapter", style = MaterialTheme.typography.bodyLarge)
+                }
+                if (isActive) {
+                    TextButton(
+                        onClick = onOff,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Turn off",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
 
 @Composable

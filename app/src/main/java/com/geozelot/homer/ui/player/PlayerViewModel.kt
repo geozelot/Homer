@@ -66,6 +66,9 @@ class PlayerViewModel @Inject constructor(
     fun playPause() = connection.playPause()
     fun seekTo(positionMs: Long) = connection.seekTo(positionMs)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
+    fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
+    fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
+    fun cancelSleepTimer() = connection.cancelSleepTimer()
     fun nextChapter() = connection.nextChapter()
     fun previousChapter() = connection.previousChapter()
 }
