@@ -43,7 +43,6 @@ class BookDetector @Inject constructor() {
             } else {
                 folder.path
             }
-            Log.i(TAG, "folder='${folder.path}' name='$name' isPart=$part -> book='$bookPath'")
             byBook.getOrPut(bookPath) { mutableListOf() }.add(folder)
         }
         Log.i(TAG, "buildBooks: grouped ${folders.size} folders into ${byBook.size} books")
