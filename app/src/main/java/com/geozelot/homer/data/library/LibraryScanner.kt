@@ -18,14 +18,13 @@ sealed interface ScanState {
 }
 
 /**
- * Crawls the WebDAV tree from the library root via depth-1 PROPFINDs, detecting books
- * (folders that directly contain audio files) and persisting them to Room.
+ * Crawls the WebDAV tree from the library root via depth-1 PROPFINDs, collecting every
+ * folder that directly contains audio, then hands the set to [BookDetector] to group
+ * into books (merging multi-part books) and persists the result to Room.
  *
- * Incremental scans prune unchanged subtrees using Nextcloud's propagated collection
- * ETags — a directory whose stored ETag matches is skipped, and the books already
- * indexed beneath it are preserved.
- *
- * Cancellable: honors coroutine cancellation between directories.
+ * The crawl is a full traversal for now so book grouping always sees the whole tree;
+ * ETag-based incremental pruning (stored per directory) is a later optimization.
+ * Cancellable between directories.
  */
 class LibraryScanner @Inject constructor(
     private val webDavClient: WebDavClient,
@@ -36,16 +35,16 @@ class LibraryScanner @Inject constructor(
 ) {
     data class Result(val bookCount: Int)
 
+    @Suppress("UNUSED_PARAMETER")
     suspend fun scan(
         libraryRoot: String,
         incremental: Boolean,
         now: Long,
-        onProgress: (directoriesVisited: Int, booksFound: Int) -> Unit,
+        onProgress: (directoriesVisited: Int, audioFoldersFound: Int) -> Unit,
     ): Result {
         val root = libraryRoot.trim('/')
-        val keepBookIds = mutableListOf<String>()
+        val audioFolders = mutableListOf<BookDetector.AudioFolder>()
         var directoriesVisited = 0
-        var booksFound = 0
 
         val stack = ArrayDeque<String>()
         stack.addLast(root)
@@ -65,35 +64,27 @@ class LibraryScanner @Inject constructor(
             val childDirs = children.filter { it.isCollection }
 
             if (audioFiles.isNotEmpty()) {
-                val detected = detector.detect(normDir, audioFiles, imageFiles, root, now)
-                bookDao.upsert(listOf(detected.book))
-                audioFileDao.deleteForBook(detected.book.id)
-                audioFileDao.upsert(detected.files)
-                keepBookIds += detected.book.id
-                booksFound++
+                audioFolders += BookDetector.AudioFolder(normDir, audioFiles, imageFiles)
             }
+            childDirs.forEach { stack.addLast(it.path) }
 
-            for (childDir in childDirs) {
-                val stored = crawlDirDao.findByPath(childDir.path)
-                val unchanged = incremental &&
-                    stored?.etag != null &&
-                    childDir.etag != null &&
-                    stored.etag == childDir.etag
-                if (unchanged) {
-                    // Preserve books already indexed beneath the skipped subtree.
-                    keepBookIds += bookDao.idsUnder(childDir.path)
-                } else {
-                    stack.addLast(childDir.path)
-                }
-            }
-
+            // Record the directory ETag for future incremental scans.
             crawlDirDao.upsert(CrawlDirEntity(normDir, selfEtag, now))
-            onProgress(directoriesVisited, booksFound)
+            onProgress(directoriesVisited, audioFolders.size)
+        }
+
+        val books = detector.buildBooks(audioFolders, root, now)
+        for (detected in books) {
+            bookDao.upsert(listOf(detected.book))
+            audioFileDao.deleteForBook(detected.book.id)
+            audioFileDao.upsert(detected.files)
         }
 
         // Prune books whose folders vanished. Guard the empty case — SQLite rejects
         // an empty `NOT IN ()`.
-        if (keepBookIds.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepBookIds)
-        return Result(booksFound)
+        val keepIds = books.map { it.book.id }
+        if (keepIds.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepIds)
+
+        return Result(books.size)
     }
 }
