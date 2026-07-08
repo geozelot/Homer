@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -47,6 +48,17 @@ data class BookListItem(
     val downloadedFiles: Int,
     val hidden: Boolean,
 )
+
+/** A library row: either a standalone book or a collapsible series shelf. */
+sealed interface LibraryEntry {
+    data class Standalone(val book: BookListItem) : LibraryEntry
+    data class Series(
+        val key: String,
+        val name: String,
+        val author: String?,
+        val books: List<BookListItem>,
+    ) : LibraryEntry
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -129,6 +141,11 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Library list grouped into collapsible series shelves (2+ books sharing a series). */
+    val entries: StateFlow<List<LibraryEntry>> = books
+        .map(::groupIntoEntries)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -218,4 +235,35 @@ class HomeViewModel @Inject constructor(
     }
 
     fun logout() = authRepository.logout()
+}
+
+/**
+ * Collapses runs of books sharing an author + series (2+) into a [LibraryEntry.Series];
+ * everything else stays a [LibraryEntry.Standalone]. Input is already sorted by
+ * author/series/index/title, so grouped books are contiguous.
+ */
+private fun groupIntoEntries(items: List<BookListItem>): List<LibraryEntry> {
+    val entries = mutableListOf<LibraryEntry>()
+    var i = 0
+    while (i < items.size) {
+        val book = items[i]
+        val series = book.series
+        if (series != null) {
+            var j = i + 1
+            while (j < items.size && items[j].series == series && items[j].author == book.author) j++
+            if (j - i >= 2) {
+                entries += LibraryEntry.Series(
+                    key = "${book.author.orEmpty()}|$series",
+                    name = series,
+                    author = book.author,
+                    books = items.subList(i, j).toList(),
+                )
+                i = j
+                continue
+            }
+        }
+        entries += LibraryEntry.Standalone(book)
+        i++
+    }
+    return entries
 }

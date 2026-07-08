@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,7 +52,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
-    val books by viewModel.books.collectAsStateWithLifecycle()
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
@@ -131,7 +134,7 @@ fun HomeScreen(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-        if (books.isEmpty()) {
+        if (entries.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
@@ -144,61 +147,38 @@ fun HomeScreen(
                 )
             }
         } else {
+            val expanded = remember { mutableStateMapOf<String, Boolean>() }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(books, key = { it.id }) { book ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = { onBookClick(book.id) },
-                                onLongClick = { editing = book },
-                            )
-                            .padding(vertical = 8.dp)
-                            .alpha(if (book.hidden) 0.5f else 1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CoverImage(
-                            model = book.coverModel,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                        )
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 12.dp),
-                        ) {
-                            Text(
-                                book.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                buildString {
-                                    append(book.author ?: "Unknown author")
-                                    append(" · ")
-                                    append(if (book.isMultiFile) "${book.fileCount} files" else "single file")
-                                    book.totalDurationMs?.takeIf { it > 0 }?.let {
-                                        append(" · ")
-                                        append(formatCompactDuration(it))
-                                    }
-                                    book.timeLeftMs?.let { left ->
-                                        append(" · ")
-                                        append(if (left <= 0) "finished" else "${formatCompactDuration(left)} left")
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                entries.forEach { entry ->
+                    when (entry) {
+                        is LibraryEntry.Standalone -> item(key = entry.book.id) {
+                            BookRow(
+                                book = entry.book,
+                                startPadding = 0.dp,
+                                onClick = { onBookClick(entry.book.id) },
+                                onLongClick = { editing = entry.book },
+                                onDownload = { viewModel.download(entry.book.id) },
+                                onRemove = { viewModel.deleteDownload(entry.book.id) },
                             )
                         }
-                        DownloadAction(
-                            status = book.downloadStatus,
-                            downloadedFiles = book.downloadedFiles,
-                            totalFiles = book.fileCount,
-                            onDownload = { viewModel.download(book.id) },
-                            onRemove = { viewModel.deleteDownload(book.id) },
-                        )
+                        is LibraryEntry.Series -> {
+                            val isOpen = expanded[entry.key] == true
+                            item(key = "series:${entry.key}") {
+                                SeriesHeaderRow(entry, isOpen) { expanded[entry.key] = !isOpen }
+                            }
+                            if (isOpen) {
+                                items(entry.books, key = { "ep:${it.id}" }) { book ->
+                                    BookRow(
+                                        book = book,
+                                        startPadding = 16.dp,
+                                        onClick = { onBookClick(book.id) },
+                                        onLongClick = { editing = book },
+                                        onDownload = { viewModel.download(book.id) },
+                                        onRemove = { viewModel.deleteDownload(book.id) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -217,6 +197,115 @@ fun HomeScreen(
                 editing = null
             },
             onDismiss = { editing = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BookRow(
+    book: BookListItem,
+    startPadding: Dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onDownload: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(start = startPadding)
+            .padding(vertical = 8.dp)
+            .alpha(if (book.hidden) 0.5f else 1f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverImage(
+            model = book.coverModel,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(6.dp)),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
+            Text(
+                book.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                buildString {
+                    append(book.author ?: "Unknown author")
+                    append(" · ")
+                    append(if (book.isMultiFile) "${book.fileCount} files" else "single file")
+                    book.totalDurationMs?.takeIf { it > 0 }?.let {
+                        append(" · ")
+                        append(formatCompactDuration(it))
+                    }
+                    book.timeLeftMs?.let { left ->
+                        append(" · ")
+                        append(if (left <= 0) "finished" else "${formatCompactDuration(left)} left")
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DownloadAction(
+            status = book.downloadStatus,
+            downloadedFiles = book.downloadedFiles,
+            totalFiles = book.fileCount,
+            onDownload = onDownload,
+            onRemove = onRemove,
+        )
+    }
+}
+
+@Composable
+private fun SeriesHeaderRow(
+    series: LibraryEntry.Series,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverImage(
+            model = series.books.first().coverModel,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(6.dp)),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
+            Text(
+                series.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${series.author ?: "Unknown author"} · ${series.books.size} books",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = if (expanded) "▾" else "▸",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp),
         )
     }
 }
