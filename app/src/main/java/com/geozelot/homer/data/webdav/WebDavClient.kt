@@ -1,0 +1,171 @@
+package com.geozelot.homer.data.webdav
+
+import android.util.Xml
+import com.geozelot.homer.data.auth.CredentialStore
+import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.di.Authed
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.xmlpull.v1.XmlPullParser
+import java.io.IOException
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import javax.inject.Inject
+
+/**
+ * Minimal Nextcloud WebDAV client: PROPFIND (directory listing) and ranged GET URL
+ * construction. Uses the authenticated OkHttp client so Basic auth is injected.
+ *
+ * Paths passed in and returned are relative to the user's files root
+ * (`/remote.php/dav/files/<user>/`). Streaming/seek during playback is handled later
+ * by Media3's OkHttpDataSource, which honors HTTP Range on these same URLs.
+ */
+class WebDavClient @Inject constructor(
+    @Authed private val client: OkHttpClient,
+    private val credentialStore: CredentialStore,
+) {
+    /** Lists the immediate children of [relativePath] (plus the collection itself). */
+    suspend fun propfind(relativePath: String, depth: Int = 1): List<DavResource> =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+            val url = urlFor(credentials, relativePath)
+            val body = PROPFIND_BODY.toRequestBody("application/xml; charset=utf-8".toMediaType())
+            val request = Request.Builder()
+                .url(url)
+                .header("Depth", depth.toString())
+                .method("PROPFIND", body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.code == 401) throw IOException("Unauthorized (401) — app password may be revoked")
+                if (response.code != 207) throw IOException("PROPFIND failed: HTTP ${response.code}")
+                val stream = response.body?.byteStream() ?: throw IOException("Empty PROPFIND response")
+                parseMultistatus(stream, credentials)
+            }
+        }
+
+    /** Absolute URL for [relativePath], correctly percent-encoded per segment. */
+    fun urlFor(credentials: NextcloudCredentials, relativePath: String): HttpUrl {
+        val builder = credentials.serverUrl.toHttpUrl().newBuilder()
+            .addPathSegments("remote.php/dav/files")
+            .addPathSegment(credentials.loginName)
+        relativePath.split('/').filter { it.isNotEmpty() }.forEach { builder.addPathSegment(it) }
+        return builder.build()
+    }
+
+    private fun parseMultistatus(
+        stream: java.io.InputStream,
+        credentials: NextcloudCredentials,
+    ): List<DavResource> {
+        val results = mutableListOf<DavResource>()
+        val parser = Xml.newPullParser()
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
+        parser.setInput(stream, null)
+
+        var href: String? = null
+        var isCollection = false
+        var length: Long? = null
+        var lastModified: Long? = null
+        var contentType: String? = null
+        var etag: String? = null
+
+        // Per-propstat scratch, committed only when its status is 2xx.
+        var propStatus = 0
+        var tCollection = false
+        var tLength: Long? = null
+        var tLastModified: Long? = null
+        var tContentType: String? = null
+        var tEtag: String? = null
+
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "response" -> {
+                        href = null; isCollection = false
+                        length = null; lastModified = null; contentType = null; etag = null
+                    }
+                    "propstat" -> {
+                        propStatus = 0; tCollection = false
+                        tLength = null; tLastModified = null; tContentType = null; tEtag = null
+                    }
+                    "collection" -> tCollection = true
+                    "href" -> href = parser.nextText().trim()
+                    "getcontentlength" -> tLength = parser.nextText().trim().toLongOrNull()
+                    "getlastmodified" -> tLastModified = parseHttpDate(parser.nextText().trim())
+                    "getcontenttype" -> tContentType = parser.nextText().trim().ifEmpty { null }
+                    "getetag" -> tEtag = parser.nextText().trim().trim('"').ifEmpty { null }
+                    "status" -> propStatus = parseStatusCode(parser.nextText())
+                }
+
+                XmlPullParser.END_TAG -> when (parser.name) {
+                    "propstat" -> if (propStatus in 200..299) {
+                        if (tCollection) isCollection = true
+                        tLength?.let { length = it }
+                        tLastModified?.let { lastModified = it }
+                        tContentType?.let { contentType = it }
+                        tEtag?.let { etag = it }
+                    }
+                    "response" -> {
+                        val relative = href?.let { relativePathFromHref(it, credentials) }
+                        if (relative != null) {
+                            results += DavResource(
+                                path = relative,
+                                isCollection = isCollection,
+                                contentLength = length,
+                                lastModifiedMs = lastModified,
+                                contentType = contentType,
+                                etag = etag,
+                            )
+                        }
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return results
+    }
+
+    companion object {
+        private const val PROPFIND_BODY =
+            """<?xml version="1.0" encoding="utf-8"?>""" +
+                """<d:propfind xmlns:d="DAV:"><d:prop>""" +
+                """<d:resourcetype/><d:getcontentlength/><d:getlastmodified/>""" +
+                """<d:getcontenttype/><d:getetag/>""" +
+                """</d:prop></d:propfind>"""
+
+        private const val FILES_MARKER = "/remote.php/dav/files/"
+
+        /**
+         * Converts a (percent-encoded, server-absolute) href into a path relative to the
+         * files root. Returns `null` for the marker not being present, or empty string
+         * for the files root itself.
+         */
+        fun relativePathFromHref(href: String, credentials: NextcloudCredentials): String? {
+            val decoded = runCatching { URI(href).path }.getOrNull() ?: href
+            val idx = decoded.indexOf(FILES_MARKER)
+            if (idx < 0) return null
+            // Skip the marker and the username segment.
+            val afterFiles = decoded.substring(idx + FILES_MARKER.length)
+            val rel = afterFiles.substringAfter('/', missingDelimiterValue = "")
+            return rel.trim('/')
+        }
+
+        private fun parseStatusCode(status: String): Int =
+            status.trim().split(' ').getOrNull(1)?.toIntOrNull() ?: 0
+
+        private fun parseHttpDate(value: String): Long? = runCatching {
+            val format = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+            format.timeZone = TimeZone.getTimeZone("GMT")
+            format.parse(value)?.time
+        }.getOrNull()
+    }
+}
