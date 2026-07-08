@@ -95,14 +95,14 @@ class LoginFlowClient @Inject constructor(
         private const val TAG = "HomerAuth"
         const val USER_AGENT = "Homer"
 
-        /** Ensures an https scheme and strips any trailing slash. */
+        /** Forces an https scheme (upgrading/adding it) and strips any trailing slash. */
         fun normalizeServerUrl(raw: String): String {
             val trimmed = raw.trim().trimEnd('/')
-            val withScheme = when {
-                trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            return when {
+                trimmed.startsWith("https://") -> trimmed
+                trimmed.startsWith("http://") -> "https://" + trimmed.removePrefix("http://")
                 else -> "https://$trimmed"
             }
-            return withScheme
         }
     }
 }
