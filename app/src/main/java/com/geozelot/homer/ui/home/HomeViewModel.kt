@@ -82,10 +82,16 @@ class HomeViewModel @Inject constructor(
                 }
                 .filter { (_, hidden) -> showHidden || !hidden }
                 .sortedWith(
-                    compareBy(nullsLast<String>()) { it.first.author }
-                        .thenBy(nullsLast<String>()) { it.first.series }
-                        .thenBy(nullsLast<Int>()) { it.first.seriesIndex }
-                        .thenBy { it.first.title },
+                    // Nulls last (the `== null` keys sort false<true), matching the DB order.
+                    compareBy<Pair<BookEntity, Boolean>>(
+                        { it.first.author == null },
+                        { it.first.author },
+                        { it.first.series == null },
+                        { it.first.series },
+                        { it.first.seriesIndex == null },
+                        { it.first.seriesIndex },
+                        { it.first.title },
+                    ),
                 )
         }
 
