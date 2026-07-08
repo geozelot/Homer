@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,8 +25,12 @@ class PlayerViewModel @Inject constructor(
     private val connection: PlaybackConnection,
     bookDao: BookDao,
     audioFileDao: AudioFileDao,
+    playbackSettings: PlaybackSettings,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
+
+    val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val bookId = MutableStateFlow<String?>(null)
 
@@ -66,6 +71,7 @@ class PlayerViewModel @Inject constructor(
     fun playPause() = connection.playPause()
     fun seekTo(positionMs: Long) = connection.seekTo(positionMs)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
+    fun setSkipSilence(enabled: Boolean) = connection.setSkipSilence(enabled)
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
     fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
     fun cancelSleepTimer() = connection.cancelSleepTimer()

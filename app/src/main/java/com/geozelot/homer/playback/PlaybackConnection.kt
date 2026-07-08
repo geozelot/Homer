@@ -2,6 +2,7 @@ package com.geozelot.homer.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -126,6 +127,15 @@ class PlaybackConnection @Inject constructor(
     fun setSpeed(speed: Float) {
         controller?.setPlaybackSpeed(speed)
         scope.launch { playbackSettings.setSpeed(speed) }
+    }
+
+    /** Toggles silence-trimming on the service's player (custom command) and persists it. */
+    fun setSkipSilence(enabled: Boolean) {
+        controller?.sendCustomCommand(
+            PlaybackCommands.SET_SKIP_SILENCE,
+            Bundle().apply { putBoolean(PlaybackCommands.KEY_ENABLED, enabled) },
+        )
+        scope.launch { playbackSettings.setSkipSilence(enabled) }
     }
 
     /** Pauses playback after [durationMs]; shake-to-extend is armed while it counts down. */
