@@ -6,6 +6,8 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,23 +43,39 @@ data class PlaybackUiState(
 class PlaybackConnection @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playlistResolver: PlaylistResolver,
+    private val playbackStateDao: PlaybackStateDao,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
+    private var currentBookId: String? = null
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
     private val listener = object : Player.Listener {
-        override fun onEvents(player: Player, events: Player.Events) = pushState()
+        override fun onEvents(player: Player, events: Player.Events) {
+            pushState()
+            persistPosition()
+        }
     }
 
-    /** Loads and starts a book from the beginning. */
+    /** Loads a book and resumes from its saved position (or the start if none). */
     fun playBook(bookId: String) {
         scope.launch {
-            val playlist = playlistResolver.resolve(bookId) ?: return@launch
             val c = awaitController()
+            // Already playing this book (e.g. reopening the player) — don't restart it.
+            if (currentBookId == bookId && c.mediaItemCount > 0) {
+                if (!c.isPlaying) c.play()
+                return@launch
+            }
+            val playlist = playlistResolver.resolve(bookId) ?: return@launch
+            currentBookId = bookId
+            val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
+            if (saved != null) {
+                val index = playlist.items.indexOfFirst { it.mediaId == saved.currentMediaId }
+                c.seekTo(if (index >= 0) index else 0, saved.positionMs)
+            }
             c.prepare()
             c.play()
             pushState()
@@ -99,10 +117,32 @@ class PlaybackConnection @Inject constructor(
 
     private fun startPositionUpdates() {
         scope.launch {
+            var tick = 0
             while (controller != null) {
-                if (controller?.isPlaying == true) pushState()
+                if (controller?.isPlaying == true) {
+                    pushState()
+                    if (++tick % 10 == 0) persistPosition() // ~ every 5s while playing
+                }
                 delay(500)
             }
+        }
+    }
+
+    /** Debounced-ish persistence of the current book's position to Room. */
+    private fun persistPosition() {
+        val c = controller ?: return
+        val bookId = currentBookId ?: return
+        val mediaId = c.currentMediaItem?.mediaId ?: return
+        val position = c.currentPosition.coerceAtLeast(0L)
+        scope.launch {
+            playbackStateDao.upsert(
+                PlaybackStateEntity(
+                    bookId = bookId,
+                    currentMediaId = mediaId,
+                    positionMs = position,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
         }
     }
 
