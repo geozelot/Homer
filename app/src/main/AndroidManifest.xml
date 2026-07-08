@@ -4,6 +4,16 @@
     <!-- WebDAV over HTTPS. Cleartext is disabled below (locked decision). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Android 11+ package visibility: resolve a browser / Custom Tabs provider
+         for the Login Flow v2 web step. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name=".HomerApplication"
         android:allowBackup="false"
