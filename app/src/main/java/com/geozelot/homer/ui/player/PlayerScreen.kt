@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.formatCompactDuration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
@@ -52,6 +53,7 @@ fun PlayerScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
+    val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -109,6 +111,14 @@ fun PlayerScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            timeLeftMs?.let { left ->
+                Text(
+                    text = if (left <= 0) "Finished" else "${formatCompactDuration(left)} left",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
 

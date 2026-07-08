@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.library.ScanState
-import java.util.concurrent.TimeUnit
+import com.geozelot.homer.ui.formatCompactDuration
 
 @Composable
 fun HomeScreen(
@@ -137,7 +137,11 @@ fun HomeScreen(
                                     append(if (book.isMultiFile) "${book.fileCount} files" else "single file")
                                     book.totalDurationMs?.takeIf { it > 0 }?.let {
                                         append(" · ")
-                                        append(formatDuration(it))
+                                        append(formatCompactDuration(it))
+                                    }
+                                    book.timeLeftMs?.let { left ->
+                                        append(" · ")
+                                        append(if (left <= 0) "finished" else "${formatCompactDuration(left)} left")
                                     }
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -174,11 +178,4 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
             Text("$bookCount books", style = MaterialTheme.typography.bodySmall)
         }
     }
-}
-
-/** Compact whole-book length, e.g. "12h 34m" or "45m". */
-private fun formatDuration(ms: Long): String {
-    val hours = TimeUnit.MILLISECONDS.toHours(ms)
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }

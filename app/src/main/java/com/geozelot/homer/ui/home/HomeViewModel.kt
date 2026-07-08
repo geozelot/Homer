@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
@@ -28,6 +29,8 @@ data class BookListItem(
     val fileCount: Int,
     val coverModel: Any?,
     val totalDurationMs: Long?,
+    /** Remaining time from the saved position; null if not started or not yet measured. */
+    val timeLeftMs: Long?,
 )
 
 @HiltViewModel
@@ -35,13 +38,20 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val libraryRepository: LibraryRepository,
     private val webDavClient: WebDavClient,
+    playbackStateDao: PlaybackStateDao,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
 
     val books: StateFlow<List<BookListItem>> =
-        combine(libraryRepository.books, authRepository.credentials) { books, credentials ->
+        combine(
+            libraryRepository.books,
+            authRepository.credentials,
+            playbackStateDao.observeProgress(),
+        ) { books, credentials, progress ->
+            val elapsedByBook = progress.associate { it.bookId to it.elapsedMs }
             books.map { book ->
+                val elapsed = elapsedByBook[book.id]
                 BookListItem(
                     id = book.id,
                     title = book.title,
@@ -50,6 +60,12 @@ class HomeViewModel @Inject constructor(
                     fileCount = book.fileCount,
                     coverModel = BookCover.model(book, credentials, webDavClient),
                     totalDurationMs = book.totalDurationMs,
+                    // Only meaningful once both a total and a saved position exist.
+                    timeLeftMs = if (book.totalDurationMs != null && elapsed != null) {
+                        (book.totalDurationMs - elapsed).coerceAtLeast(0)
+                    } else {
+                        null
+                    },
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
