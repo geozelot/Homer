@@ -55,7 +55,13 @@ class WebDavClient @Inject constructor(
     /** Downloads a small text file (e.g. the `.homer` manifest). Null if it doesn't exist. */
     suspend fun getText(relativePath: String): DavFile? = withContext(Dispatchers.IO) {
         val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
-        val request = Request.Builder().url(urlFor(credentials, relativePath)).get().build()
+        val request = Request.Builder()
+            .url(urlFor(credentials, relativePath))
+            // Force an uncompressed response: gzip proxies (Apache mod_deflate) mangle the
+            // ETag (append "-gzip" / mark it weak), which then fails every If-Match write.
+            .header("Accept-Encoding", "identity")
+            .get()
+            .build()
         client.newCall(request).execute().use { response ->
             when {
                 response.code == 404 -> null

@@ -35,7 +35,6 @@ class HomerSyncRepository @Inject constructor(
     private val json: Json,
 ) {
     private val mutex = Mutex()
-    private var cachedEtag: String? = null
     private var ensuredDir: String? = null
 
     /** Pull-merge-push in one pass. No-op if no account is configured. */
@@ -43,7 +42,7 @@ class HomerSyncRepository @Inject constructor(
         if (credentialStore.credentials.value == null) return
         mutex.withLock {
             try {
-                syncOnce(retryOnConflict = true)
+                reconcile()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -52,56 +51,58 @@ class HomerSyncRepository @Inject constructor(
         }
     }
 
-    private suspend fun syncOnce(retryOnConflict: Boolean) {
+    private suspend fun reconcile() {
         val dir = manifestDir()
         val path = "$dir/$FILE"
 
-        val remoteFile = webDavClient.getText(path)
-        cachedEtag = remoteFile?.etag
-        val remoteIndex = remoteFile?.content
-            ?.takeIf { it.isNotBlank() }
-            ?.let { runCatching { json.decodeFromString<HomerIndex>(it) }.getOrNull() }
-            ?: HomerIndex()
+        // Re-pull, re-merge and retry on each conflict; the last attempt writes
+        // unconditionally so a mangled/weak ETag can never block sync forever
+        // (single-user last-write-wins is safe — SCOPE D3).
+        for (attempt in 0 until MAX_ATTEMPTS) {
+            val remoteFile = webDavClient.getText(path)
+            val remoteEtag = remoteFile?.etag
+            val remoteIndex = remoteFile?.content
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { json.decodeFromString<HomerIndex>(it) }.getOrNull() }
+                ?: HomerIndex()
 
-        val local = playbackStateDao.getAll().associateBy { it.bookId }
-
-        val merged = LinkedHashMap<String, HomerBookState>()
-        val remoteWins = mutableListOf<PlaybackStateEntity>()
-        for (id in remoteIndex.books.keys + local.keys) {
-            val remote = remoteIndex.books[id]
-            val localState = local[id]
-            when {
-                remote == null -> merged[id] = localState!!.toBookState()
-                localState == null -> {
-                    merged[id] = remote
-                    remoteWins += remote.toEntity(id)
-                }
-                localState.updatedAt >= remote.updatedAt -> merged[id] = localState.toBookState()
-                else -> {
-                    merged[id] = remote
-                    remoteWins += remote.toEntity(id)
+            val local = playbackStateDao.getAll().associateBy { it.bookId }
+            val merged = LinkedHashMap<String, HomerBookState>()
+            val remoteWins = mutableListOf<PlaybackStateEntity>()
+            for (id in remoteIndex.books.keys + local.keys) {
+                val remote = remoteIndex.books[id]
+                val localState = local[id]
+                when {
+                    remote == null -> merged[id] = localState!!.toBookState()
+                    localState == null -> {
+                        merged[id] = remote
+                        remoteWins += remote.toEntity(id)
+                    }
+                    localState.updatedAt >= remote.updatedAt -> merged[id] = localState.toBookState()
+                    else -> {
+                        merged[id] = remote
+                        remoteWins += remote.toEntity(id)
+                    }
                 }
             }
-        }
 
-        // Bring Room forward for books the manifest knows more recently.
-        remoteWins.forEach { playbackStateDao.upsert(it) }
-        if (remoteWins.isNotEmpty()) Log.i(TAG, "pulled ${remoteWins.size} newer positions")
+            // Bring Room forward for books the manifest knows more recently.
+            remoteWins.forEach { playbackStateDao.upsert(it) }
+            if (remoteWins.isNotEmpty()) Log.i(TAG, "pulled ${remoteWins.size} newer positions")
 
-        // Push only when we actually add to what the server has.
-        val mergedIndex = HomerIndex(books = merged)
-        if (mergedIndex != remoteIndex) {
+            // Push only when we'd actually change what the server has.
+            val mergedIndex = HomerIndex(books = merged)
+            if (mergedIndex == remoteIndex) return
+
             ensureDir(dir)
+            val ifMatch = remoteEtag.takeUnless { attempt == MAX_ATTEMPTS - 1 }
             try {
-                cachedEtag = webDavClient.putText(path, json.encodeToString(mergedIndex), ifMatch = cachedEtag)
-                Log.i(TAG, "pushed manifest (${merged.size} books)")
+                webDavClient.putText(path, json.encodeToString(mergedIndex), ifMatch)
+                val how = if (ifMatch == null) " [unconditional]" else ""
+                Log.i(TAG, "pushed manifest (${merged.size} books)$how")
+                return
             } catch (e: PreconditionFailedException) {
-                if (retryOnConflict) {
-                    Log.i(TAG, "manifest changed under us; re-syncing")
-                    syncOnce(retryOnConflict = false)
-                } else {
-                    throw e
-                }
+                Log.i(TAG, "manifest changed under us; retry ${attempt + 1}/$MAX_ATTEMPTS")
             }
         }
     }
@@ -121,6 +122,7 @@ class HomerSyncRepository @Inject constructor(
         const val TAG = "HomerSync"
         const val DIR = ".homer"
         const val FILE = "index.json"
+        const val MAX_ATTEMPTS = 3
     }
 }
 
