@@ -4,29 +4,54 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
-import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.webdav.WebDavClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** A library row: enough to render without touching the DB entity in the UI. */
+data class BookListItem(
+    val id: String,
+    val title: String,
+    val author: String?,
+    val isMultiFile: Boolean,
+    val fileCount: Int,
+    val coverUrl: String?,
+)
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val libraryRepository: LibraryRepository,
+    private val webDavClient: WebDavClient,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
 
-    val books: StateFlow<List<BookEntity>> = libraryRepository.books
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val books: StateFlow<List<BookListItem>> =
+        combine(libraryRepository.books, authRepository.credentials) { books, credentials ->
+            books.map { book ->
+                BookListItem(
+                    id = book.id,
+                    title = book.title,
+                    author = book.author,
+                    isMultiFile = book.isMultiFile,
+                    fileCount = book.fileCount,
+                    coverUrl = book.coverFilePath?.let { path ->
+                        credentials?.let { webDavClient.urlFor(it, path).toString() }
+                    },
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)

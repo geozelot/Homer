@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.geozelot.homer.ui.components.CoverImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
@@ -82,6 +85,13 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            CoverImage(
+                coverUrl = state.coverUrl,
+                modifier = Modifier
+                    .padding(bottom = 24.dp)
+                    .size(240.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+            )
             Text(
                 text = state.chapterTitle.ifEmpty { "Loading…" },
                 style = MaterialTheme.typography.titleLarge,

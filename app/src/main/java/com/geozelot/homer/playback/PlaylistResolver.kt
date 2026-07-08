@@ -15,13 +15,15 @@ class PlaylistResolver @Inject constructor(
     private val credentialStore: CredentialStore,
     private val webDavClient: WebDavClient,
 ) {
-    data class Playlist(val bookTitle: String, val items: List<MediaItem>)
+    data class Playlist(val bookTitle: String, val coverUrl: String?, val items: List<MediaItem>)
 
     suspend fun resolve(bookId: String): Playlist? {
         val credentials = credentialStore.credentials.value ?: return null
         val book = bookDao.findById(bookId) ?: return null
         val files = audioFileDao.findForBook(bookId)
         if (files.isEmpty()) return null
+
+        val coverUrl = book.coverFilePath?.let { webDavClient.urlFor(credentials, it).toString() }
 
         val items = files.map { file ->
             val url = webDavClient.urlFor(credentials, file.relativePath).toString()
@@ -40,6 +42,6 @@ class PlaylistResolver @Inject constructor(
                 )
                 .build()
         }
-        return Playlist(book.title, items)
+        return Playlist(book.title, coverUrl, items)
     }
 }

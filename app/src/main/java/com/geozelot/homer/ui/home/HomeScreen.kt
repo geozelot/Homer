@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.geozelot.homer.ui.components.CoverImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -105,27 +109,36 @@ fun HomeScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(books, key = { it.id }) { book ->
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onBookClick(book.id) }
                             .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            book.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        CoverImage(
+                            coverUrl = book.coverUrl,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(6.dp)),
                         )
-                        Text(
-                            buildString {
-                                append(book.author ?: "Unknown author")
-                                append(" · ")
-                                append(if (book.isMultiFile) "${book.fileCount} files" else "single file")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(
+                                book.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                buildString {
+                                    append(book.author ?: "Unknown author")
+                                    append(" · ")
+                                    append(if (book.isMultiFile) "${book.fileCount} files" else "single file")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
