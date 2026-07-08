@@ -64,6 +64,8 @@ class HomerSyncRepository @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "sync failed", e)
+                // The .homer dir may have been removed server-side; re-MKCOL next time.
+                ensuredDir = null
             }
         }
     }
@@ -79,10 +81,16 @@ class HomerSyncRepository @Inject constructor(
         for (attempt in 0 until MAX_ATTEMPTS) {
             val remoteFile = webDavClient.getText(path)
             val remoteEtag = remoteFile?.etag
-            val remoteIndex = remoteFile?.content
-                ?.takeIf { it.isNotBlank() }
-                ?.let { runCatching { json.decodeFromString<HomerIndex>(it) }.getOrNull() }
-                ?: HomerIndex()
+            val remoteBody = remoteFile?.content
+            val remoteIndex = when {
+                remoteBody == null || remoteBody.isBlank() -> HomerIndex() // absent — safe to create
+                else -> runCatching { json.decodeFromString<HomerIndex>(remoteBody) }.getOrElse {
+                    // Present but unparseable (proxy/HTML error page, corruption): do NOT treat
+                    // it as empty and overwrite it — abort this pass to avoid clobbering.
+                    Log.w(TAG, "manifest present but unparseable; skipping sync")
+                    return
+                }
+            }
 
             val localPos = playbackStateDao.getAll().associateBy { it.bookId }
             val localBookmarks = bookmarkDao.getAll().groupBy { it.bookId }
@@ -98,17 +106,31 @@ class HomerSyncRepository @Inject constructor(
             for (id in remoteIndex.books.keys + localPos.keys + localBookmarks.keys + localOverrides.keys) {
                 val remote = remoteIndex.books[id]
 
-                // --- position: LWW on updatedAt ---
+                // --- position: LWW on updatedAt, deterministic tiebreak on an exact tie so
+                //     two same-ms writes converge instead of diverging forever ---
                 val lp = localPos[id]
+                val rMediaId = if (remote != null && remote.hasPosition) remote.mediaId else null
                 var posMediaId: String? = null
                 var posMs = 0L
                 var posTs = 0L
-                when {
-                    remote?.hasPosition == true && (lp == null || remote.updatedAt > lp.updatedAt) -> {
-                        posMediaId = remote.mediaId; posMs = remote.positionMs; posTs = remote.updatedAt
-                        positionPulls += PlaybackStateEntity(id, remote.mediaId!!, remote.positionMs, remote.updatedAt)
+                if (remote != null && rMediaId != null) {
+                    val takeRemote = when {
+                        lp == null -> true
+                        remote.updatedAt > lp.updatedAt -> true
+                        remote.updatedAt == lp.updatedAt -> {
+                            // Tie: pick greater (mediaId, then positionMs) — same on both devices.
+                            val cmp = rMediaId.compareTo(lp.currentMediaId)
+                            if (cmp != 0) cmp > 0 else remote.positionMs > lp.positionMs
+                        }
+                        else -> false
                     }
-                    lp != null -> { posMediaId = lp.currentMediaId; posMs = lp.positionMs; posTs = lp.updatedAt }
+                    if (takeRemote) {
+                        posMediaId = rMediaId; posMs = remote.positionMs; posTs = remote.updatedAt
+                        positionPulls += PlaybackStateEntity(id, rMediaId, remote.positionMs, remote.updatedAt)
+                    }
+                }
+                if (posMediaId == null && lp != null) {
+                    posMediaId = lp.currentMediaId; posMs = lp.positionMs; posTs = lp.updatedAt
                 }
 
                 // --- bookmarks: LWW on bookmarksUpdatedAt, union on tie ---
@@ -127,12 +149,13 @@ class HomerSyncRepository @Inject constructor(
                         winnerList = localList; winnerTs = localTs
                     }
                     else -> {
+                        // Equal timestamps: union both sides so nothing is lost, keeping the
+                        // tied ts (NOT a fresh one) so the merge is idempotent — both devices
+                        // compute the same union@ts and converge instead of ping-ponging.
                         val union = unionBookmarks(localList, remoteList)
-                        if (union.keySet() == localList.keySet()) {
-                            winnerList = localList; winnerTs = localTs
-                        } else {
-                            // Local was missing some — adopt the union with a fresh ts so it propagates.
-                            winnerList = union; winnerTs = System.currentTimeMillis()
+                        winnerList = union
+                        winnerTs = localTs
+                        if (union.keySet() != localList.keySet()) {
                             bookmarkPulls += Triple(id, winnerTs, union)
                         }
                     }
