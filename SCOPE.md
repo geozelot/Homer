@@ -177,7 +177,7 @@ Each phase is independently demoable.
 | M4B chapter parsing (no FOSS lib; Media3 native support unreleased) | **High** | Spiked (see research note). MP3 via Media3 now; M4B via manual QuickTime-track + Nero `chpl` parser behind an interface; swap to Media3 `Chapter` API when a pinned stable ships #2803. Tiers 2–3 (sidecar/manual) cover parse failures. |
 | PROPFIND performance / Nextcloud quirks on large trees | Med | Depth-controlled, resumable crawl; incremental etag; test against real library early (P2). |
 | Seek within large files + cheap M4B metadata scan over WebDAV | Med | **P2 WebDAV `DataSource` must honor HTTP `Range` and expose `getSize()`** — required so moov-at-end M4B files stay cheap (Media3 seeks past `mdat`) and for playback seek. Verify Nextcloud honors `Range` on WebDAV GET early. |
-| Media3 pinned at placeholder 1.4.1 | Low | Bump to current stable (1.10.x) when P3/P4 touch playback. |
+| Media3 version vs. compileSdk | Low | Media3 ≥1.6ish requires `compileSdk 36` (needs AGP ≥8.9 + SDK 36 installed). Pinned at **1.5.1** (builds on our SDK 35 / AGP 8.7); has everything P4–P5 need. Bump toolchain to SDK 36 when the M4B `Chapter` APIs (Media3 1.11+) are needed. |
 | Android Auto validation (browse tree, flags, media requirements) | Med | Build `MediaLibraryService` correctly from P4; test on Desktop Head Unit early. |
 | `.homer` index write concurrency across devices | Low | Single user + ETag optimistic concurrency + timestamp LWW. |
 | Android 14+ foreground-service / background limits | Low | Declare `mediaPlayback` FGS type; standard Media3 session handling. |
@@ -220,6 +220,7 @@ content-hash identity is what makes overrides survive moves.
   into a single browsable series entry with ordering. Part of the override layer (§7).
 - **Library management / override UI** — reassign folders to books, split/merge,
   fix metadata, review ambiguous detections (full design in §7).
+- **Toolchain bump to `compileSdk 36` + AGP ≥8.9** — unlocks latest Media3 (incl. the M4B `Chapter` APIs once released). Deferred to avoid an SDK-36 install mid-build.
 - Subsonic backend (spike against installed Music app first — D4).
 - Content-hash book identity for move/rename survival (unblocks move-safe overrides).
 - Companion desktop scanner (D7).
