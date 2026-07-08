@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import okhttp3.Credentials
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,12 +39,6 @@ class CoverEnricher @Inject constructor(
         scope.launch {
             try {
                 val credentials = credentialStore.credentials.value ?: return@launch
-                val headers = mapOf(
-                    "Authorization" to Credentials.basic(
-                        credentials.loginName,
-                        credentials.appPassword,
-                    ),
-                )
                 val books = bookDao.booksNeedingCover()
                 Log.i(TAG, "enriching covers for ${books.size} books")
                 var found = 0
@@ -53,7 +46,7 @@ class CoverEnricher @Inject constructor(
                     coroutineContext.ensureActive()
                     val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
                     val url = webDavClient.urlFor(credentials, firstFile.relativePath).toString()
-                    val bytes = metadataExtractor.extractEmbeddedPicture(url, headers) ?: continue
+                    val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue
                     val path = coverCache.write(book.id, bytes)
                     bookDao.updateLocalCover(book.id, path)
                     found++

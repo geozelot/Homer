@@ -1,43 +1,48 @@
 package com.geozelot.homer.data.metadata
 
-import android.media.MediaMetadataRetriever
 import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.MetadataRetriever
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.metadata.flac.PictureFrame
+import androidx.media3.extractor.metadata.id3.ApicFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * On-device metadata extraction via the platform [MediaMetadataRetriever], reading
- * over HTTP with an auth header so it works against WebDAV. Documented as
- * potentially slow and prone to native crashes, so every call runs off the main
- * thread and swallows failures (returning null).
+ * Extracts embedded metadata through Media3, driven by the authenticated OkHttp data
+ * source — the same transport that plays audio. This avoids the platform
+ * MediaMetadataRetriever, whose HTTP path fails against authenticated WebDAV.
  */
-class MetadataExtractor @Inject constructor() {
-
-    /** Embedded cover art (ID3 APIC / MP4 covr), or null if none / on failure. */
-    suspend fun extractEmbeddedPicture(url: String, headers: Map<String, String>): ByteArray? =
-        withRetriever(url, headers) { it.embeddedPicture }
-
-    /** Track duration in ms, or null if unknown / on failure. */
-    suspend fun extractDurationMs(url: String, headers: Map<String, String>): Long? =
-        withRetriever(url, headers) {
-            it.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-        }
-
-    private suspend fun <T> withRetriever(
-        url: String,
-        headers: Map<String, String>,
-        block: (MediaMetadataRetriever) -> T?,
-    ): T? = withContext(Dispatchers.IO) {
-        val retriever = MediaMetadataRetriever()
+@OptIn(UnstableApi::class)
+class MetadataExtractor @Inject constructor(
+    private val dataSourceFactory: DataSource.Factory,
+) {
+    /** Embedded cover art (ID3 APIC / FLAC picture), or null if none / on failure. */
+    suspend fun extractEmbeddedPicture(mediaUri: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            retriever.setDataSource(url, headers)
-            block(retriever)
-        } catch (e: Exception) {
-            Log.w(TAG, "metadata extract failed for $url", e)
+            val mediaItem = MediaItem.fromUri(mediaUri)
+            val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+            val trackGroups = MetadataRetriever.retrieveMetadata(mediaSourceFactory, mediaItem).get()
+            for (i in 0 until trackGroups.length) {
+                val group = trackGroups.get(i)
+                for (j in 0 until group.length) {
+                    val metadata = group.getFormat(j).metadata ?: continue
+                    for (k in 0 until metadata.length()) {
+                        when (val entry = metadata.get(k)) {
+                            is ApicFrame -> return@withContext entry.pictureData
+                            is PictureFrame -> return@withContext entry.pictureData
+                        }
+                    }
+                }
+            }
             null
-        } finally {
-            runCatching { retriever.release() }
+        } catch (e: Exception) {
+            Log.w(TAG, "cover extract failed for $mediaUri", e)
+            null
         }
     }
 
