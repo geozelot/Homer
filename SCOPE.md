@@ -185,10 +185,43 @@ Each phase is independently demoable.
 
 ---
 
-## 7. Explicitly deferred (post-v1)
+## 7. Library organization: detected vs. override layers (roadmap)
 
+Real libraries are messy, so detection is a *default*, not the source of truth.
+Two layers:
+
+- **Detected layer** — re-derived from the folder tree on every scan (disposable).
+- **Override layer** — user corrections, stored authoritatively in the `.homer`
+  index, taking precedence over detection (D2 ladder). Never mutates remote files.
+
+On rescan: re-derive detection, then re-apply overrides on top, so manual fixes
+survive rescans, device switches, and heuristic changes.
+
+**Override operations** (keyed by folder/book, persisted in `.homer`):
+- Reclassify a folder as part vs. standalone book (fixes over-/under-merging).
+- Merge folders into one book; split a book (by folder, or file ranges).
+- Reassign a folder to a different book.
+- Edit metadata: title, author, **series + series index**, custom cover.
+- Group books into a **series** with explicit ordering.
+- Ignore/hide a folder or book.
+- **Ambiguity review queue** — surface flagged auto-detections for one-tap fixes,
+  so the user edits the ~5% that's wrong, not everything.
+
+**Where it lands:** the override *schema* rides in with **P6** (`.homer` index);
+the management/editing **UI** is a **P8** feature (additive). Note the coupling with
+**content-hash identity** (deferred): path-keyed overrides orphan if a folder moves;
+content-hash identity is what makes overrides survive moves.
+
+---
+
+## 8. Explicitly deferred (post-v1)
+
+- **Series grouping** — collapse episodic/series shelves (e.g. TKKG's ~148 episodes)
+  into a single browsable series entry with ordering. Part of the override layer (§7).
+- **Library management / override UI** — reassign folders to books, split/merge,
+  fix metadata, review ambiguous detections (full design in §7).
 - Subsonic backend (spike against installed Music app first — D4).
-- Content-hash book identity for move/rename survival.
+- Content-hash book identity for move/rename survival (unblocks move-safe overrides).
 - Companion desktop scanner (D7).
 - Multi-user / sharing.
 - Cert pinning UI (mechanism in from P1, opt-in).
