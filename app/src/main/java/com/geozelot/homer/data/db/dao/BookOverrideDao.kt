@@ -20,7 +20,4 @@ interface BookOverrideDao {
 
     @Upsert
     suspend fun upsert(override: BookOverrideEntity)
-
-    @Query("DELETE FROM book_overrides WHERE bookId = :bookId")
-    suspend fun delete(bookId: String)
 }

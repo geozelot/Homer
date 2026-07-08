@@ -107,7 +107,7 @@ class HomeViewModel @Inject constructor(
                 )
         }
 
-    val books: StateFlow<List<BookListItem>> =
+    private val books: StateFlow<List<BookListItem>> =
         combine(
             effectiveBooks,
             authRepository.credentials,
