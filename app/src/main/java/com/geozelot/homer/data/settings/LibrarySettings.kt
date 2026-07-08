@@ -59,8 +59,17 @@ class PlaybackSettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SKIP_SILENCE] = value }
     }
 
+    /** Restrict downloads to unmetered (Wi‑Fi) networks. */
+    val wifiOnlyDownloads: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_WIFI_ONLY] ?: false }
+
+    suspend fun setWifiOnlyDownloads(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_WIFI_ONLY] = value }
+    }
+
     private companion object {
         val KEY_SPEED = floatPreferencesKey("playback_speed")
         val KEY_SKIP_SILENCE = booleanPreferencesKey("skip_silence")
+        val KEY_WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
     }
 }

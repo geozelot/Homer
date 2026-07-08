@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.formatCompactDuration
 
@@ -42,6 +44,7 @@ fun HomeScreen(
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
+    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
 
     val scanning = scanState is ScanState.Scanning
 
@@ -93,6 +96,17 @@ fun HomeScreen(
             ScanStatus(scanState = scanState, bookCount = bookCount)
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Download on Wi‑Fi only", style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = wifiOnly, onCheckedChange = viewModel::setWifiOnlyDownloads)
+        }
+
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         if (books.isEmpty()) {
@@ -123,7 +137,11 @@ fun HomeScreen(
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(6.dp)),
                         )
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp),
+                        ) {
                             Text(
                                 book.title,
                                 style = MaterialTheme.typography.titleMedium,
@@ -148,6 +166,13 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        DownloadAction(
+                            status = book.downloadStatus,
+                            downloadedFiles = book.downloadedFiles,
+                            totalFiles = book.fileCount,
+                            onDownload = { viewModel.download(book.id) },
+                            onRemove = { viewModel.deleteDownload(book.id) },
+                        )
                     }
                 }
             }
@@ -177,5 +202,26 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
         ScanState.Idle -> if (bookCount > 0) {
             Text("$bookCount books", style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+@Composable
+private fun DownloadAction(
+    status: String?,
+    downloadedFiles: Int,
+    totalFiles: Int,
+    onDownload: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    when (status) {
+        DownloadStatus.DONE -> TextButton(onClick = onRemove) { Text("Remove") }
+        DownloadStatus.DOWNLOADING -> Text(
+            "$downloadedFiles/$totalFiles",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        DownloadStatus.FAILED -> TextButton(onClick = onDownload) { Text("Retry") }
+        else -> TextButton(onClick = onDownload) { Text("Download") }
     }
 }

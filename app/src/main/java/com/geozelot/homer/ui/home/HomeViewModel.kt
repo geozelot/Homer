@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +35,9 @@ data class BookListItem(
     val totalDurationMs: Long?,
     /** Remaining time from the saved position; null if not started or not yet measured. */
     val timeLeftMs: Long?,
+    /** Offline-download status ([com.geozelot.homer.data.db.entity.DownloadStatus]) or null. */
+    val downloadStatus: String?,
+    val downloadedFiles: Int,
 )
 
 @HiltViewModel
@@ -40,7 +46,10 @@ class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val webDavClient: WebDavClient,
     private val homerSync: HomerSyncRepository,
+    private val downloadManager: DownloadManager,
+    private val librarySettings: LibrarySettings,
     playbackStateDao: PlaybackStateDao,
+    downloadDao: DownloadDao,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
@@ -50,10 +59,13 @@ class HomeViewModel @Inject constructor(
             libraryRepository.books,
             authRepository.credentials,
             playbackStateDao.observeProgress(),
-        ) { books, credentials, progress ->
+            downloadDao.observeAll(),
+        ) { books, credentials, progress, downloads ->
             val elapsedByBook = progress.associate { it.bookId to it.elapsedMs }
+            val downloadByBook = downloads.associateBy { it.bookId }
             books.map { book ->
                 val elapsed = elapsedByBook[book.id]
+                val download = downloadByBook[book.id]
                 BookListItem(
                     id = book.id,
                     title = book.title,
@@ -68,9 +80,14 @@ class HomeViewModel @Inject constructor(
                     } else {
                         null
                     },
+                    downloadStatus = download?.status,
+                    downloadedFiles = download?.downloadedFiles ?: 0,
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val wifiOnlyDownloads: StateFlow<Boolean> = librarySettings.wifiOnlyDownloads
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -97,6 +114,12 @@ class HomeViewModel @Inject constructor(
             libraryRepository.setLibraryRoot(_libraryRoot.value)
             libraryRepository.scan(incremental = false)
         }
+    }
+
+    fun download(bookId: String) = downloadManager.download(bookId)
+    fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
+    fun setWifiOnlyDownloads(value: Boolean) {
+        viewModelScope.launch { librarySettings.setWifiOnlyDownloads(value) }
     }
 
     fun logout() = authRepository.logout()

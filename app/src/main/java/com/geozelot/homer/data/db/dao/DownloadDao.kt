@@ -12,6 +12,9 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE bookId = :bookId")
     fun observeByBookId(bookId: String): Flow<DownloadEntity?>
 
+    @Query("SELECT * FROM downloads")
+    fun observeAll(): Flow<List<DownloadEntity>>
+
     @Query("SELECT * FROM downloads WHERE bookId = :bookId")
     suspend fun findByBookId(bookId: String): DownloadEntity?
 
