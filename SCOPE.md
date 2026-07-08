@@ -59,8 +59,17 @@ whole "biggest technical unknown" is removed from the critical path.
 2. **Sidecar** — no embedded chapters but `.homer.json` sidecar exists → read offsets.
 3. **None** — single long chapter. In-app manual chapter-marking tool writes a sidecar. Tier-3 books flagged visually ("no chapters").
 
-Chapter parsing is a **flagged spike** (see risks) — Media3's ID3 decoder exposes
-`ChapterFrame`, but M4B atom coverage is partial and may need a small parser.
+Chapter parsing was spiked — see [docs/research/chapter-parsing.md](docs/research/chapter-parsing.md). Findings:
+- **MP3 (ID3 CHAP/CTOC):** fully supported by Media3 `MetadataRetriever` on current
+  stable. Titles are `TIT2` subframes (walk subframes; no `getTitle()`). Low risk.
+- **M4B/MP4:** the hole. Media3's native MP4 chapter API (`Chapter`, issue #2803) is
+  **merged but unreleased** (1.11 betas only), and **no FOSS library reads M4B chapters
+  cleanly**. Mitigation: chapters sit behind an interface; ship a **manual parser
+  bridge** (QuickTime chapter track first, Nero `chpl` fallback; `org.mp4parser:isoparser`
+  Apache-2.0 for box access) and swap to Media3's native `Chapter` once a pinned stable
+  release confirms #2803.
+- Cover art + basic tags for both formats: platform `MediaMetadataRetriever` /
+  Media3 `MediaMetadata` (downsample artwork — 1–3 MB covers risk OOM).
 
 ---
 
@@ -165,9 +174,10 @@ Each phase is independently demoable.
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| M4B / ID3 `CHAP` parsing coverage | Med | Spike in P3; fall back to sidecar/manual (tier 2/3) when embedded parse fails. |
+| M4B chapter parsing (no FOSS lib; Media3 native support unreleased) | **High** | Spiked (see research note). MP3 via Media3 now; M4B via manual QuickTime-track + Nero `chpl` parser behind an interface; swap to Media3 `Chapter` API when a pinned stable ships #2803. Tiers 2–3 (sidecar/manual) cover parse failures. |
 | PROPFIND performance / Nextcloud quirks on large trees | Med | Depth-controlled, resumable crawl; incremental etag; test against real library early (P2). |
-| Seek within large single files over WebDAV | Med | Ranged GET via `OkHttpDataSource`; verify Nextcloud honors `Range` on WebDAV GET in P4. |
+| Seek within large files + cheap M4B metadata scan over WebDAV | Med | **P2 WebDAV `DataSource` must honor HTTP `Range` and expose `getSize()`** — required so moov-at-end M4B files stay cheap (Media3 seeks past `mdat`) and for playback seek. Verify Nextcloud honors `Range` on WebDAV GET early. |
+| Media3 pinned at placeholder 1.4.1 | Low | Bump to current stable (1.10.x) when P3/P4 touch playback. |
 | Android Auto validation (browse tree, flags, media requirements) | Med | Build `MediaLibraryService` correctly from P4; test on Desktop Head Unit early. |
 | `.homer` index write concurrency across devices | Low | Single user + ETag optimistic concurrency + timestamp LWW. |
 | Android 14+ foreground-service / background limits | Low | Declare `mediaPlayback` FGS type; standard Media3 session handling. |
