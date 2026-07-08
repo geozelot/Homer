@@ -33,6 +33,9 @@ class LibraryRepository @Inject constructor(
 
     suspend fun setLibraryRoot(path: String) = librarySettings.setLibraryRoot(path)
 
+    /** Kick off background cover extraction for any books still missing a cover. */
+    fun enrichCovers() = coverEnricher.enrichMissingCovers()
+
     /** Runs a scan, updating [scanState]. No-op if a scan is already running. */
     suspend fun scan(incremental: Boolean = false) {
         if (_scanState.value is ScanState.Scanning) return

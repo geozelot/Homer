@@ -62,6 +62,8 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
+        // Fill in covers for books missing one, without needing a full re-scan.
+        libraryRepository.enrichCovers()
     }
 
     fun onLibraryRootChange(value: String) {
