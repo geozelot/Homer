@@ -1,5 +1,6 @@
 package com.geozelot.homer.playback
 
+import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.geozelot.homer.data.auth.CredentialStore
@@ -25,6 +26,9 @@ class PlaylistResolver @Inject constructor(
         if (files.isEmpty()) return null
 
         val coverModel = BookCover.model(book, credentials, webDavClient)
+        // Local cached cover as a file:// URI so the media notification shows it on
+        // every chapter (the notification's loader can't authenticate remote WebDAV).
+        val artworkUri = book.localCoverPath?.let { Uri.fromFile(java.io.File(it)) }
 
         val items = files.map { file ->
             val url = webDavClient.urlFor(credentials, file.relativePath).toString()
@@ -37,6 +41,7 @@ class PlaylistResolver @Inject constructor(
                         .setTitle(chapterTitle)
                         .setAlbumTitle(book.title)
                         .setArtist(book.author ?: "Unknown author")
+                        .setArtworkUri(artworkUri)
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
                         .build(),
