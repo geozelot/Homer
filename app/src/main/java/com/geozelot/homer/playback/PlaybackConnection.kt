@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -116,6 +117,9 @@ class PlaybackConnection @Inject constructor(
             currentCoverModel = playlist.coverModel
             // Measure per-file durations for the book total (once per book; cached).
             durationEnricher.enrich(bookId)
+            // Pull the freshest cross-device position before deciding where to resume.
+            // Time-boxed so a slow/offline server never delays playback start.
+            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { homerSync.sync() }
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {
@@ -327,5 +331,6 @@ class PlaybackConnection @Inject constructor(
     private companion object {
         const val TAG = "HomerPlay"
         const val SHAKE_EXTEND_MS = 5 * 60 * 1000L
+        const val RESUME_SYNC_TIMEOUT_MS = 5_000L
     }
 }
