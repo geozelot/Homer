@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Offline downloads run as a foreground (data-sync) service so they survive the
+         app being closed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <!-- Android 11+ package visibility: resolve a browser / Custom Tabs provider
          for the Login Flow v2 web step. -->
     <queries>
@@ -65,6 +69,13 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- Declare the data-sync FGS type on WorkManager's foreground service so the
+             download worker can promote itself with setForeground(). -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
     </application>
 

@@ -3,11 +3,13 @@ package com.geozelot.homer.data.download
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
@@ -26,9 +28,10 @@ import java.io.IOException
 
 /**
  * Downloads a book's audio files to app-private storage for offline playback. Runs under
- * WorkManager so it survives process death and retries with backoff; a Wi‑Fi-only network
- * constraint (when set) is applied by the enqueuer. Progress is written to Room (drives the
- * UI) and mirrored to a lightweight notification.
+ * WorkManager as a long-running foreground (data-sync) service, so it keeps going when the
+ * app is closed and survives memory pressure; it retries with backoff, and a Wi‑Fi-only
+ * network constraint (when set) is applied by the enqueuer. Progress is written to Room
+ * (drives the UI) and shown in the foreground notification.
  */
 @HiltWorker
 class DownloadWorker @AssistedInject constructor(
@@ -52,11 +55,13 @@ class DownloadWorker @AssistedInject constructor(
         val title = bookDao.findById(bookId)?.title ?: bookId.substringAfterLast('/')
         val notifId = bookId.hashCode()
         ensureChannel()
+        // Promote to a foreground service so the download continues if the app is closed.
+        runCatching { setForeground(foregroundInfo(notifId, title, 0, files.size)) }
 
         downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, 0, files.size, now()))
         try {
             files.forEachIndexed { index, file ->
-                notifyProgress(notifId, title, index, files.size)
+                runCatching { setForeground(foregroundInfo(notifId, title, index, files.size)) }
                 val dest = storage.fileFor(file.relativePath)
                 dest.parentFile?.mkdirs()
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, file.relativePath)).build()
@@ -68,7 +73,6 @@ class DownloadWorker @AssistedInject constructor(
                 downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, index + 1, files.size, now()))
             }
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DONE, files.size, files.size, now()))
-            cancelNotification(notifId)
             Log.i(TAG, "downloaded $bookId (${files.size} files)")
             return Result.success()
         } catch (e: CancellationException) {
@@ -78,7 +82,6 @@ class DownloadWorker @AssistedInject constructor(
             if (runAttemptCount + 1 < MAX_ATTEMPTS) return Result.retry()
             storage.deleteBook(bookId)
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.FAILED, 0, files.size, now()))
-            cancelNotification(notifId)
             return Result.failure()
         }
     }
@@ -92,20 +95,20 @@ class DownloadWorker @AssistedInject constructor(
         }
     }
 
-    private fun notifyProgress(id: Int, title: String, done: Int, total: Int) {
+    /** Foreground notification for the ongoing download; the WM service is removed on finish. */
+    private fun foregroundInfo(id: Int, title: String, done: Int, total: Int): ForegroundInfo {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
             .setContentText("Downloading $done/$total…")
             .setOngoing(true)
-            .setProgress(total, done, false)
+            .setProgress(total, done, done == 0)
             .build()
-        // No-op if POST_NOTIFICATIONS isn't granted; the download proceeds regardless.
-        runCatching { NotificationManagerCompat.from(appContext).notify(id, notification) }
-    }
-
-    private fun cancelNotification(id: Int) {
-        runCatching { NotificationManagerCompat.from(appContext).cancel(id) }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(id, notification)
+        }
     }
 
     private fun now() = System.currentTimeMillis()
