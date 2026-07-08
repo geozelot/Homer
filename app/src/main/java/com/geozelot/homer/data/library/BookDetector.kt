@@ -80,7 +80,10 @@ class BookDetector @Inject constructor() {
         val relToRoot = bookPath.removePrefix(root).trim('/')
         val segments = relToRoot.split('/').filter { it.isNotEmpty() }
         val title = segments.lastOrNull() ?: bookPath.substringAfterLast('/')
-        val author = if (segments.size >= 2) segments[segments.size - 2] else null
+        // Top-level folder under the library root is the author; any folder between
+        // author and book is the series (e.g. "Harry Potter - Heptalogie").
+        val author = if (segments.size >= 2) segments.first() else null
+        val series = if (segments.size >= 3) segments[segments.size - 2] else null
         val cover = images.minByOrNull { coverRank(it.name) }?.path
 
         val fileEntities = orderedAudio.mapIndexed { index, resource ->
@@ -101,7 +104,7 @@ class BookDetector @Inject constructor() {
             id = bookPath,
             title = title,
             author = author,
-            series = null,
+            series = series,
             seriesIndex = null,
             relativePath = bookPath,
             coverFilePath = cover,
@@ -139,9 +142,14 @@ class BookDetector @Inject constructor() {
         /** Chapter tier is resolved in P3 (embedded/sidecar/none); 0 = not yet determined. */
         const val CHAPTER_TIER_UNDETERMINED = 0
 
-        // "Part 1", "Part_01", "CD2", "Disc 3", "vol.1", etc.
-        private val PART_REGEX =
-            Regex("^(part|pt|disc|disk|cd|vol|volume)[\\s._-]*\\d+", RegexOption.IGNORE_CASE)
+        // A part/disc/volume marker followed by a number, matched ANYWHERE in the
+        // folder name (handles "CD4", "Eden CD 6", "… - Teil 2"). A word boundary
+        // before the keyword avoids matching inside words, and the required trailing
+        // digit keeps "… - CD Version" or "… Band 6" from being treated as parts.
+        private val PART_REGEX = Regex(
+            "\\b(teil|part|cd|dvd|disc|disk|vol|volume|folge)[\\s._#-]*\\d+",
+            RegexOption.IGNORE_CASE,
+        )
 
         // A folder named just "1", "02", "003" — commonly a part/disc number.
         private val PURE_NUMBER_REGEX = Regex("^\\d{1,3}$")
