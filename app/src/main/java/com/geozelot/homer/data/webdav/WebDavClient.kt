@@ -52,6 +52,51 @@ class WebDavClient @Inject constructor(
             }
         }
 
+    /** Downloads a small text file (e.g. the `.homer` manifest). Null if it doesn't exist. */
+    suspend fun getText(relativePath: String): DavFile? = withContext(Dispatchers.IO) {
+        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val request = Request.Builder().url(urlFor(credentials, relativePath)).get().build()
+        client.newCall(request).execute().use { response ->
+            when {
+                response.code == 404 -> null
+                response.isSuccessful -> DavFile(response.body?.string().orEmpty(), response.header("ETag"))
+                else -> throw IOException("GET failed: HTTP ${response.code}")
+            }
+        }
+    }
+
+    /**
+     * Uploads [content] to [relativePath]. When [ifMatch] is set, the write only succeeds if
+     * the server's ETag still matches (optimistic concurrency) — otherwise [PreconditionFailedException].
+     * Returns the new ETag if the server reported one.
+     */
+    suspend fun putText(relativePath: String, content: String, ifMatch: String? = null): String? =
+        withContext(Dispatchers.IO) {
+            val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+            val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val builder = Request.Builder().url(urlFor(credentials, relativePath)).put(body)
+            ifMatch?.let { builder.header("If-Match", it) }
+            client.newCall(builder.build()).execute().use { response ->
+                when {
+                    response.code == 412 -> throw PreconditionFailedException()
+                    response.isSuccessful -> response.header("ETag")
+                    else -> throw IOException("PUT failed: HTTP ${response.code}")
+                }
+            }
+        }
+
+    /** Creates a collection (directory); a no-op if it already exists. */
+    suspend fun mkcol(relativePath: String): Unit = withContext(Dispatchers.IO) {
+        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val request = Request.Builder().url(urlFor(credentials, relativePath)).method("MKCOL", null).build()
+        client.newCall(request).execute().use { response ->
+            // 201 = created, 405 = already exists; both are fine.
+            if (response.code != 201 && response.code != 405) {
+                throw IOException("MKCOL failed: HTTP ${response.code}")
+            }
+        }
+    }
+
     /** Absolute URL for [relativePath], correctly percent-encoded per segment. */
     fun urlFor(credentials: NextcloudCredentials, relativePath: String): HttpUrl {
         val builder = credentials.serverUrl.toHttpUrl().newBuilder()

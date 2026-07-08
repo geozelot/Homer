@@ -16,6 +16,7 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.sync.HomerSyncRepository
 import kotlinx.coroutines.flow.first
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -66,6 +67,7 @@ class PlaybackConnection @Inject constructor(
     private val durationEnricher: DurationEnricher,
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
+    private val homerSync: HomerSyncRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
@@ -84,6 +86,8 @@ class PlaybackConnection @Inject constructor(
         override fun onEvents(player: Player, events: Player.Events) {
             pushState()
             persistPosition()
+            // Flush to the .homer manifest at natural boundaries (not every tick).
+            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) flushSync()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -93,6 +97,8 @@ class PlaybackConnection @Inject constructor(
                 clearSleepTimer()
                 pushState()
             }
+            // Chapter boundary is a good, cheap moment to sync cross-device position.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) flushSync()
         }
     }
 
@@ -256,6 +262,7 @@ class PlaybackConnection @Inject constructor(
                 if (controller?.isPlaying == true) {
                     pushState()
                     if (++tick % 10 == 0) persistPosition() // ~ every 5s while playing
+                    if (tick % 600 == 0) flushSync() // ~ every 5 min, bounds cross-device staleness
                 }
                 delay(500)
             }
@@ -264,19 +271,29 @@ class PlaybackConnection @Inject constructor(
 
     /** Debounced-ish persistence of the current book's position to Room. */
     private fun persistPosition() {
+        scope.launch { savePosition() }
+    }
+
+    private suspend fun savePosition() {
         val c = controller ?: return
         val bookId = currentBookId ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: return
         val position = c.currentPosition.coerceAtLeast(0L)
+        playbackStateDao.upsert(
+            PlaybackStateEntity(
+                bookId = bookId,
+                currentMediaId = mediaId,
+                positionMs = position,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    /** Persists the latest position, then reconciles it with the .homer manifest. */
+    private fun flushSync() {
         scope.launch {
-            playbackStateDao.upsert(
-                PlaybackStateEntity(
-                    bookId = bookId,
-                    currentMediaId = mediaId,
-                    positionMs = position,
-                    updatedAt = System.currentTimeMillis(),
-                ),
-            )
+            savePosition()
+            homerSync.sync()
         }
     }
 

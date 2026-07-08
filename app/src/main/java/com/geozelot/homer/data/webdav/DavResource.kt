@@ -15,5 +15,11 @@ data class DavResource(
     val name: String get() = path.substringAfterLast('/')
 }
 
+/** A downloaded text resource together with its ETag (for optimistic-concurrency writes). */
+data class DavFile(val content: String, val etag: String?)
+
 /** Thrown when a WebDAV call is attempted with no configured account. */
 class NotAuthenticatedException : IllegalStateException("No Nextcloud account configured")
+
+/** Thrown by a conditional PUT (If-Match) when the server's ETag no longer matches. */
+class PreconditionFailedException : java.io.IOException("ETag precondition failed")

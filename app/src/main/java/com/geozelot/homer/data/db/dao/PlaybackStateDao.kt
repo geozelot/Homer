@@ -18,6 +18,9 @@ interface PlaybackStateDao {
     @Query("SELECT * FROM playback_state WHERE bookId = :bookId")
     suspend fun findByBookId(bookId: String): PlaybackStateEntity?
 
+    @Query("SELECT * FROM playback_state")
+    suspend fun getAll(): List<PlaybackStateEntity>
+
     /** All saved positions — for a future "continue listening" / progress UI. */
     @Query("SELECT * FROM playback_state")
     fun observeAll(): Flow<List<PlaybackStateEntity>>
