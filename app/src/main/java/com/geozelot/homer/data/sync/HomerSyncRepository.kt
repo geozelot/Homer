@@ -39,7 +39,10 @@ class HomerSyncRepository @Inject constructor(
 
     /** Pull-merge-push in one pass. No-op if no account is configured. */
     suspend fun sync() {
-        if (credentialStore.credentials.value == null) return
+        if (credentialStore.credentials.value == null) {
+            Log.i(TAG, "sync skipped: no account")
+            return
+        }
         mutex.withLock {
             try {
                 reconcile()
@@ -54,6 +57,7 @@ class HomerSyncRepository @Inject constructor(
     private suspend fun reconcile() {
         val dir = manifestDir()
         val path = "$dir/$FILE"
+        Log.i(TAG, "sync start: path=$path")
 
         // Re-pull, re-merge and retry on each conflict; the last attempt writes
         // unconditionally so a mangled/weak ETag can never block sync forever
@@ -67,6 +71,7 @@ class HomerSyncRepository @Inject constructor(
                 ?: HomerIndex()
 
             val local = playbackStateDao.getAll().associateBy { it.bookId }
+            Log.i(TAG, "remote=${remoteIndex.books.size} books (etag=${remoteEtag ?: "none"}), local=${local.size} books")
             val merged = LinkedHashMap<String, HomerBookState>()
             val remoteWins = mutableListOf<PlaybackStateEntity>()
             for (id in remoteIndex.books.keys + local.keys) {
@@ -92,7 +97,10 @@ class HomerSyncRepository @Inject constructor(
 
             // Push only when we'd actually change what the server has.
             val mergedIndex = HomerIndex(books = merged)
-            if (mergedIndex == remoteIndex) return
+            if (mergedIndex == remoteIndex) {
+                Log.i(TAG, "already in sync, nothing to push")
+                return
+            }
 
             ensureDir(dir)
             val ifMatch = remoteEtag.takeUnless { attempt == MAX_ATTEMPTS - 1 }
