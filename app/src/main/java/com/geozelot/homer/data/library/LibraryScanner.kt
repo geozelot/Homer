@@ -75,11 +75,22 @@ class LibraryScanner @Inject constructor(
 
         val books = detector.buildBooks(audioFolders, root, now)
         for (detected in books) {
-            // Preserve a previously cached cover across rescans (upsert replaces the row).
+            // Carry cached data across the rescan (upsert replaces the rows): the extracted
+            // cover, and per-file durations matched by path — otherwise every rescan would
+            // discard all measured durations and re-probe the whole library on next open.
             val existingCover = bookDao.findById(detected.book.id)?.localCoverPath
-            bookDao.upsert(listOf(detected.book.copy(localCoverPath = existingCover)))
+            val existingDurations = audioFileDao.findForBook(detected.book.id)
+                .associate { it.relativePath to it.durationMs }
+            val files = detected.files.map { it.copy(durationMs = it.durationMs ?: existingDurations[it.relativePath]) }
+            // Recompute the total from the current file set so removed/added files stay correct.
+            val total = if (files.isNotEmpty() && files.all { it.durationMs != null }) {
+                files.sumOf { it.durationMs!! }
+            } else {
+                null
+            }
+            bookDao.upsert(listOf(detected.book.copy(localCoverPath = existingCover, totalDurationMs = total)))
             audioFileDao.deleteForBook(detected.book.id)
-            audioFileDao.upsert(detected.files)
+            audioFileDao.upsert(files)
         }
 
         // Prune books whose folders vanished. Guard the empty case — SQLite rejects

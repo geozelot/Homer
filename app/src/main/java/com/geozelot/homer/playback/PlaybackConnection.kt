@@ -40,6 +40,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** Snapshot of playback state for the UI. */
 data class PlaybackUiState(
@@ -85,6 +86,7 @@ class PlaybackConnection @Inject constructor(
     private var currentCoverModel: Any? = null
     private var currentOffline = false
     private var downloadWatchJob: Job? = null
+    private var syncJob: Job? = null
 
     private var sleepJob: Job? = null
     private var sleepTargetRealtimeMs = 0L
@@ -115,9 +117,11 @@ class PlaybackConnection @Inject constructor(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            // Sleep-at-end-of-chapter: pause as soon as the book auto-advances a chapter.
-            if (sleepEndOfChapter && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                controller?.pause()
+            if (sleepEndOfChapter) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    // The chapter finished on its own — pause as armed.
+                    controller?.pause()
+                } // else: user manually skipped chapters — they've taken control, so disarm.
                 clearSleepTimer()
                 pushState()
             }
@@ -129,7 +133,12 @@ class PlaybackConnection @Inject constructor(
     /** Loads a book and resumes from its saved position (or the start if none). */
     fun playBook(bookId: String) {
         scope.launch {
-            val c = awaitController()
+            val c = try {
+                awaitController()
+            } catch (e: Exception) {
+                Log.w(TAG, "cannot connect media controller", e)
+                return@launch
+            }
             // Pull the freshest cross-device state first (time-boxed so a slow/offline
             // server never delays playback). Runs even when reopening the current book,
             // so positions and bookmarks reflect other devices.
@@ -143,7 +152,6 @@ class PlaybackConnection @Inject constructor(
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
-            watchDownloadStatus(bookId)
             // Measure per-file durations for the book total (once per book; cached).
             durationEnricher.enrich(bookId)
             val saved = playbackStateDao.findByBookId(bookId)
@@ -155,6 +163,9 @@ class PlaybackConnection @Inject constructor(
             c.prepare()
             c.play()
             pushState()
+            // Watch for download-status flips only after the playlist is loaded, so the
+            // reload can't race the initial setMediaItems.
+            watchDownloadStatus(bookId)
         }
     }
 
@@ -178,6 +189,7 @@ class PlaybackConnection @Inject constructor(
     /** Rebuilds the current playlist from the latest source, keeping chapter + position. */
     private suspend fun reloadCurrentBook() {
         val c = controller ?: return
+        if (c.mediaItemCount == 0) return // nothing loaded yet — playBook is still setting up
         val bookId = currentBookId ?: return
         val playlist = playlistResolver.resolve(bookId) ?: return
         currentOffline = playlist.offline
@@ -242,7 +254,9 @@ class PlaybackConnection @Inject constructor(
     /** Adds [extraMs] to a running countdown; no-op for end-of-chapter or when off. */
     fun extendSleepTimer(extraMs: Long) {
         if (sleepJob?.isActive != true) return
-        sleepTargetRealtimeMs += extraMs
+        // Cap the total remaining so repeated shakes can't push the timer arbitrarily far.
+        val cap = SystemClock.elapsedRealtime() + MAX_SLEEP_REMAINING_MS
+        sleepTargetRealtimeMs = (sleepTargetRealtimeMs + extraMs).coerceAtMost(cap)
         val remaining = (sleepTargetRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         Log.i(TAG, "shake: sleep timer extended by ${extraMs / 1000}s -> ${remaining / 1000}s left")
         pushState()
@@ -317,16 +331,32 @@ class PlaybackConnection @Inject constructor(
         controller?.let { return it }
         return suspendCancellableCoroutine { cont ->
             val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-            val future = MediaController.Builder(context, token).buildAsync()
+            val future = MediaController.Builder(context, token)
+                .setListener(object : MediaController.Listener {
+                    override fun onDisconnected(controller: MediaController) {
+                        // Session/service went away — drop the stale controller so the
+                        // position loop stops and the next playBook reconnects fresh.
+                        if (this@PlaybackConnection.controller === controller) {
+                            this@PlaybackConnection.controller = null
+                        }
+                    }
+                })
+                .buildAsync()
+            cont.invokeOnCancellation { future.cancel(true) }
             future.addListener({
-                val c = future.get()
-                controller = c
-                c.addListener(listener)
-                // Apply the persisted global speed to this session.
-                scope.launch { c.setPlaybackSpeed(playbackSettings.speed.first()) }
-                startPositionUpdates()
-                pushState()
-                cont.resume(c)
+                try {
+                    val c = future.get()
+                    controller = c
+                    c.addListener(listener)
+                    // Apply the persisted global speed to this session.
+                    scope.launch { c.setPlaybackSpeed(playbackSettings.speed.first()) }
+                    startPositionUpdates()
+                    pushState()
+                    cont.resume(c)
+                } catch (e: Exception) {
+                    Log.w(TAG, "media controller connect failed", e)
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
             }, ContextCompat.getMainExecutor(context))
         }
     }
@@ -365,10 +395,16 @@ class PlaybackConnection @Inject constructor(
         )
     }
 
-    /** Persists the latest position, then reconciles it with the .homer manifest. */
+    /**
+     * Persists the latest position immediately, then reconciles with the .homer manifest —
+     * debounced, so a burst of events (pause + transition + position discontinuity firing
+     * together) collapses into a single WebDAV round-trip instead of several queued ones.
+     */
     private fun flushSync() {
-        scope.launch {
-            savePosition()
+        scope.launch { savePosition() }
+        syncJob?.cancel()
+        syncJob = scope.launch {
+            delay(SYNC_DEBOUNCE_MS)
             homerSync.sync()
         }
     }
@@ -403,6 +439,8 @@ class PlaybackConnection @Inject constructor(
     private companion object {
         const val TAG = "HomerPlay"
         const val SHAKE_EXTEND_MS = 5 * 60 * 1000L
+        const val MAX_SLEEP_REMAINING_MS = 2 * 60 * 60 * 1000L
         const val RESUME_SYNC_TIMEOUT_MS = 5_000L
+        const val SYNC_DEBOUNCE_MS = 1_000L
     }
 }
