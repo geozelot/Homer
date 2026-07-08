@@ -33,6 +33,8 @@ data class PlaybackUiState(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val coverUrl: String? = null,
+    /** Embedded artwork the player parsed from the stream (fallback when no coverUrl). */
+    val artworkData: ByteArray? = null,
 )
 
 /**
@@ -165,6 +167,7 @@ class PlaybackConnection @Inject constructor(
             positionMs = c.currentPosition.coerceAtLeast(0L),
             durationMs = c.duration.coerceAtLeast(0L),
             coverUrl = currentCoverUrl,
+            artworkData = if (currentCoverUrl == null) metadata.artworkData else null,
         )
     }
 }

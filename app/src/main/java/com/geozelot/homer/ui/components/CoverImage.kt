@@ -13,12 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 
-/** Book cover, or a book-glyph placeholder when no cover URL is available. */
+/**
+ * Book cover, or a book-glyph placeholder when none is available. [model] may be a
+ * URL string (folder cover image) or a ByteArray (embedded artwork) — Coil handles both.
+ */
 @Composable
-fun CoverImage(coverUrl: String?, modifier: Modifier = Modifier) {
-    if (coverUrl != null) {
+fun CoverImage(model: Any?, modifier: Modifier = Modifier) {
+    if (model != null) {
         AsyncImage(
-            model = coverUrl,
+            model = model,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = modifier,
