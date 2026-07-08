@@ -3,6 +3,7 @@ package com.geozelot.homer.ui.login
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import com.geozelot.homer.data.auth.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -62,7 +63,17 @@ class LoginViewModel @Inject constructor(
 
                 var elapsed = 0L
                 while (elapsed < POLL_TIMEOUT_MS) {
-                    val credentials = authRepository.pollOnce(init)
+                    val credentials = try {
+                        authRepository.pollOnce(init)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A transient failure (e.g. a connectivity blip while the
+                        // browser is foregrounded) must NOT abort the flow — the login
+                        // session stays valid for minutes, so just retry next tick.
+                        Log.w(TAG, "poll attempt failed; will retry", e)
+                        null
+                    }
                     if (credentials != null) {
                         Log.i(TAG, "startLogin: success, credentials saved")
                         return@launch // AuthRepository state flips app-wide
@@ -70,9 +81,12 @@ class LoginViewModel @Inject constructor(
                     delay(POLL_INTERVAL_MS)
                     elapsed += POLL_INTERVAL_MS
                 }
-                Log.w(TAG, "startLogin: timed out after ${POLL_TIMEOUT_MS}ms")
+                Log.w(TAG, "startLogin: timed out")
                 fail("Login timed out. Please try again.")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                // Only reached for setup failures (e.g. an unreachable server address).
                 Log.e(TAG, "startLogin failed", e)
                 fail(e.message ?: "Login failed. Check the server address and try again.")
             }
