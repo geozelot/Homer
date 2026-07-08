@@ -10,7 +10,7 @@ import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
-import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,7 +47,7 @@ class HomeViewModel @Inject constructor(
     private val webDavClient: WebDavClient,
     private val homerSync: HomerSyncRepository,
     private val downloadManager: DownloadManager,
-    private val librarySettings: LibrarySettings,
+    private val playbackSettings: PlaybackSettings,
     playbackStateDao: PlaybackStateDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
@@ -86,7 +86,7 @@ class HomeViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val wifiOnlyDownloads: StateFlow<Boolean> = librarySettings.wifiOnlyDownloads
+    val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
@@ -119,7 +119,7 @@ class HomeViewModel @Inject constructor(
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
     fun setWifiOnlyDownloads(value: Boolean) {
-        viewModelScope.launch { librarySettings.setWifiOnlyDownloads(value) }
+        viewModelScope.launch { playbackSettings.setWifiOnlyDownloads(value) }
     }
 
     fun logout() = authRepository.logout()

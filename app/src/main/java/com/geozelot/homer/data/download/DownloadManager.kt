@@ -9,7 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.geozelot.homer.data.db.dao.DownloadDao
-import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.settings.PlaybackSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +30,7 @@ class DownloadManager @Inject constructor(
     @ApplicationContext context: Context,
     private val downloadDao: DownloadDao,
     private val storage: DownloadStorage,
-    private val settings: LibrarySettings,
+    private val settings: PlaybackSettings,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
