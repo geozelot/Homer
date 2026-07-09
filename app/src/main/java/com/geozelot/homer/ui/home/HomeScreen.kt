@@ -97,6 +97,7 @@ import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Faint
+import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
@@ -632,7 +633,8 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f / 1.5f)
-                .clip(RoundedCornerShape(10.dp)),
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             CoverArt(model = book.coverModel, title = book.title, modifier = Modifier.fillMaxSize())
             if (showCheck) {
@@ -700,26 +702,34 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f / 1.5f),
+                .aspectRatio(1f / 1.5f)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             val covers = series.books.take(3)
             val steps = (covers.size - 1).coerceAtLeast(1)
-            val coverW = maxWidth * (1f - STACK_SPREAD)
-            val dx = maxWidth * STACK_SPREAD / steps
-            val dy = maxHeight * STACK_SPREAD / steps
+            // Inset the stack so its covers never touch the card's outline.
+            val pad = 6.dp
+            val availW = maxWidth - pad * 2
+            val availH = maxHeight - pad * 2
+            val coverW = availW * (1f - STACK_SPREAD)
+            val coverH = coverW * 1.5f
+            val dx = (availW - coverW) / steps
+            val dy = (availH - coverH) / steps
             // Deepest drawn first; the front book (depth 0) sits bottom-left, the rest fan
-            // up-right, together spanning the whole cell.
+            // up-right. Each cover gets a background-coloured outline so overlapping sheets
+            // read as separate books.
             for (depth in covers.indices.reversed()) {
                 val book = covers[depth]
                 CoverArt(
                     model = book.coverModel,
                     title = book.title,
                     modifier = Modifier
-                        .offset(x = dx * depth, y = dy * (steps - depth))
+                        .offset(x = pad + dx * depth, y = pad + dy * (steps - depth))
                         .width(coverW)
                         .aspectRatio(1f / 1.5f)
-                        .then(if (depth > 0) Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)) else Modifier)
-                        .clip(RoundedCornerShape(10.dp)),
+                        .clip(RoundedCornerShape(9.dp))
+                        .border(1.5.dp, Ground, RoundedCornerShape(9.dp)),
                 )
             }
         }
