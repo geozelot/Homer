@@ -184,10 +184,20 @@ class HomeViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Library list grouped into collapsible series shelves (2+ books sharing a series). */
-    val entries: StateFlow<List<LibraryEntry>> = books
-        .map(::groupIntoEntries)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /** Library list, filtered by the search query, grouped into series shelves (2+). */
+    val entries: StateFlow<List<LibraryEntry>> =
+        combine(books, _searchQuery) { list, query ->
+            val filtered = if (query.isBlank()) {
+                list
+            } else {
+                val needle = query.trim().lowercase()
+                list.filter { it.matchesQuery(needle) }
+            }
+            groupIntoEntries(filtered)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** In-progress books (started, not finished), most-recently-played first. */
     val continueShelf: StateFlow<List<BookListItem>> = books
@@ -242,6 +252,10 @@ class HomeViewModel @Inject constructor(
 
     fun setShowHidden(value: Boolean) {
         _showHidden.value = value
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     /** Saves metadata corrections + hidden flag; blank fields revert to detection. */
@@ -356,6 +370,14 @@ class HomeViewModel @Inject constructor(
         const val CONTINUE_LIMIT = 12
     }
 }
+
+/** Case-insensitive match across title, author, series, genre and tags. */
+private fun BookListItem.matchesQuery(needle: String): Boolean =
+    title.contains(needle, ignoreCase = true) ||
+        author?.contains(needle, ignoreCase = true) == true ||
+        series?.contains(needle, ignoreCase = true) == true ||
+        genre?.contains(needle, ignoreCase = true) == true ||
+        tags.any { it.contains(needle, ignoreCase = true) }
 
 /**
  * Collapses runs of books sharing an author + series (2+) into a [LibraryEntry.Series];

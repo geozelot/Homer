@@ -34,7 +34,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +75,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -113,9 +119,11 @@ fun HomeScreen(
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<BookListItem?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     val actions = remember(viewModel) {
@@ -129,14 +137,28 @@ fun HomeScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TopBar(onSettings = { showSettings = true })
+        TopBar(
+            searching = searching,
+            query = searchQuery,
+            onQueryChange = viewModel::setSearchQuery,
+            onOpenSearch = { searching = true },
+            onCloseSearch = {
+                searching = false
+                viewModel.setSearchQuery("")
+            },
+            onSettings = { showSettings = true },
+        )
 
         if (entries.isEmpty()) {
-            EmptyLibrary(
-                scanning = scanState is ScanState.Scanning,
-                onOpenSettings = { showSettings = true },
-                modifier = Modifier.weight(1f),
-            )
+            if (searching && searchQuery.isNotBlank()) {
+                EmptyResults(modifier = Modifier.weight(1f))
+            } else {
+                EmptyLibrary(
+                    scanning = scanState is ScanState.Scanning,
+                    onOpenSettings = { showSettings = true },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (gridView) 3 else 1),
@@ -151,9 +173,10 @@ fun HomeScreen(
             ) {
                 libraryContent(
                     entries = entries,
-                    continueShelf = continueShelf,
+                    continueShelf = if (searching) emptyList() else continueShelf,
                     bookCount = bookCount,
                     gridView = gridView,
+                    searching = searching,
                     expanded = expanded,
                     onToggleView = viewModel::setGridView,
                     onBookClick = onBookClick,
@@ -202,7 +225,14 @@ private class BookActions(
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(onSettings: () -> Unit) {
+private fun TopBar(
+    searching: Boolean,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onOpenSearch: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onSettings: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -211,10 +241,57 @@ private fun TopBar(onSettings: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Wordmark("Homer")
-        IconButton(onClick = onSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Muted)
+        if (searching) {
+            SearchField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onClose = onCloseSearch,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Wordmark("Homer")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenSearch) {
+                    Icon(Icons.Filled.Search, contentDescription = "Search", tint = Muted)
+                }
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Muted)
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onClose) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search", tint = Muted)
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("Title, author, genre, tag…") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Faint) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear", tint = Muted)
+                    }
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+        )
     }
 }
 
@@ -246,6 +323,7 @@ private fun LazyGridScope.libraryContent(
     continueShelf: List<BookListItem>,
     bookCount: Int,
     gridView: Boolean,
+    searching: Boolean,
     expanded: MutableMap<String, Boolean>,
     onToggleView: (Boolean) -> Unit,
     onBookClick: (String) -> Unit,
@@ -259,7 +337,11 @@ private fun LazyGridScope.libraryContent(
     }
 
     item(span = { GridItemSpan(maxLineSpan) }, key = "library-head") {
-        LibraryHeader(count = bookCount, gridView = gridView, onToggleView = onToggleView)
+        LibraryHeader(
+            label = if (searching) "RESULTS" else "LIBRARY · $bookCount",
+            gridView = gridView,
+            onToggleView = onToggleView,
+        )
     }
 
     entries.forEach { entry ->
@@ -305,7 +387,7 @@ private fun SectionLabelRow(text: String) {
 }
 
 @Composable
-private fun LibraryHeader(count: Int, gridView: Boolean, onToggleView: (Boolean) -> Unit) {
+private fun LibraryHeader(label: String, gridView: Boolean, onToggleView: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -313,7 +395,7 @@ private fun LibraryHeader(count: Int, gridView: Boolean, onToggleView: (Boolean)
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("LIBRARY · $count", style = SectionLabel, color = Muted)
+        Text(label, style = SectionLabel, color = Muted)
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
@@ -761,6 +843,19 @@ private fun BookMenu(
 }
 
 // ── Empty state ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun EmptyResults(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("No matches", style = SerifTitle, color = Parchment)
+        Spacer(Modifier.height(8.dp))
+        Text("Try a different title, author, genre or tag.", color = Muted, fontSize = 13.sp)
+    }
+}
 
 @Composable
 private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
