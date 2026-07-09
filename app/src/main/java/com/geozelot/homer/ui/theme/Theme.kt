@@ -1,51 +1,62 @@
 package com.geozelot.homer.ui.theme
 
 import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
-private val LightColors = lightColorScheme(
-    primary = Accent,
-    secondary = AccentLight,
-    background = Parchment,
-    onBackground = Ink,
-    surface = Parchment,
-    onSurface = Ink,
-)
-
-private val DarkColors = darkColorScheme(
-    primary = AccentLight,
-    secondary = Accent,
+// Homer is dark-first by design (the candlelit palette). We map the locked tokens onto a
+// single Material dark scheme and don't offer a light variant or dynamic color — the warm
+// amber-on-near-black identity is the whole point.
+private val CandlelitScheme = darkColorScheme(
+    primary = Amber,
+    onPrimary = OnAmber,
+    primaryContainer = AmberDeep,
+    onPrimaryContainer = OnAmber,
+    secondary = Amber,
+    onSecondary = OnAmber,
+    tertiary = Sage,
+    onTertiary = OnAmber,
+    background = Ground,
+    onBackground = Parchment,
+    surface = Surface1,
+    onSurface = Parchment,
+    surfaceVariant = Surface2,
+    onSurfaceVariant = Muted,
+    surfaceContainer = Surface1,
+    surfaceContainerHigh = Surface2,
+    outline = Line,
+    outlineVariant = Line,
+    error = Danger,
+    onError = OnAmber,
+    scrim = Studio,
 )
 
 /**
- * App theme. Honors Material You dynamic color on Android 12+ when available,
- * falling back to Homer's seed palette otherwise.
+ * App theme — always the candlelit dark scheme. Custom [HomerTypography] pairs a serif
+ * (titles/wordmark) with the system sans (chrome). System bars are transparent with light
+ * icons to sit on the dark ground.
  */
 @Composable
-fun HomerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+fun HomerTheme(content: @Composable () -> Unit) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            // Force light system-bar icons: the app is always dark, so even on a light-mode
+            // device the bars must sit on our near-black ground. (enableEdgeToEdge already
+            // makes the bars transparent.)
+            val window = (view.context as Activity).window
+            val insets = WindowCompat.getInsetsController(window, view)
+            insets.isAppearanceLightStatusBars = false
+            insets.isAppearanceLightNavigationBars = false
         }
-        darkTheme -> DarkColors
-        else -> LightColors
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = CandlelitScheme,
         typography = HomerTypography,
         content = content,
     )
