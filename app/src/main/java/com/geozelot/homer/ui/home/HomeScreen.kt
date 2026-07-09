@@ -76,7 +76,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
@@ -381,13 +380,17 @@ private fun LazyGridScope.libraryContent(
                 val isOpen = expanded[entry.key] == true
                 if (gridView) {
                     if (isOpen) {
-                        // Accordion: a collapse band + the series' books as grid cards. No
-                        // navigation, so no Back button — tap the band to close.
+                        // Accordion container: a header band, the series' books as grid cards,
+                        // then a footer band that closes it off from the next items. No
+                        // navigation, so no Back button — tap either band to collapse.
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-head:${entry.key}") {
                             SeriesExpandedHeader(entry) { expanded[entry.key] = false }
                         }
                         items(entry.books, key = { "ep:${it.id}" }) { book ->
                             BookGridCard(book, onOpen = onBookClick, actions = actions)
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-foot:${entry.key}") {
+                            SeriesExpandedFooter { expanded[entry.key] = false }
                         }
                     } else {
                         item(key = "series:${entry.key}") {
@@ -654,6 +657,7 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             lineHeight = 13.sp,
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
@@ -676,10 +680,9 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
     }
 }
 
-// A shuffled stack: the front book fills the cell exactly like a book cover; the two
-// behind it are the same size but rotated + nudged so their corners fan out.
-private val STACK_ROTATIONS = listOf(0f, -5f, 6f)
-private val STACK_OFFSETS = listOf(0 to 0, 3 to 4, 6 to 6)
+// A clean stack: the front book fills the cell exactly like a book cover; the covers behind
+// are the same size, offset up-right so their top/right edges peek out as parallel sheets.
+private val STACK_OFFSETS = listOf(0 to 0, 5 to -4, 9 to -7)
 
 /** A series as a grid cell the same size as a book card, with a stacked-cover look. */
 @Composable
@@ -695,7 +698,7 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
                 .aspectRatio(1f / 1.3f),
         ) {
             // Drawn back-to-front so the first book sits flat on top; the box isn't clipped
-            // so the rotated covers behind can fan their corners past its edges.
+            // so the offset covers behind can peek their edges past it.
             val covers = series.books.take(3)
             for (depth in covers.indices.reversed()) {
                 val book = covers[depth]
@@ -706,18 +709,19 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .offset(x = ox.dp, y = oy.dp)
-                        .rotate(STACK_ROTATIONS.getOrElse(depth) { 0f })
                         .then(if (depth > 0) Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)) else Modifier)
                         .clip(RoundedCornerShape(10.dp)),
                 )
             }
         }
+        // minLines matches the book card's title so the meta line sits at the same height.
         Text(
             series.name,
             color = Parchment,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             lineHeight = 13.sp,
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
@@ -732,15 +736,15 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
     }
 }
 
-/** Full-width band shown in grid view when a series is expanded; tap to collapse. */
+/** Top band of the expanded-series container (rounded top); tap to collapse. */
 @Composable
 private fun SeriesExpandedHeader(series: LibraryEntry.Series, onCollapse: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 2.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+            .border(1.dp, Line, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
             .background(Surface1)
             .clickable(onClick = onCollapse)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -751,6 +755,26 @@ private fun SeriesExpandedHeader(series: LibraryEntry.Series, onCollapse: () -> 
             Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
         }
         Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
+    }
+}
+
+/** Bottom band closing the expanded-series container (rounded bottom); tap to collapse. */
+@Composable
+private fun SeriesExpandedFooter(onCollapse: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+            .border(1.dp, Line, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+            .background(Surface1)
+            .clickable(onClick = onCollapse)
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = Muted, modifier = Modifier.size(16.dp))
+        Text("Close", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
