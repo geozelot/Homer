@@ -31,6 +31,9 @@ interface BookDao {
     @Query("UPDATE books SET totalDurationMs = :totalDurationMs WHERE id = :bookId")
     suspend fun updateTotalDuration(bookId: String, totalDurationMs: Long)
 
+    @Query("UPDATE books SET genre = :genre WHERE id = :bookId")
+    suspend fun updateGenre(bookId: String, genre: String)
+
     /** Ids of books at or beneath [path] (used to preserve skipped subtrees on rescan). */
     @Query("SELECT id FROM books WHERE id = :path OR id LIKE :path || '/%'")
     suspend fun idsUnder(path: String): List<String>

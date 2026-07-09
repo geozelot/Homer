@@ -44,6 +44,7 @@ data class BookListItem(
     val coverModel: Any?,
     val series: String?,
     val seriesIndex: Int?,
+    val genre: String?,
     val totalDurationMs: Long?,
     /** Remaining time from the saved position; null if not started or not yet measured. */
     val timeLeftMs: Long?,
@@ -151,6 +152,7 @@ class HomeViewModel @Inject constructor(
                     coverModel = BookCover.model(book, credentials, webDavClient),
                     series = book.series,
                     seriesIndex = book.seriesIndex,
+                    genre = book.genre,
                     totalDurationMs = total,
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,

@@ -538,8 +538,14 @@ private fun BookListRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 1.dp),
             )
-            if (book.isDownloaded) {
-                Box(modifier = Modifier.padding(top = 5.dp)) { OfflineTag() }
+            if (book.genre != null || book.isDownloaded) {
+                Row(
+                    modifier = Modifier.padding(top = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    book.genre?.let { TagChip(it, Amber, AmberSoft) }
+                    if (book.isDownloaded) TagChip("offline", Sage, SageSoft)
+                }
             }
         }
         Box {
@@ -561,14 +567,16 @@ private fun listRowMeta(book: BookListItem): String = buildString {
 }
 
 @Composable
-private fun OfflineTag() {
+private fun TagChip(text: String, fg: Color, bg: Color) {
     Text(
-        "offline",
-        color = Sage,
+        text,
+        color = fg,
         fontSize = 9.5.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(SageSoft)
+            .background(bg)
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
 }

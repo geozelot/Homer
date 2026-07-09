@@ -18,6 +18,8 @@ data class BookEntity(
     val author: String?,
     val series: String?,
     val seriesIndex: Int?,
+    /** Detected genre from embedded tags (filled lazily on first open); user-overridable. */
+    val genre: String? = null,
     val relativePath: String,
     /** Relative path of a cover image file in the book folder (remote), if any. */
     val coverFilePath: String?,

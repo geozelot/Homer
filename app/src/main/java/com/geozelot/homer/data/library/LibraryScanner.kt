@@ -78,7 +78,9 @@ class LibraryScanner @Inject constructor(
             // Carry cached data across the rescan (upsert replaces the rows): the extracted
             // cover, and per-file durations matched by path — otherwise every rescan would
             // discard all measured durations and re-probe the whole library on next open.
-            val existingCover = bookDao.findById(detected.book.id)?.localCoverPath
+            val existing = bookDao.findById(detected.book.id)
+            val existingCover = existing?.localCoverPath
+            val existingGenre = existing?.genre
             val existingDurations = audioFileDao.findForBook(detected.book.id)
                 .associate { it.relativePath to it.durationMs }
             val files = detected.files.map { it.copy(durationMs = it.durationMs ?: existingDurations[it.relativePath]) }
@@ -88,7 +90,15 @@ class LibraryScanner @Inject constructor(
             } else {
                 null
             }
-            bookDao.upsert(listOf(detected.book.copy(localCoverPath = existingCover, totalDurationMs = total)))
+            bookDao.upsert(
+                listOf(
+                    detected.book.copy(
+                        localCoverPath = existingCover,
+                        genre = existingGenre,
+                        totalDurationMs = total,
+                    ),
+                ),
+            )
             audioFileDao.deleteForBook(detected.book.id)
             audioFileDao.upsert(files)
         }

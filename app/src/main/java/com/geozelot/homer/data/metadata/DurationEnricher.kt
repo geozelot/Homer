@@ -43,16 +43,31 @@ class DurationEnricher @Inject constructor(
             try {
                 val credentials = credentialStore.credentials.value ?: return@launch
                 val files = audioFileDao.findForBook(bookId)
+                val needsGenre = bookDao.findById(bookId)?.genre == null
                 val missing = files.filter { it.durationMs == null }
-                if (missing.isEmpty()) return@launch
-                Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
+                if (missing.isEmpty() && !needsGenre) return@launch
+                if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
 
+                // Genre lives on the first file; capture it from whichever probe reaches it.
+                var genre: String? = null
                 for (file in missing) {
                     coroutineContext.ensureActive()
                     val url = webDavClient.urlFor(credentials, file.relativePath).toString()
-                    val duration = durationExtractor.probe(url) ?: continue
-                    audioFileDao.updateDuration(file.relativePath, duration)
+                    val probe = durationExtractor.probe(url)
+                    probe.durationMs?.let { audioFileDao.updateDuration(file.relativePath, it) }
+                    if (genre == null) genre = probe.genre
                 }
+
+                // No missing files were probed but genre is still unknown — probe the first
+                // file once just for its tags.
+                if (needsGenre && genre == null) {
+                    files.firstOrNull()?.let { first ->
+                        coroutineContext.ensureActive()
+                        val url = webDavClient.urlFor(credentials, first.relativePath).toString()
+                        genre = durationExtractor.probe(url).genre
+                    }
+                }
+                if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
 
                 // Best-effort total from whatever is now known; improves on a later open
                 // if some files couldn't be measured this time.
@@ -60,7 +75,7 @@ class DurationEnricher @Inject constructor(
                 if (durations.isNotEmpty()) {
                     bookDao.updateTotalDuration(bookId, durations.sum())
                 }
-                Log.i(TAG, "book $bookId: ${durations.size}/${files.size} files measured")
+                Log.i(TAG, "book $bookId: ${durations.size}/${files.size} files measured, genre=${genre ?: "—"}")
             } finally {
                 inFlight.remove(bookId)
             }
