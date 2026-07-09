@@ -127,25 +127,20 @@ class PlaybackConnection @Inject constructor(
             // never delays playback). Runs even when reopening the current book, so positions
             // and bookmarks reflect other devices.
             withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-            // Already playing this book (e.g. reopening the player) — don't restart it.
-            if (currentBookId == bookId && c.mediaItemCount > 0) {
-                if (!c.isPlaying) c.play()
-                return@launch
-            }
+            // Already loaded (e.g. reopening the player) — leave its play/pause state as-is.
+            if (currentBookId == bookId && c.mediaItemCount > 0) return@launch
             val playlist = playlistResolver.resolve(bookId) ?: return@launch
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
-            // Measure per-file durations for the book total (once per book; cached).
-            durationEnricher.enrich(bookId)
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {
                 val index = playlist.items.indexOfFirst { it.mediaId == saved.currentMediaId }
                 c.seekTo(if (index >= 0) index else 0, saved.positionMs)
             }
-            c.prepare()
-            c.play()
+            // Load the queue only — do NOT prepare()/play(), so opening a book streams no
+            // audio. Buffering + playback begin when the user hits play (see [playPause]).
             pushState()
             // Watch for download-status flips only after the playlist is loaded, so the reload
             // can't race the initial setMediaItems.
@@ -168,16 +163,31 @@ class PlaybackConnection @Inject constructor(
         val index = c.currentMediaItemIndex
         val position = c.currentPosition.coerceAtLeast(0L)
         val wasPlaying = c.isPlaying
+        // If the book was only loaded (never played), keep it that way — a source swap must
+        // not start streaming on its own.
+        val wasPrepared = c.playbackState != Player.STATE_IDLE
         c.setMediaItems(playlist.items)
         c.seekTo(index, position)
-        c.prepare()
-        if (wasPlaying) c.play()
+        if (wasPrepared) {
+            c.prepare()
+            if (wasPlaying) c.play()
+        }
         pushState()
     }
 
     fun playPause() {
         val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
+        if (c.isPlaying) {
+            c.pause()
+            return
+        }
+        // First play after loading: prepare (which begins buffering/streaming) and kick off
+        // the one-time per-file duration measurement now, rather than on open.
+        if (c.playbackState == Player.STATE_IDLE) {
+            c.prepare()
+            currentBookId?.let { durationEnricher.enrich(it) }
+        }
+        c.play()
     }
 
     fun seekTo(positionMs: Long) {
