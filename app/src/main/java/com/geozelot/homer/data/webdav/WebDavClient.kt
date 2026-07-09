@@ -106,13 +106,24 @@ class WebDavClient @Inject constructor(
                 .method("PROPFIND", body)
                 .build()
             client.newCall(request).execute().use { response ->
-                if (response.code != 207) return@use null
-                val text = response.body?.string() ?: return@use null
+                if (response.code != 207) {
+                    android.util.Log.w(TAG, "owner probe '$relativePath': HTTP ${response.code}")
+                    return@use null
+                }
+                val text = response.body?.string().orEmpty()
                 // Match any namespace prefix: <oc:owner-id>login</oc:owner-id>.
-                Regex("owner-id[^>]*>([^<]+)<").find(text)?.groupValues?.getOrNull(1)?.trim()?.ifBlank { null }
+                val owner = Regex("owner-id[^>]*>([^<]+)<").find(text)
+                    ?.groupValues?.getOrNull(1)?.trim()?.ifBlank { null }
+                if (owner != null) {
+                    android.util.Log.i(TAG, "owner-id for '$relativePath' = $owner")
+                } else {
+                    // Nextcloud often omits owner-id on a non-shared (own) folder — expected.
+                    android.util.Log.i(TAG, "owner-id absent for '$relativePath'; body: ${text.take(400)}")
+                }
+                owner
             }
         } catch (e: Exception) {
-            android.util.Log.w("HomerDav", "owner probe failed", e)
+            android.util.Log.w(TAG, "owner probe failed", e)
             null
         }
     }
@@ -263,6 +274,7 @@ class WebDavClient @Inject constructor(
                 """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">""" +
                 """<d:prop><oc:owner-id/></d:prop></d:propfind>"""
 
+        private const val TAG = "HomerDav"
         private const val FILES_MARKER = "/remote.php/dav/files/"
 
         /**

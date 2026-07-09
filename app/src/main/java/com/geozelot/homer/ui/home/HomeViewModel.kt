@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
@@ -257,6 +258,10 @@ class HomeViewModel @Inject constructor(
     private val _tier3Available = MutableStateFlow(false)
     val tier3Available: StateFlow<Boolean> = _tier3Available.asStateFlow()
 
+    /** Detected Nextcloud owner of the library folder, or null if not discoverable. */
+    private val _libraryOwner = MutableStateFlow<String?>(null)
+    val libraryOwner: StateFlow<String?> = _libraryOwner.asStateFlow()
+
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -274,9 +279,25 @@ class HomeViewModel @Inject constructor(
         libraryRepository.enrichCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
-        // Tier 3: pull the shared catalog so the library is present without scanning.
+        // Tier 3: pull the shared catalog so the library is present without scanning. Never
+        // touch the network at tier 1 (on-device only).
         viewModelScope.launch {
-            if (librarySettings.syncTier.first() >= 3) catalog.consume()
+            if (librarySettings.syncTier.first() >= 3) {
+                catalog.consume()
+                _tier3Available.value = catalog.exists()
+            }
+        }
+    }
+
+    /**
+     * Probes the library folder's Nextcloud owner and whether a shared catalog exists, for the
+     * settings UI. Called when the settings sheet opens (a user-initiated read).
+     */
+    fun probeSharedLibrary() {
+        viewModelScope.launch {
+            val owner = webDavClient.fetchOwnerId(libraryRepository.libraryRoot.first())
+            Log.i("HomerCatalog", "library owner = ${owner ?: "(unknown — claim-based)"}")
+            _libraryOwner.value = owner
             _tier3Available.value = catalog.exists()
         }
     }

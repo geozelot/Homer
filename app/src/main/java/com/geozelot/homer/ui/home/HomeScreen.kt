@@ -1133,7 +1133,11 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
     val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
+    val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
     val scanning = scanState is ScanState.Scanning
+
+    // Probe the library owner + shared-catalog availability whenever settings opens.
+    LaunchedEffect(Unit) { viewModel.probeSharedLibrary() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1190,6 +1194,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
             SyncTierSelector(
                 current = syncTier,
                 tier3Available = tier3Available,
+                owner = libraryOwner,
                 onSelect = viewModel::setSyncTier,
             )
 
@@ -1202,7 +1207,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SyncTierSelector(current: Int, tier3Available: Boolean, onSelect: (Int) -> Unit) {
+private fun SyncTierSelector(current: Int, tier3Available: Boolean, owner: String?, onSelect: (Int) -> Unit) {
     Text("SYNC", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
     Column(
         modifier = Modifier
@@ -1227,10 +1232,15 @@ private fun SyncTierSelector(current: Int, tier3Available: Boolean, onSelect: (I
         TierOption(
             selected = current >= 3,
             title = "Shared library",
-            subtitle = if (tier3Available) {
-                "Uses the shared library catalog — no scan needed on new devices."
-            } else {
-                "Publishes the full library so others (and new devices) skip scanning."
+            subtitle = buildString {
+                append(
+                    if (tier3Available) {
+                        "Uses the shared library catalog — no scan needed on new devices."
+                    } else {
+                        "Publishes the full library so others (and new devices) skip scanning."
+                    },
+                )
+                append(if (owner != null) "  Owner: $owner." else "  Owner: not detected.")
             },
             onClick = { onSelect(3) },
         )
