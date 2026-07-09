@@ -17,5 +17,6 @@ fun BookEntity.applyOverride(override: BookOverrideEntity?): BookEntity =
             author = override.author ?: author,
             series = override.series ?: series,
             seriesIndex = override.seriesIndex ?: seriesIndex,
+            genre = override.genre ?: genre,
         )
     }

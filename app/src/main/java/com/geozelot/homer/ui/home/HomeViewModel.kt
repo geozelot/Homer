@@ -45,6 +45,8 @@ data class BookListItem(
     val series: String?,
     val seriesIndex: Int?,
     val genre: String?,
+    /** User tags (from the override layer); empty if none. */
+    val tags: List<String>,
     val totalDurationMs: Long?,
     /** Remaining time from the saved position; null if not started or not yet measured. */
     val timeLeftMs: Long?,
@@ -52,17 +54,27 @@ data class BookListItem(
     val progress: Float?,
     /** When this book was last played, for Continue-shelf recency; null if never. */
     val lastPlayedAt: Long?,
+    /** Forced finished flag: null = auto-derive, true/false = user override. */
+    val finishedOverride: Boolean?,
     /** Offline-download status ([com.geozelot.homer.data.db.entity.DownloadStatus]) or null. */
     val downloadStatus: String?,
     val downloadedFiles: Int,
     val hidden: Boolean,
 ) {
-    /** Reached the end (a measured book whose remaining time is zero). */
-    val finished: Boolean get() = timeLeftMs != null && timeLeftMs <= 0L
+    /** Finished either because the user marked it, or (unforced) it ran to the end. */
+    val finished: Boolean get() = finishedOverride ?: (timeLeftMs != null && timeLeftMs <= 0L)
 
     /** Fully downloaded for offline playback. */
     val isDownloaded: Boolean get() = downloadStatus == DownloadStatus.DONE
 }
+
+/** Detected book with its override applied, plus the override-only bits (not book fields). */
+private data class EffectiveBook(
+    val book: BookEntity,
+    val hidden: Boolean,
+    val tags: List<String>,
+    val finishedOverride: Boolean?,
+)
 
 /** A library row: either a standalone book or a collapsible series shelf. */
 sealed interface LibraryEntry {
@@ -100,7 +112,7 @@ class HomeViewModel @Inject constructor(
 
     // Detection with user overrides applied (D2), hidden books filtered unless shown, then
     // re-sorted on the effective author/series so manual fixes group correctly.
-    private val effectiveBooks: Flow<List<Pair<BookEntity, Boolean>>> =
+    private val effectiveBooks: Flow<List<EffectiveBook>> =
         combine(
             libraryRepository.books,
             bookOverrideDao.observeAll(),
@@ -110,19 +122,24 @@ class HomeViewModel @Inject constructor(
             books
                 .map { book ->
                     val override = overrideByBook[book.id]
-                    book.applyOverride(override) to (override?.hidden == true)
+                    EffectiveBook(
+                        book = book.applyOverride(override),
+                        hidden = override?.hidden == true,
+                        tags = override?.tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
+                        finishedOverride = override?.finished,
+                    )
                 }
-                .filter { (_, hidden) -> showHidden || !hidden }
+                .filter { showHidden || !it.hidden }
                 .sortedWith(
                     // Nulls last (the `== null` keys sort false<true), matching the DB order.
-                    compareBy<Pair<BookEntity, Boolean>>(
-                        { it.first.author == null },
-                        { it.first.author },
-                        { it.first.series == null },
-                        { it.first.series },
-                        { it.first.seriesIndex == null },
-                        { it.first.seriesIndex },
-                        { it.first.title },
+                    compareBy<EffectiveBook>(
+                        { it.book.author == null },
+                        { it.book.author },
+                        { it.book.series == null },
+                        { it.book.series },
+                        { it.book.seriesIndex == null },
+                        { it.book.seriesIndex },
+                        { it.book.title },
                     ),
                 )
         }
@@ -136,7 +153,8 @@ class HomeViewModel @Inject constructor(
         ) { effective, credentials, progress, downloads ->
             val progressByBook = progress.associateBy { it.bookId }
             val downloadByBook = downloads.associateBy { it.bookId }
-            effective.map { (book, hidden) ->
+            effective.map { eff ->
+                val book = eff.book
                 val bookProgress = progressByBook[book.id]
                 val elapsed = bookProgress?.elapsedMs
                 val total = book.totalDurationMs
@@ -153,13 +171,15 @@ class HomeViewModel @Inject constructor(
                     series = book.series,
                     seriesIndex = book.seriesIndex,
                     genre = book.genre,
+                    tags = eff.tags,
                     totalDurationMs = total,
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
                     lastPlayedAt = bookProgress?.updatedAt,
+                    finishedOverride = eff.finishedOverride,
                     downloadStatus = download?.status,
                     downloadedFiles = download?.downloadedFiles ?: 0,
-                    hidden = hidden,
+                    hidden = eff.hidden,
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -231,9 +251,14 @@ class HomeViewModel @Inject constructor(
         author: String,
         series: String,
         seriesIndex: String,
+        genre: String,
+        tags: String,
         hidden: Boolean,
     ) {
         viewModelScope.launch {
+            // The finished flag isn't edited here (it's a context-menu action) — preserve it.
+            val existingFinished = bookOverrideDao.findById(bookId)?.finished
+            val tagList = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }
             bookOverrideDao.upsert(
                 BookOverrideEntity(
                     bookId = bookId,
@@ -241,6 +266,9 @@ class HomeViewModel @Inject constructor(
                     author = author.trim().ifBlank { null },
                     series = series.trim().ifBlank { null },
                     seriesIndex = seriesIndex.trim().toIntOrNull(),
+                    genre = genre.trim().ifBlank { null },
+                    tags = tagList.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+                    finished = existingFinished,
                     hidden = hidden,
                     updatedAt = System.currentTimeMillis(),
                 ),
@@ -288,6 +316,30 @@ class HomeViewModel @Inject constructor(
                         series = null,
                         seriesIndex = null,
                         hidden = hidden,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+            )
+            homerSync.sync()
+        }
+    }
+
+    /**
+     * Mark/unmark finished from the context menu (preserving other override fields).
+     * [finished] = true forces finished, false forces not-finished, null reverts to auto.
+     */
+    fun setFinished(bookId: String, finished: Boolean?) {
+        viewModelScope.launch {
+            val existing = bookOverrideDao.findById(bookId)
+            bookOverrideDao.upsert(
+                existing?.copy(finished = finished, updatedAt = System.currentTimeMillis())
+                    ?: BookOverrideEntity(
+                        bookId = bookId,
+                        title = null,
+                        author = null,
+                        series = null,
+                        seriesIndex = null,
+                        finished = finished,
+                        hidden = false,
                         updatedAt = System.currentTimeMillis(),
                     ),
             )

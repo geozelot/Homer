@@ -18,6 +18,12 @@ data class BookOverrideEntity(
     val author: String?,
     val series: String?,
     val seriesIndex: Int?,
+    /** Genre override (null = use the detected genre). */
+    val genre: String? = null,
+    /** User tags, newline-delimited (null = none). */
+    val tags: String? = null,
+    /** Tri-state finished flag: null = auto (derive from position), true/false = forced. */
+    val finished: Boolean? = null,
     val hidden: Boolean,
     val updatedAt: Long,
 )

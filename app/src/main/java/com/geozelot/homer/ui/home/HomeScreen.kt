@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -122,6 +124,7 @@ fun HomeScreen(
             onRemove = viewModel::deleteDownload,
             onEdit = { editing = it },
             onSetHidden = viewModel::setHidden,
+            onSetFinished = viewModel::setFinished,
         )
     }
 
@@ -174,8 +177,8 @@ fun HomeScreen(
     editing?.let { book ->
         EditBookDialog(
             book = book,
-            onSave = { title, author, series, index, hidden ->
-                viewModel.saveOverride(book.id, title, author, series, index, hidden)
+            onSave = { title, author, series, index, genre, tags, hidden ->
+                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden)
                 editing = null
             },
             onReset = {
@@ -193,6 +196,7 @@ private class BookActions(
     val onRemove: (String) -> Unit,
     val onEdit: (BookListItem) -> Unit,
     val onSetHidden: (String, Boolean) -> Unit,
+    val onSetFinished: (String, Boolean?) -> Unit,
 )
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
@@ -538,12 +542,13 @@ private fun BookListRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 1.dp),
             )
-            if (book.genre != null || book.isDownloaded) {
+            if (book.genre != null || book.tags.isNotEmpty() || book.isDownloaded) {
                 Row(
                     modifier = Modifier.padding(top = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     book.genre?.let { TagChip(it, Amber, AmberSoft) }
+                    book.tags.take(3).forEach { TagChip(it, Muted, Surface2) }
                     if (book.isDownloaded) TagChip("offline", Sage, SageSoft)
                 }
             }
@@ -737,6 +742,11 @@ private fun BookMenu(
             )
         }
         DropdownMenuItem(
+            text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
+            leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
+            onClick = { actions.onSetFinished(book.id, !book.finished); onDismiss() },
+        )
+        DropdownMenuItem(
             text = { Text("Edit") },
             leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
             onClick = { actions.onEdit(book); onDismiss() },
@@ -879,7 +889,7 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
 @Composable
 private fun EditBookDialog(
     book: BookListItem,
-    onSave: (title: String, author: String, series: String, index: String, hidden: Boolean) -> Unit,
+    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -887,13 +897,15 @@ private fun EditBookDialog(
     var author by remember { mutableStateOf(book.author.orEmpty()) }
     var series by remember { mutableStateOf(book.series.orEmpty()) }
     var index by remember { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
+    var genre by remember { mutableStateOf(book.genre.orEmpty()) }
+    var tags by remember { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by remember { mutableStateOf(book.hidden) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit book") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -923,6 +935,21 @@ private fun EditBookDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                OutlinedTextField(
+                    value = genre,
+                    onValueChange = { genre = it },
+                    label = { Text("Genre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    label = { Text("Tags") },
+                    placeholder = { Text("comma, separated") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -934,7 +961,7 @@ private fun EditBookDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title, author, series, index, hidden) }) { Text("Save") }
+            TextButton(onClick = { onSave(title, author, series, index, genre, tags, hidden) }) { Text("Save") }
         },
         dismissButton = {
             Row {

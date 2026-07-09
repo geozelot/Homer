@@ -59,6 +59,9 @@ data class HomerOverride(
     val author: String? = null,
     val series: String? = null,
     val seriesIndex: Int? = null,
+    val genre: String? = null,
+    val tags: List<String> = emptyList(),
+    val finished: Boolean? = null,
     val hidden: Boolean = false,
     val updatedAt: Long,
 )

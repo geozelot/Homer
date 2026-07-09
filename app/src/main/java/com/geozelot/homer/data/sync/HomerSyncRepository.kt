@@ -256,6 +256,9 @@ private fun BookOverrideEntity.toHomer() =
         author = author,
         series = series,
         seriesIndex = seriesIndex,
+        genre = genre,
+        tags = tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
+        finished = finished,
         hidden = hidden,
         updatedAt = updatedAt,
     )
@@ -267,6 +270,9 @@ private fun HomerOverride.toEntity(bookId: String) =
         author = author,
         series = series,
         seriesIndex = seriesIndex,
+        genre = genre,
+        tags = tags.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+        finished = finished,
         hidden = hidden,
         updatedAt = updatedAt,
     )
