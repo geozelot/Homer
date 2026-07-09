@@ -246,6 +246,10 @@ class HomeViewModel @Inject constructor(
     val gridView: StateFlow<Boolean> = librarySettings.gridView
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    /** Sync level: 1 = on-device only, 2 = cross-device progress sync (later: 3 = shared cache). */
+    val syncTier: StateFlow<Int> = librarySettings.syncTier
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 2)
+
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -347,6 +351,10 @@ class HomeViewModel @Inject constructor(
 
     fun setGridView(grid: Boolean) {
         viewModelScope.launch { librarySettings.setGridView(grid) }
+    }
+
+    fun setSyncTier(tier: Int) {
+        viewModelScope.launch { librarySettings.setSyncTier(tier) }
     }
 
     fun setSortMode(sort: LibrarySort) {

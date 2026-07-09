@@ -1131,6 +1131,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
+    val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
     val scanning = scanState is ScanState.Scanning
 
     ModalBottomSheet(
@@ -1185,6 +1186,22 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
+            // Sync tier 1 (off) vs 2 (on). Tier 3 (shared library cache) lands later.
+            SettingSwitch(
+                "Sync progress across devices",
+                checked = syncTier >= 2,
+                onChange = { viewModel.setSyncTier(if (it) 2 else 1) },
+            )
+            Text(
+                text = if (syncTier >= 2) {
+                    "Positions, bookmarks and edits sync via a private .homer folder in your account."
+                } else {
+                    "On this device only — nothing is written to your server."
+                },
+                color = Faint,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
             SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
         }

@@ -52,10 +52,15 @@ class HomerSyncRepository @Inject constructor(
     private var ensuredDir: String? = null
     private var legacyMigrationChecked = false
 
-    /** Pull-merge-push in one pass. No-op if no account is configured. */
+    /** Pull-merge-push in one pass. No-op if no account is configured or sync is off (tier 1). */
     suspend fun sync() {
         if (credentialStore.credentials.value == null) {
             Log.i(TAG, "sync skipped: no account")
+            return
+        }
+        // Tier 1 = on-device only: never touch the .homer manifest.
+        if (librarySettings.syncTier.first() < TIER_PROGRESS) {
+            Log.i(TAG, "sync skipped: on-device-only tier")
             return
         }
         mutex.withLock {
@@ -250,6 +255,7 @@ class HomerSyncRepository @Inject constructor(
         const val DIR = ".homer"
         const val FILE = "index.json"
         const val MAX_ATTEMPTS = 3
+        const val TIER_PROGRESS = 2
     }
 }
 

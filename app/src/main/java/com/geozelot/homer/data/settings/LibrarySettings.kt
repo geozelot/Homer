@@ -48,6 +48,18 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SORT_MODE] = value }
     }
 
+    /**
+     * Sync level (per-user, per-device): 1 = on-device only (no `.homer` reads/writes),
+     * 2 = progress sync via the user's `.homer/index.json`, 3 = shared library cache (later).
+     * Default 2 preserves the existing cross-device behaviour.
+     */
+    val syncTier: Flow<Int> =
+        context.settingsDataStore.data.map { it[KEY_SYNC_TIER] ?: TIER_PROGRESS }
+
+    suspend fun setSyncTier(tier: Int) {
+        context.settingsDataStore.edit { it[KEY_SYNC_TIER] = tier }
+    }
+
     /** Library grouping: "none" | "author" | "genre". */
     val groupMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_GROUP_MODE] ?: "none" }
@@ -57,10 +69,12 @@ class LibrarySettings @Inject constructor(
     }
 
     private companion object {
+        const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
+        val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
     }
 }
 
