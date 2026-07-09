@@ -5,17 +5,22 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
@@ -23,6 +28,8 @@ import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -66,6 +73,8 @@ fun PlayerScreen(
     val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
+    val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
+    val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
     var showSpeedDialog by remember { mutableStateOf(false) }
@@ -269,6 +278,8 @@ fun PlayerScreen(
     if (showSleepDialog) {
         SleepDialog(
             isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+            extendMode = sleepExtend,
+            fadeSeconds = sleepFade,
             onMinutes = {
                 viewModel.startSleepTimer(it * 60_000L)
                 showSleepDialog = false
@@ -281,49 +292,82 @@ fun PlayerScreen(
                 viewModel.cancelSleepTimer()
                 showSleepDialog = false
             },
+            onSetExtend = viewModel::setSleepExtend,
+            onSetFade = viewModel::setSleepFadeOut,
             onDismiss = { showSleepDialog = false },
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SleepDialog(
     isActive: Boolean,
+    extendMode: String,
+    fadeSeconds: Int,
     onMinutes: (Int) -> Unit,
     onEndOfChapter: () -> Unit,
     onOff: () -> Unit,
+    onSetExtend: (String) -> Unit,
+    onSetFade: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val presets = listOf(5, 10, 15, 30, 45, 60)
+    var custom by remember { mutableStateOf(30) }
+    val extendOptions = listOf("5" to "+5m", "15" to "+15m", "30" to "+30m", "previous" to "Previous", "chapter" to "Chapter")
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Sleep timer") },
         text = {
-            Column {
-                presets.forEach { minutes ->
-                    TextButton(
-                        onClick = { onMinutes(minutes) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("$minutes minutes", style = MaterialTheme.typography.bodyLarge)
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SleepLabel("Pause after")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(15, 30, 45, 60).forEach { m ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { onMinutes(m) },
+                            label = { Text("${m}m") },
+                        )
                     }
                 }
-                TextButton(
-                    onClick = onEndOfChapter,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("End of chapter", style = MaterialTheme.typography.bodyLarge)
+                TextButton(onClick = onEndOfChapter, contentPadding = PaddingValues(0.dp)) {
+                    Text("End of chapter")
                 }
-                if (isActive) {
-                    TextButton(
-                        onClick = onOff,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            "Turn off",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.error,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Custom", modifier = Modifier.weight(1f))
+                    Stepper(value = "$custom m", onDec = { custom = (custom - 5).coerceAtLeast(5) }, onInc = { custom = (custom + 5).coerceAtMost(240) })
+                    TextButton(onClick = { onMinutes(custom) }) { Text("Start") }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                SleepLabel("Shake to extend")
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    extendOptions.forEach { (value, lbl) ->
+                        FilterChip(
+                            selected = extendMode == value,
+                            onClick = { onSetExtend(value) },
+                            label = { Text(lbl) },
                         )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fade out", modifier = Modifier.weight(1f))
+                    Stepper(
+                        value = if (fadeSeconds == 0) "Off" else "${fadeSeconds}s",
+                        onDec = { onSetFade((fadeSeconds - 1).coerceAtLeast(0)) },
+                        onInc = { onSetFade((fadeSeconds + 1).coerceAtMost(30)) },
+                    )
+                }
+
+                if (isActive) {
+                    TextButton(onClick = onOff, contentPadding = PaddingValues(0.dp)) {
+                        Text("Turn off", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -331,6 +375,24 @@ private fun SleepDialog(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
+}
+
+@Composable
+private fun SleepLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun Stepper(value: String, onDec: () -> Unit, onInc: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onDec) { Text("−", style = MaterialTheme.typography.titleLarge) }
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.widthIn(min = 44.dp), textAlign = TextAlign.Center)
+        IconButton(onClick = onInc) { Text("+", style = MaterialTheme.typography.titleLarge) }
+    }
 }
 
 @Composable

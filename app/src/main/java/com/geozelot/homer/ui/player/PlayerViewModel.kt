@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,7 +31,7 @@ class PlayerViewModel @Inject constructor(
     private val connection: PlaybackConnection,
     bookDao: BookDao,
     audioFileDao: AudioFileDao,
-    playbackSettings: PlaybackSettings,
+    private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
     private val downloadManager: DownloadManager,
     downloadDao: DownloadDao,
@@ -41,6 +42,12 @@ class PlayerViewModel @Inject constructor(
 
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
+
+    val sleepExtend: StateFlow<String> = playbackSettings.sleepExtend
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "15")
 
     val bookmarks: StateFlow<List<BookmarkEntity>> = bookId
         .flatMapLatest { id ->
@@ -95,6 +102,12 @@ class PlayerViewModel @Inject constructor(
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
     fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
     fun cancelSleepTimer() = connection.cancelSleepTimer()
+    fun setSleepFadeOut(seconds: Int) {
+        viewModelScope.launch { playbackSettings.setSleepFadeOutSeconds(seconds) }
+    }
+    fun setSleepExtend(mode: String) {
+        viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
+    }
     fun addBookmark() = connection.addBookmark()
     fun jumpToBookmark(bookmark: BookmarkEntity) =
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)

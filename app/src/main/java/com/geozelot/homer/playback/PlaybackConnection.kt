@@ -89,8 +89,9 @@ class PlaybackConnection @Inject constructor(
     private val sleepTimer = SleepTimer(
         context = context,
         scope = scope,
-        onPause = { controller?.pause() },
+        onPause = ::fadeOutAndPause,
         onChanged = ::pushState,
+        onShake = ::extendSleepByPreference,
     )
     private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, ::positionSnapshot)
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
@@ -204,11 +205,49 @@ class PlaybackConnection @Inject constructor(
         scope.launch { playbackSettings.setSkipSilence(enabled) }
     }
 
-    fun startSleepTimer(durationMs: Long) = sleepTimer.startCountdown(durationMs)
+    fun startSleepTimer(durationMs: Long) {
+        scope.launch { playbackSettings.setSleepLastDurationMs(durationMs) }
+        sleepTimer.startCountdown(durationMs)
+    }
 
     fun startSleepTimerEndOfChapter() = sleepTimer.startEndOfChapter()
 
     fun cancelSleepTimer() = sleepTimer.cancel()
+
+    /** Ramps the volume down over the configured seconds, then pauses (0 = pause abruptly). */
+    private fun fadeOutAndPause() {
+        val c = controller ?: return
+        scope.launch {
+            val fadeMs = playbackSettings.sleepFadeOutSeconds.first() * 1000L
+            if (fadeMs <= 0L) {
+                c.pause()
+                return@launch
+            }
+            val steps = 20
+            val stepMs = (fadeMs / steps).coerceAtLeast(10L)
+            for (i in steps - 1 downTo 0) {
+                c.volume = i / steps.toFloat()
+                delay(stepMs)
+            }
+            c.pause()
+            c.volume = 1f // restore so the next play starts at full volume
+        }
+    }
+
+    /** Applies the user's shake-to-extend preference to the running countdown. */
+    private fun extendSleepByPreference() {
+        if (!sleepTimer.isCountingDown) return
+        scope.launch {
+            when (val mode = playbackSettings.sleepExtend.first()) {
+                "chapter" -> sleepTimer.startEndOfChapter()
+                "previous" -> {
+                    val last = playbackSettings.sleepLastDurationMs.first()
+                    sleepTimer.extendBy(if (last > 0L) last else DEFAULT_EXTEND_MS)
+                }
+                else -> sleepTimer.extendBy((mode.toLongOrNull() ?: 15L) * 60_000L)
+            }
+        }
+    }
 
     /** Saves a bookmark at the current chapter + position of the playing book. */
     fun addBookmark() {
@@ -334,5 +373,6 @@ class PlaybackConnection @Inject constructor(
         const val TAG = "HomerPlay"
         const val RESUME_SYNC_TIMEOUT_MS = 5_000L
         const val POSITION_POLL_MS = 500L
+        const val DEFAULT_EXTEND_MS = 15 * 60_000L
     }
 }

@@ -21,6 +21,7 @@ class SleepTimer(
     private val scope: CoroutineScope,
     private val onPause: () -> Unit,
     private val onChanged: () -> Unit,
+    private val onShake: () -> Unit,
 ) {
     private var job: Job? = null
     private var targetRealtimeMs = 0L
@@ -29,7 +30,11 @@ class SleepTimer(
     var endOfChapter: Boolean = false
         private set
 
-    private val shakeDetector = ShakeDetector(context) { extend(SHAKE_EXTEND_MS) }
+    /** True while a countdown is running (shake-to-extend only applies then). */
+    val isCountingDown: Boolean get() = job?.isActive == true
+
+    // The extend amount/mode is a host preference, so a shake just notifies the host.
+    private val shakeDetector = ShakeDetector(context) { onShake() }
 
     /** Milliseconds until a running countdown fires, or null when no countdown is active. */
     fun remainingMs(): Long? =
@@ -78,7 +83,7 @@ class SleepTimer(
     }
 
     /** Adds [extraMs] to a running countdown (shake-to-extend), capped; no-op otherwise. */
-    fun extend(extraMs: Long) {
+    fun extendBy(extraMs: Long) {
         if (job?.isActive != true) return
         // Cap the total remaining so repeated shakes can't push the timer arbitrarily far.
         val cap = SystemClock.elapsedRealtime() + MAX_REMAINING_MS
@@ -104,7 +109,6 @@ class SleepTimer(
     private companion object {
         const val TAG = "HomerPlay"
         const val TICK_MS = 500L
-        const val SHAKE_EXTEND_MS = 5 * 60 * 1000L
         const val MAX_REMAINING_MS = 2 * 60 * 60 * 1000L
     }
 }
