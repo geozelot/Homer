@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
@@ -75,6 +76,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
@@ -378,21 +380,32 @@ private fun LazyGridScope.libraryContent(
             is LibraryEntry.Series -> {
                 val isOpen = expanded[entry.key] == true
                 if (gridView) {
-                    item(key = "series:${entry.key}") {
-                        SeriesGridCard(entry) { expanded[entry.key] = !isOpen }
+                    if (isOpen) {
+                        // Accordion: a collapse band + the series' books as grid cards. No
+                        // navigation, so no Back button — tap the band to close.
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-head:${entry.key}") {
+                            SeriesExpandedHeader(entry) { expanded[entry.key] = false }
+                        }
+                        items(entry.books, key = { "ep:${it.id}" }) { book ->
+                            BookGridCard(book, onOpen = onBookClick, actions = actions)
+                        }
+                    } else {
+                        item(key = "series:${entry.key}") {
+                            SeriesGridCard(entry) { expanded[entry.key] = true }
+                        }
                     }
                 } else {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "series:${entry.key}") {
                         SeriesShelfRow(entry, isOpen) { expanded[entry.key] = !isOpen }
                     }
-                }
-                if (isOpen) {
-                    items(
-                        entry.books,
-                        span = { GridItemSpan(maxLineSpan) },
-                        key = { "ep:${it.id}" },
-                    ) { book ->
-                        BookListRow(book, startPadding = 12.dp, onOpen = onBookClick, actions = actions)
+                    if (isOpen) {
+                        items(
+                            entry.books,
+                            span = { GridItemSpan(maxLineSpan) },
+                            key = { "ep:${it.id}" },
+                        ) { book ->
+                            BookListRow(book, startPadding = 12.dp, onOpen = onBookClick, actions = actions)
+                        }
                     }
                 }
             }
@@ -663,34 +676,39 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
     }
 }
 
+// A shuffled stack: the front book fills the cell exactly like a book cover; the two
+// behind it are the same size but rotated + nudged so their corners fan out.
+private val STACK_ROTATIONS = listOf(0f, -5f, 6f)
+private val STACK_OFFSETS = listOf(0 to 0, 3 to 4, 6 to 6)
+
 /** A series as a grid cell the same size as a book card, with a stacked-cover look. */
 @Composable
-private fun SeriesGridCard(series: LibraryEntry.Series, onToggle: () -> Unit) {
+private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle),
+            .clickable(onClick = onOpen),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f / 1.3f),
         ) {
-            // Up to three covers, drawn back-to-front so the first book sits on top and the
-            // others peek out at the top-right — a stack of books.
+            // Drawn back-to-front so the first book sits flat on top; the box isn't clipped
+            // so the rotated covers behind can fan their corners past its edges.
             val covers = series.books.take(3)
             for (depth in covers.indices.reversed()) {
                 val book = covers[depth]
+                val (ox, oy) = STACK_OFFSETS.getOrElse(depth) { 0 to 0 }
                 CoverArt(
                     model = book.coverModel,
                     title = book.title,
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth(0.86f)
-                        .aspectRatio(1f / 1.3f)
-                        .offset(x = (depth * 7).dp, y = -(depth * 7).dp)
-                        .border(1.dp, Line, RoundedCornerShape(8.dp))
-                        .clip(RoundedCornerShape(8.dp)),
+                        .fillMaxSize()
+                        .offset(x = ox.dp, y = oy.dp)
+                        .rotate(STACK_ROTATIONS.getOrElse(depth) { 0f })
+                        .then(if (depth > 0) Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)) else Modifier)
+                        .clip(RoundedCornerShape(10.dp)),
                 )
             }
         }
@@ -704,18 +722,42 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onToggle: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )
-        val downloaded = series.books.count { it.isDownloaded }
         Text(
-            text = buildString {
-                append("${series.books.size} episodes")
-                if (downloaded > 0) append(" · $downloaded offline")
-            },
+            text = seriesMeta(series),
             color = Muted,
             fontSize = 10.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/** Full-width band shown in grid view when a series is expanded; tap to collapse. */
+@Composable
+private fun SeriesExpandedHeader(series: LibraryEntry.Series, onCollapse: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .background(Surface1)
+            .clickable(onClick = onCollapse)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
+        }
+        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
+    }
+}
+
+private fun seriesMeta(series: LibraryEntry.Series): String = buildString {
+    append("${series.books.size} episodes")
+    val downloaded = series.books.count { it.isDownloaded }
+    if (downloaded > 0) append(" · $downloaded offline")
 }
 
 // ── List row ─────────────────────────────────────────────────────────────────
