@@ -4,65 +4,92 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.clip
-import com.geozelot.homer.data.db.entity.BookmarkEntity
-import com.geozelot.homer.data.db.entity.DownloadStatus
-import com.geozelot.homer.ui.components.CoverImage
-import com.geozelot.homer.ui.formatCompactDuration
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.LaunchedEffect
+import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.formatCompactDuration
+import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberDeep
+import com.geozelot.homer.ui.theme.Faint
+import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.Muted
+import com.geozelot.homer.ui.theme.OnAmber
+import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.theme.Sage
+import com.geozelot.homer.ui.theme.SectionLabel
+import com.geozelot.homer.ui.theme.SerifTitle
+import com.geozelot.homer.ui.theme.Surface2
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     bookId: String,
@@ -77,7 +104,7 @@ fun PlayerScreen(
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
-    var showSpeedDialog by remember { mutableStateOf(false) }
+
     var showSleepDialog by remember { mutableStateOf(false) }
     var showBookmarksDialog by remember { mutableStateOf(false) }
 
@@ -94,42 +121,50 @@ fun PlayerScreen(
     // Start playback when the screen opens for this book.
     LaunchedEffect(bookId) { viewModel.play(bookId) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(state.bookTitle.ifEmpty { "Now playing" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { showBookmarksDialog = true }) { Text("Bookmarks") }
-                },
-            )
-        },
-    ) { padding ->
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 22.dp),
+    ) {
+        PlayerTopBar(
+            skipSilence = skipSilence,
+            onBack = onBack,
+            onToggleSkipSilence = viewModel::setSkipSilence,
+        )
+
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.Center,
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Big cover with a warm glow.
             CoverImage(
                 model = state.coverModel ?: state.artworkData,
                 modifier = Modifier
-                    .padding(bottom = 24.dp)
-                    .size(240.dp)
-                    .clip(RoundedCornerShape(12.dp)),
+                    .padding(top = 16.dp)
+                    .width(210.dp)
+                    .aspectRatio(1f / 1.3f)
+                    .shadow(
+                        elevation = 30.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = Amber,
+                        spotColor = AmberDeep,
+                    )
+                    .clip(RoundedCornerShape(14.dp)),
             )
+
             Text(
-                text = state.chapterTitle.ifEmpty { "Loading…" },
-                style = MaterialTheme.typography.titleLarge,
+                text = state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { "Loading…" } },
+                style = SerifTitle.copy(fontSize = 20.sp),
+                color = Parchment,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 18.dp),
             )
             if (state.chapterCount > 0) {
                 Text(
@@ -137,128 +172,45 @@ fun PlayerScreen(
                         append("Chapter ${state.chapterIndex + 1} of ${state.chapterCount}")
                         bookDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatTime(it)}") }
                     },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            timeLeftMs?.let { left ->
-                Text(
-                    text = if (left <= 0) "Finished" else "${formatCompactDuration(left)} left",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
+                    color = Faint,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
 
-            PositionSlider(
+            Scrubber(
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
+                timeLeftMs = timeLeftMs,
                 onSeek = viewModel::seekTo,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 32.dp),
+                    .padding(top = 20.dp),
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = viewModel::previousChapter) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", modifier = Modifier.size(40.dp))
-                }
-                IconButton(onClick = viewModel::playPause, modifier = Modifier.padding(horizontal = 24.dp)) {
-                    Icon(
-                        imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (state.isPlaying) "Pause" else "Play",
-                        modifier = Modifier.size(64.dp),
-                    )
-                }
-                IconButton(onClick = viewModel::nextChapter) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", modifier = Modifier.size(40.dp))
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                TextButton(onClick = { showSpeedDialog = true }) {
-                    Text("Speed  ${formatSpeed(state.playbackSpeed)}×")
-                }
-                TextButton(onClick = { showSleepDialog = true }) {
-                    Text(
-                        when {
-                            state.sleepEndOfChapter -> "Sleep  chapter end"
-                            state.sleepRemainingMs != null -> "Sleep  ${formatTime(state.sleepRemainingMs!!)}"
-                            else -> "Sleep"
-                        },
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Skip silence", style = MaterialTheme.typography.bodyMedium)
-                Switch(
-                    checked = skipSilence,
-                    onCheckedChange = viewModel::setSkipSilence,
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                when (download?.status) {
-                    DownloadStatus.DONE -> {
-                        Text("Downloaded", style = MaterialTheme.typography.bodyMedium)
-                        TextButton(onClick = viewModel::deleteDownload) { Text("Remove") }
-                    }
-                    DownloadStatus.DOWNLOADING -> {
-                        val d = download
-                        Text(
-                            "Downloading ${d?.downloadedFiles ?: 0}/${d?.totalFiles ?: 0}…",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    else -> {
-                        val failed = download?.status == DownloadStatus.FAILED
-                        Text(
-                            if (failed) "Download failed" else "Available offline",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                        )
-                        TextButton(onClick = viewModel::download) {
-                            Text(if (failed) "Retry" else "Download")
-                        }
-                    }
-                }
-            }
+            Transport(
+                isPlaying = state.isPlaying,
+                onPrev = viewModel::previousChapter,
+                onPlayPause = viewModel::playPause,
+                onNext = viewModel::nextChapter,
+                modifier = Modifier.padding(top = 14.dp),
+            )
         }
-    }
 
-    if (showSpeedDialog) {
-        SpeedDialog(
-            current = state.playbackSpeed,
-            onSelect = {
-                viewModel.setSpeed(it)
-                showSpeedDialog = false
-            },
-            onDismiss = { showSpeedDialog = false },
+        ToolRow(
+            speed = state.playbackSpeed,
+            sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
+            sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+            downloadStatus = download?.status,
+            onSpeed = viewModel::setSpeed,
+            onSleepMinutes = viewModel::startSleepTimer,
+            onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
+            onSleepOff = viewModel::cancelSleepTimer,
+            onSleepSettings = { showSleepDialog = true },
+            onMark = { showBookmarksDialog = true },
+            onDownload = viewModel::download,
+            onRemoveDownload = viewModel::deleteDownload,
         )
     }
 
@@ -276,18 +228,10 @@ fun PlayerScreen(
     }
 
     if (showSleepDialog) {
-        SleepDialog(
+        SleepSettingsDialog(
             isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
             extendMode = sleepExtend,
             fadeSeconds = sleepFade,
-            onMinutes = {
-                viewModel.startSleepTimer(it * 60_000L)
-                showSleepDialog = false
-            },
-            onEndOfChapter = {
-                viewModel.startSleepTimerEndOfChapter()
-                showSleepDialog = false
-            },
             onOff = {
                 viewModel.cancelSleepTimer()
                 showSleepDialog = false
@@ -299,51 +243,289 @@ fun PlayerScreen(
     }
 }
 
+// ── Top bar ──────────────────────────────────────────────────────────────────
+
+@Composable
+private fun PlayerTopBar(
+    skipSilence: Boolean,
+    onBack: () -> Unit,
+    onToggleSkipSilence: (Boolean) -> Unit,
+) {
+    var overflowOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Back", tint = Muted)
+        }
+        Text("NOW PLAYING", style = SectionLabel, color = Muted)
+        Box {
+            IconButton(onClick = { overflowOpen = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Muted)
+            }
+            DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Skip silence") },
+                    trailingIcon = {
+                        Switch(checked = skipSilence, onCheckedChange = { onToggleSkipSilence(it) })
+                    },
+                    onClick = { onToggleSkipSilence(!skipSilence) },
+                )
+            }
+        }
+    }
+}
+
+// ── Scrubber ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun Scrubber(
+    positionMs: Long,
+    durationMs: Long,
+    timeLeftMs: Long?,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragValue by remember { mutableStateOf<Float?>(null) }
+    val hasDuration = durationMs > 0
+    val sliderValue = dragValue ?: if (hasDuration) positionMs.toFloat() else 0f
+    val range = if (hasDuration) 0f..durationMs.toFloat() else 0f..1f
+
+    Column(modifier = modifier) {
+        Slider(
+            value = sliderValue.coerceIn(range.start, range.endInclusive),
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = {
+                dragValue?.let { onSeek(it.toLong()) }
+                dragValue = null
+            },
+            valueRange = range,
+            enabled = hasDuration,
+            colors = SliderDefaults.colors(
+                thumbColor = Amber,
+                activeTrackColor = Amber,
+                inactiveTrackColor = Surface2,
+            ),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(formatTime(sliderValue.toLong()), color = Muted, fontSize = 11.sp)
+            Text(
+                text = timeLeftMs?.let {
+                    if (it <= 0) "finished" else "${formatCompactDuration(it)} left"
+                } ?: formatTime(durationMs),
+                color = Muted,
+                fontSize = 11.sp,
+            )
+        }
+    }
+}
+
+// ── Transport ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun Transport(
+    isPlaying: Boolean,
+    onPrev: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(26.dp),
+    ) {
+        IconButton(onClick = onPrev) {
+            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(34.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(66.dp)
+                .shadow(10.dp, CircleShape, spotColor = AmberDeep)
+                .clip(CircleShape)
+                .background(Amber)
+                .clickable(onClick = onPlayPause),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = OnAmber,
+                modifier = Modifier.size(30.dp),
+            )
+        }
+        IconButton(onClick = onNext) {
+            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(34.dp))
+        }
+    }
+}
+
+// ── Tool row (speed / sleep / mark / save) ────────────────────────────────────
+
+@Composable
+private fun ToolRow(
+    speed: Float,
+    sleepLabel: String,
+    sleepActive: Boolean,
+    downloadStatus: String?,
+    onSpeed: (Float) -> Unit,
+    onSleepMinutes: (Long) -> Unit,
+    onSleepEndOfChapter: () -> Unit,
+    onSleepOff: () -> Unit,
+    onSleepSettings: () -> Unit,
+    onMark: () -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.Top,
+    ) {
+        // Speed — quick-select menu.
+        Box {
+            var open by remember { mutableStateOf(false) }
+            ToolButton(
+                icon = Icons.Filled.Speed,
+                label = "${formatSpeed(speed)}×",
+                active = abs(speed - 1f) > 0.001f,
+                onClick = { open = true },
+            )
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f).forEach { preset ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "${formatSpeed(preset)}×",
+                                color = if (abs(preset - speed) < 0.001f) Amber else Parchment,
+                            )
+                        },
+                        onClick = { onSpeed(preset); open = false },
+                    )
+                }
+            }
+        }
+
+        // Sleep — quick-select menu + settings.
+        Box {
+            var open by remember { mutableStateOf(false) }
+            ToolButton(
+                icon = Icons.Filled.Bedtime,
+                label = sleepLabel,
+                active = sleepActive,
+                onClick = { open = true },
+            )
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                listOf(15, 30, 45, 60).forEach { m ->
+                    DropdownMenuItem(
+                        text = { Text("${m}m") },
+                        onClick = { onSleepMinutes(m * 60_000L); open = false },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("End of chapter") },
+                    onClick = { onSleepEndOfChapter(); open = false },
+                )
+                if (sleepActive) {
+                    DropdownMenuItem(
+                        text = { Text("Turn off", color = MaterialTheme.colorScheme.error) },
+                        onClick = { onSleepOff(); open = false },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Sleep settings…") },
+                    onClick = { onSleepSettings(); open = false },
+                )
+            }
+        }
+
+        // Mark — bookmarks.
+        ToolButton(
+            icon = Icons.Filled.BookmarkBorder,
+            label = "Mark",
+            active = false,
+            onClick = onMark,
+        )
+
+        // Save — offline download.
+        val downloaded = downloadStatus == DownloadStatus.DONE
+        val downloading = downloadStatus == DownloadStatus.DOWNLOADING
+        ToolButton(
+            icon = if (downloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+            label = when {
+                downloaded -> "Saved"
+                downloading -> "Saving…"
+                downloadStatus == DownloadStatus.FAILED -> "Retry"
+                else -> "Save"
+            },
+            active = downloaded,
+            activeColor = Sage,
+            onClick = { if (downloaded) onRemoveDownload() else onDownload() },
+        )
+    }
+}
+
+@Composable
+private fun ToolButton(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    activeColor: androidx.compose.ui.graphics.Color = Amber,
+) {
+    val tint = if (active) activeColor else Muted
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+        Text(label, color = tint, fontSize = 10.5.sp, maxLines = 1)
+    }
+}
+
+private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean): String = when {
+    endOfChapter -> "Chapter"
+    remainingMs != null -> formatTime(remainingMs)
+    else -> "Sleep"
+}
+
+// ── Sleep settings (advanced: shake-extend + fade) ────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SleepDialog(
+private fun SleepSettingsDialog(
     isActive: Boolean,
     extendMode: String,
     fadeSeconds: Int,
-    onMinutes: (Int) -> Unit,
-    onEndOfChapter: () -> Unit,
     onOff: () -> Unit,
     onSetExtend: (String) -> Unit,
     onSetFade: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var custom by remember { mutableStateOf(30) }
     val extendOptions = listOf("5" to "+5m", "15" to "+15m", "30" to "+30m", "previous" to "Previous", "chapter" to "Chapter")
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sleep timer") },
+        title = { Text("Sleep settings") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                SleepLabel("Pause after")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 45, 60).forEach { m ->
-                        FilterChip(
-                            selected = false,
-                            onClick = { onMinutes(m) },
-                            label = { Text("${m}m") },
-                        )
-                    }
-                }
-                TextButton(onClick = onEndOfChapter, contentPadding = PaddingValues(0.dp)) {
-                    Text("End of chapter")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Custom", modifier = Modifier.weight(1f))
-                    Stepper(value = "$custom m", onDec = { custom = (custom - 5).coerceAtLeast(5) }, onInc = { custom = (custom + 5).coerceAtMost(240) })
-                    TextButton(onClick = { onMinutes(custom) }) { Text("Start") }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-
-                SleepLabel("Shake to extend")
+                Text("Shake to extend", style = MaterialTheme.typography.labelMedium, color = Muted)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -364,25 +546,15 @@ private fun SleepDialog(
                         onInc = { onSetFade((fadeSeconds + 1).coerceAtMost(30)) },
                     )
                 }
-
                 if (isActive) {
                     TextButton(onClick = onOff, contentPadding = PaddingValues(0.dp)) {
-                        Text("Turn off", color = MaterialTheme.colorScheme.error)
+                        Text("Turn off timer", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
-}
-
-@Composable
-private fun SleepLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -390,46 +562,12 @@ private fun SleepLabel(text: String) {
 private fun Stepper(value: String, onDec: () -> Unit, onInc: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onDec) { Text("−", style = MaterialTheme.typography.titleLarge) }
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.widthIn(min = 44.dp), textAlign = TextAlign.Center)
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
         IconButton(onClick = onInc) { Text("+", style = MaterialTheme.typography.titleLarge) }
     }
 }
 
-@Composable
-private fun SpeedDialog(
-    current: Float,
-    onSelect: (Float) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val presets = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Playback speed") },
-        text = {
-            Column {
-                presets.forEach { preset ->
-                    val selected = abs(preset - current) < 0.001f
-                    TextButton(
-                        onClick = { onSelect(preset) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "${formatSpeed(preset)}×",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
-}
+// ── Bookmarks ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun BookmarksDialog(
@@ -450,8 +588,8 @@ private fun BookmarksDialog(
                 if (bookmarks.isEmpty()) {
                     Text(
                         "No bookmarks yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Muted,
+                        fontSize = 14.sp,
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 } else {
@@ -471,15 +609,12 @@ private fun BookmarksDialog(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         bookmark.chapterTitle.ifEmpty { "Chapter" },
-                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    Text(
-                                        formatTime(bookmark.positionMs),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    Text(formatTime(bookmark.positionMs), color = Muted, fontSize = 12.sp)
                                 }
                                 TextButton(onClick = { onDelete(bookmark) }) { Text("Remove") }
                             }
@@ -493,43 +628,11 @@ private fun BookmarksDialog(
     )
 }
 
+// ── Formatting ─────────────────────────────────────────────────────────────
+
 /** Trims trailing zeros: 1.0 -> "1", 1.25 -> "1.25", 1.5 -> "1.5". */
 private fun formatSpeed(speed: Float): String =
     "%.2f".format(speed).trimEnd('0').trimEnd('.')
-
-@Composable
-private fun PositionSlider(
-    positionMs: Long,
-    durationMs: Long,
-    onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // While dragging, track a local value so the thumb doesn't fight state updates.
-    var dragValue by remember { mutableStateOf<Float?>(null) }
-    val hasDuration = durationMs > 0
-    val sliderValue = dragValue ?: if (hasDuration) positionMs.toFloat() else 0f
-    val range = if (hasDuration) 0f..durationMs.toFloat() else 0f..1f
-
-    Column(modifier = modifier) {
-        Slider(
-            value = sliderValue.coerceIn(range.start, range.endInclusive),
-            onValueChange = { dragValue = it },
-            onValueChangeFinished = {
-                dragValue?.let { onSeek(it.toLong()) }
-                dragValue = null
-            },
-            valueRange = range,
-            enabled = hasDuration,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(formatTime(sliderValue.toLong()), style = MaterialTheme.typography.labelMedium)
-            Text(formatTime(durationMs), style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
 
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"
