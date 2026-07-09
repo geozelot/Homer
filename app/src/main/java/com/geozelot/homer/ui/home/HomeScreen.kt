@@ -1132,6 +1132,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
+    val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
     val scanning = scanState is ScanState.Scanning
 
     ModalBottomSheet(
@@ -1186,24 +1187,72 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            // Sync tier 1 (off) vs 2 (on). Tier 3 (shared library cache) lands later.
-            SettingSwitch(
-                "Sync progress across devices",
-                checked = syncTier >= 2,
-                onChange = { viewModel.setSyncTier(if (it) 2 else 1) },
+            SyncTierSelector(
+                current = syncTier,
+                tier3Available = tier3Available,
+                onSelect = viewModel::setSyncTier,
             )
-            Text(
-                text = if (syncTier >= 2) {
-                    "Positions, bookmarks and edits sync via a private .homer folder in your account."
-                } else {
-                    "On this device only — nothing is written to your server."
-                },
-                color = Faint,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
             SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
+        }
+    }
+}
+
+@Composable
+private fun SyncTierSelector(current: Int, tier3Available: Boolean, onSelect: (Int) -> Unit) {
+    Text("SYNC", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, Line, RoundedCornerShape(12.dp)),
+    ) {
+        TierOption(
+            selected = current <= 1,
+            title = "On this device only",
+            subtitle = "Nothing is written to your server.",
+            onClick = { onSelect(1) },
+        )
+        HorizontalDivider(color = Line)
+        TierOption(
+            selected = current == 2,
+            title = "My devices",
+            subtitle = "Positions, bookmarks and edits sync privately across your devices.",
+            onClick = { onSelect(2) },
+        )
+        HorizontalDivider(color = Line)
+        TierOption(
+            selected = current >= 3,
+            title = "Shared library",
+            subtitle = if (tier3Available) {
+                "Uses the shared library catalog — no scan needed on new devices."
+            } else {
+                "Publishes the full library so others (and new devices) skip scanning."
+            },
+            onClick = { onSelect(3) },
+        )
+    }
+}
+
+@Composable
+private fun TierOption(selected: Boolean, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) AmberSoft else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = if (selected) Amber else Parchment, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 11.sp)
+        }
+        if (selected) {
+            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = Amber, modifier = Modifier.size(18.dp))
         }
     }
 }

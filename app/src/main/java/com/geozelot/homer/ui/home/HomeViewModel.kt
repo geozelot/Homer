@@ -17,6 +17,7 @@ import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.sync.HomerCatalogRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
@@ -122,6 +123,7 @@ class HomeViewModel @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
     private val connection: PlaybackConnection,
+    private val catalog: HomerCatalogRepository,
     playbackStateDao: PlaybackStateDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
@@ -247,9 +249,13 @@ class HomeViewModel @Inject constructor(
     val gridView: StateFlow<Boolean> = librarySettings.gridView
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    /** Sync level: 1 = on-device only, 2 = cross-device progress sync (later: 3 = shared cache). */
+    /** Sync level: 1 = on-device only, 2 = cross-device progress sync, 3 = shared library cache. */
     val syncTier: StateFlow<Int> = librarySettings.syncTier
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 2)
+
+    /** Whether a Tier-3 shared catalog exists in this library (advisory, for the settings UI). */
+    private val _tier3Available = MutableStateFlow(false)
+    val tier3Available: StateFlow<Boolean> = _tier3Available.asStateFlow()
 
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -268,6 +274,11 @@ class HomeViewModel @Inject constructor(
         libraryRepository.enrichCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
+        // Tier 3: pull the shared catalog so the library is present without scanning.
+        viewModelScope.launch {
+            if (librarySettings.syncTier.first() >= 3) catalog.consume()
+            _tier3Available.value = catalog.exists()
+        }
     }
 
     fun onLibraryRootChange(value: String) {
@@ -278,7 +289,23 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             libraryRepository.setLibraryRoot(_libraryRoot.value)
             libraryRepository.scan(incremental = false)
+            // Tier 3: publish the freshly-scanned catalog if allowed (owner, or it exists).
+            if (librarySettings.syncTier.first() >= 3 && (catalog.exists() || isOwner())) {
+                catalog.publish()
+                _tier3Available.value = true
+            }
         }
+    }
+
+    /**
+     * Owner check for gating Tier-3 catalog *creation* (updates stay open). The library's
+     * Nextcloud owner may create it; if ownership can't be determined we allow it
+     * (claim-based). Once a catalog exists this isn't consulted.
+     */
+    private suspend fun isOwner(): Boolean {
+        val me = authRepository.credentials.value?.loginName ?: return false
+        val owner = webDavClient.fetchOwnerId(libraryRepository.libraryRoot.first())
+        return owner == null || owner.equals(me, ignoreCase = true)
     }
 
     fun download(bookId: String) = downloadManager.download(bookId)
@@ -355,7 +382,16 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSyncTier(tier: Int) {
-        viewModelScope.launch { librarySettings.setSyncTier(tier) }
+        viewModelScope.launch {
+            librarySettings.setSyncTier(tier)
+            if (tier >= 3) {
+                when {
+                    catalog.exists() -> catalog.consume() // bootstrap from the shared library
+                    isOwner() -> catalog.publish()        // create it from the local library
+                }
+                _tier3Available.value = catalog.exists()
+            }
+        }
     }
 
     fun setSortMode(sort: LibrarySort) {

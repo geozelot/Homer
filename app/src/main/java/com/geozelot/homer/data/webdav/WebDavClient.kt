@@ -91,6 +91,32 @@ class WebDavClient @Inject constructor(
             }
         }
 
+    /**
+     * Best-effort Nextcloud owner login of [relativePath] via the `oc:owner-id` DAV property
+     * (Depth 0). Null if the server doesn't expose it or on any error — callers fall back to a
+     * claim-based owner. Nextcloud-specific; other backends simply return null.
+     */
+    suspend fun fetchOwnerId(relativePath: String): String? = withContext(Dispatchers.IO) {
+        val credentials = credentialStore.credentials.value ?: return@withContext null
+        try {
+            val body = OWNER_PROPFIND_BODY.toRequestBody("application/xml; charset=utf-8".toMediaType())
+            val request = Request.Builder()
+                .url(urlFor(credentials, relativePath))
+                .header("Depth", "0")
+                .method("PROPFIND", body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.code != 207) return@use null
+                val text = response.body?.string() ?: return@use null
+                // Match any namespace prefix: <oc:owner-id>login</oc:owner-id>.
+                Regex("owner-id[^>]*>([^<]+)<").find(text)?.groupValues?.getOrNull(1)?.trim()?.ifBlank { null }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("HomerDav", "owner probe failed", e)
+            null
+        }
+    }
+
     /** Creates a collection (directory); a no-op if it already exists. */
     suspend fun mkcol(relativePath: String): Unit = withContext(Dispatchers.IO) {
         val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
@@ -200,6 +226,11 @@ class WebDavClient @Inject constructor(
                 """<d:resourcetype/><d:getcontentlength/><d:getlastmodified/>""" +
                 """<d:getcontenttype/><d:getetag/>""" +
                 """</d:prop></d:propfind>"""
+
+        private const val OWNER_PROPFIND_BODY =
+            """<?xml version="1.0" encoding="utf-8"?>""" +
+                """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">""" +
+                """<d:prop><oc:owner-id/></d:prop></d:propfind>"""
 
         private const val FILES_MARKER = "/remote.php/dav/files/"
 
