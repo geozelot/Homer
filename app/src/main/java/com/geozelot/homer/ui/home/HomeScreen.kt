@@ -380,17 +380,14 @@ private fun LazyGridScope.libraryContent(
                 val isOpen = expanded[entry.key] == true
                 if (gridView) {
                     if (isOpen) {
-                        // Accordion container: a header band, the series' books as grid cards,
-                        // then a footer band that closes it off from the next items. No
-                        // navigation, so no Back button — tap either band to collapse.
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-head:${entry.key}") {
-                            SeriesExpandedHeader(entry) { expanded[entry.key] = false }
-                        }
-                        items(entry.books, key = { "ep:${it.id}" }) { book ->
-                            BookGridCard(book, onOpen = onBookClick, actions = actions)
-                        }
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-foot:${entry.key}") {
-                            SeriesExpandedFooter { expanded[entry.key] = false }
+                        // One bordered container = the whole opened series card (no Back button).
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:${entry.key}") {
+                            ExpandedSeriesContainer(
+                                series = entry,
+                                onCollapse = { expanded[entry.key] = false },
+                                onBookClick = onBookClick,
+                                actions = actions,
+                            )
                         }
                     } else {
                         item(key = "series:${entry.key}") {
@@ -680,9 +677,11 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
     }
 }
 
-// A clean stack: the front book fills the cell exactly like a book cover; the covers behind
-// are the same size, offset up-right so their top/right edges peek out as parallel sheets.
-private val STACK_OFFSETS = listOf(0 to 0, 5 to -4, 9 to -7)
+// A clean stack: the front book fills the cell exactly like a book cover (so its top AND
+// bottom edges line up with neighbouring book covers); the covers behind are the same size,
+// offset to the RIGHT only so their edges peek out as parallel sheets without poking above
+// the top line. (x, y) in dp — kept within the ~12dp grid gap so they don't touch neighbours.
+private val STACK_OFFSETS = listOf(0 to 0, 6 to 0, 11 to 0)
 
 /** A series as a grid cell the same size as a book card, with a stacked-cover look. */
 @Composable
@@ -736,45 +735,55 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
     }
 }
 
-/** Top band of the expanded-series container (rounded top); tap to collapse. */
+/**
+ * Expanded series: one faint-bordered container holding a header row (tap to collapse) and
+ * the series' books as a 3-column grid inside it — so the whole thing reads as a single
+ * opened card with a clear start and end. No Back button, no bottom row.
+ */
 @Composable
-private fun SeriesExpandedHeader(series: LibraryEntry.Series, onCollapse: () -> Unit) {
-    Row(
+private fun ExpandedSeriesContainer(
+    series: LibraryEntry.Series,
+    onCollapse: () -> Unit,
+    onBookClick: (String) -> Unit,
+    actions: BookActions,
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp)
-            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-            .border(1.dp, Line, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+            .padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
             .background(Surface1)
-            .clickable(onClick = onCollapse)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(12.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onCollapse),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
+            }
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
         }
-        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
-    }
-}
-
-/** Bottom band closing the expanded-series container (rounded bottom); tap to collapse. */
-@Composable
-private fun SeriesExpandedFooter(onCollapse: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-            .border(1.dp, Line, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-            .background(Surface1)
-            .clickable(onClick = onCollapse)
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = Muted, modifier = Modifier.size(16.dp))
-        Text("Close", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+        // 3-up grid of the series' books, laid out row by row inside the container.
+        series.books.chunked(3).forEach { rowBooks ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                rowBooks.forEach { book ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        BookGridCard(book, onOpen = onBookClick, actions = actions)
+                    }
+                }
+                repeat(3 - rowBooks.size) { Spacer(modifier = Modifier.weight(1f)) }
+            }
+        }
     }
 }
 
