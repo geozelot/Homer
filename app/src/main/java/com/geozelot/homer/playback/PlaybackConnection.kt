@@ -39,6 +39,8 @@ import kotlin.coroutines.resumeWithException
 data class PlaybackUiState(
     val isConnected: Boolean = false,
     val isPlaying: Boolean = false,
+    /** Id (folder relpath) of the loaded book, or null when nothing is playing. */
+    val bookId: String? = null,
     val bookTitle: String = "",
     val chapterTitle: String = "",
     val chapterIndex: Int = 0,
@@ -355,6 +357,7 @@ class PlaybackConnection @Inject constructor(
         _state.value = PlaybackUiState(
             isConnected = true,
             isPlaying = c.isPlaying,
+            bookId = currentBookId,
             bookTitle = metadata.albumTitle?.toString().orEmpty(),
             chapterTitle = metadata.title?.toString().orEmpty(),
             chapterIndex = c.currentMediaItemIndex,

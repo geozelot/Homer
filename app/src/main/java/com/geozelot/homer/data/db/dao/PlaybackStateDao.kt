@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.Flow
 data class BookProgress(
     val bookId: String,
     val elapsedMs: Long,
+    /** When the position was last saved — used to order the Continue shelf by recency. */
+    val updatedAt: Long,
 )
 
 @Dao
@@ -29,6 +31,7 @@ interface PlaybackStateDao {
     @Query(
         """
         SELECT ps.bookId AS bookId,
+               ps.updatedAt AS updatedAt,
                ps.positionMs + COALESCE((
                  SELECT SUM(af.durationMs) FROM audio_files af
                  WHERE af.bookId = ps.bookId

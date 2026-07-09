@@ -32,8 +32,17 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_LIBRARY_ROOT] = path.trim().trim('/') }
     }
 
+    /** Whether the library renders as a cover grid (true) or a scannable list (false). */
+    val gridView: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_GRID_VIEW] ?: true }
+
+    suspend fun setGridView(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_GRID_VIEW] = value }
+    }
+
     private companion object {
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
+        val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
     }
 }
 
