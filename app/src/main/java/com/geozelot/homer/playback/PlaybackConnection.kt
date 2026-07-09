@@ -85,6 +85,11 @@ class PlaybackConnection @Inject constructor(
     private var currentCoverModel: Any? = null
     private var currentOffline = false
 
+    /** True while [playBook] is switching to a new book: the state listener must not overwrite
+     *  the optimistic new-book state with the still-outgoing controller's state mid-load. */
+    @Volatile
+    private var loading = false
+
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
@@ -100,6 +105,9 @@ class PlaybackConnection @Inject constructor(
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
+            // During a book switch the controller still holds the outgoing book — ignore its
+            // events so they don't clobber the optimistic new-book state.
+            if (loading) return
             pushState()
             positionSyncer.save()
             // Flush to the .homer manifest at natural boundaries (not every tick).
@@ -107,6 +115,7 @@ class PlaybackConnection @Inject constructor(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (loading) return
             val auto = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
             sleepTimer.onChapterTransition(auto)
             // Chapter boundary is a good, cheap moment to sync cross-device position.
@@ -123,27 +132,63 @@ class PlaybackConnection @Inject constructor(
                 Log.w(TAG, "cannot connect media controller", e)
                 return@launch
             }
-            // Pull the freshest cross-device state first (time-boxed so a slow/offline server
-            // never delays playback). Runs even when reopening the current book, so positions
-            // and bookmarks reflect other devices.
-            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-            // Already loaded (e.g. reopening the player) — leave its play/pause state as-is.
-            if (currentBookId == bookId && c.mediaItemCount > 0) return@launch
+            // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
+            // (so they reflect other devices) and leave its queue + play state untouched.
+            if (currentBookId == bookId && c.mediaItemCount > 0) {
+                withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+                return@launch
+            }
+
+            // Persist the outgoing book's position before we leave it (synchronous snapshot,
+            // taken while currentBookId still points at it). Skip if a switch is already in
+            // flight — that one already persisted the truly-outgoing book, and currentBookId
+            // no longer matches the controller's loaded book.
+            if (!loading) positionSyncer.persist()
+
             val playlist = playlistResolver.resolve(bookId) ?: return@launch
+
+            // Switch to the new book: halt the outgoing one and flip the UI immediately —
+            // before the (possibly slow) sync + queue load — so the player never lingers on
+            // the previous book. `loading` shields the optimistic state from the listener.
+            loading = true
+            c.stop()                 // halt outgoing audio; leaves the player IDLE so the new
+            c.playWhenReady = false  // queue won't auto-buffer or auto-play
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
-            // Measure per-file durations for the book total (once per book; cached). Uses a
-            // separate headless probe — reads file headers, does NOT start main playback.
-            durationEnricher.enrich(bookId)
             val saved = playbackStateDao.findByBookId(bookId)
+            val startIndex = saved
+                ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
+                ?.takeIf { it >= 0 } ?: 0
+            _state.value = PlaybackUiState(
+                isConnected = true,
+                bookId = bookId,
+                bookTitle = playlist.bookTitle,
+                chapterTitle = playlist.items.getOrNull(startIndex)?.mediaMetadata?.title?.toString().orEmpty(),
+                chapterIndex = startIndex,
+                chapterCount = playlist.items.size,
+                positionMs = saved?.positionMs ?: 0L,
+                playbackSpeed = _state.value.playbackSpeed,
+                sleepRemainingMs = sleepTimer.remainingMs(),
+                sleepEndOfChapter = sleepTimer.endOfChapter,
+                coverModel = playlist.coverModel,
+            )
+            // Per-file duration total (headless probe; reads headers, no main playback).
+            durationEnricher.enrich(bookId)
+
+            // Freshest cross-device position (time-boxed), then commit the queue unless a
+            // newer open superseded us while we waited.
+            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+            if (currentBookId != bookId) return@launch
+            val resumed = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
-            if (saved != null) {
-                val index = playlist.items.indexOfFirst { it.mediaId == saved.currentMediaId }
-                c.seekTo(if (index >= 0) index else 0, saved.positionMs)
+            if (resumed != null) {
+                val index = playlist.items.indexOfFirst { it.mediaId == resumed.currentMediaId }
+                c.seekTo(if (index >= 0) index else 0, resumed.positionMs)
             }
             // Load the queue only — do NOT prepare()/play(), so opening a book streams no
             // audio. Buffering + playback begin when the user hits play (see [playPause]).
+            loading = false
             pushState()
             // Watch for download-status flips only after the playlist is loaded, so the reload
             // can't race the initial setMediaItems.
@@ -339,7 +384,7 @@ class PlaybackConnection @Inject constructor(
         scope.launch {
             var tick = 0
             while (controller != null) {
-                if (controller?.isPlaying == true) {
+                if (!loading && controller?.isPlaying == true) {
                     pushState()
                     if (++tick % 10 == 0) positionSyncer.save() // ~ every 5s while playing
                     if (tick % 600 == 0) positionSyncer.flush() // ~ every 5 min, bounds staleness

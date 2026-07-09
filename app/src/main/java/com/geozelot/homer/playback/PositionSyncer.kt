@@ -41,6 +41,9 @@ class PositionSyncer(
     /** Reconciles with the manifest (pull + merge + push). Suspends until done. */
     suspend fun pull() = homerSync.sync()
 
+    /** Persists the current position to Room, awaiting the write (for use before a swap). */
+    suspend fun persist() = saveNow()
+
     /** Persists the current position to Room (fire-and-forget). */
     fun save() {
         scope.launch { saveNow() }
