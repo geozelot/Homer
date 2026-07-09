@@ -50,6 +50,7 @@ class HomerSyncRepository @Inject constructor(
 ) {
     private val mutex = Mutex()
     private var ensuredDir: String? = null
+    private var legacyMigrationChecked = false
 
     /** Pull-merge-push in one pass. No-op if no account is configured. */
     suspend fun sync() {
@@ -71,9 +72,15 @@ class HomerSyncRepository @Inject constructor(
     }
 
     private suspend fun reconcile() {
-        val dir = manifestDir()
+        val dir = DIR
         val path = "$dir/$FILE"
         Log.i(TAG, "sync start: path=$path")
+
+        // One-time migration: earlier builds kept the manifest under the (configurable)
+        // library folder, so changing that folder moved the manifest and silently broke
+        // sync. It's now pinned to the files-root. If the pinned copy is absent but a
+        // legacy per-root copy exists, seed the new location from it so nothing is lost.
+        migrateLegacyManifest(dir, path)
 
         // Re-pull, re-merge and retry on each conflict; the last attempt writes
         // unconditionally so a mangled/weak ETag can never block sync forever
@@ -208,9 +215,28 @@ class HomerSyncRepository @Inject constructor(
         }
     }
 
-    private suspend fun manifestDir(): String {
-        val root = librarySettings.libraryRoot.first()
-        return listOf(root, DIR).filter { it.isNotBlank() }.joinToString("/")
+    /**
+     * Seeds the pinned files-root manifest from a legacy per-library-root copy, once per
+     * process. Cheap after the first run: as soon as the pinned copy exists (or there's no
+     * legacy to migrate) the flag short-circuits all further checks.
+     */
+    private suspend fun migrateLegacyManifest(dir: String, path: String) {
+        if (legacyMigrationChecked) return
+        val root = librarySettings.libraryRoot.first().trim('/')
+        // No configurable root, or the root already IS the files-root → nothing to migrate.
+        if (root.isEmpty()) { legacyMigrationChecked = true; return }
+        try {
+            if (webDavClient.getText(path) != null) { legacyMigrationChecked = true; return }
+            val legacy = webDavClient.getText("$root/$DIR/$FILE")?.content
+            if (legacy != null && legacy.isNotBlank()) {
+                ensureDir(dir)
+                webDavClient.putText(path, legacy, null)
+                Log.i(TAG, "migrated legacy manifest ($root/$DIR/$FILE) to pinned $path")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "legacy manifest migration skipped", e)
+        }
+        legacyMigrationChecked = true
     }
 
     private suspend fun ensureDir(dir: String) {

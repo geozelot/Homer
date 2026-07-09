@@ -4,8 +4,9 @@ import kotlinx.serialization.Serializable
 
 /**
  * The central `.homer` manifest — the authoritative cross-device store (SCOPE D1). One
- * JSON file at the library root; [books] is keyed by book identity (the book folder path
- * relative to the library root, matching Room's book id).
+ * JSON file pinned at the WebDAV files-root (`.homer/index.json`), independent of the
+ * configurable library folder so changing that folder never moves the manifest. [books] is
+ * keyed by book identity (the full files-root folder path, matching Room's book id).
  *
  * Forward-compatible by design: [HomerBookState] will grow bookmarks/overrides fields, and
  * the DI Json is lenient with unknown keys, so newer devices can add fields older ones ignore.
