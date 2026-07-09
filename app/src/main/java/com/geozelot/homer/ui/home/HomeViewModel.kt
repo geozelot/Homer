@@ -76,8 +76,9 @@ private data class EffectiveBook(
     val finishedOverride: Boolean?,
 )
 
-/** A library row: either a standalone book or a collapsible series shelf. */
+/** A library row: a section header, a standalone book, or a collapsible series shelf. */
 sealed interface LibraryEntry {
+    data class Header(val title: String) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
     data class Series(
         val key: String,
@@ -85,6 +86,29 @@ sealed interface LibraryEntry {
         val author: String?,
         val books: List<BookListItem>,
     ) : LibraryEntry
+}
+
+/** How the library list is ordered. */
+enum class LibrarySort(val key: String, val label: String) {
+    AUTHOR("author", "Author"),
+    TITLE("title", "Title"),
+    RECENT("recent", "Recently played"),
+    DURATION("duration", "Duration");
+
+    companion object {
+        fun from(key: String?) = values().firstOrNull { it.key == key } ?: AUTHOR
+    }
+}
+
+/** How the library list is sectioned. */
+enum class LibraryGroup(val key: String, val label: String) {
+    NONE("none", "No grouping"),
+    AUTHOR("author", "Author"),
+    GENRE("genre", "Genre");
+
+    companion object {
+        fun from(key: String?) = values().firstOrNull { it.key == key } ?: NONE
+    }
 }
 
 @HiltViewModel
@@ -187,16 +211,24 @@ class HomeViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    /** Library list, filtered by the search query, grouped into series shelves (2+). */
+    val sortMode: StateFlow<LibrarySort> = librarySettings.sortMode
+        .map(LibrarySort::from)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySort.AUTHOR)
+
+    val groupMode: StateFlow<LibraryGroup> = librarySettings.groupMode
+        .map(LibraryGroup::from)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryGroup.NONE)
+
+    /** Library list, filtered by the query, ordered by [sortMode], sectioned by [groupMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, _searchQuery) { list, query ->
+        combine(books, _searchQuery, sortMode, groupMode) { list, query, sort, group ->
             val filtered = if (query.isBlank()) {
                 list
             } else {
                 val needle = query.trim().lowercase()
                 list.filter { it.matchesQuery(needle) }
             }
-            groupIntoEntries(filtered)
+            buildEntries(filtered, sort, group)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** In-progress books (started, not finished), most-recently-played first. */
@@ -317,6 +349,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setGridView(grid) }
     }
 
+    fun setSortMode(sort: LibrarySort) {
+        viewModelScope.launch { librarySettings.setSortMode(sort.key) }
+    }
+
+    fun setGroupMode(group: LibraryGroup) {
+        viewModelScope.launch { librarySettings.setGroupMode(group.key) }
+    }
+
     /** Quick hide/show from the context menu, preserving any existing metadata override. */
     fun setHidden(bookId: String, hidden: Boolean) {
         viewModelScope.launch {
@@ -369,6 +409,59 @@ class HomeViewModel @Inject constructor(
     private companion object {
         const val CONTINUE_LIMIT = 12
     }
+}
+
+/** Orders [books] by [sort] and sections them by [group], producing the render list. */
+private fun buildEntries(
+    books: List<BookListItem>,
+    sort: LibrarySort,
+    group: LibraryGroup,
+): List<LibraryEntry> {
+    val ordered = books.sortedWith(sort.comparator())
+    // Series shelves only make sense when books are in author/series order.
+    val shelves = sort == LibrarySort.AUTHOR
+
+    if (group == LibraryGroup.NONE) {
+        return if (shelves) groupIntoEntries(ordered) else ordered.map(LibraryEntry::Standalone)
+    }
+
+    val keyOf: (BookListItem) -> String? = when (group) {
+        LibraryGroup.AUTHOR -> { b -> b.author }
+        LibraryGroup.GENRE -> { b -> b.genre }
+        LibraryGroup.NONE -> { _ -> null }
+    }
+    val fallback = if (group == LibraryGroup.AUTHOR) "Unknown author" else "No genre"
+    val byKey = ordered.groupBy(keyOf)
+    val orderedKeys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
+
+    return buildList {
+        for (key in orderedKeys) {
+            add(LibraryEntry.Header(key ?: fallback))
+            val groupBooks = byKey.getValue(key)
+            // Keep series shelves within an author section when sorted by author.
+            if (shelves && group == LibraryGroup.AUTHOR) {
+                addAll(groupIntoEntries(groupBooks))
+            } else {
+                groupBooks.forEach { add(LibraryEntry.Standalone(it)) }
+            }
+        }
+    }
+}
+
+private fun LibrarySort.comparator(): Comparator<BookListItem> = when (this) {
+    LibrarySort.AUTHOR -> compareBy(
+        { it.author == null },
+        { it.author?.lowercase() },
+        { it.series == null },
+        { it.series?.lowercase() },
+        { it.seriesIndex == null },
+        { it.seriesIndex },
+        { it.title.lowercase() },
+    )
+    LibrarySort.TITLE -> compareBy { it.title.lowercase() }
+    // Never-played / unmeasured sort last under the descending orders.
+    LibrarySort.RECENT -> compareByDescending { it.lastPlayedAt ?: Long.MIN_VALUE }
+    LibrarySort.DURATION -> compareByDescending { it.totalDurationMs ?: -1L }
 }
 
 /** Case-insensitive match across title, author, series, genre and tags. */

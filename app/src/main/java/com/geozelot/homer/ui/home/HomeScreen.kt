@@ -117,6 +117,8 @@ fun HomeScreen(
     val continueShelf by viewModel.continueShelf.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
+    val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
+    val groupMode by viewModel.groupMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -177,6 +179,10 @@ fun HomeScreen(
                     bookCount = bookCount,
                     gridView = gridView,
                     searching = searching,
+                    sortMode = sortMode,
+                    groupMode = groupMode,
+                    onSortChange = viewModel::setSortMode,
+                    onGroupChange = viewModel::setGroupMode,
                     expanded = expanded,
                     onToggleView = viewModel::setGridView,
                     onBookClick = onBookClick,
@@ -324,6 +330,10 @@ private fun LazyGridScope.libraryContent(
     bookCount: Int,
     gridView: Boolean,
     searching: Boolean,
+    sortMode: LibrarySort,
+    groupMode: LibraryGroup,
+    onSortChange: (LibrarySort) -> Unit,
+    onGroupChange: (LibraryGroup) -> Unit,
     expanded: MutableMap<String, Boolean>,
     onToggleView: (Boolean) -> Unit,
     onBookClick: (String) -> Unit,
@@ -344,8 +354,16 @@ private fun LazyGridScope.libraryContent(
         )
     }
 
+    item(span = { GridItemSpan(maxLineSpan) }, key = "sort-group") {
+        SortGroupBar(sortMode, groupMode, onSortChange, onGroupChange)
+    }
+
     entries.forEach { entry ->
         when (entry) {
+            is LibraryEntry.Header -> item(
+                span = { GridItemSpan(maxLineSpan) },
+                key = "header:${entry.title}",
+            ) { SectionLabelRow(entry.title) }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
@@ -432,6 +450,71 @@ private fun ViewToggleButton(
             tint = if (selected) Amber else Faint,
             modifier = Modifier.size(16.dp),
         )
+    }
+}
+
+@Composable
+private fun SortGroupBar(
+    sort: LibrarySort,
+    group: LibraryGroup,
+    onSortChange: (LibrarySort) -> Unit,
+    onGroupChange: (LibraryGroup) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp, start = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DropdownChip(
+            label = "Sort · ${sort.label}",
+            options = LibrarySort.values().toList(),
+            selected = sort,
+            labelOf = { it.label },
+            onSelect = onSortChange,
+        )
+        DropdownChip(
+            label = "Group · ${group.label}",
+            options = LibraryGroup.values().toList(),
+            selected = group,
+            labelOf = { it.label },
+            onSelect = onGroupChange,
+        )
+    }
+}
+
+@Composable
+private fun <T> DropdownChip(
+    label: String,
+    options: List<T>,
+    selected: T,
+    labelOf: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                .background(Surface1)
+                .clickable { open = true }
+                .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, color = Muted, fontSize = 11.sp)
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(labelOf(option), color = if (option == selected) Amber else Parchment)
+                    },
+                    onClick = { onSelect(option); open = false },
+                )
+            }
+        }
     }
 }
 

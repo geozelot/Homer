@@ -40,9 +40,27 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_GRID_VIEW] = value }
     }
 
+    /** Library sort key: "author" | "title" | "recent" | "duration". */
+    val sortMode: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_SORT_MODE] ?: "author" }
+
+    suspend fun setSortMode(value: String) {
+        context.settingsDataStore.edit { it[KEY_SORT_MODE] = value }
+    }
+
+    /** Library grouping: "none" | "author" | "genre". */
+    val groupMode: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_GROUP_MODE] ?: "none" }
+
+    suspend fun setGroupMode(value: String) {
+        context.settingsDataStore.edit { it[KEY_GROUP_MODE] = value }
+    }
+
     private companion object {
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
+        val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
+        val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
     }
 }
 
