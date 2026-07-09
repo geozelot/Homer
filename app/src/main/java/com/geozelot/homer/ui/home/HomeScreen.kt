@@ -377,8 +377,14 @@ private fun LazyGridScope.libraryContent(
             }
             is LibraryEntry.Series -> {
                 val isOpen = expanded[entry.key] == true
-                item(span = { GridItemSpan(maxLineSpan) }, key = "series:${entry.key}") {
-                    SeriesShelfRow(entry, isOpen) { expanded[entry.key] = !isOpen }
+                if (gridView) {
+                    item(key = "series:${entry.key}") {
+                        SeriesGridCard(entry) { expanded[entry.key] = !isOpen }
+                    }
+                } else {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "series:${entry.key}") {
+                        SeriesShelfRow(entry, isOpen) { expanded[entry.key] = !isOpen }
+                    }
                 }
                 if (isOpen) {
                     items(
@@ -654,6 +660,61 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                 maxLines = 1,
             )
         }
+    }
+}
+
+/** A series as a grid cell the same size as a book card, with a stacked-cover look. */
+@Composable
+private fun SeriesGridCard(series: LibraryEntry.Series, onToggle: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f / 1.3f),
+        ) {
+            // Up to three covers, drawn back-to-front so the first book sits on top and the
+            // others peek out at the top-right — a stack of books.
+            val covers = series.books.take(3)
+            for (depth in covers.indices.reversed()) {
+                val book = covers[depth]
+                CoverArt(
+                    model = book.coverModel,
+                    title = book.title,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(0.86f)
+                        .aspectRatio(1f / 1.3f)
+                        .offset(x = (depth * 7).dp, y = -(depth * 7).dp)
+                        .border(1.dp, Line, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp)),
+                )
+            }
+        }
+        Text(
+            series.name,
+            color = Parchment,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 13.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        val downloaded = series.books.count { it.isDownloaded }
+        Text(
+            text = buildString {
+                append("${series.books.size} episodes")
+                if (downloaded > 0) append(" · $downloaded offline")
+            },
+            color = Muted,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
