@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -648,42 +649,47 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
-        Text(
-            book.title,
-            color = Parchment,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = 13.sp,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        Text(
-            book.author ?: "Unknown author",
-            color = Muted,
-            fontSize = 10.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        book.totalDurationMs?.takeIf { it > 0 }?.let {
-            Text(
-                formatCompactDuration(it),
-                color = Faint,
-                fontSize = 9.5.sp,
-                maxLines = 1,
-            )
-        }
+        GridCardText(title = book.title, meta = bookCardMeta(book))
     }
 }
 
-// A clean stack: the front book fills the cell exactly like a book cover (so its top AND
-// bottom edges line up with neighbouring book covers); the covers behind are the same size,
-// offset to the RIGHT only so their edges peek out as parallel sheets without poking above
-// the top line. (x, y) in dp — kept within the ~12dp grid gap so they don't touch neighbours.
-private val STACK_OFFSETS = listOf(0 to 0, 6 to 0, 11 to 0)
+/** Title (2 reserved lines) + meta (2 reserved lines) — a fixed-height block so every grid
+ *  card (book or series) is exactly the same total height and their bottoms line up. */
+@Composable
+private fun GridCardText(title: String, meta: String) {
+    Text(
+        title,
+        color = Parchment,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 13.sp,
+        minLines = 2,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+    Text(
+        meta,
+        color = Muted,
+        fontSize = 10.sp,
+        lineHeight = 13.sp,
+        minLines = 2,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
 
-/** A series as a grid cell the same size as a book card, with a stacked-cover look. */
+private fun bookCardMeta(book: BookListItem): String = buildString {
+    append(book.author ?: "Unknown author")
+    book.totalDurationMs?.takeIf { it > 0 }?.let { append('\n'); append(formatCompactDuration(it)) }
+}
+
+// The stack fans diagonally up-right and is scaled so the whole stack fills the cell — the
+// same footprint as a single book card. STACK_SPREAD is the fraction of the cell the fan
+// spans; the covers are (1 - STACK_SPREAD) of the cell in each dimension.
+private const val STACK_SPREAD = 0.18f
+
+/** A series as a grid cell the same size as a book card: a diagonal stack filling the cell. */
 @Composable
 private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
     Column(
@@ -691,47 +697,42 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onOpen),
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f / 1.3f),
+                .aspectRatio(1f / 1.5f),
         ) {
-            // Drawn back-to-front so the first book sits flat on top; the box isn't clipped
-            // so the offset covers behind can peek their edges past it.
             val covers = series.books.take(3)
+            val steps = (covers.size - 1).coerceAtLeast(1)
+            val coverW = maxWidth * (1f - STACK_SPREAD)
+            val dx = maxWidth * STACK_SPREAD / steps
+            val dy = maxHeight * STACK_SPREAD / steps
+            // Deepest drawn first; the front book (depth 0) sits bottom-left, the rest fan
+            // up-right, together spanning the whole cell.
             for (depth in covers.indices.reversed()) {
                 val book = covers[depth]
-                val (ox, oy) = STACK_OFFSETS.getOrElse(depth) { 0 to 0 }
                 CoverArt(
                     model = book.coverModel,
                     title = book.title,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .offset(x = ox.dp, y = oy.dp)
+                        .offset(x = dx * depth, y = dy * (steps - depth))
+                        .width(coverW)
+                        .aspectRatio(1f / 1.5f)
                         .then(if (depth > 0) Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)) else Modifier)
                         .clip(RoundedCornerShape(10.dp)),
                 )
             }
         }
-        // minLines matches the book card's title so the meta line sits at the same height.
-        Text(
-            series.name,
-            color = Parchment,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = 13.sp,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        Text(
-            text = seriesMeta(series),
-            color = Muted,
-            fontSize = 10.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        GridCardText(title = series.name, meta = seriesCardMeta(series))
+    }
+}
+
+private fun seriesCardMeta(series: LibraryEntry.Series): String = buildString {
+    append(seriesMeta(series))
+    // Whole-series length as a second line, once every episode is measured.
+    val measured = series.books.mapNotNull { it.totalDurationMs?.takeIf { d -> d > 0 } }
+    if (measured.size == series.books.size && measured.isNotEmpty()) {
+        append('\n'); append(formatCompactDuration(measured.sum()))
     }
 }
 
