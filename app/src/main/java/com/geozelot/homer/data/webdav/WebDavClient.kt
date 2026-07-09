@@ -117,6 +117,37 @@ class WebDavClient @Inject constructor(
         }
     }
 
+    /** Downloads a binary file (e.g. a cached cover). Null if it doesn't exist. */
+    suspend fun getBytes(relativePath: String): ByteArray? = withContext(Dispatchers.IO) {
+        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val request = Request.Builder()
+            .url(urlFor(credentials, relativePath))
+            .header("Accept-Encoding", "identity")
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            when {
+                response.code == 404 -> null
+                response.isSuccessful -> response.body?.bytes()
+                else -> throw IOException("GET failed: HTTP ${response.code}")
+            }
+        }
+    }
+
+    /** Uploads binary [bytes] to [relativePath] (overwrites). */
+    suspend fun putBytes(
+        relativePath: String,
+        bytes: ByteArray,
+        contentType: String = "application/octet-stream",
+    ): Unit = withContext(Dispatchers.IO) {
+        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val body = bytes.toRequestBody(contentType.toMediaType())
+        val request = Request.Builder().url(urlFor(credentials, relativePath)).put(body).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("PUT failed: HTTP ${response.code}")
+        }
+    }
+
     /** Creates a collection (directory); a no-op if it already exists. */
     suspend fun mkcol(relativePath: String): Unit = withContext(Dispatchers.IO) {
         val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()

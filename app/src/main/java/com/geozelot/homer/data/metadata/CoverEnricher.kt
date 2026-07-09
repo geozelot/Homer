@@ -43,11 +43,24 @@ class CoverEnricher @Inject constructor(
             try {
                 val credentials = credentialStore.credentials.value ?: return@launch
                 val libraryRoot = librarySettings.libraryRoot.first()
+                val tier = librarySettings.syncTier.first()
                 val books = bookDao.booksNeedingCover()
                 Log.i(TAG, "enriching covers for ${books.size} books")
                 var found = 0
                 for (book in books) {
                     coroutineContext.ensureActive()
+                    // Tier 3: prefer the shared cover cache (a small download) over re-extracting
+                    // the art by streaming the first file.
+                    if (tier >= 3) {
+                        val cached = runCatching {
+                            webDavClient.getBytes("$libraryRoot/.homer/covers/${coverCache.coverName(book.id)}")
+                        }.getOrNull()
+                        if (cached != null) {
+                            bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
+                            found++
+                            continue
+                        }
+                    }
                     val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
                     val url = webDavClient.urlFor(credentials, libraryRoot, firstFile.relativePath).toString()
                     val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue

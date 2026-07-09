@@ -8,6 +8,7 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +36,7 @@ class HomerCatalogRepository @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
+    private val coverCache: CoverCache,
     private val json: Json,
 ) {
     /** True if a shared catalog exists at the library root (⇒ Tier 3 is available here). */
@@ -54,6 +57,9 @@ class HomerCatalogRepository @Inject constructor(
                         return
                     }
                 }
+                // Upload extracted (embedded) covers that aren't in the shared cache yet, so
+                // other devices download them instead of re-extracting from the audio.
+                uploadNewCovers(local, remote)
                 val merged = mergeCatalogs(remote, local)
                 if (merged == remote) {
                     Log.i(TAG, "catalog already up to date")
@@ -114,6 +120,7 @@ class HomerCatalogRepository @Inject constructor(
                 seriesIndex = eff.seriesIndex,
                 genre = eff.genre,
                 coverFilePath = eff.coverFilePath,
+                hasCachedCover = book.localCoverPath != null,
                 totalDurationMs = eff.totalDurationMs,
                 isMultiFile = eff.isMultiFile,
                 updatedAt = book.updatedAt,
@@ -148,6 +155,26 @@ class HomerCatalogRepository @Inject constructor(
             }
         }
         return HomerCatalog(books = merged)
+    }
+
+    /** Uploads each book's cached embedded cover to `.homer/covers/` once (skips already-shared). */
+    private suspend fun uploadNewCovers(local: HomerCatalog, remote: HomerCatalog?) {
+        val coversDir = "${catalogDir()}/covers"
+        var dirEnsured = false
+        for ((id, cb) in local.books) {
+            if (!cb.hasCachedCover) continue
+            if (remote?.books?.get(id)?.hasCachedCover == true) continue // already in the shared cache
+            val path = bookDao.findById(id)?.localCoverPath ?: continue
+            val bytes = runCatching { File(path).readBytes() }.getOrNull() ?: continue
+            try {
+                if (!dirEnsured) { webDavClient.mkcol(coversDir); dirEnsured = true }
+                webDavClient.putBytes("$coversDir/${coverCache.coverName(id)}", bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "cover upload failed for $id", e)
+            }
+        }
     }
 
     private suspend fun catalogDir(): String {

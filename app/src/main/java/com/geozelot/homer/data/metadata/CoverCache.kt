@@ -18,10 +18,13 @@ class CoverCache @Inject constructor(
 
     /** Writes [bytes] as this book's cover and returns the absolute file path. */
     suspend fun write(bookId: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
-        val file = File(dir, "${hash(bookId)}.img")
+        val file = File(dir, coverName(bookId))
         file.writeBytes(bytes)
         file.absolutePath
     }
+
+    /** Stable, safe filename for a book's cover — also used as its name in the shared cache. */
+    fun coverName(bookId: String): String = "${hash(bookId)}.img"
 
     // Book ids are folder paths (slashes, spaces); hash to a safe, collision-resistant name.
     private fun hash(bookId: String): String =
