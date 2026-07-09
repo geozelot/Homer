@@ -133,6 +133,9 @@ class PlaybackConnection @Inject constructor(
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
+            // Measure per-file durations for the book total (once per book; cached). Uses a
+            // separate headless probe — reads file headers, does NOT start main playback.
+            durationEnricher.enrich(bookId)
             val saved = playbackStateDao.findByBookId(bookId)
             c.setMediaItems(playlist.items)
             if (saved != null) {
@@ -181,12 +184,8 @@ class PlaybackConnection @Inject constructor(
             c.pause()
             return
         }
-        // First play after loading: prepare (which begins buffering/streaming) and kick off
-        // the one-time per-file duration measurement now, rather than on open.
-        if (c.playbackState == Player.STATE_IDLE) {
-            c.prepare()
-            currentBookId?.let { durationEnricher.enrich(it) }
-        }
+        // First play after loading: prepare (which begins buffering/streaming) then play.
+        if (c.playbackState == Player.STATE_IDLE) c.prepare()
         c.play()
     }
 
