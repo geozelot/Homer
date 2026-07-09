@@ -17,11 +17,13 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.di.Authed
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -45,6 +47,7 @@ class DownloadWorker @AssistedInject constructor(
     private val audioFileDao: AudioFileDao,
     private val downloadDao: DownloadDao,
     private val storage: DownloadStorage,
+    private val librarySettings: LibrarySettings,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -52,6 +55,7 @@ class DownloadWorker @AssistedInject constructor(
         val credentials = credentialStore.credentials.value ?: return Result.failure()
         val files = audioFileDao.findForBook(bookId)
         if (files.isEmpty()) return Result.success()
+        val libraryRoot = librarySettings.libraryRoot.first()
 
         val title = bookDao.findById(bookId)?.title ?: bookId.substringAfterLast('/')
         val notifId = bookId.hashCode()
@@ -71,7 +75,7 @@ class DownloadWorker @AssistedInject constructor(
                 // Write to a .part file and move into place only after a complete write, so a
                 // truncated file can never be mistaken for a finished download.
                 val part = File(dest.parentFile, dest.name + ".part")
-                val request = Request.Builder().url(webDavClient.urlFor(credentials, file.relativePath)).build()
+                val request = Request.Builder().url(webDavClient.urlFor(credentials, libraryRoot, file.relativePath)).build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
                     val body = response.body ?: throw IOException("empty body for ${file.relativePath}")

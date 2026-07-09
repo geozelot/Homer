@@ -4,7 +4,9 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +31,7 @@ class CoverEnricher @Inject constructor(
     private val webDavClient: WebDavClient,
     private val metadataExtractor: MetadataExtractor,
     private val coverCache: CoverCache,
+    private val librarySettings: LibrarySettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val running = AtomicBoolean(false)
@@ -39,13 +42,14 @@ class CoverEnricher @Inject constructor(
         scope.launch {
             try {
                 val credentials = credentialStore.credentials.value ?: return@launch
+                val libraryRoot = librarySettings.libraryRoot.first()
                 val books = bookDao.booksNeedingCover()
                 Log.i(TAG, "enriching covers for ${books.size} books")
                 var found = 0
                 for (book in books) {
                     coroutineContext.ensureActive()
                     val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
-                    val url = webDavClient.urlFor(credentials, firstFile.relativePath).toString()
+                    val url = webDavClient.urlFor(credentials, libraryRoot, firstFile.relativePath).toString()
                     val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue
                     val path = coverCache.write(book.id, bytes)
                     bookDao.updateLocalCover(book.id, path)

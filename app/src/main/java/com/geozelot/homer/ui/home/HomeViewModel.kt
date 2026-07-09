@@ -174,7 +174,8 @@ class HomeViewModel @Inject constructor(
             authRepository.credentials,
             playbackStateDao.observeProgress(),
             downloadDao.observeAll(),
-        ) { effective, credentials, progress, downloads ->
+            libraryRepository.libraryRoot,
+        ) { effective, credentials, progress, downloads, libraryRoot ->
             val progressByBook = progress.associateBy { it.bookId }
             val downloadByBook = downloads.associateBy { it.bookId }
             effective.map { eff ->
@@ -191,7 +192,7 @@ class HomeViewModel @Inject constructor(
                     author = book.author,
                     isMultiFile = book.isMultiFile,
                     fileCount = book.fileCount,
-                    coverModel = BookCover.model(book, credentials, webDavClient),
+                    coverModel = BookCover.model(book, credentials, webDavClient, libraryRoot),
                     series = book.series,
                     seriesIndex = book.seriesIndex,
                     genre = book.genre,

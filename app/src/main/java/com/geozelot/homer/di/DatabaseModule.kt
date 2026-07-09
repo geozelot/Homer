@@ -110,13 +110,28 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * v9 -> v10: book/file ids switched from files-root-relative to library-root-relative
+     * (Tier 3 needs ids that match across users mounting the shared folder at different
+     * paths). Old rows are keyed by the old scheme, so clear the derived + id-keyed data;
+     * the next scan rebuilds it. `.homer` re-syncs under the new ids on next open.
+     */
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "books", "audio_files", "crawl_dirs", "playback_state",
+                "bookmarks", "bookmark_meta", "downloads", "book_overrides",
+            ).forEach { db.execSQL("DELETE FROM `$it`") }
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                MIGRATION_7_8, MIGRATION_8_9,
+                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
             )
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()

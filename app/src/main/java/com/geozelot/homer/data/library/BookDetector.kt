@@ -76,19 +76,24 @@ class BookDetector @Inject constructor() {
             images += member.imageFiles
         }
 
-        val relToRoot = bookPath.removePrefix(root).trim('/')
+        // Ids and stored paths are LIBRARY-ROOT-RELATIVE (not files-root), so they're stable
+        // across users who mount the same shared folder at different paths (Tier 3). The
+        // library-root prefix is re-attached when building fetch URLs (see WebDavClient.urlFor).
+        fun strip(path: String) = path.removePrefix(root).trim('/')
+
+        val relToRoot = strip(bookPath)
         val segments = relToRoot.split('/').filter { it.isNotEmpty() }
         val title = segments.lastOrNull() ?: bookPath.substringAfterLast('/')
         // Top-level folder under the library root is the author; any folder between
         // author and book is the series (e.g. "Harry Potter - Heptalogie").
         val author = if (segments.size >= 2) segments.first() else null
         val series = if (segments.size >= 3) segments[segments.size - 2] else null
-        val cover = images.minByOrNull { coverRank(it.name) }?.path
+        val cover = images.minByOrNull { coverRank(it.name) }?.path?.let(::strip)
 
         val fileEntities = orderedAudio.mapIndexed { index, resource ->
             AudioFileEntity(
-                relativePath = resource.path,
-                bookId = bookPath,
+                relativePath = strip(resource.path),
+                bookId = relToRoot,
                 fileName = resource.name,
                 sortIndex = index,
                 sizeBytes = resource.contentLength ?: 0L,
@@ -100,12 +105,12 @@ class BookDetector @Inject constructor() {
         }
 
         val book = BookEntity(
-            id = bookPath,
+            id = relToRoot,
             title = title,
             author = author,
             series = series,
             seriesIndex = null,
-            relativePath = bookPath,
+            relativePath = relToRoot,
             coverFilePath = cover,
             localCoverPath = null,
             chapterTier = CHAPTER_TIER_UNDETERMINED,

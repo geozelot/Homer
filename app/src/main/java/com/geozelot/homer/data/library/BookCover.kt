@@ -11,9 +11,10 @@ object BookCover {
         book: BookEntity,
         credentials: NextcloudCredentials?,
         webDavClient: WebDavClient,
+        libraryRoot: String,
     ): Any? = when {
         book.coverFilePath != null && credentials != null ->
-            webDavClient.urlFor(credentials, book.coverFilePath).toString()
+            webDavClient.urlFor(credentials, libraryRoot, book.coverFilePath).toString()
         book.localCoverPath != null -> File(book.localCoverPath)
         else -> null
     }

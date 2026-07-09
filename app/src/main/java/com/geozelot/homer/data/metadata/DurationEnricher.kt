@@ -4,7 +4,9 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +34,7 @@ class DurationEnricher @Inject constructor(
     private val credentialStore: CredentialStore,
     private val webDavClient: WebDavClient,
     private val durationExtractor: DurationExtractor,
+    private val librarySettings: LibrarySettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = Collections.synchronizedSet(mutableSetOf<String>())
@@ -42,6 +45,7 @@ class DurationEnricher @Inject constructor(
         scope.launch {
             try {
                 val credentials = credentialStore.credentials.value ?: return@launch
+                val libraryRoot = librarySettings.libraryRoot.first()
                 val files = audioFileDao.findForBook(bookId)
                 val needsGenre = bookDao.findById(bookId)?.genre == null
                 val missing = files.filter { it.durationMs == null }
@@ -52,7 +56,7 @@ class DurationEnricher @Inject constructor(
                 var genre: String? = null
                 for (file in missing) {
                     coroutineContext.ensureActive()
-                    val url = webDavClient.urlFor(credentials, file.relativePath).toString()
+                    val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
                     val probe = durationExtractor.probe(url)
                     probe.durationMs?.let { audioFileDao.updateDuration(file.relativePath, it) }
                     if (genre == null) genre = probe.genre
@@ -63,7 +67,7 @@ class DurationEnricher @Inject constructor(
                 if (needsGenre && genre == null) {
                     files.firstOrNull()?.let { first ->
                         coroutineContext.ensureActive()
-                        val url = webDavClient.urlFor(credentials, first.relativePath).toString()
+                        val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
                         genre = durationExtractor.probe(url).genre
                     }
                 }

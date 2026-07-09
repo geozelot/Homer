@@ -112,6 +112,14 @@ class WebDavClient @Inject constructor(
         return builder.build()
     }
 
+    /**
+     * Builds a file URL from a **library-root-relative** path by prepending [libraryRoot]
+     * (the current account's mount path of the library). Empty segments are dropped, so a
+     * blank root or stray slashes are harmless.
+     */
+    fun urlFor(credentials: NextcloudCredentials, libraryRoot: String, relativePath: String): HttpUrl =
+        urlFor(credentials, "$libraryRoot/$relativePath")
+
     private fun parseMultistatus(
         stream: java.io.InputStream,
         credentials: NextcloudCredentials,

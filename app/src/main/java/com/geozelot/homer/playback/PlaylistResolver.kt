@@ -12,7 +12,9 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /** Resolves a book into an ordered playlist of streamable [MediaItem]s. */
@@ -24,6 +26,7 @@ class PlaylistResolver @Inject constructor(
     private val downloadDao: DownloadDao,
     private val downloadStorage: DownloadStorage,
     private val bookOverrideDao: BookOverrideDao,
+    private val librarySettings: LibrarySettings,
 ) {
     data class Playlist(
         val bookTitle: String,
@@ -40,7 +43,8 @@ class PlaylistResolver @Inject constructor(
         val files = audioFileDao.findForBook(bookId)
         if (files.isEmpty()) return null
 
-        val coverModel = BookCover.model(book, credentials, webDavClient)
+        val libraryRoot = librarySettings.libraryRoot.first()
+        val coverModel = BookCover.model(book, credentials, webDavClient, libraryRoot)
         // Local cached cover as a file:// URI so the media notification shows it on
         // every chapter (the notification's loader can't authenticate remote WebDAV).
         val artworkUri = book.localCoverPath?.let { Uri.fromFile(java.io.File(it)) }
@@ -53,7 +57,7 @@ class PlaylistResolver @Inject constructor(
             val url = if (offline && localFile.exists()) {
                 Uri.fromFile(localFile).toString()
             } else {
-                webDavClient.urlFor(credentials, file.relativePath).toString()
+                webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
             }
             val chapterTitle = file.fileName.substringBeforeLast('.')
             MediaItem.Builder()
