@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -97,7 +98,6 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
@@ -134,19 +134,21 @@ fun PlayerScreen(
             onToggleSkipSilence = viewModel::setSkipSilence,
         )
 
-        Column(
+        // Artwork centered in the flexible space above the controls, sized to the largest
+        // 1:1.3 cover that fits both the available width and height (so it never overflows
+        // onto the controls on shorter screens).
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            // Big cover with a warm glow.
+            val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f)
             CoverImage(
                 model = state.coverModel ?: state.artworkData,
                 modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(210.dp)
+                    .width(coverWidth)
                     .aspectRatio(1f / 1.3f)
                     .shadow(
                         elevation = 30.dp,
@@ -156,7 +158,13 @@ fun PlayerScreen(
                     )
                     .clip(RoundedCornerShape(14.dp)),
             )
+        }
 
+        // Bottom cluster: title, chapter + book-time-left, scrubber, transport, quick-select.
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text(
                 text = state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { "Loading…" } },
                 style = SerifTitle.copy(fontSize = 20.sp),
@@ -164,29 +172,30 @@ fun PlayerScreen(
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 18.dp),
             )
             if (state.chapterCount > 0) {
                 Text(
                     text = buildString {
                         append("Chapter ${state.chapterIndex + 1} of ${state.chapterCount}")
-                        bookDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatTime(it)}") }
+                        timeLeftMs?.let {
+                            append(" · ")
+                            append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
+                        }
                     },
                     color = Faint,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
 
             Scrubber(
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
-                timeLeftMs = timeLeftMs,
                 onSeek = viewModel::seekTo,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 20.dp),
+                    .padding(top = 16.dp),
             )
 
             Transport(
@@ -194,24 +203,24 @@ fun PlayerScreen(
                 onPrev = viewModel::previousChapter,
                 onPlayPause = viewModel::playPause,
                 onNext = viewModel::nextChapter,
-                modifier = Modifier.padding(top = 14.dp),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+
+            ToolRow(
+                speed = state.playbackSpeed,
+                sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
+                sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+                downloadStatus = download?.status,
+                onSpeed = viewModel::setSpeed,
+                onSleepMinutes = viewModel::startSleepTimer,
+                onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
+                onSleepOff = viewModel::cancelSleepTimer,
+                onSleepSettings = { showSleepDialog = true },
+                onMark = { showBookmarksDialog = true },
+                onDownload = viewModel::download,
+                onRemoveDownload = viewModel::deleteDownload,
             )
         }
-
-        ToolRow(
-            speed = state.playbackSpeed,
-            sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
-            sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
-            downloadStatus = download?.status,
-            onSpeed = viewModel::setSpeed,
-            onSleepMinutes = viewModel::startSleepTimer,
-            onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
-            onSleepOff = viewModel::cancelSleepTimer,
-            onSleepSettings = { showSleepDialog = true },
-            onMark = { showBookmarksDialog = true },
-            onDownload = viewModel::download,
-            onRemoveDownload = viewModel::deleteDownload,
-        )
     }
 
     if (showBookmarksDialog) {
@@ -286,7 +295,6 @@ private fun PlayerTopBar(
 private fun Scrubber(
     positionMs: Long,
     durationMs: Long,
-    timeLeftMs: Long?,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -311,15 +319,15 @@ private fun Scrubber(
                 inactiveTrackColor = Surface2,
             ),
         )
+        // Chapter-relative: elapsed on the left, time-to-end-of-chapter on the right.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(formatTime(sliderValue.toLong()), color = Muted, fontSize = 11.sp)
+            val remaining = (durationMs - sliderValue.toLong()).coerceAtLeast(0)
             Text(
-                text = timeLeftMs?.let {
-                    if (it <= 0) "finished" else "${formatCompactDuration(it)} left"
-                } ?: formatTime(durationMs),
+                text = if (hasDuration) "-${formatTime(remaining)}" else "--:--",
                 color = Muted,
                 fontSize = 11.sp,
             )

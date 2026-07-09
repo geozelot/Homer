@@ -646,6 +646,14 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        book.totalDurationMs?.takeIf { it > 0 }?.let {
+            Text(
+                formatCompactDuration(it),
+                color = Faint,
+                fontSize = 9.5.sp,
+                maxLines = 1,
+            )
+        }
     }
 }
 
