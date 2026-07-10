@@ -13,6 +13,7 @@ import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
+import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
@@ -117,6 +118,7 @@ enum class LibraryGroup(val key: String, val label: String) {
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val libraryRepository: LibraryRepository,
+    private val libraryIndexManager: LibraryIndexManager,
     private val librarySettings: LibrarySettings,
     private val webDavClient: WebDavClient,
     private val homerSync: HomerSyncRepository,
@@ -275,8 +277,8 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
-        // Fill in covers for books missing one, without needing a full re-scan.
-        libraryRepository.enrichCovers()
+        // Fill in covers for books missing one, in a foreground worker (survives backgrounding).
+        libraryIndexManager.enrichCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
         // Tier 3: pull the shared catalog so the library is present without scanning. Never
@@ -308,25 +310,11 @@ class HomeViewModel @Inject constructor(
 
     fun scan() {
         viewModelScope.launch {
+            // Persist the root first; the worker reads it. Scan + covers (+ Tier-3 publish)
+            // then run in the foreground worker so they survive the app being backgrounded.
             libraryRepository.setLibraryRoot(_libraryRoot.value)
-            libraryRepository.scan(incremental = false)
-            // Tier 3: publish the freshly-scanned catalog if allowed (owner, or it exists).
-            if (librarySettings.syncTier.first() >= 3 && (catalog.exists() || isOwner())) {
-                catalog.publish()
-                _tier3Available.value = true
-            }
+            libraryIndexManager.scan()
         }
-    }
-
-    /**
-     * Owner check for gating Tier-3 catalog *creation* (updates stay open). The library's
-     * Nextcloud owner may create it; if ownership can't be determined we allow it
-     * (claim-based). Once a catalog exists this isn't consulted.
-     */
-    private suspend fun isOwner(): Boolean {
-        val me = authRepository.credentials.value?.loginName ?: return false
-        val owner = webDavClient.fetchOwnerId(libraryRepository.libraryRoot.first())
-        return owner == null || owner.equals(me, ignoreCase = true)
     }
 
     fun download(bookId: String) = downloadManager.download(bookId)
@@ -406,10 +394,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             librarySettings.setSyncTier(tier)
             if (tier >= 3) {
-                when {
-                    catalog.exists() -> catalog.consume() // bootstrap from the shared library
-                    isOwner() -> catalog.publish()        // create it from the local library
-                }
+                if (catalog.exists()) catalog.consume() // bootstrap from the shared library
+                else catalog.publishIfAllowed()         // create it (owner, or claim-based)
                 _tier3Available.value = catalog.exists()
             }
         }

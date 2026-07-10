@@ -43,6 +43,21 @@ class HomerCatalogRepository @Inject constructor(
     suspend fun exists(): Boolean =
         credentialStore.credentials.value != null && webDavClient.getText(catalogPath()) != null
 
+    /**
+     * Whether this user may CREATE the shared catalog — the Nextcloud folder owner, or
+     * (when ownership can't be determined) anyone, claim-based. Not consulted once it exists.
+     */
+    suspend fun isOwner(): Boolean {
+        val me = credentialStore.credentials.value?.loginName ?: return false
+        val owner = webDavClient.fetchOwnerId(librarySettings.libraryRoot.first())
+        return owner == null || owner.equals(me, ignoreCase = true)
+    }
+
+    /** Publishes only if allowed: the catalog already exists (open updates) or we're the owner. */
+    suspend fun publishIfAllowed() {
+        if (exists() || isOwner()) publish()
+    }
+
     /** Merges the local library into the shared catalog and pushes it. */
     suspend fun publish() {
         if (credentialStore.credentials.value == null) return

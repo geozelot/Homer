@@ -7,21 +7,18 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
 
 /**
- * Background pass that gives books an artwork cover. Embedded audiobook art usually
- * lives only on the first file, so we extract it once from that file and cache it as
- * the book-level cover. Runs only for books that have no cover yet (no folder image,
- * no cached art), sequentially to avoid hammering the server.
+ * Gives books an artwork cover. Embedded audiobook art usually lives only on the first file,
+ * so we extract it once from that file and cache it as the book-level cover (or, at Tier 3,
+ * download it from the shared cover cache instead). Runs only for books with no cover yet.
+ *
+ * Driven by [com.geozelot.homer.data.library.LibraryIndexWorker] so it survives the app being
+ * backgrounded and shows progress; [enrich] is a plain suspend pass, cancellable per book.
  */
 @Singleton
 class CoverEnricher @Inject constructor(
@@ -33,46 +30,42 @@ class CoverEnricher @Inject constructor(
     private val coverCache: CoverCache,
     private val librarySettings: LibrarySettings,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val running = AtomicBoolean(false)
+    /** How many books still need a cover — lets the worker skip foregrounding when there's none. */
+    suspend fun pendingCount(): Int = bookDao.booksNeedingCover().size
 
-    /** Fire-and-forget; no-op if already running. */
-    fun enrichMissingCovers() {
-        if (!running.compareAndSet(false, true)) return
-        scope.launch {
-            try {
-                val credentials = credentialStore.credentials.value ?: return@launch
-                val libraryRoot = librarySettings.libraryRoot.first()
-                val tier = librarySettings.syncTier.first()
-                val books = bookDao.booksNeedingCover()
-                Log.i(TAG, "enriching covers for ${books.size} books")
-                var found = 0
-                for (book in books) {
-                    coroutineContext.ensureActive()
-                    // Tier 3: prefer the shared cover cache (a small download) over re-extracting
-                    // the art by streaming the first file.
-                    if (tier >= 3) {
-                        val cached = runCatching {
-                            webDavClient.getBytes("$libraryRoot/.homer/covers/${coverCache.coverName(book.id)}")
-                        }.getOrNull()
-                        if (cached != null) {
-                            bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
-                            found++
-                            continue
-                        }
-                    }
-                    val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
-                    val url = webDavClient.urlFor(credentials, libraryRoot, firstFile.relativePath).toString()
-                    val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue
-                    val path = coverCache.write(book.id, bytes)
-                    bookDao.updateLocalCover(book.id, path)
+    /** Fetches covers for all books missing one, reporting progress. Suspends until done. */
+    suspend fun enrich(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }) {
+        val credentials = credentialStore.credentials.value ?: return
+        val libraryRoot = librarySettings.libraryRoot.first()
+        val tier = librarySettings.syncTier.first()
+        val books = bookDao.booksNeedingCover()
+        val total = books.size
+        if (total == 0) return
+        Log.i(TAG, "enriching covers for $total books")
+        var found = 0
+        for ((index, book) in books.withIndex()) {
+            coroutineContext.ensureActive()
+            onProgress(index, total)
+            // Tier 3: prefer the shared cover cache (a small download) over re-extracting the
+            // art by streaming the first file.
+            if (tier >= 3) {
+                val cached = runCatching {
+                    webDavClient.getBytes("$libraryRoot/.homer/covers/${coverCache.coverName(book.id)}")
+                }.getOrNull()
+                if (cached != null) {
+                    bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
                     found++
+                    continue
                 }
-                Log.i(TAG, "cover enrichment done: $found/${books.size} got art")
-            } finally {
-                running.set(false)
             }
+            val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
+            val url = webDavClient.urlFor(credentials, libraryRoot, firstFile.relativePath).toString()
+            val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue
+            bookDao.updateLocalCover(book.id, coverCache.write(book.id, bytes))
+            found++
         }
+        onProgress(total, total)
+        Log.i(TAG, "cover enrichment done: $found/$total got art")
     }
 
     private companion object {
