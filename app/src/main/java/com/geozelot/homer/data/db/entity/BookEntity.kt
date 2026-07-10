@@ -25,6 +25,8 @@ data class BookEntity(
     val coverFilePath: String?,
     /** Absolute path of a locally cached cover (e.g. extracted embedded art), if any. */
     val localCoverPath: String?,
+    /** True once cover extraction has been tried (so art-less books aren't re-probed forever). */
+    val coverAttempted: Boolean = false,
     val chapterTier: Int,
     val isMultiFile: Boolean,
     val fileCount: Int,

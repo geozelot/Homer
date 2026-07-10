@@ -94,6 +94,7 @@ class LibraryScanner @Inject constructor(
                 listOf(
                     detected.book.copy(
                         localCoverPath = existingCover,
+                        coverAttempted = existing?.coverAttempted ?: false,
                         genre = existingGenre,
                         totalDurationMs = total,
                     ),

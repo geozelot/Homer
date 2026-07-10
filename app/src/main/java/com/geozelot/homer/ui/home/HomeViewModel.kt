@@ -278,7 +278,7 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
         // Fill in covers for books missing one, in a foreground worker (survives backgrounding).
-        libraryIndexManager.enrichCovers()
+        libraryIndexManager.fetchMissingCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
         // Tier 3: pull the shared catalog so the library is present without scanning. Never
@@ -316,6 +316,17 @@ class HomeViewModel @Inject constructor(
             libraryIndexManager.scan()
         }
     }
+
+    /** Deep re-scan: rebuild the library and re-fetch all cover art. */
+    fun fullScan() {
+        viewModelScope.launch {
+            libraryRepository.setLibraryRoot(_libraryRoot.value)
+            libraryIndexManager.fullScan()
+        }
+    }
+
+    /** Re-fetch cover art for every book (no library crawl). */
+    fun refreshCoverArt() = libraryIndexManager.refreshCovers()
 
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)

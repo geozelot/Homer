@@ -22,15 +22,26 @@ class LibraryIndexManager @Inject constructor(
 ) {
     private val workManager = WorkManager.getInstance(context)
 
-    /** Full scan + cover enrichment (+ Tier-3 publish). Supersedes any running index job. */
-    fun scan() = enqueue(scan = true, policy = ExistingWorkPolicy.REPLACE)
+    /** Everyday scan: find added/removed books + fetch missing covers. Preserves cached art. */
+    fun scan() = enqueue(scan = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
 
-    /** Cover enrichment only (on library open); no-op if an index job is already queued. */
-    fun enrichCovers() = enqueue(scan = false, policy = ExistingWorkPolicy.KEEP)
+    /** Deep re-scan: rebuild the library and re-fetch all cover art. */
+    fun fullScan() = enqueue(scan = true, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
 
-    private fun enqueue(scan: Boolean, policy: ExistingWorkPolicy) {
+    /** Cover-only pass for books still missing art (on open); keeps a running index job. */
+    fun fetchMissingCovers() = enqueue(scan = false, resetCovers = false, policy = ExistingWorkPolicy.KEEP)
+
+    /** Re-fetch cover art for every book (resets attempts + cached art). */
+    fun refreshCovers() = enqueue(scan = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
+
+    private fun enqueue(scan: Boolean, resetCovers: Boolean, policy: ExistingWorkPolicy) {
         val request = OneTimeWorkRequestBuilder<LibraryIndexWorker>()
-            .setInputData(workDataOf(LibraryIndexWorker.KEY_SCAN to scan))
+            .setInputData(
+                workDataOf(
+                    LibraryIndexWorker.KEY_SCAN to scan,
+                    LibraryIndexWorker.KEY_RESET_COVERS to resetCovers,
+                ),
+            )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
         workManager.enqueueUniqueWork(LibraryIndexWorker.WORK_NAME, policy, request)

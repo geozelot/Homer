@@ -24,12 +24,20 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     fun observeById(id: String): Flow<BookEntity?>
 
-    /** Books with no cover yet (no folder image and no cached art) — enrichment targets. */
-    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL")
+    /** Books with no cover yet and not yet tried — enrichment targets. */
+    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL AND coverAttempted = 0")
     suspend fun booksNeedingCover(): List<BookEntity>
 
     @Query("UPDATE books SET localCoverPath = :path WHERE id = :bookId")
     suspend fun updateLocalCover(bookId: String, path: String)
+
+    /** Marks a book's cover as tried (whether or not art was found) so it isn't re-probed. */
+    @Query("UPDATE books SET coverAttempted = 1 WHERE id = :bookId")
+    suspend fun markCoverAttempted(bookId: String)
+
+    /** Clears cached extracted art + the attempted flag so covers are re-fetched. */
+    @Query("UPDATE books SET localCoverPath = NULL, coverAttempted = 0")
+    suspend fun resetCoverArt()
 
     @Query("UPDATE books SET totalDurationMs = :totalDurationMs WHERE id = :bookId")
     suspend fun updateTotalDuration(bookId: String, totalDurationMs: Long)

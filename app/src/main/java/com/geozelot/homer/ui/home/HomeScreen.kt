@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -1188,6 +1189,25 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 }
                 ScanStatus(scanState = scanState, bookCount = bookCount)
             }
+            Text(
+                "Finds added and removed books and fetches any missing cover art.",
+                color = Faint,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = viewModel::fullScan, enabled = !scanning, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                    Text("Full re-scan")
+                }
+                TextButton(onClick = viewModel::refreshCoverArt, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                    Text("Refresh cover art")
+                }
+            }
+            Text(
+                "Full re-scan rebuilds the library and re-fetches every cover; refresh only re-fetches artwork.",
+                color = Faint,
+                fontSize = 11.sp,
+            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 

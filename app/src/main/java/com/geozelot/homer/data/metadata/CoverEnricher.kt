@@ -58,9 +58,17 @@ class CoverEnricher @Inject constructor(
                     continue
                 }
             }
-            val firstFile = audioFileDao.findForBook(book.id).firstOrNull() ?: continue
-            val url = webDavClient.urlFor(credentials, libraryRoot, firstFile.relativePath).toString()
-            val bytes = metadataExtractor.extractEmbeddedPicture(url) ?: continue
+            val firstFile = audioFileDao.findForBook(book.id).firstOrNull()
+            val bytes = firstFile?.let {
+                metadataExtractor.extractEmbeddedPicture(
+                    webDavClient.urlFor(credentials, libraryRoot, it.relativePath).toString(),
+                )
+            }
+            if (bytes == null) {
+                // No art on the server — remember we tried, so we don't re-probe every run.
+                bookDao.markCoverAttempted(book.id)
+                continue
+            }
             bookDao.updateLocalCover(book.id, coverCache.write(book.id, bytes))
             found++
         }

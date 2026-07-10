@@ -39,9 +39,13 @@ class LibraryIndexWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val doScan = inputData.getBoolean(KEY_SCAN, false)
+        val resetCovers = inputData.getBoolean(KEY_RESET_COVERS, false)
         ensureChannel()
 
         try {
+            // Full re-scan / refresh: clear cached art + attempted flags so covers re-fetch.
+            if (resetCovers) libraryRepository.resetCoverArt()
+
             if (doScan) {
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
                 libraryRepository.scan(incremental = false)
@@ -104,6 +108,7 @@ class LibraryIndexWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_SCAN = "scan"
+        const val KEY_RESET_COVERS = "reset_covers"
         const val WORK_NAME = "library-index"
         private const val TAG = "HomerScan"
         private const val CHANNEL_ID = "library"

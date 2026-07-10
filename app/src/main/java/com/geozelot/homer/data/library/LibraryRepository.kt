@@ -20,11 +20,14 @@ import javax.inject.Singleton
 class LibraryRepository @Inject constructor(
     private val scanner: LibraryScanner,
     private val librarySettings: LibrarySettings,
-    bookDao: BookDao,
+    private val bookDao: BookDao,
 ) {
     val books: Flow<List<BookEntity>> = bookDao.observeAll()
     val bookCount: Flow<Int> = bookDao.observeCount()
     val libraryRoot: Flow<String> = librarySettings.libraryRoot
+
+    /** Clears cached cover art + the attempted flag so a cover pass re-fetches everything. */
+    suspend fun resetCoverArt() = bookDao.resetCoverArt()
 
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
