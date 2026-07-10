@@ -4,10 +4,16 @@
       Launch theme applied before Compose takes over. Kept intentionally minimal:
       no action bar, platform Material base (no AppCompat/Material XML dependency).
       All real theming happens in Compose via HomerTheme.
+
+      DARK base (Theme.Material, not .Light) with a near-black window background, and
+      forceDarkAllowed=false: the app is dark-first, so the OS must not auto-invert it. A
+      light base made LineageOS / Android "force dark" fight the already-dark Compose UI,
+      flipping colours inconsistently across app restarts.
     -->
-    <style name="Theme.Homer" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/parchment</item>
+    <style name="Theme.Homer" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>
