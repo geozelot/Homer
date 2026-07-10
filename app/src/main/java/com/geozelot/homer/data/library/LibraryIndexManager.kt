@@ -22,23 +22,24 @@ class LibraryIndexManager @Inject constructor(
 ) {
     private val workManager = WorkManager.getInstance(context)
 
-    /** Everyday scan: find added/removed books + fetch missing covers. Preserves cached art. */
-    fun scan() = enqueue(scan = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
+    /** Everyday scan: incremental (skips unchanged subtrees) + fetch missing covers. */
+    fun scan() = enqueue(scan = true, incremental = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
 
-    /** Deep re-scan: rebuild the library and re-fetch all cover art. */
-    fun fullScan() = enqueue(scan = true, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
+    /** Deep re-scan: full crawl (re-reads everything) + re-fetch all cover art. */
+    fun fullScan() = enqueue(scan = true, incremental = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
 
     /** Cover-only pass for books still missing art (on open); keeps a running index job. */
-    fun fetchMissingCovers() = enqueue(scan = false, resetCovers = false, policy = ExistingWorkPolicy.KEEP)
+    fun fetchMissingCovers() = enqueue(scan = false, incremental = false, resetCovers = false, policy = ExistingWorkPolicy.KEEP)
 
     /** Re-fetch cover art for every book (resets attempts + cached art). */
-    fun refreshCovers() = enqueue(scan = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
+    fun refreshCovers() = enqueue(scan = false, incremental = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
 
-    private fun enqueue(scan: Boolean, resetCovers: Boolean, policy: ExistingWorkPolicy) {
+    private fun enqueue(scan: Boolean, incremental: Boolean, resetCovers: Boolean, policy: ExistingWorkPolicy) {
         val request = OneTimeWorkRequestBuilder<LibraryIndexWorker>()
             .setInputData(
                 workDataOf(
                     LibraryIndexWorker.KEY_SCAN to scan,
+                    LibraryIndexWorker.KEY_INCREMENTAL to incremental,
                     LibraryIndexWorker.KEY_RESET_COVERS to resetCovers,
                 ),
             )

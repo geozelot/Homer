@@ -19,12 +19,15 @@ sealed interface ScanState {
 
 /**
  * Crawls the WebDAV tree from the library root via depth-1 PROPFINDs, collecting every
- * folder that directly contains audio, then hands the set to [BookDetector] to group
- * into books (merging multi-part books) and persists the result to Room.
+ * folder that directly contains audio, then hands the set to [BookDetector] to group into
+ * books (merging multi-part books) and persists the result to Room.
  *
- * The crawl is a full traversal for now so book grouping always sees the whole tree;
- * ETag-based incremental pruning (stored per directory) is a later optimization.
- * Cancellable between directories.
+ * With [scan]'s `incremental = true`, unchanged subtrees are skipped: Nextcloud propagates a
+ * collection's ETag up the tree, so a directory whose stored ETag still matches has an
+ * unchanged subtree and is left untouched (its books preserved via [BookDao.idsUnder]). A book
+ * folder that *has* changed is always fully re-read (so all its parts are gathered). A full
+ * (`incremental = false`) scan re-reads everything — the safe fallback if ETags can't be
+ * trusted. Cancellable between directories.
  */
 class LibraryScanner @Inject constructor(
     private val webDavClient: WebDavClient,
@@ -35,7 +38,8 @@ class LibraryScanner @Inject constructor(
 ) {
     data class Result(val bookCount: Int)
 
-    @Suppress("UNUSED_PARAMETER")
+    private data class Frame(val path: String, val forced: Boolean)
+
     suspend fun scan(
         libraryRoot: String,
         incremental: Boolean,
@@ -43,33 +47,53 @@ class LibraryScanner @Inject constructor(
         onProgress: (directoriesVisited: Int, audioFoldersFound: Int) -> Unit,
     ): Result {
         val root = libraryRoot.trim('/')
+        val storedEtags = if (incremental) {
+            crawlDirDao.getAll().associate { it.path to it.etag }
+        } else {
+            emptyMap()
+        }
         val audioFolders = mutableListOf<BookDetector.AudioFolder>()
+        val skippedRoots = mutableListOf<String>()
         var directoriesVisited = 0
 
-        val stack = ArrayDeque<String>()
-        stack.addLast(root)
+        val stack = ArrayDeque<Frame>()
+        stack.addLast(Frame(root, forced = false))
 
         while (stack.isNotEmpty()) {
             coroutineContext.ensureActive()
-            val dir = stack.removeLast()
-            val normDir = dir.trim('/')
+            val frame = stack.removeLast()
+            val dir = frame.path.trim('/')
 
             val entries = webDavClient.propfind(dir, depth = 1)
             directoriesVisited++
 
-            val selfEtag = entries.firstOrNull { it.path == normDir }?.etag
-            val children = entries.filter { it.path != normDir }
+            val selfEtag = entries.firstOrNull { it.path == dir }?.etag
+            val children = entries.filter { it.path != dir }
             val audioFiles = children.filter { !it.isCollection && AudioFormats.isAudio(it.name) }
             val imageFiles = children.filter { !it.isCollection && AudioFormats.isImage(it.name) }
             val childDirs = children.filter { it.isCollection }
+            val isBookFolder = audioFiles.isNotEmpty()
 
-            if (audioFiles.isNotEmpty()) {
-                audioFolders += BookDetector.AudioFolder(normDir, audioFiles, imageFiles)
+            if (isBookFolder) {
+                audioFolders += BookDetector.AudioFolder(dir, audioFiles, imageFiles)
             }
-            childDirs.forEach { stack.addLast(it.path) }
 
-            // Record the directory ETag for future incremental scans.
-            crawlDirDao.upsert(CrawlDirEntity(normDir, selfEtag, now))
+            for (childDir in childDirs) {
+                val childPath = childDir.path.trim('/')
+                // Skip an unchanged subtree only from a plain container folder — never while
+                // rebuilding a book (all its parts must be re-read). An unchanged collection
+                // ETag means the whole subtree is unchanged (Nextcloud propagates ETags up).
+                val stored = storedEtags[childPath]
+                val unchanged = incremental && !frame.forced && !isBookFolder &&
+                    stored != null && childDir.etag != null && stored == childDir.etag
+                if (unchanged) {
+                    skippedRoots += childPath
+                } else {
+                    stack.addLast(Frame(childPath, forced = isBookFolder || frame.forced))
+                }
+            }
+
+            crawlDirDao.upsert(CrawlDirEntity(dir, selfEtag, now))
             onProgress(directoriesVisited, audioFolders.size)
         }
 
@@ -104,11 +128,17 @@ class LibraryScanner @Inject constructor(
             audioFileDao.upsert(files)
         }
 
-        // Prune books whose folders vanished. Guard the empty case — SQLite rejects
-        // an empty `NOT IN ()`.
-        val keepIds = books.map { it.book.id }
+        // Keep the (re-)built books plus every book under an unchanged, skipped subtree; prune
+        // the rest (a vanished book always sits under a visited parent, so it's excluded here).
+        // Skipped roots are files-root paths; book ids are library-root-relative.
+        val keepIds = buildSet {
+            books.forEach { add(it.book.id) }
+            for (skipped in skippedRoots) {
+                addAll(bookDao.idsUnder(skipped.removePrefix(root).trim('/')))
+            }
+        }.toList()
         if (keepIds.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepIds)
 
-        return Result(books.size)
+        return Result(bookDao.count())
     }
 }

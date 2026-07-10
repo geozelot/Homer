@@ -1190,7 +1190,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 ScanStatus(scanState = scanState, bookCount = bookCount)
             }
             Text(
-                "Finds added and removed books and fetches any missing cover art.",
+                "Quick scan — only re-reads changed folders, and fetches any missing cover art.",
                 color = Faint,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 4.dp),

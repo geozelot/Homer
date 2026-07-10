@@ -15,6 +15,9 @@ interface BookDao {
     @Query("SELECT COUNT(*) FROM books")
     fun observeCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM books")
+    suspend fun count(): Int
+
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun findById(id: String): BookEntity?
 

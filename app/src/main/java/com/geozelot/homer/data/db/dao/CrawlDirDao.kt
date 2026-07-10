@@ -11,6 +11,9 @@ interface CrawlDirDao {
     @Query("SELECT * FROM crawl_dirs WHERE path = :path")
     suspend fun findByPath(path: String): CrawlDirEntity?
 
+    @Query("SELECT * FROM crawl_dirs")
+    suspend fun getAll(): List<CrawlDirEntity>
+
     @Upsert
     suspend fun upsert(dir: CrawlDirEntity)
 

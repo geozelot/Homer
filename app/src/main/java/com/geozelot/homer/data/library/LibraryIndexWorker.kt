@@ -48,7 +48,7 @@ class LibraryIndexWorker @AssistedInject constructor(
 
             if (doScan) {
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
-                libraryRepository.scan(incremental = false)
+                libraryRepository.scan(incremental = inputData.getBoolean(KEY_INCREMENTAL, false))
             } else if (coverEnricher.pendingCount() == 0) {
                 // Nothing to fetch — finish without ever showing a notification.
                 return Result.success()
@@ -108,6 +108,7 @@ class LibraryIndexWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_SCAN = "scan"
+        const val KEY_INCREMENTAL = "incremental"
         const val KEY_RESET_COVERS = "reset_covers"
         const val WORK_NAME = "library-index"
         private const val TAG = "HomerScan"
