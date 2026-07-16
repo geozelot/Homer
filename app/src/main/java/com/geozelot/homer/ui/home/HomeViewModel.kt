@@ -1,5 +1,7 @@
 package com.geozelot.homer.ui.home
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,6 +20,7 @@ import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.sync.HomerCatalogRepository
@@ -26,6 +29,8 @@ import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,6 +51,8 @@ data class BookListItem(
     val isMultiFile: Boolean,
     val fileCount: Int,
     val coverModel: Any?,
+    /** Whether a user-chosen custom cover is set (so the edit dialog can offer to clear it). */
+    val hasCustomCover: Boolean,
     val series: String?,
     val seriesIndex: Int?,
     val genre: String?,
@@ -129,6 +136,8 @@ class HomeViewModel @Inject constructor(
     private val bookDao: BookDao,
     private val connection: PlaybackConnection,
     private val catalog: HomerCatalogRepository,
+    private val coverCache: CoverCache,
+    @ApplicationContext private val context: Context,
     playbackStateDao: PlaybackStateDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
@@ -200,6 +209,7 @@ class HomeViewModel @Inject constructor(
                     isMultiFile = book.isMultiFile,
                     fileCount = book.fileCount,
                     coverModel = BookCover.model(book, credentials, webDavClient, libraryRoot),
+                    hasCustomCover = book.customCoverPath != null,
                     series = book.series,
                     seriesIndex = book.seriesIndex,
                     genre = book.genre,
@@ -423,6 +433,22 @@ class HomeViewModel @Inject constructor(
 
     fun setGridView(grid: Boolean) {
         viewModelScope.launch { librarySettings.setGridView(grid) }
+    }
+
+    /** Copies a user-picked image into the cover cache and sets it as the book's custom cover. */
+    fun setCustomCover(bookId: String, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull() ?: return@launch
+            val path = coverCache.writeCustom(bookId, bytes, System.currentTimeMillis())
+            bookDao.updateCustomCover(bookId, path)
+        }
+    }
+
+    /** Clears a custom cover, reverting to detected/extracted/online art. */
+    fun clearCustomCover(bookId: String) {
+        viewModelScope.launch { bookDao.updateCustomCover(bookId, null) }
     }
 
     fun setSyncTier(tier: Int) {

@@ -33,6 +33,8 @@ data class BookEntity(
     val coverFilePath: String?,
     /** Absolute path of a locally cached cover (e.g. extracted embedded art), if any. */
     val localCoverPath: String?,
+    /** Absolute path of a user-chosen custom cover (device-local; wins over all detected art). */
+    val customCoverPath: String? = null,
     /** True once cover extraction has been tried (so art-less books aren't re-probed forever). */
     val coverAttempted: Boolean = false,
     val chapterTier: Int,

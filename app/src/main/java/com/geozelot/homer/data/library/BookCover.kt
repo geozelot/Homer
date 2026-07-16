@@ -13,6 +13,8 @@ object BookCover {
         webDavClient: WebDavClient,
         libraryRoot: String,
     ): Any? = when {
+        // A user-chosen custom cover wins over everything detected.
+        book.customCoverPath != null -> File(book.customCoverPath)
         book.coverFilePath != null && credentials != null ->
             webDavClient.urlFor(credentials, libraryRoot, book.coverFilePath).toString()
         book.localCoverPath != null -> File(book.localCoverPath)

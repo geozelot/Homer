@@ -33,7 +33,7 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         BookOverrideEntity::class,
         ChapterEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = false,
 )
 abstract class HomerDatabase : RoomDatabase() {

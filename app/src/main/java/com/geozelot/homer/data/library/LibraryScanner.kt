@@ -160,6 +160,7 @@ class LibraryScanner @Inject constructor(
                 listOf(
                     detected.book.copy(
                         localCoverPath = source?.localCoverPath,
+                        customCoverPath = source?.customCoverPath,
                         coverAttempted = source?.coverAttempted ?: false,
                         genre = source?.genre,
                         chapterTier = source?.chapterTier ?: detected.book.chapterTier,

@@ -1,5 +1,9 @@
 package com.geozelot.homer.ui.home
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -218,6 +222,8 @@ fun HomeScreen(
                 viewModel.clearOverride(book.id)
                 editing = null
             },
+            onPickCover = { uri -> viewModel.setCustomCover(book.id, uri) },
+            onClearCover = { viewModel.clearCustomCover(book.id) },
             onDismiss = { editing = null },
         )
     }
@@ -1339,8 +1345,13 @@ private fun EditBookDialog(
     book: BookListItem,
     onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?) -> Unit,
     onReset: () -> Unit,
+    onPickCover: (Uri) -> Unit,
+    onClearCover: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val pickCover = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) onPickCover(uri) }
     var title by remember { mutableStateOf(book.title) }
     var author by remember { mutableStateOf(book.author.orEmpty()) }
     var series by remember { mutableStateOf(book.series.orEmpty()) }
@@ -1417,6 +1428,19 @@ private fun EditBookDialog(
                 ) {
                     Text("Hide from library", fontSize = 14.sp)
                     Switch(checked = hidden, onCheckedChange = { hidden = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = {
+                        pickCover.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    }) { Text(if (book.hasCustomCover) "Change cover" else "Choose cover") }
+                    if (book.hasCustomCover) {
+                        TextButton(onClick = onClearCover) { Text("Clear cover") }
+                    }
                 }
             }
         },
