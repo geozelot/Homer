@@ -68,6 +68,18 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_GROUP_MODE] = value }
     }
 
+    /**
+     * Opt-in online cover lookup: when a book has no embedded/folder art, query Open Library by
+     * title/author for one. Off by default — it reaches a third-party server (title + author only,
+     * over the unauthenticated client), which the privacy / Play-Services-free stance keeps opt-in.
+     */
+    val onlineCoverLookup: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_ONLINE_COVERS] ?: false }
+
+    suspend fun setOnlineCoverLookup(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_ONLINE_COVERS] = value }
+    }
+
     private companion object {
         const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
@@ -75,6 +87,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
+        val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
     }
 }
 

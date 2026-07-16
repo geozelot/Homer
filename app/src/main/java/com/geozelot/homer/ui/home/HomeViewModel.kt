@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
@@ -125,6 +126,7 @@ class HomeViewModel @Inject constructor(
     private val downloadManager: DownloadManager,
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
+    private val bookDao: BookDao,
     private val connection: PlaybackConnection,
     private val catalog: HomerCatalogRepository,
     playbackStateDao: PlaybackStateDao,
@@ -267,6 +269,10 @@ class HomeViewModel @Inject constructor(
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Opt-in Open Library cover lookup for art-less books. */
+    val onlineCoverLookup: StateFlow<Boolean> = librarySettings.onlineCoverLookup
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -335,6 +341,17 @@ class HomeViewModel @Inject constructor(
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
     fun setWifiOnlyDownloads(value: Boolean) {
         viewModelScope.launch { playbackSettings.setWifiOnlyDownloads(value) }
+    }
+
+    /** Toggles online cover lookup; enabling it re-arms art-less books and kicks a cover pass. */
+    fun setOnlineCoverLookup(value: Boolean) {
+        viewModelScope.launch {
+            librarySettings.setOnlineCoverLookup(value)
+            if (value) {
+                bookDao.retryCoversWithoutArt()
+                libraryIndexManager.fetchMissingCovers()
+            }
+        }
     }
 
     fun setShowHidden(value: Boolean) {

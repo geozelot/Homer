@@ -29,6 +29,7 @@ class CoverEnricher @Inject constructor(
     private val metadataExtractor: MetadataExtractor,
     private val coverCache: CoverCache,
     private val librarySettings: LibrarySettings,
+    private val onlineCoverClient: OnlineCoverClient,
 ) {
     /** How many books still need a cover — lets the worker skip foregrounding when there's none. */
     suspend fun pendingCount(): Int = bookDao.booksNeedingCover().size
@@ -38,6 +39,7 @@ class CoverEnricher @Inject constructor(
         val credentials = credentialStore.credentials.value ?: return
         val libraryRoot = librarySettings.libraryRoot.first()
         val tier = librarySettings.syncTier.first()
+        val onlineLookup = librarySettings.onlineCoverLookup.first()
         val books = bookDao.booksNeedingCover()
         val total = books.size
         if (total == 0) return
@@ -65,8 +67,15 @@ class CoverEnricher @Inject constructor(
                 )
             }
             if (bytes == null) {
-                // No art on the server — remember we tried, so we don't re-probe every run.
-                bookDao.markCoverAttempted(book.id)
+                // No embedded/folder art. If the user opted in, try Open Library by title/author
+                // before giving up; either way remember we tried so we don't re-probe every run.
+                val online = if (onlineLookup) onlineCoverClient.fetchCover(book.title, book.author) else null
+                if (online != null) {
+                    bookDao.updateLocalCover(book.id, coverCache.write(book.id, online))
+                    found++
+                } else {
+                    bookDao.markCoverAttempted(book.id)
+                }
                 continue
             }
             bookDao.updateLocalCover(book.id, coverCache.write(book.id, bytes))

@@ -42,6 +42,11 @@ interface BookDao {
     @Query("UPDATE books SET localCoverPath = NULL, coverAttempted = 0")
     suspend fun resetCoverArt()
 
+    /** Re-arms cover enrichment for books that still have no art (e.g. after enabling online
+     *  lookup), without disturbing books that already have a cover. */
+    @Query("UPDATE books SET coverAttempted = 0 WHERE localCoverPath IS NULL AND coverFilePath IS NULL")
+    suspend fun retryCoversWithoutArt()
+
     @Query("UPDATE books SET totalDurationMs = :totalDurationMs WHERE id = :bookId")
     suspend fun updateTotalDuration(bookId: String, totalDurationMs: Long)
 

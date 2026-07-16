@@ -1142,6 +1142,7 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
     val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
@@ -1232,6 +1233,13 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
+            SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
+            Text(
+                "Searches Open Library by title and author for books without embedded art. Sends only those to a third-party server.",
+                color = Muted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
             SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
         }
     }
