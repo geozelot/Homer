@@ -5,11 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,7 +36,9 @@ class PlayerViewModel @Inject constructor(
     audioFileDao: AudioFileDao,
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
+    private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
+    private val homerSync: HomerSyncRepository,
     downloadDao: DownloadDao,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
@@ -90,6 +95,17 @@ class PlayerViewModel @Inject constructor(
         (durations.sum() - elapsed).coerceAtLeast(0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    private val finishedOverride: StateFlow<Boolean?> = bookId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(null) else bookOverrideDao.observeById(id).map { it?.finished }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Effective finished flag: the forced override if set, else auto from time-left reaching zero. */
+    val finished: StateFlow<Boolean> = combine(finishedOverride, timeLeftMs) { forced, left ->
+        forced ?: (left != null && left <= 0L)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     fun play(bookId: String) {
         this.bookId.value = bookId
         connection.playBook(bookId)
@@ -113,6 +129,30 @@ class PlayerViewModel @Inject constructor(
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
+    /** Forces the finished flag to the opposite of the current effective value, preserving other
+     *  override fields, and syncs the change out. */
+    fun toggleFinished() {
+        val id = bookId.value ?: return
+        val target = !finished.value
+        viewModelScope.launch {
+            val existing = bookOverrideDao.findById(id)
+            bookOverrideDao.upsert(
+                existing?.copy(finished = target, updatedAt = System.currentTimeMillis())
+                    ?: BookOverrideEntity(
+                        bookId = id,
+                        title = null,
+                        author = null,
+                        series = null,
+                        seriesIndex = null,
+                        finished = target,
+                        hidden = false,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+            )
+            homerSync.sync()
+        }
+    }
+
     fun download() = bookId.value?.let(downloadManager::download)
     fun deleteDownload() = bookId.value?.let(downloadManager::delete)
     fun nextChapter() = connection.nextChapter()

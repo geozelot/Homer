@@ -210,8 +210,8 @@ fun HomeScreen(
     editing?.let { book ->
         EditBookDialog(
             book = book,
-            onSave = { title, author, series, index, genre, tags, hidden ->
-                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden)
+            onSave = { title, author, series, index, genre, tags, hidden, finishedChange ->
+                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, finishedChange)
                 editing = null
             },
             onReset = {
@@ -650,6 +650,17 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                         .size(24.dp),
                 )
             }
+            // Genre pill overlaid bottom-start (clear of the TopEnd badge and BottomEnd ring), so
+            // it surfaces on grid cards without disturbing their fixed-height text block. Tags stay
+            // a list-row feature (too many to read as overlays).
+            book.genre?.let {
+                TagChip(
+                    it,
+                    Amber,
+                    AmberSoft,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(7.dp),
+                )
+            }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
         GridCardText(title = book.title, meta = bookCardMeta(book))
@@ -893,14 +904,14 @@ private fun listRowMeta(book: BookListItem): String = buildString {
 }
 
 @Composable
-private fun TagChip(text: String, fg: Color, bg: Color) {
+private fun TagChip(text: String, fg: Color, bg: Color, modifier: Modifier = Modifier) {
     Text(
         text,
         color = fg,
         fontSize = 9.5.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(bg)
             .padding(horizontal = 7.dp, vertical = 2.dp),
@@ -1318,7 +1329,7 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
 @Composable
 private fun EditBookDialog(
     book: BookListItem,
-    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean) -> Unit,
+    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1329,6 +1340,10 @@ private fun EditBookDialog(
     var genre by remember { mutableStateOf(book.genre.orEmpty()) }
     var tags by remember { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by remember { mutableStateOf(book.hidden) }
+    // Tri-state finished: the switch starts at the effective value; only a change from that value
+    // forces the flag (null preserves the existing auto/forced state on save).
+    val initialFinished = book.finished
+    var finished by remember { mutableStateOf(initialFinished) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1384,13 +1399,24 @@ private fun EditBookDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text("Mark as finished", fontSize = 14.sp)
+                    Switch(checked = finished, onCheckedChange = { finished = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text("Hide from library", fontSize = 14.sp)
                     Switch(checked = hidden, onCheckedChange = { hidden = it })
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title, author, series, index, genre, tags, hidden) }) { Text("Save") }
+            TextButton(onClick = {
+                val finishedChange = if (finished != initialFinished) finished else null
+                onSave(title, author, series, index, genre, tags, hidden, finishedChange)
+            }) { Text("Save") }
         },
         dismissButton = {
             Row {

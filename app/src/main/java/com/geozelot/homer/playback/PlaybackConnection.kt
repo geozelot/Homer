@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.DownloadDao
@@ -72,6 +73,7 @@ class PlaybackConnection @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playlistResolver: PlaylistResolver,
     private val playbackStateDao: PlaybackStateDao,
+    private val audioFileDao: AudioFileDao,
     private val durationEnricher: DurationEnricher,
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
@@ -120,6 +122,37 @@ class PlaybackConnection @Inject constructor(
             sleepTimer.onChapterTransition(auto)
             // Chapter boundary is a good, cheap moment to sync cross-device position.
             if (auto) positionSyncer.flush()
+        }
+    }
+
+    /**
+     * Eagerly connects to the service so a session already playing (e.g. the service kept running
+     * in the background) surfaces in the docked mini-player without the user opening a book first.
+     * If the reconnected controller already holds a queue but this process hasn't tracked a book
+     * yet, the current book is recovered from its media id. A no-op once a book is loaded.
+     */
+    fun connect() {
+        if (currentBookId != null) return
+        scope.launch {
+            val c = try {
+                awaitController()
+            } catch (e: Exception) {
+                Log.w(TAG, "eager connect failed", e)
+                return@launch
+            }
+            if (currentBookId != null || c.mediaItemCount == 0) return@launch
+            val mediaId = c.currentMediaItem?.mediaId ?: return@launch
+            val bookId = audioFileDao.findBookIdForFile(mediaId) ?: return@launch
+            val playlist = playlistResolver.resolve(bookId)
+            currentBookId = bookId
+            currentCoverModel = playlist?.coverModel
+            currentOffline = playlist?.offline ?: false
+            pushState()
+            downloadReloadWatcher.watch(
+                bookId = bookId,
+                isOffline = { currentOffline },
+                onSourceFlip = { reloadCurrentBook() },
+            )
         }
     }
 

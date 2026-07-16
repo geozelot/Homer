@@ -100,6 +100,7 @@ fun PlayerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
+    val finished by viewModel.finished.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -130,8 +131,10 @@ fun PlayerScreen(
     ) {
         PlayerTopBar(
             skipSilence = skipSilence,
+            finished = finished,
             onBack = onBack,
             onToggleSkipSilence = viewModel::setSkipSilence,
+            onToggleFinished = viewModel::toggleFinished,
         )
 
         // Artwork centered in the flexible space above the controls, sized to the largest
@@ -257,8 +260,10 @@ fun PlayerScreen(
 @Composable
 private fun PlayerTopBar(
     skipSilence: Boolean,
+    finished: Boolean,
     onBack: () -> Unit,
     onToggleSkipSilence: (Boolean) -> Unit,
+    onToggleFinished: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -283,6 +288,13 @@ private fun PlayerTopBar(
                         Switch(checked = skipSilence, onCheckedChange = { onToggleSkipSilence(it) })
                     },
                     onClick = { onToggleSkipSilence(!skipSilence) },
+                )
+                DropdownMenuItem(
+                    text = { Text(if (finished) "Mark as unfinished" else "Mark as finished") },
+                    onClick = {
+                        onToggleFinished()
+                        overflowOpen = false
+                    },
                 )
             }
         }

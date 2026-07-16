@@ -15,6 +15,10 @@ interface AudioFileDao {
     @Query("SELECT * FROM audio_files WHERE bookId = :bookId ORDER BY sortIndex")
     suspend fun findForBook(bookId: String): List<AudioFileEntity>
 
+    /** The book a given file belongs to — used to recover the current book on an eager reconnect. */
+    @Query("SELECT bookId FROM audio_files WHERE relativePath = :relativePath")
+    suspend fun findBookIdForFile(relativePath: String): String?
+
     @Query("UPDATE audio_files SET durationMs = :durationMs WHERE relativePath = :relativePath")
     suspend fun updateDuration(relativePath: String, durationMs: Long)
 

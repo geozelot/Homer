@@ -277,6 +277,9 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
+        // Surface an already-running playback session in the mini-player on cold start, before the
+        // user opens a book (recovers the current book from the restored queue if present).
+        connection.connect()
         // Fill in covers for books missing one, in a foreground worker (survives backgrounding).
         libraryIndexManager.fetchMissingCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
@@ -342,7 +345,11 @@ class HomeViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
-    /** Saves metadata corrections + hidden flag; blank fields revert to detection. */
+    /**
+     * Saves metadata corrections + hidden flag; blank fields revert to detection.
+     * [finishedChange] carries the finished toggle: null leaves the existing flag untouched (the
+     * dialog didn't change it), true/false forces that value.
+     */
     fun saveOverride(
         bookId: String,
         title: String,
@@ -352,10 +359,10 @@ class HomeViewModel @Inject constructor(
         genre: String,
         tags: String,
         hidden: Boolean,
+        finishedChange: Boolean?,
     ) {
         viewModelScope.launch {
-            // The finished flag isn't edited here (it's a context-menu action) — preserve it.
-            val existingFinished = bookOverrideDao.findById(bookId)?.finished
+            val finished = finishedChange ?: bookOverrideDao.findById(bookId)?.finished
             val tagList = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }
             bookOverrideDao.upsert(
                 BookOverrideEntity(
@@ -366,7 +373,7 @@ class HomeViewModel @Inject constructor(
                     seriesIndex = seriesIndex.trim().toIntOrNull(),
                     genre = genre.trim().ifBlank { null },
                     tags = tagList.takeIf { it.isNotEmpty() }?.joinToString("\n"),
-                    finished = existingFinished,
+                    finished = finished,
                     hidden = hidden,
                     updatedAt = System.currentTimeMillis(),
                 ),
