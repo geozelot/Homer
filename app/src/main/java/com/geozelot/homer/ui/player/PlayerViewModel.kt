@@ -6,9 +6,11 @@ import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -39,6 +41,7 @@ class PlayerViewModel @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
     private val homerSync: HomerSyncRepository,
+    chapterDao: ChapterDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
@@ -65,6 +68,13 @@ class PlayerViewModel @Inject constructor(
             if (id == null) flowOf(null) else downloadDao.observeByBookId(id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Embedded chapter marks for a single-file book (empty for multi-file / no chapters). */
+    val chapters: StateFlow<List<ChapterEntity>> = bookId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList()) else chapterDao.observeForBook(id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Whole-book length; fills in reactively as durations are measured on first open. */
     val bookDurationMs: StateFlow<Long?> = bookId
@@ -124,6 +134,9 @@ class PlayerViewModel @Inject constructor(
     fun setSleepExtend(mode: String) {
         viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
     }
+    /** Seeks within the current (single) file to an embedded chapter's start. */
+    fun jumpToChapter(chapter: ChapterEntity) = connection.seekTo(chapter.startMs)
+
     fun addBookmark() = connection.addBookmark()
     fun jumpToBookmark(bookmark: BookmarkEntity) =
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)

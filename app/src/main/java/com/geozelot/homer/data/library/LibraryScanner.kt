@@ -162,6 +162,7 @@ class LibraryScanner @Inject constructor(
                         localCoverPath = source?.localCoverPath,
                         coverAttempted = source?.coverAttempted ?: false,
                         genre = source?.genre,
+                        chapterTier = source?.chapterTier ?: detected.book.chapterTier,
                         totalDurationMs = total,
                     ),
                 ),

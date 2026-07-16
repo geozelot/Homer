@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
@@ -104,10 +106,12 @@ fun PlayerScreen(
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+    val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
 
     var showSleepDialog by remember { mutableStateOf(false) }
     var showBookmarksDialog by remember { mutableStateOf(false) }
+    var showChaptersDialog by remember { mutableStateOf(false) }
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -132,9 +136,11 @@ fun PlayerScreen(
         PlayerTopBar(
             skipSilence = skipSilence,
             finished = finished,
+            hasChapters = chapters.isNotEmpty(),
             onBack = onBack,
             onToggleSkipSilence = viewModel::setSkipSilence,
             onToggleFinished = viewModel::toggleFinished,
+            onChapters = { showChaptersDialog = true },
         )
 
         // Artwork centered in the flexible space above the controls, sized to the largest
@@ -226,6 +232,17 @@ fun PlayerScreen(
         }
     }
 
+    if (showChaptersDialog) {
+        ChaptersDialog(
+            chapters = chapters,
+            onJump = {
+                viewModel.jumpToChapter(it)
+                showChaptersDialog = false
+            },
+            onDismiss = { showChaptersDialog = false },
+        )
+    }
+
     if (showBookmarksDialog) {
         BookmarksDialog(
             bookmarks = bookmarks,
@@ -261,9 +278,11 @@ fun PlayerScreen(
 private fun PlayerTopBar(
     skipSilence: Boolean,
     finished: Boolean,
+    hasChapters: Boolean,
     onBack: () -> Unit,
     onToggleSkipSilence: (Boolean) -> Unit,
     onToggleFinished: () -> Unit,
+    onChapters: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -282,6 +301,15 @@ private fun PlayerTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Muted)
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                if (hasChapters) {
+                    DropdownMenuItem(
+                        text = { Text("Chapters") },
+                        onClick = {
+                            onChapters()
+                            overflowOpen = false
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Skip silence") },
                     trailingIcon = {
@@ -639,6 +667,45 @@ private fun BookmarksDialog(
                                 TextButton(onClick = { onDelete(bookmark) }) { Text("Remove") }
                             }
                         }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+// ── Chapters ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChaptersDialog(
+    chapters: List<ChapterEntity>,
+    onJump: (ChapterEntity) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Chapters") },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                itemsIndexed(chapters, key = { _, c -> c.id }) { index, chapter ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onJump(chapter) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            chapter.title?.ifBlank { null } ?: "Chapter ${index + 1}",
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(formatTime(chapter.startMs), color = Muted, fontSize = 12.sp)
                     }
                 }
             }

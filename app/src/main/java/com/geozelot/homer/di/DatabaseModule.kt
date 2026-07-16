@@ -10,6 +10,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
@@ -143,6 +144,21 @@ object DatabaseModule {
         }
     }
 
+    /** v12 -> v13: add the chapters table (embedded ID3 chapter marks for single-file books). */
+    private val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `chapters` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`bookId` TEXT NOT NULL, `sortIndex` INTEGER NOT NULL, " +
+                    "`title` TEXT, `startMs` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) " +
+                    "ON UPDATE NO ACTION ON DELETE CASCADE )",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_chapters_bookId` ON `chapters` (`bookId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
@@ -150,6 +166,7 @@ object DatabaseModule {
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                 MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+                MIGRATION_12_13,
             )
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()
@@ -178,4 +195,7 @@ object DatabaseModule {
 
     @Provides
     fun provideBookOverrideDao(db: HomerDatabase): BookOverrideDao = db.bookOverrideDao()
+
+    @Provides
+    fun provideChapterDao(db: HomerDatabase): ChapterDao = db.chapterDao()
 }

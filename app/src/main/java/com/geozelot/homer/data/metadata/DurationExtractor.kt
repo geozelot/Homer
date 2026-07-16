@@ -13,6 +13,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.metadata.id3.ChapterFrame
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -37,8 +39,15 @@ class DurationExtractor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataSourceFactory: DataSource.Factory,
 ) {
-    /** What one probe learned: playback duration and (best-effort) embedded genre. */
-    data class Probe(val durationMs: Long?, val genre: String?)
+    /** One embedded chapter mark: where it starts in the file and its title (if tagged). */
+    data class ChapterMark(val startMs: Long, val title: String?)
+
+    /** What one probe learned: duration, (best-effort) genre, and any embedded ID3 chapters. */
+    data class Probe(
+        val durationMs: Long?,
+        val genre: String?,
+        val chapters: List<ChapterMark> = emptyList(),
+    )
 
     // ExoPlayer must only be touched from the thread it was built on; keep one dedicated
     // looper thread so probing never blocks Main and callbacks arrive here in order.
@@ -61,10 +70,12 @@ class DurationExtractor @Inject constructor(
                         fun finish(duration: Long?) {
                             if (!settled.compareAndSet(false, true)) return
                             // ExoPlayer folds the container tags into a unified MediaMetadata by
-                            // STATE_READY, so genre comes free from the same probe.
+                            // STATE_READY, so genre + embedded ID3 chapters come free from the
+                            // same probe (empty if none / not yet READY).
                             val genre = exo.mediaMetadata.genre?.toString()?.trim()?.ifBlank { null }
+                            val chapters = readChapters(exo)
                             exo.release()
-                            if (cont.isActive) cont.resume(Probe(duration, genre))
+                            if (cont.isActive) cont.resume(Probe(duration, genre, chapters))
                         }
 
                         exo.addListener(object : Player.Listener {
@@ -102,6 +113,36 @@ class DurationExtractor @Inject constructor(
                 }
             }
         } ?: Probe(null, null)
+
+    /**
+     * Pulls embedded ID3v2 CHAP frames out of the prepared player's track metadata, in start-time
+     * order. Each chapter's title is a nested TIT2 text subframe (ID3 has no flat title field).
+     * Returns empty for formats without ID3 chapters (e.g. M4B — that path is the "hole" noted in
+     * the chapter-parsing research and stays behind this best-effort probe).
+     */
+    private fun readChapters(exo: ExoPlayer): List<ChapterMark> {
+        val marks = mutableListOf<ChapterMark>()
+        val groups = exo.currentTracks.groups
+        for (g in groups.indices) {
+            val group = groups[g]
+            for (t in 0 until group.length) {
+                val metadata = group.getTrackFormat(t).metadata ?: continue
+                for (e in 0 until metadata.length()) {
+                    val entry = metadata.get(e)
+                    if (entry !is ChapterFrame) continue
+                    val title = (0 until entry.subFrameCount)
+                        .map { entry.getSubFrame(it) }
+                        .filterIsInstance<TextInformationFrame>()
+                        .firstOrNull { it.id == "TIT2" }
+                        ?.values?.firstOrNull()
+                        ?.trim()
+                        ?.ifBlank { null }
+                    marks += ChapterMark(startMs = entry.startTimeMs.toLong(), title = title)
+                }
+            }
+        }
+        return marks.distinctBy { it.startMs }.sortedBy { it.startMs }
+    }
 
     private companion object {
         const val TAG = "HomerMeta"
