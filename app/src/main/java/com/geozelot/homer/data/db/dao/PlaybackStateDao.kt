@@ -45,6 +45,10 @@ interface PlaybackStateDao {
     )
     fun observeProgress(): Flow<List<BookProgress>>
 
+    /** Re-points a book's saved position onto a new id after its folder moved/renamed. */
+    @Query("UPDATE playback_state SET bookId = :newId WHERE bookId = :oldId")
+    suspend fun relink(oldId: String, newId: String)
+
     @Upsert
     suspend fun upsert(state: PlaybackStateEntity)
 }

@@ -26,4 +26,12 @@ interface BookmarkDao {
 
     @Query("DELETE FROM bookmarks WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+
+    /**
+     * Re-points a book's bookmarks onto a new id after its folder moved/renamed. Must run while
+     * the new book row already exists (FK) and before the old row is pruned (cascade would delete
+     * them otherwise).
+     */
+    @Query("UPDATE bookmarks SET bookId = :newId WHERE bookId = :oldId")
+    suspend fun relink(oldId: String, newId: String)
 }

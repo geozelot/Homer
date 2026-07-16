@@ -1,8 +1,13 @@
 package com.geozelot.homer.data.library
 
+import android.util.Log
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
+import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
+import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.ensureActive
@@ -34,6 +39,10 @@ class LibraryScanner @Inject constructor(
     private val bookDao: BookDao,
     private val audioFileDao: AudioFileDao,
     private val crawlDirDao: CrawlDirDao,
+    private val playbackStateDao: PlaybackStateDao,
+    private val bookOverrideDao: BookOverrideDao,
+    private val bookmarkDao: BookmarkDao,
+    private val bookmarkMetaDao: BookmarkMetaDao,
     private val detector: BookDetector,
 ) {
     data class Result(val bookCount: Int)
@@ -98,16 +107,49 @@ class LibraryScanner @Inject constructor(
         }
 
         val books = detector.buildBooks(audioFolders, root, now)
+
+        // Books to keep: the (re-)built ones plus every book under an unchanged, skipped subtree.
+        // Anything else is pruned (a vanished book always sits under a visited parent). Skipped
+        // roots are files-root paths; book ids are library-root-relative.
+        val keepIds = buildSet {
+            books.forEach { add(it.book.id) }
+            for (skipped in skippedRoots) {
+                addAll(bookDao.idsUnder(skipped.removePrefix(root).trim('/')))
+            }
+        }
+
+        // Detect moved/renamed books by content hash: a freshly detected book at a previously
+        // unknown path whose fingerprint matches an existing book that won't be kept = the same
+        // book that moved. Map its new id back to the old one so we can re-link user data.
+        val existingBooks = bookDao.getAll()
+        val existingIds = existingBooks.mapTo(HashSet()) { it.id }
+        val lostByHash = existingBooks
+            .filter { it.contentHash != null && it.id !in keepIds }
+            .associate { it.contentHash!! to it.id } // duplicate hashes: last wins (rare)
+        val movedFrom = HashMap<String, String>() // newId -> oldId
         for (detected in books) {
-            // Carry cached data across the rescan (upsert replaces the rows): the extracted
-            // cover, and per-file durations matched by path — otherwise every rescan would
-            // discard all measured durations and re-probe the whole library on next open.
-            val existing = bookDao.findById(detected.book.id)
-            val existingCover = existing?.localCoverPath
-            val existingGenre = existing?.genre
+            val hash = detected.book.contentHash ?: continue
+            if (detected.book.id in existingIds) continue // path already existed → not a move target
+            val oldId = lostByHash[hash] ?: continue
+            movedFrom[detected.book.id] = oldId
+        }
+        if (movedFrom.isNotEmpty()) Log.i(TAG, "scan: re-linking ${movedFrom.size} moved book(s)")
+
+        for (detected in books) {
+            // Carry cached data across the rescan (upsert replaces the rows): the extracted cover,
+            // genre, and per-file durations — otherwise every rescan would discard all measured
+            // durations and re-probe the whole library on next open. For a moved book the source is
+            // the old (pre-move) row, and durations match by file name since the path changed.
+            val movedOldId = movedFrom[detected.book.id]
+            val source = bookDao.findById(detected.book.id) ?: movedOldId?.let { bookDao.findById(it) }
             val existingDurations = audioFileDao.findForBook(detected.book.id)
                 .associate { it.relativePath to it.durationMs }
-            val files = detected.files.map { it.copy(durationMs = it.durationMs ?: existingDurations[it.relativePath]) }
+            val movedDurations = movedOldId
+                ?.let { old -> audioFileDao.findForBook(old).associate { it.fileName to it.durationMs } }
+                ?: emptyMap()
+            val files = detected.files.map {
+                it.copy(durationMs = it.durationMs ?: existingDurations[it.relativePath] ?: movedDurations[it.fileName])
+            }
             // Recompute the total from the current file set so removed/added files stay correct.
             val total = if (files.isNotEmpty() && files.all { it.durationMs != null }) {
                 files.sumOf { it.durationMs!! }
@@ -117,9 +159,9 @@ class LibraryScanner @Inject constructor(
             bookDao.upsert(
                 listOf(
                     detected.book.copy(
-                        localCoverPath = existingCover,
-                        coverAttempted = existing?.coverAttempted ?: false,
-                        genre = existingGenre,
+                        localCoverPath = source?.localCoverPath,
+                        coverAttempted = source?.coverAttempted ?: false,
+                        genre = source?.genre,
                         totalDurationMs = total,
                     ),
                 ),
@@ -128,17 +170,24 @@ class LibraryScanner @Inject constructor(
             audioFileDao.upsert(files)
         }
 
-        // Keep the (re-)built books plus every book under an unchanged, skipped subtree; prune
-        // the rest (a vanished book always sits under a visited parent, so it's excluded here).
-        // Skipped roots are files-root paths; book ids are library-root-relative.
-        val keepIds = buildSet {
-            books.forEach { add(it.book.id) }
-            for (skipped in skippedRoots) {
-                addAll(bookDao.idsUnder(skipped.removePrefix(root).trim('/')))
-            }
-        }.toList()
-        if (keepIds.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepIds)
+        // Re-link user data onto the moved books' new ids BEFORE pruning — the new book rows now
+        // exist (so the bookmark FK holds) and the old rows aren't gone yet (bookmarks would
+        // otherwise cascade away with them). Downloads are intentionally not re-linked: their bytes
+        // on disk are keyed by the old relative path, so a moved book cleanly re-downloads.
+        for ((newId, oldId) in movedFrom) {
+            playbackStateDao.relink(oldId, newId)
+            bookOverrideDao.relink(oldId, newId)
+            bookmarkMetaDao.relink(oldId, newId)
+            bookmarkDao.relink(oldId, newId)
+        }
+
+        val keepList = keepIds.toList()
+        if (keepList.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepList)
 
         return Result(bookDao.count())
+    }
+
+    private companion object {
+        const val TAG = "HomerScan"
     }
 }

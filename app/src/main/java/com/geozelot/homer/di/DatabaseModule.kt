@@ -132,13 +132,24 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * v11 -> v12: add the path-independent content fingerprint to books. Left null for existing
+     * rows; the next scan re-derives it from each book's files, after which moved/renamed folders
+     * are recognised and their position/overrides/bookmarks re-linked instead of orphaned.
+     */
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `books` ADD COLUMN `contentHash` TEXT")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
             )
             // Safety net for any other version mismatch during development.
             .fallbackToDestructiveMigration()

@@ -18,6 +18,10 @@ interface BookOverrideDao {
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     suspend fun findById(bookId: String): BookOverrideEntity?
 
+    /** Re-points a book's overrides onto a new id after its folder moved/renamed. */
+    @Query("UPDATE book_overrides SET bookId = :newId WHERE bookId = :oldId")
+    suspend fun relink(oldId: String, newId: String)
+
     @Upsert
     suspend fun upsert(override: BookOverrideEntity)
 }

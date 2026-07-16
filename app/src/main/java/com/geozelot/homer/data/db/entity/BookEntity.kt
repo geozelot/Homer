@@ -4,8 +4,14 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * A detected audiobook. For v1 the identity is the book's folder path relative to
- * the library root (see SCOPE.md — content-hash identity is a later enhancement).
+ * A detected audiobook. Its [id] (primary key) is the book's folder path relative to the
+ * library root — load-bearing, since fetch URLs are `libraryRoot + id` and the `.homer`
+ * catalog/manifest key by it.
+ *
+ * [contentHash] is a secondary, path-independent fingerprint (over the book's file
+ * names + sizes) used to recognise the same book after its folder is moved or renamed, so
+ * a scan can re-link the user's position/overrides/bookmarks onto the new [id] instead of
+ * orphaning them. Null until the first scan that sees the book's files populates it.
  *
  * [chapterTier] follows the three-tier model: 1 = embedded chapters, 2 = sidecar,
  * 3 = none/manual. Multi-file books derive their chapters from the ordered file list
@@ -14,6 +20,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "books")
 data class BookEntity(
     @PrimaryKey val id: String,
+    /** Path-independent fingerprint (file names + sizes) for move/rename survival; null until scanned. */
+    val contentHash: String? = null,
     val title: String,
     val author: String?,
     val series: String?,
