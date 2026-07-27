@@ -60,6 +60,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -99,6 +100,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
@@ -141,6 +143,8 @@ fun HomeScreen(
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val pendingStorage by viewModel.pendingStorageChange.collectAsStateWithLifecycle()
+    val migration by viewModel.migrationProgress.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<BookListItem?>(null) }
     var editingSeries by remember { mutableStateOf<LibraryEntry.Series?>(null) }
@@ -275,6 +279,69 @@ fun HomeScreen(
             onDismiss = { editingSeries = null },
         )
     }
+
+    pendingStorage?.let {
+        StorageConflictDialog(
+            onLoad = viewModel::loadPendingStorage,
+            onReplace = viewModel::replacePendingStorage,
+            onCancel = viewModel::cancelPendingStorage,
+        )
+    }
+
+    migration?.let { MigrationDialog(it) }
+}
+
+/** Asked when the chosen storage folder already holds a Homer library. */
+@Composable
+private fun StorageConflictDialog(onLoad: () -> Unit, onReplace: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Folder already has a library") },
+        text = {
+            Text(
+                "This folder already contains Homer data. Load that library, or replace it with " +
+                    "this device's downloads and progress?",
+            )
+        },
+        confirmButton = { TextButton(onClick = onLoad) { Text("Load it") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReplace) { Text("Replace") }
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+/** Blocking overlay shown while a storage move runs (not cancelable). */
+@Composable
+private fun MigrationDialog(progress: StorageMigrator.Progress) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Moving your library") },
+        text = {
+            Column {
+                Text(progress.label, color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(12.dp))
+                if (progress.total > 0) {
+                    LinearProgressIndicator(
+                        progress = { progress.done.toFloat() / progress.total },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Amber,
+                    )
+                    Text(
+                        "${progress.done} / ${progress.total} files",
+                        color = Faint,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Amber)
+                }
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 /** Maps a library row to the shared edit dialog's minimal model (effective values). */

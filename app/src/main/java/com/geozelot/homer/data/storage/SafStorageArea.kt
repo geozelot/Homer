@@ -6,6 +6,7 @@ import android.provider.DocumentsContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 
 /**
@@ -83,6 +84,11 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
     override suspend fun readBytes(rel: String): ByteArray? = withContext(Dispatchers.IO) {
         val uri = docUri(rel)
         if (!existsUri(uri)) null else resolver.openInputStream(uri)?.use { it.readBytes() }
+    }
+
+    override suspend fun openInputStream(rel: String): InputStream? = withContext(Dispatchers.IO) {
+        val uri = docUri(rel)
+        if (!existsUri(uri)) null else resolver.openInputStream(uri)
     }
 
     override suspend fun delete(rel: String) {

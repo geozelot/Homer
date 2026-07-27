@@ -24,6 +24,8 @@ import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
+import com.geozelot.homer.data.storage.StorageMigrationManager
+import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.HomerCatalogRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -141,6 +143,8 @@ class HomeViewModel @Inject constructor(
     private val catalog: HomerCatalogRepository,
     private val discovery: LibraryDiscovery,
     private val storageLocation: StorageLocation,
+    private val storageMigrationManager: StorageMigrationManager,
+    storageMigrator: StorageMigrator,
     private val localMirror: LocalMirror,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
@@ -305,6 +309,13 @@ class HomeViewModel @Inject constructor(
     /** Whether the server's TLS certificate is pinned (trust-on-first-use). */
     val certPinningEnabled: StateFlow<Boolean> = librarySettings.certPinningEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Live progress of a storage move (null when none is running) — drives a blocking overlay. */
+    val migrationProgress: StateFlow<StorageMigrator.Progress?> = storageMigrator.progress
+
+    private val _pendingStorageChange = MutableStateFlow<PendingStorageChange?>(null)
+    /** Set when a chosen folder already holds a Homer library and the user must pick load vs replace. */
+    val pendingStorageChange: StateFlow<PendingStorageChange?> = _pendingStorageChange.asStateFlow()
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -488,32 +499,68 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { bookEditor.clearCustomCover(bookId) }
     }
 
-    /** Points storage at a user-picked SAF folder (survives uninstall) and rebuilds data there. */
+    /**
+     * Points storage at a user-picked SAF folder. If the folder already holds a Homer library the
+     * user is asked what to do ([pendingStorageChange]); otherwise everything is moved into it.
+     */
     fun setCustomStorageFolder(uri: Uri) {
-        viewModelScope.launch {
-            storageLocation.setCustomFolder(uri)
-            relocateStorage()
+        viewModelScope.launch { requestStorageChange(uri.toString()) }
+    }
+
+    /** Reverts storage to the default app-external location, moving data back (or asking). */
+    fun useDefaultStorage() {
+        viewModelScope.launch { requestStorageChange(null) }
+    }
+
+    private suspend fun requestStorageChange(target: String?) {
+        val source = storageLocation.currentCustomUri()
+        if (source == target) return // already there
+        // Take a durable grant so we can probe + write the target folder.
+        if (target != null) storageLocation.takePersistable(target)
+        if (storageLocation.areaFor(target).exists(MIRROR_MARKER)) {
+            // The folder already has Homer data — let the user choose load vs replace.
+            _pendingStorageChange.value = PendingStorageChange(source, target)
+        } else {
+            storageMigrationManager.migrate(source, target, overwrite = false)
         }
     }
 
-    /** Reverts storage to the default app-external location and rebuilds data there. */
-    fun useDefaultStorage() {
+    /** Adopt the library already in the chosen folder (merge progress, keep its downloads). */
+    fun loadPendingStorage() {
+        val p = _pendingStorageChange.value ?: return
+        _pendingStorageChange.value = null
         viewModelScope.launch {
-            storageLocation.useDefault()
-            relocateStorage()
+            if (p.target == null) storageLocation.useDefault() else storageLocation.setCustomFolder(Uri.parse(p.target))
+            if (p.source != null && p.source != p.target) storageLocation.releasePersistable(p.source)
+            adoptCurrentArea()
+        }
+    }
+
+    /** Overwrite the chosen folder's Homer data with this device's (a full move, clearing target). */
+    fun replacePendingStorage() {
+        val p = _pendingStorageChange.value ?: return
+        _pendingStorageChange.value = null
+        storageMigrationManager.migrate(p.source, p.target, overwrite = true)
+    }
+
+    /** Abandon a pending storage change, releasing the grant taken to probe the folder. */
+    fun cancelPendingStorage() {
+        val p = _pendingStorageChange.value ?: return
+        _pendingStorageChange.value = null
+        val target = p.target ?: return
+        viewModelScope.launch {
+            if (target != storageLocation.currentCustomUri()) storageLocation.releasePersistable(target)
         }
     }
 
     /**
-     * After a storage-location change the old area's downloads/covers no longer apply: drop them
-     * (re-download / re-extract into the new area) and kick a cover pass. Custom covers are cleared
-     * since their Uris pointed at the old area.
+     * Adopts whatever the (now active) area already holds: import its progress mirror (LWW),
+     * recompute download status against it, and re-fetch covers (their old Uris are stale). Used
+     * when the user loads an existing library in the chosen folder rather than moving into it.
      */
-    private suspend fun relocateStorage() {
+    private suspend fun adoptCurrentArea() {
         bookDao.resetCoverArt()
         bookDao.clearCustomCovers()
-        // Adopt whatever the new folder already holds: import its progress mirror, and recompute
-        // download status against it (present → done without re-downloading, absent → cleared).
         localMirror.import()
         localMirror.adoptDownloads()
         libraryIndexManager.fetchMissingCovers()
@@ -561,8 +608,12 @@ class HomeViewModel @Inject constructor(
 
     private companion object {
         const val CONTINUE_LIMIT = 12
+        const val MIRROR_MARKER = ".homer/index.json"
     }
 }
+
+/** A storage-folder change awaiting the user's decision when the target already holds a library. */
+data class PendingStorageChange(val source: String?, val target: String?)
 
 /**
  * Builds the render list. [group] alone decides sectioning and whether series collapse into

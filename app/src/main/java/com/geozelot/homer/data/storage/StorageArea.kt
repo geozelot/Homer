@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 
 /**
@@ -26,6 +27,9 @@ interface StorageArea {
     suspend fun exists(rel: String): Boolean
 
     suspend fun readBytes(rel: String): ByteArray?
+
+    /** Opens [rel] for streaming reads (caller closes), or null if absent — for large-file copies. */
+    suspend fun openInputStream(rel: String): InputStream?
 
     /** Deletes the file or directory subtree at [rel] (best-effort). */
     suspend fun delete(rel: String)
@@ -67,6 +71,10 @@ class FileStorageArea(private val root: File) : StorageArea {
 
     override suspend fun readBytes(rel: String): ByteArray? = withContext(Dispatchers.IO) {
         file(rel).takeIf { it.exists() }?.readBytes()
+    }
+
+    override suspend fun openInputStream(rel: String): InputStream? = withContext(Dispatchers.IO) {
+        file(rel).takeIf { it.exists() }?.inputStream()
     }
 
     override suspend fun delete(rel: String) {

@@ -46,6 +46,27 @@ class StorageLocation @Inject constructor(
         return hasPermission(custom)
     }
 
+    /** The configured custom folder Uri string, or null when on the default area. */
+    suspend fun currentCustomUri(): String? = librarySettings.customStorageUri.first()
+
+    /**
+     * Builds an area for an explicit location — null → the default app-external area, else a SAF
+     * area for [uriString]. Used by the migrator to hold the source and target areas at once.
+     * The caller must hold a persisted permission for a custom uri (see [takePersistable]).
+     */
+    fun areaFor(uriString: String?): StorageArea =
+        if (uriString == null) defaultArea else SafStorageArea(context, Uri.parse(uriString))
+
+    /** Takes a durable read/write grant on a SAF tree (idempotent). */
+    fun takePersistable(uriString: String) {
+        context.contentResolver.takePersistableUriPermission(Uri.parse(uriString), RW_FLAGS)
+    }
+
+    /** Releases a previously-held SAF grant (best-effort). */
+    fun releasePersistable(uriString: String) {
+        runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(uriString), RW_FLAGS) }
+    }
+
     /** Persists a user-picked SAF tree as the storage folder, taking a durable read/write grant. */
     suspend fun setCustomFolder(treeUri: Uri) {
         context.contentResolver.takePersistableUriPermission(treeUri, RW_FLAGS)

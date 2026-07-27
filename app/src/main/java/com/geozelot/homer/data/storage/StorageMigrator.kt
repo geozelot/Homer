@@ -1,0 +1,144 @@
+package com.geozelot.homer.data.storage
+
+import android.net.Uri
+import android.util.Log
+import com.geozelot.homer.data.db.dao.AudioFileDao
+import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.metadata.CoverCache
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Moves all of Homer's on-device data — offline downloads, cached covers, and the local `.homer`
+ * progress mirror — from one [StorageArea] to another when the user changes the storage folder.
+ *
+ * The move is driven off Room (every downloaded file's path and every cover's path are known), so
+ * no directory listing is needed. Each file is copied then deleted from the source individually
+ * (copy-verify-delete), so peak disk use stays bounded and an interruption can resume — a re-run
+ * skips files already present at the target. The library itself lives on Nextcloud and is
+ * untouched; only the local cache moves.
+ *
+ * Progress is published on [progress] for the UI and mirrored to an [onProgress] callback for the
+ * worker's notification.
+ */
+@Singleton
+class StorageMigrator @Inject constructor(
+    private val storageLocation: StorageLocation,
+    private val bookDao: BookDao,
+    private val audioFileDao: AudioFileDao,
+    private val coverCache: CoverCache,
+    private val localMirror: LocalMirror,
+) {
+    data class Progress(val label: String, val done: Int, val total: Int)
+
+    private val _progress = MutableStateFlow<Progress?>(null)
+    val progress: StateFlow<Progress?> = _progress.asStateFlow()
+
+    private data class CoverJob(val bookId: String, val rel: String, val custom: Boolean)
+
+    /**
+     * Moves everything from [sourceUri] (null = current default area) to [targetUri] (null =
+     * default). With [overwrite] the target's existing Homer data is cleared first (used when the
+     * user chooses to replace an existing library in the chosen folder).
+     */
+    suspend fun migrate(
+        sourceUri: String?,
+        targetUri: String?,
+        overwrite: Boolean,
+        onProgress: suspend (Progress) -> Unit = {},
+    ) {
+        if (sourceUri == targetUri) return // same location — nothing to move
+        val source = storageLocation.areaFor(sourceUri)
+        val target = storageLocation.areaFor(targetUri)
+
+        try {
+            // Enumerate the work from Room: existing download files, then covers.
+            val books = bookDao.getAll()
+            val downloadRels = buildList {
+                for (b in books) for (f in audioFileDao.findForBook(b.id)) {
+                    val rel = "downloads/${f.relativePath}"
+                    if (source.exists(rel)) add(rel)
+                }
+            }
+            val coverJobs = buildList {
+                for (b in books) {
+                    if (b.localCoverPath != null) {
+                        val rel = "covers/${coverCache.coverName(b.id)}"
+                        if (source.exists(rel)) add(CoverJob(b.id, rel, custom = false))
+                    }
+                    b.customCoverPath?.let { path ->
+                        val name = Uri.parse(path).lastPathSegment?.substringAfterLast('/')
+                        if (name != null) {
+                            val rel = "covers/$name"
+                            if (source.exists(rel)) add(CoverJob(b.id, rel, custom = true))
+                        }
+                    }
+                }
+            }
+            val total = downloadRels.size + coverJobs.size
+
+            if (overwrite) {
+                report("Preparing…", 0, total, onProgress)
+                target.delete("downloads"); target.delete("covers"); target.delete(".homer")
+            }
+
+            var done = 0
+            for (rel in downloadRels) {
+                copyThenDeleteSource(source, target, rel)
+                report("Moving downloads", ++done, total, onProgress)
+            }
+            for (job in coverJobs) {
+                copyThenDeleteSource(source, target, job.rel)
+                report("Moving covers", ++done, total, onProgress)
+            }
+
+            // Clean up the source's now-empty Homer subtree while we still hold its permission.
+            source.delete("downloads"); source.delete("covers"); source.delete(".homer")
+
+            report("Finishing…", done, total, onProgress)
+            // Commit the location switch. useDefault releases the old custom grant; when moving
+            // between two custom folders we release the source grant explicitly below.
+            if (targetUri == null) storageLocation.useDefault()
+            else storageLocation.setCustomFolder(Uri.parse(targetUri))
+            if (sourceUri != null && sourceUri != targetUri) storageLocation.releasePersistable(sourceUri)
+
+            // Repoint the cover paths (absolute Uris) at the new area, now that it's active.
+            val targetArea = storageLocation.areaFor(targetUri)
+            for (job in coverJobs) {
+                val u = targetArea.uri(job.rel)?.toString() ?: continue
+                if (job.custom) bookDao.updateCustomCover(job.bookId, u) else bookDao.updateLocalCover(job.bookId, u)
+            }
+            // Recompute download status against the new area and refresh the progress mirror.
+            localMirror.adoptDownloads()
+            localMirror.export()
+            Log.i(TAG, "migration done: ${downloadRels.size} files, ${coverJobs.size} covers → ${targetUri ?: "default"}")
+        } catch (e: Exception) {
+            Log.w(TAG, "storage migration failed", e)
+            throw e
+        } finally {
+            _progress.value = null
+        }
+    }
+
+    /** Copies [rel] to [target] if not already there, verifies it, then removes it from [source]. */
+    private suspend fun copyThenDeleteSource(source: StorageArea, target: StorageArea, rel: String) {
+        if (!target.exists(rel)) {
+            val input = source.openInputStream(rel) ?: return
+            target.writeStream(rel) { out -> input.use { it.copyTo(out) } }
+        }
+        if (target.exists(rel)) source.delete(rel)
+    }
+
+    private suspend fun report(label: String, done: Int, total: Int, onProgress: suspend (Progress) -> Unit) {
+        val p = Progress(label, done, total)
+        _progress.value = p
+        onProgress(p)
+    }
+
+    private companion object {
+        const val TAG = "HomerStore"
+    }
+}
