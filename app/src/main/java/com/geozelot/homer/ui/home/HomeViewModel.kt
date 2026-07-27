@@ -24,6 +24,7 @@ import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.storage.StorageLocation
 import com.geozelot.homer.data.sync.HomerCatalogRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -139,9 +140,10 @@ class HomeViewModel @Inject constructor(
     private val catalog: HomerCatalogRepository,
     private val discovery: LibraryDiscovery,
     private val coverCache: CoverCache,
+    private val storageLocation: StorageLocation,
     @ApplicationContext private val context: Context,
     playbackStateDao: PlaybackStateDao,
-    downloadDao: DownloadDao,
+    private val downloadDao: DownloadDao,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
@@ -312,6 +314,16 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
+        // One-time relocation to the siloed Homer/ storage root. Offline downloads lived in
+        // internal storage; drop them (start fresh, per design) so they re-download into the new
+        // location, and reclaim the old files. Covers relocate lazily as new ones are extracted.
+        viewModelScope.launch {
+            if (!librarySettings.storageRelocated.first()) {
+                downloadDao.deleteAll()
+                storageLocation.deleteLegacyDownloads()
+                librarySettings.setStorageRelocated(true)
+            }
+        }
         // Surface an already-running playback session in the mini-player on cold start, before the
         // user opens a book (recovers the current book from the restored queue if present).
         connection.connect()

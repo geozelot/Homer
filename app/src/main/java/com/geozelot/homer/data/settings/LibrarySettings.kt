@@ -80,6 +80,14 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_ONLINE_COVERS] = value }
     }
 
+    /** One-time guard: whether app data has been relocated from internal storage to the Homer root. */
+    val storageRelocated: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_STORAGE_RELOCATED] ?: false }
+
+    suspend fun setStorageRelocated(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_STORAGE_RELOCATED] = value }
+    }
+
     private companion object {
         const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
@@ -88,6 +96,7 @@ class LibrarySettings @Inject constructor(
         val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
+        val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
     }
 }
 

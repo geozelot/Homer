@@ -1,7 +1,6 @@
 package com.geozelot.homer.data.metadata
 
-import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.geozelot.homer.data.storage.StorageLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -9,12 +8,12 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Stores extracted cover images under the app's private files dir, keyed by book id. */
+/** Stores extracted cover images under the app's [StorageLocation] `covers/` root, keyed by book id. */
 @Singleton
 class CoverCache @Inject constructor(
-    @ApplicationContext context: Context,
+    storageLocation: StorageLocation,
 ) {
-    private val dir = File(context.filesDir, "covers").apply { mkdirs() }
+    private val dir = storageLocation.coversDir
 
     /** Writes [bytes] as this book's cover and returns the absolute file path. */
     suspend fun write(bookId: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
