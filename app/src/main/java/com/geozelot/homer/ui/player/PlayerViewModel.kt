@@ -61,6 +61,10 @@ class PlayerViewModel @Inject constructor(
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Seconds the skip-back/forward buttons jump; user-configurable (default 15). */
+    val seekSeconds: StateFlow<Int> = playbackSettings.seekSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 15)
+
     val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
 
@@ -164,6 +168,7 @@ class PlayerViewModel @Inject constructor(
 
     fun playPause() = connection.playPause()
     fun seekTo(positionMs: Long) = connection.seekTo(positionMs)
+    fun seekBy(deltaSeconds: Int) = connection.seekBy(deltaSeconds * 1000L)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
     fun setSkipSilence(enabled: Boolean) = connection.setSkipSilence(enabled)
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)

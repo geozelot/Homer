@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.playback.PlaybackUiState
+import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
@@ -46,11 +47,14 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     val bookId = state.bookId ?: return
-    val fraction = if (state.durationMs > 0) {
-        (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
-    } else {
-        0f
+    // Prefer whole-book progress (from measured durations) for the hairline; fall back to the
+    // current chapter's progress while durations aren't known yet.
+    val fraction = when {
+        state.bookTotalMs > 0 -> (state.bookElapsedMs.toFloat() / state.bookTotalMs).coerceIn(0f, 1f)
+        state.durationMs > 0 -> (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+        else -> 0f
     }
+    val bookLeftMs = (state.bookTotalMs - state.bookElapsedMs).takeIf { state.bookTotalMs > 0 && it > 0 }
 
     Box(
         modifier = modifier
@@ -97,6 +101,10 @@ fun MiniPlayer(
                         if (speed != null) {
                             if (isNotEmpty()) append(" · ")
                             append(speed)
+                        }
+                        bookLeftMs?.let {
+                            if (isNotEmpty()) append(" · ")
+                            append("${formatCompactDuration(it)} left")
                         }
                     },
                     color = Muted,

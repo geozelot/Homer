@@ -297,6 +297,10 @@ class HomeViewModel @Inject constructor(
     val onlineCoverLookup: StateFlow<Boolean> = librarySettings.onlineCoverLookup
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Seconds the player's skip buttons jump (default 15). */
+    val seekSeconds: StateFlow<Int> = playbackSettings.seekSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 15)
+
     /** Configured custom storage folder Uri (null = app-external default). */
     val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -398,6 +402,10 @@ class HomeViewModel @Inject constructor(
     fun resumeDownload(bookId: String) = downloadManager.resume(bookId)
     fun setWifiOnlyDownloads(value: Boolean) {
         viewModelScope.launch { playbackSettings.setWifiOnlyDownloads(value) }
+    }
+
+    fun setSeekSeconds(value: Int) {
+        viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
 
     /** Toggles online cover lookup; enabling it re-arms art-less books and kicks a cover pass. */

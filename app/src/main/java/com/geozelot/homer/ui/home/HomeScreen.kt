@@ -393,7 +393,7 @@ private fun LazyGridScope.libraryContent(
     if (continueShelf.isNotEmpty()) {
         item(span = { GridItemSpan(maxLineSpan) }, key = "continue-head") { SectionLabelRow("Continue") }
         item(span = { GridItemSpan(maxLineSpan) }, key = "continue-shelf") {
-            ContinueShelf(books = continueShelf, onOpen = onBookClick)
+            ContinueShelf(books = continueShelf, onOpen = onBookClick, actions = actions)
         }
     }
 
@@ -612,54 +612,62 @@ private fun <T> DropdownChip(
 // ── Continue shelf ─────────────────────────────────────────────────────────
 
 @Composable
-private fun ContinueShelf(books: List<BookListItem>, onOpen: (String) -> Unit) {
+private fun ContinueShelf(books: List<BookListItem>, onOpen: (String) -> Unit, actions: BookActions) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(books, key = { "cont:${it.id}" }) { book ->
-            ContinueCard(book, onOpen)
+            ContinueCard(book, onOpen, actions)
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(132.dp)
-            .clickable { onOpen(book.id) },
-    ) {
-        CoverArt(
-            model = book.coverModel,
-            title = book.title,
+private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f / 1.5f)
-                .clip(RoundedCornerShape(10.dp)),
-        )
-        ProgressBar(
-            fraction = book.progress ?: 0f,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 9.dp, bottom = 6.dp),
-        )
-        Text(
-            book.title,
-            color = Parchment,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = 15.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = book.timeLeftMs?.let {
-                if (it <= 0) "finished" else "${formatCompactDuration(it)} left"
-            } ?: (book.author ?: "Unknown author"),
-            color = Muted,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp),
-        )
+                .width(132.dp)
+                .combinedClickable(
+                    onClick = { onOpen(book.id) },
+                    onLongClick = { menuOpen = true },
+                ),
+        ) {
+            CoverArt(
+                model = book.coverModel,
+                title = book.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f / 1.5f)
+                    .clip(RoundedCornerShape(10.dp)),
+            )
+            ProgressBar(
+                fraction = book.progress ?: 0f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 9.dp, bottom = 6.dp),
+            )
+            Text(
+                book.title,
+                color = Parchment,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 15.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = book.timeLeftMs?.let {
+                    if (it <= 0) "finished" else "${formatCompactDuration(it)} left"
+                } ?: (book.author ?: "Unknown author"),
+                color = Muted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        BookMenu(book, menuOpen, actions) { menuOpen = false }
     }
 }
 
@@ -1254,6 +1262,7 @@ private fun AppSettingsSheet(
     val account by viewModel.account.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
+    val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -1333,6 +1342,21 @@ private fun AppSettingsSheet(
                 fontSize = 11.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Skip button interval", color = Parchment, fontSize = 14.sp)
+                DropdownChip(
+                    label = "${seekSeconds}s",
+                    options = listOf(5, 10, 15, 20, 30, 45, 60),
+                    selected = seekSeconds,
+                    labelOf = { "${it}s" },
+                    onSelect = viewModel::setSeekSeconds,
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
             Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)

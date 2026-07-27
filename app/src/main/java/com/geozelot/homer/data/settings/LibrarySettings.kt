@@ -167,6 +167,14 @@ class PlaybackSettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SLEEP_LAST_MS] = value }
     }
 
+    /** Seconds the player's skip-back/forward buttons jump; default 15. */
+    val seekSeconds: Flow<Int> =
+        context.settingsDataStore.data.map { it[KEY_SEEK_SECONDS] ?: DEFAULT_SEEK_SECONDS }
+
+    suspend fun setSeekSeconds(value: Int) {
+        context.settingsDataStore.edit { it[KEY_SEEK_SECONDS] = value }
+    }
+
     private companion object {
         val KEY_SPEED = floatPreferencesKey("playback_speed")
         val KEY_SKIP_SILENCE = booleanPreferencesKey("skip_silence")
@@ -174,7 +182,9 @@ class PlaybackSettings @Inject constructor(
         val KEY_SLEEP_FADE = intPreferencesKey("sleep_fade_seconds")
         val KEY_SLEEP_EXTEND = stringPreferencesKey("sleep_extend")
         val KEY_SLEEP_LAST_MS = longPreferencesKey("sleep_last_duration_ms")
+        val KEY_SEEK_SECONDS = intPreferencesKey("seek_seconds")
         const val DEFAULT_SLEEP_FADE = 5
         const val DEFAULT_SLEEP_EXTEND = "15"
+        const val DEFAULT_SEEK_SECONDS = 15
     }
 }

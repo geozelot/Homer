@@ -49,6 +49,9 @@ data class PlaybackUiState(
     val chapterCount: Int = 0,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
+    /** Whole-book elapsed / total (from measured chapter durations); 0 total when unmeasured. */
+    val bookElapsedMs: Long = 0L,
+    val bookTotalMs: Long = 0L,
     val playbackSpeed: Float = 1f,
     /** Milliseconds until the sleep timer pauses playback; null when off. */
     val sleepRemainingMs: Long? = null,
@@ -205,6 +208,8 @@ class PlaybackConnection @Inject constructor(
             val startIndex = saved
                 ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
                 ?.takeIf { it >= 0 } ?: 0
+            val savedPos = saved?.positionMs ?: 0L
+            val before = (0 until startIndex).sumOf { currentDurations[playlist.items[it].mediaId] ?: 0L }
             _state.value = PlaybackUiState(
                 isConnected = true,
                 bookId = bookId,
@@ -212,8 +217,10 @@ class PlaybackConnection @Inject constructor(
                 chapterTitle = playlist.items.getOrNull(startIndex)?.mediaMetadata?.title?.toString().orEmpty(),
                 chapterIndex = startIndex,
                 chapterCount = playlist.items.size,
-                positionMs = saved?.positionMs ?: 0L,
+                positionMs = savedPos,
                 durationMs = currentDurations[playlist.items.getOrNull(startIndex)?.mediaId] ?: 0L,
+                bookElapsedMs = before + savedPos,
+                bookTotalMs = currentDurations.values.sum(),
                 playbackSpeed = _state.value.playbackSpeed,
                 sleepRemainingMs = sleepTimer.remainingMs(),
                 sleepEndOfChapter = sleepTimer.endOfChapter,
@@ -282,6 +289,14 @@ class PlaybackConnection @Inject constructor(
 
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
+    }
+
+    /** Relative seek within the current chapter by [deltaMs] (negative = back), clamped in range. */
+    fun seekBy(deltaMs: Long) {
+        val c = controller ?: return
+        val target = (c.currentPosition + deltaMs).coerceAtLeast(0L)
+        val duration = c.duration
+        c.seekTo(if (duration > 0) target.coerceAtMost(duration) else target)
     }
 
     fun nextChapter() {
@@ -468,6 +483,14 @@ class PlaybackConnection @Inject constructor(
             return
         }
         val metadata = c.mediaMetadata
+        val position = c.currentPosition.coerceAtLeast(0L)
+        // Whole-book progress from measured chapter durations: sum of chapters before the current
+        // one + the current position; total is the sum over all chapters (0 while unmeasured).
+        var before = 0L
+        for (i in 0 until c.currentMediaItemIndex) {
+            before += currentDurations[c.getMediaItemAt(i).mediaId] ?: 0L
+        }
+        val bookTotal = currentDurations.values.sum()
         _state.value = PlaybackUiState(
             isConnected = true,
             isPlaying = c.isPlaying,
@@ -476,10 +499,12 @@ class PlaybackConnection @Inject constructor(
             chapterTitle = metadata.title?.toString().orEmpty(),
             chapterIndex = c.currentMediaItemIndex,
             chapterCount = c.mediaItemCount,
-            positionMs = c.currentPosition.coerceAtLeast(0L),
+            positionMs = position,
             // Before playback prepares the player, c.duration is unknown — fall back to the
             // measured chapter duration so the scrubber shows real progress on a resumed book.
             durationMs = c.duration.takeIf { it > 0 } ?: (currentDurations[c.currentMediaItem?.mediaId] ?: 0L),
+            bookElapsedMs = before + position,
+            bookTotalMs = bookTotal,
             playbackSpeed = c.playbackParameters.speed,
             sleepRemainingMs = sleepTimer.remainingMs(),
             sleepEndOfChapter = sleepTimer.endOfChapter,

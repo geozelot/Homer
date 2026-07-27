@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
@@ -65,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -101,6 +103,7 @@ fun PlayerScreen(
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val finished by viewModel.finished.collectAsStateWithLifecycle()
+    val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -181,13 +184,18 @@ fun PlayerScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            // Chapter line (info). A chapter list is available for multi-file books and single
-            // files with embedded marks; the picker itself is the button left of the scrubber.
             val hasPicker = chapters.isNotEmpty()
             val chapterCount = if (hasPicker) chapters.size else state.chapterCount
             val chapterNumber =
                 if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
                 else state.chapterIndex + 1
+
+            // Chapter picker: a wide pill below the title, above the chapter/progress line.
+            if (hasPicker) {
+                ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 10.dp))
+            }
+
+            // Chapter/progress line (info).
             if (chapterCount > 0) {
                 Text(
                     text = buildString {
@@ -204,27 +212,20 @@ fun PlayerScreen(
                 )
             }
 
-            Row(
+            Scrubber(
+                positionMs = state.positionMs,
+                durationMs = state.durationMs,
+                onSeek = viewModel::seekTo,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (hasPicker) {
-                    IconButton(onClick = { showChaptersDialog = true }) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters", tint = Muted)
-                    }
-                }
-                Scrubber(
-                    positionMs = state.positionMs,
-                    durationMs = state.durationMs,
-                    onSeek = viewModel::seekTo,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            )
 
             Transport(
                 isPlaying = state.isPlaying,
+                seekSeconds = seekSeconds,
                 onPrev = viewModel::previousChapter,
+                onSeekBack = { viewModel.seekBy(-seekSeconds) },
                 onPlayPause = viewModel::playPause,
+                onSeekForward = { viewModel.seekBy(seekSeconds) },
                 onNext = viewModel::nextChapter,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -387,19 +388,23 @@ private fun Scrubber(
 @Composable
 private fun Transport(
     isPlaying: Boolean,
+    seekSeconds: Int,
     onPrev: () -> Unit,
+    onSeekBack: () -> Unit,
     onPlayPause: () -> Unit,
+    onSeekForward: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(26.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         IconButton(onClick = onPrev) {
-            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(34.dp))
+            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(30.dp))
         }
+        SeekButton(seconds = seekSeconds, forward = false, onClick = onSeekBack)
         Box(
             modifier = Modifier
                 .size(66.dp)
@@ -416,9 +421,48 @@ private fun Transport(
                 modifier = Modifier.size(30.dp),
             )
         }
+        SeekButton(seconds = seekSeconds, forward = true, onClick = onSeekForward)
         IconButton(onClick = onNext) {
-            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(34.dp))
+            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(30.dp))
         }
+    }
+}
+
+/** Skip-back / skip-forward button: a circular-arrow icon with the seconds count centered in it. */
+@Composable
+private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.Replay,
+            contentDescription = if (forward) "Skip forward $seconds seconds" else "Skip back $seconds seconds",
+            tint = Parchment,
+            // The Replay glyph is a counter-clockwise arrow; mirror it for the forward button.
+            modifier = Modifier.size(34.dp).then(if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier),
+        )
+        Text("$seconds", color = Parchment, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Wide pill opening the chapter picker; sits below the title. */
+@Composable
+private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(Surface2)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
+        Text("Chapters", color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
