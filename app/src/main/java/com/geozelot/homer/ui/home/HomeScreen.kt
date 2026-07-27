@@ -458,14 +458,16 @@ private fun LazyGridScope.libraryContent(
                 val isOpen = expanded[entry.key] == true
                 if (gridView) {
                     if (isOpen) {
-                        // One bordered container = the whole opened series card (no Back button).
+                        // Full-span header banner, then each episode as its own grid cell — so a
+                        // large series composes lazily instead of all at once in a single item.
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:${entry.key}") {
-                            ExpandedSeriesContainer(
+                            ExpandedSeriesHeader(
                                 series = entry,
                                 onCollapse = { expanded[entry.key] = false },
-                                onBookClick = onBookClick,
-                                actions = actions,
                             )
+                        }
+                        items(entry.books, key = { "sep:${it.id}" }) { book ->
+                            BookGridCard(book, onOpen = onBookClick, actions = actions)
                         }
                     } else {
                         item(key = "series:${entry.key}") {
@@ -865,54 +867,30 @@ private fun seriesCardMeta(series: LibraryEntry.Series): String = buildString {
 }
 
 /**
- * Expanded series: one faint-bordered container holding a header row (tap to collapse) and
- * the series' books as a 3-column grid inside it — so the whole thing reads as a single
- * opened card with a clear start and end. No Back button, no bottom row.
+ * Header banner for an expanded series in grid view (tap to collapse). The episodes follow as
+ * their own lazy grid cells, so a large series doesn't compose every card in one pass.
  */
 @Composable
-private fun ExpandedSeriesContainer(
+private fun ExpandedSeriesHeader(
     series: LibraryEntry.Series,
     onCollapse: () -> Unit,
-    onBookClick: (String) -> Unit,
-    actions: BookActions,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, Line, RoundedCornerShape(12.dp))
             .background(Surface1)
+            .clickable(onClick = onCollapse)
             .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onCollapse),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
-            }
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
         }
-        // 3-up grid of the series' books, laid out row by row inside the container.
-        series.books.chunked(3).forEach { rowBooks ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                rowBooks.forEach { book ->
-                    Box(modifier = Modifier.weight(1f)) {
-                        BookGridCard(book, onOpen = onBookClick, actions = actions)
-                    }
-                }
-                repeat(3 - rowBooks.size) { Spacer(modifier = Modifier.weight(1f)) }
-            }
-        }
+        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
     }
 }
 
