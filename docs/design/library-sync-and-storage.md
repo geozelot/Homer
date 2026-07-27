@@ -1,17 +1,28 @@
 # Design: Library & Sync Management + Storage Relocation
 
-Status: **DRAFT for review** (2026-07-27). Covers two requested features:
+Status: **DRAFT for review** (2026-07-27). Covers three requested features:
 
-- **B1 — Discovery sweep + a dedicated Library & Sync management screen.**
-- **B2 — Relocatable storage** (downloads + device `.homer`) with an optional custom folder
-  whose contents survive an app reinstall.
+- **B1 — Discovery sweep + a dedicated Library & Sync management screen** (+ an App Settings /
+  Library settings split).
+- **B2 — Relocatable storage** (downloads + covers + device `.homer`, one siloed root) with an
+  optional custom folder whose contents survive an app reinstall.
+- **B3 — Chapter picker** in the player screen.
 
-Decisions already locked with the user:
+Decisions locked with the user:
 
-- Storage: **default = app external-files dir**; **custom option = Storage Access Framework (SAF)
-  folder** (the only modern-Android mechanism that survives uninstall). Selectable in settings.
-- **Design-first**: this document is reviewed before any code.
-- The "device `.homer`" question is answered below (§B2.4) as a recommendation.
+- Storage: **default = app external-files dir** (zero-config); **custom = SAF folder** (the only
+  modern-Android mechanism whose contents survive uninstall). Selectable in settings.
+- **One siloed root**: downloads, cover cache, and the local `.homer` all live under a single
+  `Homer/` tree in the chosen location — including the cover cache (moved out of internal storage).
+- **Accessibility**: the app-external default (`Android/data/<pkg>/`) is hidden from the file
+  manager on many Android 11+ phones. The truly "accessible without root" option is a **custom SAF
+  folder pointed at a public location** (e.g. a top-level `Homer/`); the picker will nudge toward
+  one. Default stays app-external purely so first run needs no picker.
+- **Upgrade migration**: OK to **drop existing offline downloads and re-download** ("start fresh").
+- **Device `.homer`**: yes — a local progress mirror (see §B2.4).
+- Settings are **split** into a general App Settings sheet + a dedicated Library & Sync screen
+  (§B1.2a).
+- **Design-first**: this document is reviewed before code.
 
 ---
 
@@ -67,10 +78,11 @@ Moving to a `content://` tree means local file I/O can no longer assume `java.io
 - **`PlaylistResolver`** → local playback URI becomes the `content://` document URI instead of
   `file://`. ExoPlayer's `DefaultDataSource` already handles `content://` via `ContentResolver`,
   so playback itself is fine.
-- **`CoverCache`** → same handle abstraction (or keep covers in internal cache always — they're
-  cheap and disposable; only *downloads* + `.homer` truly need to relocate). **Recommendation:
-  keep the cover cache in internal storage** to shrink the refactor; only downloads + `.homer`
-  move.
+- **`CoverCache`** → moves under the same siloed root via the handle abstraction (user's call:
+  keep all app data in one place). Covers are still disposable/re-derivable, so on a location
+  change they can simply be dropped and re-extracted rather than moved.
+
+Everything lives under one root: `‹location›/Homer/{downloads,covers,.homer}/`.
 
 ### B2.4 The device `.homer` — recommendation
 
@@ -152,6 +164,26 @@ the current opaque sync-tier switch. Sections:
    one"). Rescan / refresh actions with one-line descriptions of exactly what each does.
 4. **Rediscover** — manual button re-running the sweep; shows progress + a timestamped summary.
 
+### B1.2a Settings split (App vs Library & Sync)
+
+Today almost everything sits in one `SettingsSheet`. Split into two surfaces:
+
+- **App Settings** (the gear on the library top bar → a compact bottom sheet). Cross-cutting,
+  rarely-touched app concerns only:
+  - Account: "Signed in as `<user>` @ `<server>`", Log out.
+  - **Storage**: current app-data location (default/custom) + "Change folder…" (SAF picker).
+  - Online cover lookup toggle (privacy-sensitive, app-wide).
+  - A prominent **"Library & Sync →"** row that navigates to the dedicated screen.
+  - About / version.
+- **Library & Sync** (its own full destination, §B1.2): library folder/root, discovery +
+  discovered libraries, scan / full-scan / refresh-covers (each with a one-line "what this does"),
+  sync tier explained by discovery, Wi-Fi-only downloads, show-hidden books, Rediscover.
+
+Rationale for the cut: "app settings" = identity, storage, privacy, about (stable, global);
+"library & sync" = everything about *this* library's content and how it syncs (frequently
+revisited, and where discovery lives). A full destination (not a sheet) gives the library/sync
+detail room to breathe and a natural home for the deferred structural tools.
+
 ### B1.3 Data model
 
 - Discovery results are transient (not persisted) — recomputed on open + on Rediscover. Optionally
@@ -165,14 +197,45 @@ same screen later. B1 builds the surface they'll plug into.
 
 ---
 
+---
+
+## B3 — Chapter picker in the player
+
+Today the player navigates chapters only via prev/next, and the embedded-chapter jump list (added
+for single-file ID3 `CHAP` books) is buried in the overflow menu. Unify these into one **chapter
+picker** reachable from the player.
+
+**What a "chapter" is, per book kind:**
+- **Multi-file book**: each audio file is a chapter. The list is the ordered `audio_files`; the
+  current chapter is `state.chapterIndex`; jumping = seek to that media-item index (offset 0).
+- **Single-file book with embedded chapters**: the `chapters` table marks. Current = the mark
+  whose `[startMs, nextStartMs)` range contains the live position; jumping = `seekTo(startMs)`
+  within the single item.
+- **Single file, no chapters**: no picker (nothing to pick).
+
+**UI**: make the existing "Chapter X of N · … left" line a **tappable affordance** (subtle list
+glyph) that opens a `ChapterPickerSheet` — a scrollable list with each chapter's title + start
+time, the current one highlighted, tap to jump and dismiss. This replaces the overflow "Chapters"
+item (removed to avoid two entry points). Works for both book kinds through one
+`PlayerViewModel.chapters` flow of a unified `PlayerChapter(title, index?, startMs?, isCurrent)`.
+
+**Model/glue**: `PlayerViewModel.chapters` combines `bookId` → embedded `chapters` (if any) else
+the `audio_files` list, with `state` for the current marker. `jumpToChapter(PlayerChapter)` routes
+to `connection.seekTo(startMs)` (embedded) or a new `connection.jumpToChapterItem(index)`
+(`controller.seekTo(index, 0)`) for multi-file. No schema change. Self-contained and buildable
+now; low risk.
+
+---
+
 ## Proposed phasing
 
-1. **B1 first** (buildable now, high value, no platform risk): `LibraryDiscovery` + management
-   screen + manual rediscover. Makes shared-library state legible immediately.
-2. **B2 default relocation** (low risk): `StorageLocation` abstraction, move downloads to
-   `getExternalFilesDir()` default, settings entry. No SAF yet.
+0. **B3 chapter picker** (small, self-contained, no platform risk) — done first as a quick win.
+1. **B1 discovery + Library & Sync screen + settings split** (buildable now, high value, no
+   platform risk): `LibraryDiscovery` + the two settings surfaces + manual rediscover.
+2. **B2 default relocation** (low risk): `StorageLocation` abstraction; move downloads + covers +
+   local `.homer` under one `getExternalFilesDir()/Homer/` root; settings entry. No SAF yet.
 3. **B2 custom SAF folder + local `.homer` mirror + rediscovery** (the big, device-only-verifiable
-   piece): SAF picker, `DocumentFile` I/O, `content://` playback, reinstall-survival import.
+   piece): SAF picker, `DocumentFile`/`content://` I/O + playback, reinstall-survival import.
 
 Each phase is independently shippable and compile-checked; phase 3 needs device iteration.
 
@@ -181,10 +244,9 @@ Each phase is independently shippable and compile-checked; phase 3 needs device 
 - All of phase 3 (SAF I/O, `content://` playback, reinstall reconnect).
 - Discovery PROPFIND behavior against the real Nextcloud (shared-mount detection, `oc:owner-id`).
 
-## Open questions for the user
+## Resolved (was: open questions)
 
-1. On upgrade, OK to **drop-and-re-download** existing offline books (simplest), or must they be
-   moved in place?
-2. Cover cache: OK to **keep covers in internal storage** (not relocated), or should they move too?
-3. Management screen entry point: nested under the existing settings sheet, or a top-level
-   destination of its own?
+1. Upgrade migration: **drop-and-re-download** — starting fresh is acceptable.
+2. Cover cache: **moves** under the single siloed root with everything else.
+3. Settings: **split** into a general App Settings sheet + a dedicated Library & Sync destination
+   (§B1.2a).
