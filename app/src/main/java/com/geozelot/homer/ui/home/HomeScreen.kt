@@ -126,6 +126,8 @@ import com.geozelot.homer.ui.theme.Surface2
 @Composable
 fun HomeScreen(
     onBookClick: (String) -> Unit,
+    onOpenLicenses: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -231,6 +233,14 @@ fun HomeScreen(
     if (showAppSettings) {
         AppSettingsSheet(
             viewModel = viewModel,
+            onOpenLicenses = {
+                showAppSettings = false
+                onOpenLicenses()
+            },
+            onOpenPrivacy = {
+                showAppSettings = false
+                onOpenPrivacy()
+            },
             onDismiss = { showAppSettings = false },
         )
     }
@@ -1284,6 +1294,8 @@ private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier
 @Composable
 private fun AppSettingsSheet(
     viewModel: HomeViewModel,
+    onOpenLicenses: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
@@ -1403,9 +1415,31 @@ private fun AppSettingsSheet(
             }
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
+            Text("ABOUT", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
+            NavRow("Privacy", onOpenPrivacy)
+            NavRow("Open-source licenses", onOpenLicenses)
+
             Spacer(Modifier.height(12.dp))
             Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)
         }
+    }
+}
+
+/** A tappable settings row that navigates to another screen (label + trailing chevron). */
+@Composable
+private fun NavRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Parchment, fontSize = 14.sp)
+        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted)
     }
 }
 

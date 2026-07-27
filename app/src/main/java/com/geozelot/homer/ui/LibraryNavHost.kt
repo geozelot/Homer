@@ -7,10 +7,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.geozelot.homer.ui.about.LicensesScreen
+import com.geozelot.homer.ui.about.PrivacyScreen
 import com.geozelot.homer.ui.home.HomeScreen
 import com.geozelot.homer.ui.player.PlayerScreen
 
 private const val ROUTE_LIBRARY = "library"
+private const val ROUTE_LICENSES = "licenses"
+private const val ROUTE_PRIVACY = "privacy"
 private const val ARG_BOOK_ID = "bookId"
 
 /**
@@ -26,6 +30,8 @@ fun LibraryNavHost() {
                 onBookClick = { bookId ->
                     navController.navigate("player/${Uri.encode(bookId)}")
                 },
+                onOpenLicenses = { navController.navigate(ROUTE_LICENSES) },
+                onOpenPrivacy = { navController.navigate(ROUTE_PRIVACY) },
             )
         }
         composable(
@@ -34,6 +40,12 @@ fun LibraryNavHost() {
         ) { entry ->
             val bookId = entry.arguments?.getString(ARG_BOOK_ID).orEmpty()
             PlayerScreen(bookId = bookId, onBack = { navController.popBackStack() })
+        }
+        composable(ROUTE_LICENSES) {
+            LicensesScreen(onBack = { navController.popBackStack() })
+        }
+        composable(ROUTE_PRIVACY) {
+            PrivacyScreen(onBack = { navController.popBackStack() })
         }
     }
 }
