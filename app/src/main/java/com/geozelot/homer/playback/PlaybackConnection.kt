@@ -374,6 +374,12 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
+    /** Jumps to the start of a chapter (media item) by index — multi-file chapter navigation. */
+    fun jumpToChapterItem(index: Int) {
+        val c = controller ?: return
+        if (index in 0 until c.mediaItemCount) c.seekTo(index, 0)
+    }
+
     /** Seeks the current playlist to a bookmark's chapter + position. */
     fun jumpToBookmark(mediaId: String, positionMs: Long) {
         val c = controller ?: return

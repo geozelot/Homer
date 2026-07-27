@@ -10,7 +10,6 @@ import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
-import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -29,6 +28,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/**
+ * One entry in the player's chapter picker. Exactly one of [startMs] (embedded mark — seek within
+ * the current file) or [mediaItemIndex] (multi-file — jump to that file) is set.
+ */
+data class PlayerChapter(
+    val title: String,
+    val mediaItemIndex: Int?,
+    val startMs: Long?,
+    val isCurrent: Boolean,
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -69,12 +79,43 @@ class PlayerViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Embedded chapter marks for a single-file book (empty for multi-file / no chapters). */
-    val chapters: StateFlow<List<ChapterEntity>> = bookId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else chapterDao.observeForBook(id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val embeddedChapters = bookId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else chapterDao.observeForBook(id)
+    }
+    private val bookFiles = bookId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else audioFileDao.observeForBook(id)
+    }
+
+    /**
+     * Unified chapter list for the player's picker. A multi-file book's chapters are its ordered
+     * files; a single-file book's are its embedded ID3 marks (if any). Empty ⇒ no picker.
+     */
+    val chapters: StateFlow<List<PlayerChapter>> =
+        combine(embeddedChapters, bookFiles, state) { embedded, files, s ->
+            when {
+                embedded.isNotEmpty() -> {
+                    // Single file: the current mark is the last one starting at/before the position.
+                    val current = embedded.indexOfLast { it.startMs <= s.positionMs }.coerceAtLeast(0)
+                    embedded.mapIndexed { i, c ->
+                        PlayerChapter(
+                            title = c.title?.ifBlank { null } ?: "Chapter ${i + 1}",
+                            mediaItemIndex = null,
+                            startMs = c.startMs,
+                            isCurrent = i == current,
+                        )
+                    }
+                }
+                files.size > 1 -> files.map { f ->
+                    PlayerChapter(
+                        title = f.fileName.substringBeforeLast('.'),
+                        mediaItemIndex = f.sortIndex,
+                        startMs = null,
+                        isCurrent = f.sortIndex == s.chapterIndex,
+                    )
+                }
+                else -> emptyList()
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Whole-book length; fills in reactively as durations are measured on first open. */
     val bookDurationMs: StateFlow<Long?> = bookId
@@ -134,8 +175,13 @@ class PlayerViewModel @Inject constructor(
     fun setSleepExtend(mode: String) {
         viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
     }
-    /** Seeks within the current (single) file to an embedded chapter's start. */
-    fun jumpToChapter(chapter: ChapterEntity) = connection.seekTo(chapter.startMs)
+    /** Jumps to a chapter: a within-file seek (embedded marks) or a media-item jump (multi-file). */
+    fun jumpToChapter(chapter: PlayerChapter) {
+        when {
+            chapter.startMs != null -> connection.seekTo(chapter.startMs)
+            chapter.mediaItemIndex != null -> connection.jumpToChapterItem(chapter.mediaItemIndex)
+        }
+    }
 
     fun addBookmark() = connection.addBookmark()
     fun jumpToBookmark(bookmark: BookmarkEntity) =

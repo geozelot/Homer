@@ -25,11 +25,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Download
@@ -75,7 +77,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.db.entity.BookmarkEntity
-import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
@@ -136,11 +137,9 @@ fun PlayerScreen(
         PlayerTopBar(
             skipSilence = skipSilence,
             finished = finished,
-            hasChapters = chapters.isNotEmpty(),
             onBack = onBack,
             onToggleSkipSilence = viewModel::setSkipSilence,
             onToggleFinished = viewModel::toggleFinished,
-            onChapters = { showChaptersDialog = true },
         )
 
         // Artwork centered in the flexible space above the controls, sized to the largest
@@ -182,20 +181,42 @@ fun PlayerScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (state.chapterCount > 0) {
-                Text(
-                    text = buildString {
-                        append("Chapter ${state.chapterIndex + 1} of ${state.chapterCount}")
-                        timeLeftMs?.let {
-                            append(" · ")
-                            append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
-                        }
-                    },
-                    color = Faint,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+            // Chapter line. When a chapter list is available (multi-file files, or a single file's
+            // embedded marks) it reflects that list and is tappable to open the picker.
+            val hasPicker = chapters.isNotEmpty()
+            val chapterCount = if (hasPicker) chapters.size else state.chapterCount
+            val chapterNumber =
+                if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
+                else state.chapterIndex + 1
+            if (chapterCount > 0) {
+                Row(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .then(if (hasPicker) Modifier.clickable { showChaptersDialog = true } else Modifier),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = buildString {
+                            append("Chapter $chapterNumber of $chapterCount")
+                            timeLeftMs?.let {
+                                append(" · ")
+                                append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
+                            }
+                        },
+                        color = Faint,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (hasPicker) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.List,
+                            contentDescription = "Chapters",
+                            tint = Faint,
+                            modifier = Modifier.padding(start = 5.dp).size(15.dp),
+                        )
+                    }
+                }
             }
 
             Scrubber(
@@ -233,7 +254,7 @@ fun PlayerScreen(
     }
 
     if (showChaptersDialog) {
-        ChaptersDialog(
+        ChapterPickerDialog(
             chapters = chapters,
             onJump = {
                 viewModel.jumpToChapter(it)
@@ -278,11 +299,9 @@ fun PlayerScreen(
 private fun PlayerTopBar(
     skipSilence: Boolean,
     finished: Boolean,
-    hasChapters: Boolean,
     onBack: () -> Unit,
     onToggleSkipSilence: (Boolean) -> Unit,
     onToggleFinished: () -> Unit,
-    onChapters: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -301,15 +320,6 @@ private fun PlayerTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Muted)
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                if (hasChapters) {
-                    DropdownMenuItem(
-                        text = { Text("Chapters") },
-                        onClick = {
-                            onChapters()
-                            overflowOpen = false
-                        },
-                    )
-                }
                 DropdownMenuItem(
                     text = { Text("Skip silence") },
                     trailingIcon = {
@@ -679,17 +689,23 @@ private fun BookmarksDialog(
 // ── Chapters ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChaptersDialog(
-    chapters: List<ChapterEntity>,
-    onJump: (ChapterEntity) -> Unit,
+private fun ChapterPickerDialog(
+    chapters: List<PlayerChapter>,
+    onJump: (PlayerChapter) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    // Open scrolled to the current chapter so it's visible in a long list.
+    LaunchedEffect(Unit) {
+        val current = chapters.indexOfFirst { it.isCurrent }
+        if (current > 0) listState.scrollToItem(current)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Chapters") },
         text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                itemsIndexed(chapters, key = { _, c -> c.id }) { index, chapter ->
+            LazyColumn(state = listState, modifier = Modifier.heightIn(max = 360.dp)) {
+                itemsIndexed(chapters) { index, chapter ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -698,14 +714,23 @@ private fun ChaptersDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            chapter.title?.ifBlank { null } ?: "Chapter ${index + 1}",
+                            "${index + 1}",
+                            modifier = Modifier.width(28.dp),
+                            color = if (chapter.isCurrent) Amber else Muted,
+                            fontSize = 12.sp,
+                        )
+                        Text(
+                            chapter.title.ifBlank { "Chapter ${index + 1}" },
                             modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.SemiBold,
+                            color = if (chapter.isCurrent) Amber else Parchment,
+                            fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                             fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(formatTime(chapter.startMs), color = Muted, fontSize = 12.sp)
+                        chapter.startMs?.let {
+                            Text(formatTime(it), color = Muted, fontSize = 12.sp)
+                        }
                     }
                 }
             }
