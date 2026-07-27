@@ -98,6 +98,14 @@ class LibrarySettings @Inject constructor(
         }
     }
 
+    /** Require a biometric / device-credential unlock when the app is opened or resumed. */
+    val appLockEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_APP_LOCK] ?: false }
+
+    suspend fun setAppLockEnabled(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_APP_LOCK] = value }
+    }
+
     private companion object {
         const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
@@ -108,6 +116,7 @@ class LibrarySettings @Inject constructor(
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")
+        val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
     }
 }
 

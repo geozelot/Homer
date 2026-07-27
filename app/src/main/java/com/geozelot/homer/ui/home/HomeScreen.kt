@@ -1304,6 +1304,7 @@ private fun AppSettingsSheet(
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val appLock by viewModel.appLockEnabled.collectAsStateWithLifecycle()
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -1414,6 +1415,16 @@ private fun AppSettingsSheet(
                 )
             }
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
+            Text("SECURITY", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
+            SettingSwitch("Require unlock to open", appLock, viewModel::setAppLock)
+            Text(
+                "Asks for your fingerprint, face, or screen lock when Homer opens or returns from the background.",
+                color = Muted,
+                fontSize = 11.sp,
+            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 

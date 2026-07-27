@@ -304,6 +304,10 @@ class HomeViewModel @Inject constructor(
     val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Whether opening/resuming the app requires a biometric / device-credential unlock. */
+    val appLockEnabled: StateFlow<Boolean> = librarySettings.appLockEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -409,6 +413,10 @@ class HomeViewModel @Inject constructor(
 
     fun setAutoRewindSeconds(value: Int) {
         viewModelScope.launch { playbackSettings.setAutoRewindSeconds(value) }
+    }
+
+    fun setAppLock(value: Boolean) {
+        viewModelScope.launch { librarySettings.setAppLockEnabled(value) }
     }
 
     /** Toggles online cover lookup; enabling it re-arms art-less books and kicks a cover pass. */
