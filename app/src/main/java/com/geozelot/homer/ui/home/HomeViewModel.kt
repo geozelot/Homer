@@ -455,6 +455,35 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
+     * Applies a series-level edit (name + author) to every member book, preserving each book's
+     * own title/index/genre/tags/finished/hidden. Blank reverts that field to detection. Members
+     * re-group under the new series name; the change syncs like any override.
+     */
+    fun saveSeriesOverride(bookIds: List<String>, series: String, author: String) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val s = series.trim().ifBlank { null }
+            val a = author.trim().ifBlank { null }
+            for (id in bookIds) {
+                val existing = bookOverrideDao.findById(id)
+                bookOverrideDao.upsert(
+                    existing?.copy(series = s, author = a, updatedAt = now)
+                        ?: BookOverrideEntity(
+                            bookId = id,
+                            title = null,
+                            author = a,
+                            series = s,
+                            seriesIndex = null,
+                            hidden = false,
+                            updatedAt = now,
+                        ),
+                )
+            }
+            homerSync.sync()
+        }
+    }
+
+    /**
      * Reverts a book to pure detection. Stored as an all-null "cleared" override (not a
      * row delete) with a fresh timestamp, so the reset propagates to other devices via
      * last-write-wins instead of being resurrected on the next pull.

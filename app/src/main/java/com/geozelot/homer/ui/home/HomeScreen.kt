@@ -137,6 +137,7 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<BookListItem?>(null) }
+    var editingSeries by remember { mutableStateOf<LibraryEntry.Series?>(null) }
     var showAppSettings by remember { mutableStateOf(false) }
     var showLibrarySync by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
@@ -149,6 +150,7 @@ fun HomeScreen(
             onEdit = { editing = it },
             onSetHidden = viewModel::setHidden,
             onSetFinished = viewModel::setFinished,
+            onEditSeries = { editingSeries = it },
         )
     }
 
@@ -245,6 +247,17 @@ fun HomeScreen(
             onDismiss = { editing = null },
         )
     }
+
+    editingSeries?.let { series ->
+        SeriesEditDialog(
+            series = series,
+            onSave = { name, author ->
+                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author)
+                editingSeries = null
+            },
+            onDismiss = { editingSeries = null },
+        )
+    }
 }
 
 /** Callbacks a card/row needs for its context menu, bundled to keep signatures small. */
@@ -254,6 +267,7 @@ private class BookActions(
     val onEdit: (BookListItem) -> Unit,
     val onSetHidden: (String, Boolean) -> Unit,
     val onSetFinished: (String, Boolean?) -> Unit,
+    val onEditSeries: (LibraryEntry.Series) -> Unit,
 )
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
@@ -422,12 +436,21 @@ private fun LazyGridScope.libraryContent(
                         }
                     } else {
                         item(key = "series:${entry.key}") {
-                            SeriesGridCard(entry) { expanded[entry.key] = true }
+                            SeriesGridCard(
+                                series = entry,
+                                onOpen = { expanded[entry.key] = true },
+                                onEdit = { actions.onEditSeries(entry) },
+                            )
                         }
                     }
                 } else {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "series:${entry.key}") {
-                        SeriesShelfRow(entry, isOpen) { expanded[entry.key] = !isOpen }
+                        SeriesShelfRow(
+                            series = entry,
+                            expanded = isOpen,
+                            onToggle = { expanded[entry.key] = !isOpen },
+                            onEdit = { actions.onEditSeries(entry) },
+                        )
                     }
                     if (isOpen) {
                         items(
@@ -745,12 +768,13 @@ private fun bookCardMeta(book: BookListItem): String = buildString {
 private const val STACK_SPREAD = 0.18f
 
 /** A series as a grid cell the same size as a book card: a diagonal stack filling the cell. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit) {
+private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit, onEdit: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen),
+            .combinedClickable(onClick = onOpen, onLongClick = onEdit),
     ) {
         BoxWithConstraints(
             modifier = Modifier
@@ -961,15 +985,21 @@ private fun TagChip(text: String, fg: Color, bg: Color, modifier: Modifier = Mod
 
 // ── Series shelf row ───────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SeriesShelfRow(series: LibraryEntry.Series, expanded: Boolean, onToggle: () -> Unit) {
+private fun SeriesShelfRow(
+    series: LibraryEntry.Series,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, Line, RoundedCornerShape(12.dp))
             .background(Surface1)
-            .clickable(onClick = onToggle)
+            .combinedClickable(onClick = onToggle, onLongClick = onEdit)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1684,5 +1714,45 @@ private fun EditBookDialog(
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },
+    )
+}
+
+/** Edits the series-level fields (name + author) and pushes them to every book in the series. */
+@Composable
+private fun SeriesEditDialog(
+    series: LibraryEntry.Series,
+    onSave: (name: String, author: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(series.name) }
+    var author by remember { mutableStateOf(series.author.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit series") },
+        text = {
+            Column {
+                Text(
+                    "${series.books.size} books — changes apply to all of them.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Series") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                )
+                OutlinedTextField(
+                    value = author,
+                    onValueChange = { author = it },
+                    label = { Text("Author") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(name, author) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
