@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -95,6 +96,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geozelot.homer.BuildConfig
+import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.MiniPlayer
@@ -105,6 +108,7 @@ import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
+import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Sage
 import com.geozelot.homer.ui.theme.SageSoft
@@ -133,7 +137,8 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<BookListItem?>(null) }
-    var showSettings by remember { mutableStateOf(false) }
+    var showAppSettings by remember { mutableStateOf(false) }
+    var showLibrarySync by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -157,7 +162,7 @@ fun HomeScreen(
                 searching = false
                 viewModel.setSearchQuery("")
             },
-            onSettings = { showSettings = true },
+            onSettings = { showAppSettings = true },
         )
 
         if (entries.isEmpty()) {
@@ -171,7 +176,7 @@ fun HomeScreen(
                 else ->
                     EmptyLibrary(
                         scanning = false,
-                        onOpenSettings = { showSettings = true },
+                        onOpenSettings = { showLibrarySync = true },
                         modifier = Modifier.weight(1f),
                     )
             }
@@ -213,8 +218,18 @@ fun HomeScreen(
         )
     }
 
-    if (showSettings) {
-        SettingsSheet(viewModel = viewModel, onDismiss = { showSettings = false })
+    if (showAppSettings) {
+        AppSettingsSheet(
+            viewModel = viewModel,
+            onOpenLibrarySync = {
+                showAppSettings = false
+                showLibrarySync = true
+            },
+            onDismiss = { showAppSettings = false },
+        )
+    }
+    if (showLibrarySync) {
+        LibrarySyncSheet(viewModel = viewModel, onDismiss = { showLibrarySync = false })
     }
 
     editing?.let { book ->
@@ -1165,25 +1180,17 @@ private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier
     }
 }
 
-// ── Settings sheet ─────────────────────────────────────────────────────────
+// ── App settings sheet (general) ─────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
+private fun AppSettingsSheet(
+    viewModel: HomeViewModel,
+    onOpenLibrarySync: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val account by viewModel.account.collectAsStateWithLifecycle()
-    val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
-    val scanState by viewModel.scanState.collectAsStateWithLifecycle()
-    val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
-    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
-    val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
-    val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
-    val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
-    val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
-    val scanning = scanState is ScanState.Scanning
-
-    // Probe the library owner + shared-catalog availability whenever settings opens.
-    LaunchedEffect(Unit) { viewModel.probeSharedLibrary() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1212,6 +1219,82 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 }
                 TextButton(onClick = viewModel::logout) { Text("Log out") }
             }
+
+            Spacer(Modifier.height(16.dp))
+            NavRow(
+                title = "Library & Sync",
+                subtitle = "Library folder, scanning, discovered libraries and sync",
+                onClick = onOpenLibrarySync,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
+            SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
+            Text(
+                "Searches Open Library by title and author for books without embedded art. Sends only those to a third-party server.",
+                color = Muted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)
+        }
+    }
+}
+
+/** A tappable settings row that leads to another surface (chevron affordance). */
+@Composable
+private fun NavRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = Parchment, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 12.sp)
+        }
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Muted)
+    }
+}
+
+// ── Library & Sync sheet ─────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
+    val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
+    val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
+    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
+    val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
+    val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
+    val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
+    val discovered by viewModel.discovered.collectAsStateWithLifecycle()
+    val discovering by viewModel.discovering.collectAsStateWithLifecycle()
+    val scanning = scanState is ScanState.Scanning
+
+    // Sweep for Homer-bearing folders when the sheet opens.
+    LaunchedEffect(Unit) { viewModel.rediscover() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("Library & Sync", style = SerifTitle, color = Parchment)
 
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
@@ -1256,6 +1339,15 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
+            DiscoveredLibraries(
+                discovered = discovered,
+                discovering = discovering,
+                onRediscover = viewModel::rediscover,
+                onUse = viewModel::onLibraryRootChange,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
             SyncTierSelector(
                 current = syncTier,
                 tier3Available = tier3Available,
@@ -1266,14 +1358,87 @@ private fun SettingsSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
-            SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
-            Text(
-                "Searches Open Library by title and author for books without embedded art. Sends only those to a third-party server.",
-                color = Muted,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
             SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredLibraries(
+    discovered: List<DiscoveredLibrary>,
+    discovering: Boolean,
+    onRediscover: () -> Unit,
+    onUse: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("DISCOVERED LIBRARIES", style = SectionLabel, color = Muted)
+        if (discovering) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+        } else {
+            TextButton(onClick = onRediscover, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text("Rediscover")
+            }
+        }
+    }
+    if (discovered.isEmpty()) {
+        Text(
+            if (discovering) "Scanning your server…" else "No libraries found yet — try Rediscover.",
+            color = Faint,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    } else {
+        discovered.forEach { lib -> DiscoveredLibraryCard(lib, onUse) }
+    }
+}
+
+@Composable
+private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, if (lib.isCurrentRoot) Amber else Line, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                lib.relativePath.ifEmpty { "Home (files root)" },
+                color = Parchment,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (lib.isCurrentRoot) TagChip("in use", OnAmber, Amber)
+        }
+        val detail = buildString {
+            append(
+                when (lib.kind) {
+                    DiscoveredLibrary.Kind.FILES_ROOT -> "Your account root"
+                    DiscoveredLibrary.Kind.LIBRARY_ROOT -> "Configured library"
+                    DiscoveredLibrary.Kind.SHARED_FOLDER -> "Shared folder"
+                },
+            )
+            if (lib.hasSharedCatalog) {
+                append(" · shared catalog")
+                lib.bookCount?.let { append(" ($it books)") }
+            }
+            if (lib.hasPrivateIndex) append(" · private progress")
+            lib.owner?.let { append(" · owner: $it") }
+        }
+        Text(detail, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+        if (!lib.isCurrentRoot) {
+            TextButton(
+                onClick = { onUse(lib.relativePath) },
+                contentPadding = PaddingValues(horizontal = 4.dp),
+            ) { Text("Use as library folder") }
         }
     }
 }

@@ -2,7 +2,6 @@ package com.geozelot.homer.ui.home
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
@@ -16,6 +15,8 @@ import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
+import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
@@ -136,6 +137,7 @@ class HomeViewModel @Inject constructor(
     private val bookDao: BookDao,
     private val connection: PlaybackConnection,
     private val catalog: HomerCatalogRepository,
+    private val discovery: LibraryDiscovery,
     private val coverCache: CoverCache,
     @ApplicationContext private val context: Context,
     playbackStateDao: PlaybackStateDao,
@@ -276,6 +278,13 @@ class HomeViewModel @Inject constructor(
     private val _libraryOwner = MutableStateFlow<String?>(null)
     val libraryOwner: StateFlow<String?> = _libraryOwner.asStateFlow()
 
+    /** Homer-bearing folders found by the discovery sweep (files root, library root, shares). */
+    private val _discovered = MutableStateFlow<List<DiscoveredLibrary>>(emptyList())
+    val discovered: StateFlow<List<DiscoveredLibrary>> = _discovered.asStateFlow()
+
+    private val _discovering = MutableStateFlow(false)
+    val discovering: StateFlow<Boolean> = _discovering.asStateFlow()
+
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -321,15 +330,22 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Probes the library folder's Nextcloud owner and whether a shared catalog exists, for the
-     * settings UI. Called when the settings sheet opens (a user-initiated read).
+     * Runs the discovery sweep and refreshes the shared-catalog/owner hints for the current root
+     * from its result. Called when the Library & Sync sheet opens and by the Rediscover action.
      */
-    fun probeSharedLibrary() {
+    fun rediscover() {
+        if (_discovering.value) return
         viewModelScope.launch {
-            val owner = webDavClient.fetchOwnerId(libraryRepository.libraryRoot.first())
-            Log.i("HomerCatalog", "library owner = ${owner ?: "(unknown — claim-based)"}")
-            _libraryOwner.value = owner
-            _tier3Available.value = catalog.exists()
+            _discovering.value = true
+            try {
+                val libraries = discovery.discover()
+                _discovered.value = libraries
+                val current = libraries.firstOrNull { it.isCurrentRoot }
+                _tier3Available.value = current?.hasSharedCatalog == true
+                _libraryOwner.value = current?.owner
+            } finally {
+                _discovering.value = false
+            }
         }
     }
 
