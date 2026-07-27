@@ -38,6 +38,7 @@ class DurationEnricher @Inject constructor(
     private val credentialStore: CredentialStore,
     private val webDavClient: WebDavClient,
     private val durationExtractor: DurationExtractor,
+    private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,7 +90,15 @@ class DurationEnricher @Inject constructor(
                 // Persist embedded chapters (empty = none found) and settle the tier so we don't
                 // re-probe on every open.
                 if (needsChapters && firstProbe != null) {
-                    val marks = firstProbe!!.chapters
+                    var marks = firstProbe!!.chapters
+                    // ID3 CHAP covers MP3; for MP4/M4B (no ID3 chapters) fall back to the Nero
+                    // `chpl` parser over the same authed source.
+                    val first = files.firstOrNull()
+                    if (marks.isEmpty() && first != null && first.relativePath.isMp4Family()) {
+                        val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
+                        marks = mp4ChapterParser.parse(url)
+                        if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} chapters from mp4 chpl")
+                    }
                     chapterDao.replaceForBook(
                         bookId,
                         marks.mapIndexed { i, m -> ChapterEntity(bookId = bookId, sortIndex = i, title = m.title, startMs = m.startMs) },
@@ -115,3 +124,7 @@ class DurationEnricher @Inject constructor(
         const val TAG = "HomerMeta"
     }
 }
+
+/** MP4-family containers whose chapters live in a `chpl`/track rather than ID3 CHAP. */
+private fun String.isMp4Family(): Boolean =
+    substringAfterLast('.', "").lowercase() in setOf("m4b", "m4a", "mp4", "aac")
