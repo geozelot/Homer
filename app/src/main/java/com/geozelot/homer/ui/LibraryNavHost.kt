@@ -1,6 +1,9 @@
 package com.geozelot.homer.ui
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -37,6 +40,9 @@ fun LibraryNavHost() {
         composable(
             route = "player/{$ARG_BOOK_ID}",
             arguments = listOf(navArgument(ARG_BOOK_ID) { type = NavType.StringType }),
+            // The player slides up from the bottom (like expanding the mini-player) and back down.
+            enterTransition = { slideInVertically(tween(300)) { it } },
+            popExitTransition = { slideOutVertically(tween(300)) { it } },
         ) { entry ->
             val bookId = entry.arguments?.getString(ARG_BOOK_ID).orEmpty()
             PlayerScreen(bookId = bookId, onBack = { navController.popBackStack() })

@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,7 +65,19 @@ fun MiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Surface2, Surface1)))
-            .clickable { onOpenPlayer(bookId) },
+            .clickable { onOpenPlayer(bookId) }
+            // Swipe up to expand into Now Playing.
+            .pointerInput(bookId) {
+                val threshold = 48.dp.toPx()
+                var dragged = 0f
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (dragged < -threshold) onOpenPlayer(bookId)
+                        dragged = 0f
+                    },
+                    onVerticalDrag = { _, delta -> dragged += delta },
+                )
+            },
     ) {
         // Hairline separator along the very top edge of the bar (under the progress line).
         Box(
