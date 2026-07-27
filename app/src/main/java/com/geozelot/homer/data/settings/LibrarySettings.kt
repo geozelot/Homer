@@ -88,6 +88,16 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_STORAGE_RELOCATED] = value }
     }
 
+    /** Persisted SAF tree Uri for a user-chosen storage folder; null = the app-external default. */
+    val customStorageUri: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_CUSTOM_STORAGE_URI] }
+
+    suspend fun setCustomStorageUri(uri: String?) {
+        context.settingsDataStore.edit {
+            if (uri == null) it.remove(KEY_CUSTOM_STORAGE_URI) else it[KEY_CUSTOM_STORAGE_URI] = uri
+        }
+    }
+
     private companion object {
         const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
@@ -97,6 +107,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
+        val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")
     }
 }
 

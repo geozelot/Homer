@@ -294,6 +294,10 @@ class HomeViewModel @Inject constructor(
     val onlineCoverLookup: StateFlow<Boolean> = librarySettings.onlineCoverLookup
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Configured custom storage folder Uri (null = app-external default). */
+    val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -487,6 +491,34 @@ class HomeViewModel @Inject constructor(
     /** Clears a custom cover, reverting to detected/extracted/online art. */
     fun clearCustomCover(bookId: String) {
         viewModelScope.launch { bookDao.updateCustomCover(bookId, null) }
+    }
+
+    /** Points storage at a user-picked SAF folder (survives uninstall) and rebuilds data there. */
+    fun setCustomStorageFolder(uri: Uri) {
+        viewModelScope.launch {
+            storageLocation.setCustomFolder(uri)
+            relocateStorage()
+        }
+    }
+
+    /** Reverts storage to the default app-external location and rebuilds data there. */
+    fun useDefaultStorage() {
+        viewModelScope.launch {
+            storageLocation.useDefault()
+            relocateStorage()
+        }
+    }
+
+    /**
+     * After a storage-location change the old area's downloads/covers no longer apply: drop them
+     * (re-download / re-extract into the new area) and kick a cover pass. Custom covers are cleared
+     * since their Uris pointed at the old area.
+     */
+    private suspend fun relocateStorage() {
+        downloadDao.deleteAll()
+        bookDao.resetCoverArt()
+        bookDao.clearCustomCovers()
+        libraryIndexManager.fetchMissingCovers()
     }
 
     fun setSyncTier(tier: Int) {

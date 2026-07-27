@@ -1191,6 +1191,11 @@ private fun AppSettingsSheet(
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
+    val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri -> if (uri != null) viewModel.setCustomStorageFolder(uri) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1229,6 +1234,43 @@ private fun AppSettingsSheet(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
+            Text("STORAGE", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+            Text(
+                if (customStorageUri != null) "Custom folder: ${storageFolderName(customStorageUri!!)}" else "App storage (default)",
+                color = Parchment,
+                fontSize = 14.sp,
+            )
+            Text(
+                if (customStorageUri != null) {
+                    "Downloads, covers and progress live in your chosen folder — kept if you reinstall."
+                } else {
+                    "Downloads and covers live in the app's storage, which is cleared if you uninstall. " +
+                        "Pick a folder to keep them across reinstalls."
+                },
+                color = Faint,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = { folderPicker.launch(null) },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                ) { Text(if (customStorageUri != null) "Change folder…" else "Choose folder…") }
+                if (customStorageUri != null) {
+                    TextButton(
+                        onClick = viewModel::useDefaultStorage,
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) { Text("Use app storage") }
+                }
+            }
+            Text(
+                "Changing the location clears offline downloads and cached covers — they rebuild in the new place.",
+                color = Faint,
+                fontSize = 11.sp,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
+
             SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
             Text(
                 "Searches Open Library by title and author for books without embedded art. Sends only those to a third-party server.",
@@ -1242,6 +1284,10 @@ private fun AppSettingsSheet(
         }
     }
 }
+
+/** A readable folder name from a SAF tree Uri (e.g. …/tree/primary%3AAudiobooks → "Audiobooks"). */
+private fun storageFolderName(treeUri: String): String =
+    Uri.decode(treeUri).substringAfterLast('/').substringAfterLast(':').ifBlank { "selected folder" }
 
 /** A tappable settings row that leads to another surface (chevron affordance). */
 @Composable
