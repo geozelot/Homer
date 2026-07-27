@@ -11,53 +11,87 @@ import java.io.OutputStream
 
 /**
  * [StorageArea] over a user-chosen SAF folder (a `content://` document tree from
- * `ACTION_OPEN_DOCUMENT_TREE`). Its contents survive an app uninstall; the folder is
- * user-accessible in a file manager.
+ * `ACTION_OPEN_DOCUMENT_TREE`). Its contents survive an app uninstall and are user-accessible in
+ * a file manager.
  *
- * Resolution is path-based: for the on-device storage providers the tree document id encodes the
- * path (e.g. `primary:Homer`), so a child is addressed as `‹treeDocId›/‹rel›` and built directly
- * with [DocumentsContract.buildDocumentUriUsingTree] — O(1), exact names, no directory listing.
- * This targets folders on the phone/SD storage (the realistic pick); opaque cloud DocumentsProviders
- * that don't use path-based ids aren't supported.
+ * Documents are resolved by **listing the parent's children and matching display names**, using
+ * the real document ids the provider returns. This is provider-agnostic — unlike constructing a
+ * document id by string-joining the tree id with the relative path, which only works for the
+ * primary "externalstorage" provider and silently mis-resolves elsewhere (creating duplicate,
+ * numbered folders that the app can then never find again). A small per-instance cache keeps a
+ * multi-file book from re-listing the same directories.
  */
 class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
 
     private val resolver = context.contentResolver
     private val treeDocId: String = DocumentsContract.getTreeDocumentId(treeUri)
+    private val rootUri: Uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocId)
 
-    private fun docId(rel: String): String = if (rel.isEmpty()) treeDocId else "$treeDocId/$rel"
+    /** rel (POSIX dir path) → its resolved document Uri, to avoid re-walking within one instance. */
+    private val dirCache = HashMap<String, Uri>()
 
-    private fun docUri(rel: String): Uri =
-        DocumentsContract.buildDocumentUriUsingTree(treeUri, docId(rel))
-
-    private fun existsUri(uri: Uri): Boolean = runCatching {
-        resolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)
-            ?.use { it.moveToFirst() } ?: false
-    }.getOrDefault(false)
-
-    /** Creates any missing parent directories for [rel] and returns the parent's document Uri. */
-    private fun ensureParentDirs(rel: String): Uri {
-        val parents = rel.split('/').filter { it.isNotEmpty() }.dropLast(1)
-        var parentRel = ""
-        for (seg in parents) {
-            val childRel = if (parentRel.isEmpty()) seg else "$parentRel/$seg"
-            if (!existsUri(docUri(childRel))) {
-                DocumentsContract.createDocument(
-                    resolver, docUri(parentRel), DocumentsContract.Document.MIME_TYPE_DIR, seg,
-                ) ?: throw IOException("SAF: could not create dir $childRel")
+    /** The child document named [name] directly under [parent], or null if absent. */
+    private fun findChild(parent: Uri, name: String): Uri? {
+        val parentDocId = DocumentsContract.getDocumentId(parent)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        return runCatching {
+            resolver.query(
+                childrenUri,
+                arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                ),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    if (c.getString(1) == name) {
+                        return@use DocumentsContract.buildDocumentUriUsingTree(treeUri, c.getString(0))
+                    }
+                }
+                null
             }
-            parentRel = childRel
-        }
-        return docUri(parentRel)
+        }.getOrNull()
     }
 
-    /** Creates (replacing any existing) the file at [rel]; returns its actual document Uri. */
+    /** Resolves the directory at [rel] (empty = the tree root), creating missing levels if [create]. */
+    private fun resolveDir(rel: String, create: Boolean): Uri? {
+        if (rel.isEmpty()) return rootUri
+        dirCache[rel]?.let { return it }
+        val segs = rel.split('/').filter { it.isNotEmpty() }
+        var current = rootUri
+        val built = StringBuilder()
+        for (seg in segs) {
+            var child = findChild(current, seg)
+            if (child == null) {
+                if (!create) return null
+                child = DocumentsContract.createDocument(
+                    resolver, current, DocumentsContract.Document.MIME_TYPE_DIR, seg,
+                ) ?: throw IOException("SAF: could not create directory $seg (in $rel)")
+            }
+            current = child
+            if (built.isNotEmpty()) built.append('/')
+            built.append(seg)
+            dirCache[built.toString()] = current
+        }
+        return current
+    }
+
+    private fun parentRel(rel: String) = rel.substringBeforeLast('/', "")
+    private fun nameOf(rel: String) = rel.substringAfterLast('/')
+
+    /** The existing file document at [rel], or null. */
+    private fun resolveFile(rel: String): Uri? {
+        val parent = resolveDir(parentRel(rel), create = false) ?: return null
+        return findChild(parent, nameOf(rel))
+    }
+
+    /** Creates the file at [rel] fresh (creating parents, deleting any existing so no `name (1)`). */
     private fun createFile(rel: String): Uri {
-        val name = rel.substringAfterLast('/')
-        val parentUri = ensureParentDirs(rel)
-        val target = docUri(rel)
-        if (existsUri(target)) runCatching { DocumentsContract.deleteDocument(resolver, target) }
-        return DocumentsContract.createDocument(resolver, parentUri, mimeFor(name), name)
+        val parent = resolveDir(parentRel(rel), create = true)
+            ?: throw IOException("SAF: could not resolve parent of $rel")
+        val name = nameOf(rel)
+        findChild(parent, name)?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+        return DocumentsContract.createDocument(resolver, parent, mimeFor(name), name)
             ?: throw IOException("SAF: could not create file $rel")
     }
 
@@ -75,32 +109,34 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
             uri
         }
 
-    override suspend fun uri(rel: String): Uri? = withContext(Dispatchers.IO) {
-        docUri(rel).takeIf { existsUri(it) }
+    override suspend fun uri(rel: String): Uri? = withContext(Dispatchers.IO) { resolveFile(rel) }
+
+    override suspend fun exists(rel: String): Boolean = withContext(Dispatchers.IO) {
+        resolveFile(rel) != null || resolveDir(rel, create = false) != null
     }
 
-    override suspend fun exists(rel: String): Boolean = withContext(Dispatchers.IO) { existsUri(docUri(rel)) }
-
     override suspend fun readBytes(rel: String): ByteArray? = withContext(Dispatchers.IO) {
-        val uri = docUri(rel)
-        if (!existsUri(uri)) null else resolver.openInputStream(uri)?.use { it.readBytes() }
+        resolveFile(rel)?.let { uri -> resolver.openInputStream(uri)?.use { it.readBytes() } }
     }
 
     override suspend fun openInputStream(rel: String): InputStream? = withContext(Dispatchers.IO) {
-        val uri = docUri(rel)
-        if (!existsUri(uri)) null else resolver.openInputStream(uri)
+        resolveFile(rel)?.let { resolver.openInputStream(it) }
     }
 
     override suspend fun delete(rel: String) {
         withContext(Dispatchers.IO) {
-            val uri = docUri(rel)
-            if (existsUri(uri)) runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+            val uri = resolveFile(rel) ?: resolveDir(rel, create = false) ?: return@withContext
+            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+            dirCache.keys.filter { it == rel || it.startsWith("$rel/") }.forEach { dirCache.remove(it) }
         }
     }
 
     override suspend fun deleteMatching(dirRel: String, namePrefix: String) {
         withContext(Dispatchers.IO) {
-            val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId(dirRel))
+            val dir = resolveDir(dirRel, create = false) ?: return@withContext
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+                treeUri, DocumentsContract.getDocumentId(dir),
+            )
             runCatching {
                 resolver.query(
                     children,

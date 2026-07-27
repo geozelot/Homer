@@ -17,8 +17,13 @@ data class DownloadEntity(
 )
 
 object DownloadStatus {
+    /** Enqueued but the worker hasn't started yet (or is waiting on its network constraint). */
+    const val QUEUED = "queued"
     const val DOWNLOADING = "downloading"
     const val PAUSED = "paused"
     const val DONE = "done"
     const val FAILED = "failed"
+
+    /** True while a download is queued or actively running — the UI shows a spinner. */
+    fun isActive(status: String?): Boolean = status == QUEUED || status == DOWNLOADING
 }

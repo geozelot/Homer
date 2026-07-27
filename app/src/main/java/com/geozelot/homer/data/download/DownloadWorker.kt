@@ -2,7 +2,9 @@ package com.geozelot.homer.data.download
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.util.Log
@@ -60,7 +62,7 @@ class DownloadWorker @AssistedInject constructor(
         val notifId = bookId.hashCode()
         ensureChannel()
         // Promote to a foreground service so the download continues if the app is closed.
-        setForegroundSafely(foregroundInfo(notifId, title, 0, files.size))
+        setForegroundSafely(foregroundInfo(notifId, bookId, title, 0, files.size))
 
         // Resume from the last completed file: a paused (or retried) download keeps its progress
         // count, so already-finished files are skipped rather than re-fetched.
@@ -72,7 +74,7 @@ class DownloadWorker @AssistedInject constructor(
                 // Stop promptly on cancellation (user removed the download / constraint lost)
                 // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
                 if (isStopped) return Result.failure()
-                setForegroundSafely(foregroundInfo(notifId, title, index, files.size))
+                setForegroundSafely(foregroundInfo(notifId, bookId, title, index, files.size))
                 // The storage area streams into place (atomically where the backend supports it),
                 // so a truncated write is never mistaken for a finished download.
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, libraryRoot, file.relativePath)).build()
@@ -120,20 +122,35 @@ class DownloadWorker @AssistedInject constructor(
         }
     }
 
-    /** Foreground notification for the ongoing download; the WM service is removed on finish. */
-    private fun foregroundInfo(id: Int, title: String, done: Int, total: Int): ForegroundInfo {
+    /** Foreground notification for the ongoing download, with Pause + Cancel actions; the WM
+     *  service is removed on finish. */
+    private fun foregroundInfo(id: Int, bookId: String, title: String, done: Int, total: Int): ForegroundInfo {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
             .setContentText("Downloading $done/$total…")
             .setOngoing(true)
             .setProgress(total, done, done == 0)
+            .addAction(0, "Pause", actionIntent(DownloadActionReceiver.ACTION_PAUSE, bookId))
+            .addAction(0, "Cancel", actionIntent(DownloadActionReceiver.ACTION_CANCEL, bookId))
             .build()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             ForegroundInfo(id, notification)
         }
+    }
+
+    private fun actionIntent(action: String, bookId: String): PendingIntent {
+        val intent = Intent(appContext, DownloadActionReceiver::class.java)
+            .setAction(action)
+            .putExtra(DownloadActionReceiver.EXTRA_BOOK_ID, bookId)
+        return PendingIntent.getBroadcast(
+            appContext,
+            (action + bookId).hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun now() = System.currentTimeMillis()

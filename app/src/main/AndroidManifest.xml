@@ -80,6 +80,11 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- Handles Pause / Cancel taps on the download notification. -->
+        <receiver
+            android:name=".data.download.DownloadActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

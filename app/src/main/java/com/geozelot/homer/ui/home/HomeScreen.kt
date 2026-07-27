@@ -1233,7 +1233,7 @@ private fun BookMenu(
         // Offline sits at the bottom of every menu: on = keep offline, off = remove/abort. While a
         // download is in flight the trailing control is a spinner so the toggle clearly did something.
         val offlineEnabled = book.downloadStatus != null
-        val downloading = book.downloadStatus == DownloadStatus.DOWNLOADING
+        val downloading = DownloadStatus.isActive(book.downloadStatus)
         DropdownMenuItem(
             text = { Text("Offline") },
             leadingIcon = { Icon(Icons.Filled.Download, null, tint = if (book.isDownloaded) Sage else Muted) },
@@ -1256,7 +1256,7 @@ private fun BookMenu(
             },
         )
         when (book.downloadStatus) {
-            DownloadStatus.DOWNLOADING -> DropdownMenuItem(
+            DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED -> DropdownMenuItem(
                 text = { Text("Pause download") },
                 onClick = { actions.onPause(book.id); onDismiss() },
             )

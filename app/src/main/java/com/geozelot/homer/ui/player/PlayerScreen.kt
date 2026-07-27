@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -148,6 +149,7 @@ fun PlayerScreen(
         PlayerTopBar(
             finished = finished,
             offline = offline,
+            downloading = DownloadStatus.isActive(download?.status),
             canEdit = editableBook != null,
             onBack = onBack,
             onToggleFinished = viewModel::toggleFinished,
@@ -327,6 +329,7 @@ fun PlayerScreen(
 private fun PlayerTopBar(
     finished: Boolean,
     offline: Boolean,
+    downloading: Boolean,
     canEdit: Boolean,
     onBack: () -> Unit,
     onToggleFinished: () -> Unit,
@@ -369,7 +372,13 @@ private fun PlayerTopBar(
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text("Offline") },
-                    trailingIcon = { HomerSwitch(checked = offline, onCheckedChange = { onToggleOffline() }) },
+                    trailingIcon = {
+                        if (downloading) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Amber, strokeWidth = 2.dp)
+                        } else {
+                            HomerSwitch(checked = offline, onCheckedChange = { onToggleOffline() })
+                        }
+                    },
                     onClick = { onToggleOffline() },
                 )
             }
