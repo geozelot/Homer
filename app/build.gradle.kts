@@ -28,7 +28,7 @@ android {
         // CI passes -PversionCode / -PversionName (derived from the release tag); the literals
         // are the fallback for local builds.
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = (project.findProperty("versionName") as String?) ?: "1.0"
+        versionName = (project.findProperty("versionName") as String?) ?: "0.9.0"
 
         vectorDrawables { useSupportLibrary = true }
     }

@@ -13,9 +13,6 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE bookId = :bookId ORDER BY sortIndex")
     fun observeForBook(bookId: String): Flow<List<ChapterEntity>>
 
-    @Query("SELECT COUNT(*) FROM chapters WHERE bookId = :bookId")
-    suspend fun countForBook(bookId: String): Int
-
     @Query("DELETE FROM chapters WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
 

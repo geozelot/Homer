@@ -68,8 +68,12 @@ class EncryptedCredentialStore @Inject constructor(
 
     init {
         scope.launch {
-            _credentials.value = readFromPrefs()
-            _loaded.value = true
+            val stored = readFromPrefs()
+            // Don't clobber a save()/clear() that raced ahead of this initial read.
+            if (!_loaded.value) {
+                _credentials.value = stored
+                _loaded.value = true
+            }
         }
     }
 
@@ -88,6 +92,7 @@ class EncryptedCredentialStore @Inject constructor(
 
     override fun clear() {
         _credentials.value = null
+        _loaded.value = true
         scope.launch { prefs.edit().clear().apply() }
     }
 

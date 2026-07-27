@@ -100,6 +100,10 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var currentDurations: Map<String, Long> = emptyMap()
 
+    /** Sum of [currentDurations], cached so [pushState] doesn't re-sum on every position tick. */
+    @Volatile
+    private var currentBookTotal = 0L
+
     /** True while [playBook] is switching to a new book: the state listener must not overwrite
      *  the optimistic new-book state with the still-outgoing controller's state mid-load. */
     @Volatile
@@ -185,6 +189,7 @@ class PlaybackConnection @Inject constructor(
             currentCoverModel = playlist?.coverModel
             currentOffline = playlist?.offline ?: false
             currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
+            currentBookTotal = currentDurations.values.sum()
             pushState()
             downloadReloadWatcher.watch(
                 bookId = bookId,
@@ -232,6 +237,7 @@ class PlaybackConnection @Inject constructor(
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
             currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
+            currentBookTotal = currentDurations.values.sum()
             val saved = playbackStateDao.findByBookId(bookId)
             val startIndex = saved
                 ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
@@ -248,7 +254,7 @@ class PlaybackConnection @Inject constructor(
                 positionMs = savedPos,
                 durationMs = currentDurations[playlist.items.getOrNull(startIndex)?.mediaId] ?: 0L,
                 bookElapsedMs = before + savedPos,
-                bookTotalMs = currentDurations.values.sum(),
+                bookTotalMs = currentBookTotal,
                 playbackSpeed = _state.value.playbackSpeed,
                 sleepRemainingMs = sleepTimer.remainingMs(),
                 sleepEndOfChapter = sleepTimer.endOfChapter,
@@ -539,7 +545,7 @@ class PlaybackConnection @Inject constructor(
         for (i in 0 until c.currentMediaItemIndex) {
             before += currentDurations[c.getMediaItemAt(i).mediaId] ?: 0L
         }
-        val bookTotal = currentDurations.values.sum()
+        val bookTotal = currentBookTotal
         _state.value = PlaybackUiState(
             isConnected = true,
             isPlaying = c.isPlaying,

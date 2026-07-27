@@ -84,6 +84,8 @@ private data class EffectiveBook(
     val hidden: Boolean,
     val tags: List<String>,
     val finishedOverride: Boolean?,
+    /** Resolved cover model, computed here (rarely) rather than on every progress tick. */
+    val coverModel: Any?,
 )
 
 /** A library row: a section header, a standalone book, or a collapsible series shelf. */
@@ -152,48 +154,40 @@ class HomeViewModel @Inject constructor(
     private val _showHidden = MutableStateFlow(false)
     val showHidden: StateFlow<Boolean> = _showHidden.asStateFlow()
 
-    // Detection with user overrides applied (D2), hidden books filtered unless shown, then
-    // re-sorted on the effective author/series so manual fixes group correctly.
+    // Detection with user overrides applied (D2), hidden books filtered unless shown, plus the
+    // resolved cover model. All the inputs here change rarely, so the per-book cover resolution
+    // does NOT re-run on the ~5s playback-position ticks that drive `books` below. Ordering is
+    // left to `buildEntries` / `continueShelf`, which always sort, so no sort is needed here.
     private val effectiveBooks: Flow<List<EffectiveBook>> =
         combine(
             libraryRepository.books,
             bookOverrideDao.observeAll(),
             _showHidden,
-        ) { books, overrides, showHidden ->
+            authRepository.credentials,
+            libraryRepository.libraryRoot,
+        ) { books, overrides, showHidden, credentials, libraryRoot ->
             val overrideByBook = overrides.associateBy { it.bookId }
             books
                 .map { book ->
                     val override = overrideByBook[book.id]
+                    val effective = book.applyOverride(override)
                     EffectiveBook(
-                        book = book.applyOverride(override),
+                        book = effective,
                         hidden = override?.hidden == true,
                         tags = override?.tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
                         finishedOverride = override?.finished,
+                        coverModel = BookCover.model(effective, credentials, webDavClient, libraryRoot),
                     )
                 }
                 .filter { showHidden || !it.hidden }
-                .sortedWith(
-                    // Nulls last (the `== null` keys sort false<true), matching the DB order.
-                    compareBy<EffectiveBook>(
-                        { it.book.author == null },
-                        { it.book.author },
-                        { it.book.series == null },
-                        { it.book.series },
-                        { it.book.seriesIndex == null },
-                        { it.book.seriesIndex },
-                        { it.book.title },
-                    ),
-                )
         }
 
     private val books: StateFlow<List<BookListItem>> =
         combine(
             effectiveBooks,
-            authRepository.credentials,
             playbackStateDao.observeProgress(),
             downloadDao.observeAll(),
-            libraryRepository.libraryRoot,
-        ) { effective, credentials, progress, downloads, libraryRoot ->
+        ) { effective, progress, downloads ->
             val progressByBook = progress.associateBy { it.bookId }
             val downloadByBook = downloads.associateBy { it.bookId }
             effective.map { eff ->
@@ -210,7 +204,7 @@ class HomeViewModel @Inject constructor(
                     author = book.author,
                     isMultiFile = book.isMultiFile,
                     fileCount = book.fileCount,
-                    coverModel = BookCover.model(book, credentials, webDavClient, libraryRoot),
+                    coverModel = eff.coverModel,
                     hasCustomCover = book.customCoverPath != null,
                     series = book.series,
                     seriesIndex = book.seriesIndex,
