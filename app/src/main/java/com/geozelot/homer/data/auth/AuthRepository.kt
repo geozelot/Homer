@@ -1,7 +1,7 @@
 package com.geozelot.homer.data.auth
 
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,9 +37,17 @@ class AuthRepository @Inject constructor(
 
     fun logout() = credentialStore.clear()
 
-    /** Maps credentials to a coarse [AuthState] for navigation gating. */
+    /**
+     * Maps credentials to a coarse [AuthState] for navigation gating. Stays [AuthState.Unknown]
+     * (spinner) until the credential store has finished its initial load, so a cold start never
+     * flashes the login screen before the persisted account is read.
+     */
     fun authState(scope: CoroutineScope): StateFlow<AuthState> =
-        credentials
-            .map { if (it == null) AuthState.LoggedOut else AuthState.LoggedIn(it) }
-            .stateIn(scope, SharingStarted.Eagerly, AuthState.Unknown)
+        combine(credentials, credentialStore.loaded) { creds, loaded ->
+            when {
+                !loaded -> AuthState.Unknown
+                creds == null -> AuthState.LoggedOut
+                else -> AuthState.LoggedIn(creds)
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, AuthState.Unknown)
 }
