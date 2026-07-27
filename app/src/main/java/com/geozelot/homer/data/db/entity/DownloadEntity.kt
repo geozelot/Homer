@@ -18,6 +18,7 @@ data class DownloadEntity(
 
 object DownloadStatus {
     const val DOWNLOADING = "downloading"
+    const val PAUSED = "paused"
     const val DONE = "done"
     const val FAILED = "failed"
 }

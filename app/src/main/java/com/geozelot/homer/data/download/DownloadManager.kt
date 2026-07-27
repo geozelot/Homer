@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.geozelot.homer.data.db.dao.DownloadDao
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.settings.PlaybackSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,19 @@ class DownloadManager @Inject constructor(
             downloadDao.delete(bookId)
         }
     }
+
+    /** Stops the worker but keeps the partial files + progress, marking the download paused. */
+    fun pause(bookId: String) {
+        scope.launch {
+            workManager.cancelUniqueWork(workName(bookId))
+            downloadDao.findByBookId(bookId)?.let {
+                downloadDao.upsert(it.copy(status = DownloadStatus.PAUSED, updatedAt = System.currentTimeMillis()))
+            }
+        }
+    }
+
+    /** Re-enqueues a paused/failed download; the worker resumes from the last completed file. */
+    fun resume(bookId: String) = download(bookId)
 
     private fun workName(bookId: String) = "$WORK_PREFIX$bookId"
 

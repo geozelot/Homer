@@ -394,6 +394,8 @@ class HomeViewModel @Inject constructor(
 
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
+    fun pauseDownload(bookId: String) = downloadManager.pause(bookId)
+    fun resumeDownload(bookId: String) = downloadManager.resume(bookId)
     fun setWifiOnlyDownloads(value: Boolean) {
         viewModelScope.launch { playbackSettings.setWifiOnlyDownloads(value) }
     }

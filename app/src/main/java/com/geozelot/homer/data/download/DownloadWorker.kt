@@ -62,9 +62,13 @@ class DownloadWorker @AssistedInject constructor(
         // Promote to a foreground service so the download continues if the app is closed.
         setForegroundSafely(foregroundInfo(notifId, title, 0, files.size))
 
-        downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, 0, files.size, now()))
+        // Resume from the last completed file: a paused (or retried) download keeps its progress
+        // count, so already-finished files are skipped rather than re-fetched.
+        val startIndex = (downloadDao.findByBookId(bookId)?.downloadedFiles ?: 0).coerceIn(0, files.size)
+        downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, startIndex, files.size, now()))
         try {
             for ((index, file) in files.withIndex()) {
+                if (index < startIndex) continue // completed before a pause/retry
                 // Stop promptly on cancellation (user removed the download / constraint lost)
                 // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
                 if (isStopped) return Result.failure()

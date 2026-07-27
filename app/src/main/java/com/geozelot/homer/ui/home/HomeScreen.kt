@@ -97,6 +97,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
@@ -151,6 +152,8 @@ fun HomeScreen(
             onSetHidden = viewModel::setHidden,
             onSetFinished = viewModel::setFinished,
             onEditSeries = { editingSeries = it },
+            onPause = viewModel::pauseDownload,
+            onResume = viewModel::resumeDownload,
         )
     }
 
@@ -268,6 +271,8 @@ private class BookActions(
     val onSetHidden: (String, Boolean) -> Unit,
     val onSetFinished: (String, Boolean?) -> Unit,
     val onEditSeries: (LibraryEntry.Series) -> Unit,
+    val onPause: (String) -> Unit,
+    val onResume: (String) -> Unit,
 )
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
@@ -1131,23 +1136,33 @@ private fun BookMenu(
             leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
             onClick = onDismiss, // tapping the card already opens the player
         )
+        // Offline covers any download intent (downloading/paused/done): on = keep offline,
+        // off = remove/abort. Pause/Resume/Retry appear below while a download is in flight.
+        val offlineEnabled = book.downloadStatus != null
+        val toggleOffline = {
+            if (offlineEnabled) actions.onRemove(book.id) else actions.onDownload(book.id)
+            onDismiss()
+        }
         DropdownMenuItem(
             text = { Text("Offline") },
             leadingIcon = { Icon(Icons.Filled.Download, null, tint = if (book.isDownloaded) Sage else Muted) },
-            trailingIcon = {
-                Switch(
-                    checked = book.isDownloaded,
-                    onCheckedChange = {
-                        if (book.isDownloaded) actions.onRemove(book.id) else actions.onDownload(book.id)
-                        onDismiss()
-                    },
-                )
-            },
-            onClick = {
-                if (book.isDownloaded) actions.onRemove(book.id) else actions.onDownload(book.id)
-                onDismiss()
-            },
+            trailingIcon = { Switch(checked = offlineEnabled, onCheckedChange = { toggleOffline() }) },
+            onClick = toggleOffline,
         )
+        when (book.downloadStatus) {
+            DownloadStatus.DOWNLOADING -> DropdownMenuItem(
+                text = { Text("Pause download") },
+                onClick = { actions.onPause(book.id); onDismiss() },
+            )
+            DownloadStatus.PAUSED -> DropdownMenuItem(
+                text = { Text("Resume download") },
+                onClick = { actions.onResume(book.id); onDismiss() },
+            )
+            DownloadStatus.FAILED -> DropdownMenuItem(
+                text = { Text("Retry download") },
+                onClick = { actions.onResume(book.id); onDismiss() },
+            )
+        }
         DropdownMenuItem(
             text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
             leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
