@@ -171,6 +171,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playPause() = connection.playPause()
+    fun retry() = connection.retry()
     fun seekTo(positionMs: Long) = connection.seekTo(positionMs)
     fun seekBy(deltaSeconds: Int) = connection.seekBy(deltaSeconds * 1000L)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)

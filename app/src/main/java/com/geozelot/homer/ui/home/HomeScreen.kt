@@ -221,6 +221,7 @@ fun HomeScreen(
             state = playback,
             onOpenPlayer = onBookClick,
             onPlayPause = viewModel::playPause,
+            onRetry = viewModel::retry,
             modifier = Modifier.navigationBarsPadding(),
         )
     }
@@ -1273,6 +1274,7 @@ private fun AppSettingsSheet(
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
+    val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
 
     val folderPicker = rememberLauncherForActivityResult(
@@ -1367,6 +1369,20 @@ private fun AppSettingsSheet(
                     selected = seekSeconds,
                     labelOf = { "${it}s" },
                     onSelect = viewModel::setSeekSeconds,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Rewind on resume", color = Parchment, fontSize = 14.sp)
+                DropdownChip(
+                    label = if (autoRewind == 0) "Off" else "${autoRewind}s",
+                    options = listOf(0, 5, 10, 15, 20, 30),
+                    selected = autoRewind,
+                    labelOf = { if (it == 0) "Off" else "${it}s" },
+                    onSelect = viewModel::setAutoRewindSeconds,
                 )
             }
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)

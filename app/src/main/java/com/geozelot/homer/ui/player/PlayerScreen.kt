@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -86,6 +87,7 @@ import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
+import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
@@ -213,6 +215,10 @@ fun PlayerScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+
+            if (state.hasError) {
+                ErrorBanner(onRetry = viewModel::retry, modifier = Modifier.padding(top = 12.dp))
             }
 
             Scrubber(
@@ -462,6 +468,23 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
         Text("Chapters", color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Shown when the stream stalls on an error (typically a lost connection); tap re-prepares. */
+@Composable
+private fun ErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(Surface2)
+            .clickable(onClick = onRetry)
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Filled.Refresh, contentDescription = null, tint = Danger, modifier = Modifier.size(17.dp))
+        Text("Can't reach the server — Retry", color = Danger, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

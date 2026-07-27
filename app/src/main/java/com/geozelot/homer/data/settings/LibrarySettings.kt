@@ -183,6 +183,17 @@ class PlaybackSettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_VOLUME_MODE] = value }
     }
 
+    /**
+     * Seconds to rewind when resuming a paused book, so you re-hear a little of what came before;
+     * 0 = off (default, so playback resumes exactly where it stopped unless the user opts in).
+     */
+    val autoRewindSeconds: Flow<Int> =
+        context.settingsDataStore.data.map { it[KEY_AUTO_REWIND] ?: DEFAULT_AUTO_REWIND }
+
+    suspend fun setAutoRewindSeconds(value: Int) {
+        context.settingsDataStore.edit { it[KEY_AUTO_REWIND] = value }
+    }
+
     private companion object {
         val KEY_SPEED = floatPreferencesKey("playback_speed")
         val KEY_SKIP_SILENCE = booleanPreferencesKey("skip_silence")
@@ -192,9 +203,11 @@ class PlaybackSettings @Inject constructor(
         val KEY_SLEEP_LAST_MS = longPreferencesKey("sleep_last_duration_ms")
         val KEY_SEEK_SECONDS = intPreferencesKey("seek_seconds")
         val KEY_VOLUME_MODE = stringPreferencesKey("volume_mode")
+        val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
         const val DEFAULT_SLEEP_FADE = 5
         const val DEFAULT_SLEEP_EXTEND = "15"
         const val DEFAULT_SEEK_SECONDS = 15
         const val DEFAULT_VOLUME_MODE = "normal"
+        const val DEFAULT_AUTO_REWIND = 0
     }
 }

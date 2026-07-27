@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -61,6 +62,8 @@ data class PlaybackUiState(
     val coverModel: Any? = null,
     /** Embedded artwork parsed from the current file — fallback before a cover is cached. */
     val artworkData: ByteArray? = null,
+    /** A playback error is stalling the stream (usually a lost connection); offer a retry. */
+    val hasError: Boolean = false,
 )
 
 /**
@@ -102,8 +105,22 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var loading = false
 
+    /** Seconds to rewind on resume (cached from settings so [playPause] can apply it synchronously). */
+    @Volatile
+    private var autoRewindMs = 0L
+
+    /** Set when the player reports an error; surfaced in [state] so the UI can offer a retry. */
+    @Volatile
+    private var playbackError = false
+
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
+
+    init {
+        scope.launch {
+            playbackSettings.autoRewindSeconds.collect { autoRewindMs = it * 1000L }
+        }
+    }
 
     private val sleepTimer = SleepTimer(
         context = context,
@@ -120,10 +137,20 @@ class PlaybackConnection @Inject constructor(
             // During a book switch the controller still holds the outgoing book — ignore its
             // events so they don't clobber the optimistic new-book state.
             if (loading) return
+            // Playback made progress again ⇒ clear any stale error banner.
+            if (player.isPlaying) playbackError = false
             pushState()
             positionSyncer.save()
             // Flush to the .homer manifest at natural boundaries (not every tick).
             if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) positionSyncer.flush()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // Usually a dropped connection mid-stream. Surface it so the UI can offer Retry
+            // instead of silently freezing on the last frame.
+            Log.w(TAG, "playback error: ${error.errorCodeName}", error)
+            playbackError = true
+            pushState()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -198,6 +225,7 @@ class PlaybackConnection @Inject constructor(
             // before the (possibly slow) sync + queue load — so the player never lingers on
             // the previous book. `loading` shields the optimistic state from the listener.
             loading = true
+            playbackError = false    // a fresh book starts without the previous one's error
             c.stop()                 // halt outgoing audio; leaves the player IDLE so the new
             c.playWhenReady = false  // queue won't auto-buffer or auto-play
             currentBookId = bookId
@@ -282,9 +310,21 @@ class PlaybackConnection @Inject constructor(
             c.pause()
             return
         }
+        // Auto-rewind: on resume, step back a little so the listener re-hears some context.
+        // Skipped on a brand-new start (position ~0, clamped by seekBy anyway).
+        if (autoRewindMs > 0L && c.currentPosition > 0L) seekBy(-autoRewindMs)
         // First play after loading: prepare (which begins buffering/streaming) then play.
         if (c.playbackState == Player.STATE_IDLE) c.prepare()
         c.play()
+    }
+
+    /** Re-prepares the current media after a playback error (e.g. a connection was restored). */
+    fun retry() {
+        val c = controller ?: return
+        playbackError = false
+        c.prepare()
+        c.play()
+        pushState()
     }
 
     fun seekTo(positionMs: Long) {
@@ -519,6 +559,7 @@ class PlaybackConnection @Inject constructor(
             sleepEndOfChapter = sleepTimer.endOfChapter,
             coverModel = currentCoverModel,
             artworkData = if (currentCoverModel == null) metadata.artworkData else null,
+            hasError = playbackError,
         )
     }
 

@@ -301,6 +301,10 @@ class HomeViewModel @Inject constructor(
     val seekSeconds: StateFlow<Int> = playbackSettings.seekSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 15)
 
+    /** Seconds to rewind on resume; 0 = off (default). */
+    val autoRewindSeconds: StateFlow<Int> = playbackSettings.autoRewindSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     /** Configured custom storage folder Uri (null = app-external default). */
     val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -406,6 +410,10 @@ class HomeViewModel @Inject constructor(
 
     fun setSeekSeconds(value: Int) {
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
+    }
+
+    fun setAutoRewindSeconds(value: Int) {
+        viewModelScope.launch { playbackSettings.setAutoRewindSeconds(value) }
     }
 
     /** Toggles online cover lookup; enabling it re-arms art-less books and kicks a cover pass. */
@@ -631,6 +639,9 @@ class HomeViewModel @Inject constructor(
 
     /** Toggle play/pause on the currently-loaded book (docked mini-player). */
     fun playPause() = connection.playPause()
+
+    /** Retry a stalled stream from the docked mini-player (after a connection error). */
+    fun retry() = connection.retry()
 
     fun logout() = authRepository.logout()
 

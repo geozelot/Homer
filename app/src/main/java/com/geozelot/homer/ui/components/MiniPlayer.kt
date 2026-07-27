@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.OnAmber
@@ -44,6 +46,7 @@ fun MiniPlayer(
     state: PlaybackUiState,
     onOpenPlayer: (String) -> Unit,
     onPlayPause: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val bookId = state.bookId ?: return
@@ -95,7 +98,7 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = buildString {
+                    text = if (state.hasError) "Playback error — tap to retry" else buildString {
                         if (state.chapterCount > 0) append("Chapter ${state.chapterIndex + 1}")
                         val speed = formatSpeedShort(state.playbackSpeed)
                         if (speed != null) {
@@ -107,7 +110,7 @@ fun MiniPlayer(
                             append("${formatCompactDuration(it)} left")
                         }
                     },
-                    color = Muted,
+                    color = if (state.hasError) Danger else Muted,
                     fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -118,12 +121,20 @@ fun MiniPlayer(
                     .size(38.dp)
                     .clip(RoundedCornerShape(50))
                     .background(Amber)
-                    .clickable { onPlayPause() },
+                    .clickable { if (state.hasError) onRetry() else onPlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (state.isPlaying) "Pause" else "Play",
+                    imageVector = when {
+                        state.hasError -> Icons.Filled.Refresh
+                        state.isPlaying -> Icons.Filled.Pause
+                        else -> Icons.Filled.PlayArrow
+                    },
+                    contentDescription = when {
+                        state.hasError -> "Retry"
+                        state.isPlaying -> "Pause"
+                        else -> "Play"
+                    },
                     tint = OnAmber,
                     modifier = Modifier.size(20.dp),
                 )
