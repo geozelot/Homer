@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,7 +69,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -99,6 +99,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.MiniPlayer
@@ -1144,18 +1145,43 @@ private fun BookMenu(
             leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
             onClick = onDismiss, // tapping the card already opens the player
         )
-        // Offline covers any download intent (downloading/paused/done): on = keep offline,
-        // off = remove/abort. Pause/Resume/Retry appear below while a download is in flight.
+        DropdownMenuItem(
+            text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
+            leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
+            onClick = { actions.onSetFinished(book.id, !book.finished); onDismiss() },
+        )
+        DropdownMenuItem(
+            text = { Text("Edit") }, // hide/unhide lives in the edit dialog
+            leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
+            onClick = { actions.onEdit(book); onDismiss() },
+        )
+
+        HorizontalDivider()
+
+        // Offline sits at the bottom of every menu: on = keep offline, off = remove/abort. While a
+        // download is in flight the trailing control is a spinner so the toggle clearly did something.
         val offlineEnabled = book.downloadStatus != null
-        val toggleOffline = {
-            if (offlineEnabled) actions.onRemove(book.id) else actions.onDownload(book.id)
-            onDismiss()
-        }
+        val downloading = book.downloadStatus == DownloadStatus.DOWNLOADING
         DropdownMenuItem(
             text = { Text("Offline") },
             leadingIcon = { Icon(Icons.Filled.Download, null, tint = if (book.isDownloaded) Sage else Muted) },
-            trailingIcon = { Switch(checked = offlineEnabled, onCheckedChange = { toggleOffline() }) },
-            onClick = toggleOffline,
+            trailingIcon = {
+                if (downloading) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Amber, strokeWidth = 2.dp)
+                } else {
+                    HomerSwitch(
+                        checked = offlineEnabled,
+                        onCheckedChange = {
+                            if (offlineEnabled) actions.onRemove(book.id) else actions.onDownload(book.id)
+                            onDismiss()
+                        },
+                    )
+                }
+            },
+            onClick = {
+                if (offlineEnabled) actions.onRemove(book.id) else actions.onDownload(book.id)
+                onDismiss()
+            },
         )
         when (book.downloadStatus) {
             DownloadStatus.DOWNLOADING -> DropdownMenuItem(
@@ -1171,22 +1197,6 @@ private fun BookMenu(
                 onClick = { actions.onResume(book.id); onDismiss() },
             )
         }
-        DropdownMenuItem(
-            text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
-            leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
-            onClick = { actions.onSetFinished(book.id, !book.finished); onDismiss() },
-        )
-        DropdownMenuItem(
-            text = { Text("Edit") },
-            leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
-            onClick = { actions.onEdit(book); onDismiss() },
-        )
-        HorizontalDivider()
-        DropdownMenuItem(
-            text = { Text(if (book.hidden) "Unhide" else "Hide") },
-            leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Muted) },
-            onClick = { actions.onSetHidden(book.id, !book.hidden); onDismiss() },
-        )
     }
 }
 
@@ -1263,6 +1273,7 @@ private fun AppSettingsSheet(
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
+    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -1271,6 +1282,7 @@ private fun AppSettingsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Ground,
     ) {
         Column(
             modifier = Modifier
@@ -1357,6 +1369,7 @@ private fun AppSettingsSheet(
                     onSelect = viewModel::setSeekSeconds,
                 )
             }
+            SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
 
             Spacer(Modifier.height(12.dp))
             Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)
@@ -1376,7 +1389,6 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
-    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
     val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
@@ -1391,6 +1403,7 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Ground,
     ) {
         Column(
             modifier = Modifier
@@ -1412,32 +1425,28 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // Primary actions as top-level pills.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Button(onClick = viewModel::scan, enabled = !scanning) {
+                Button(onClick = viewModel::scan, enabled = !scanning, modifier = Modifier.weight(1f)) {
                     Text(if (scanning) "Scanning…" else "Scan library")
                 }
-                ScanStatus(scanState = scanState, bookCount = bookCount)
+                FilledTonalButton(onClick = viewModel::refreshCoverArt, modifier = Modifier.weight(1f)) {
+                    Text("Refresh covers")
+                }
             }
-            Text(
-                "Quick scan — only re-reads changed folders, and fetches any missing cover art.",
-                color = Faint,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ScanStatus(scanState = scanState, bookCount = bookCount)
+                Spacer(Modifier.weight(1f))
                 TextButton(onClick = viewModel::fullScan, enabled = !scanning, contentPadding = PaddingValues(horizontal = 4.dp)) {
                     Text("Full re-scan")
                 }
-                TextButton(onClick = viewModel::refreshCoverArt, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    Text("Refresh cover art")
-                }
             }
             Text(
-                "Full re-scan rebuilds the library and re-fetches every cover; refresh only re-fetches artwork.",
+                "Scan re-reads changed folders and fetches missing art. Refresh re-fetches all covers. " +
+                    "Full re-scan rebuilds the whole library.",
                 color = Faint,
                 fontSize = 11.sp,
             )
@@ -1462,7 +1471,6 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
             SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
         }
     }
@@ -1508,6 +1516,7 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
             .fillMaxWidth()
             .padding(top = 8.dp)
             .clip(RoundedCornerShape(12.dp))
+            .background(if (lib.isCurrentRoot) AmberSoft else Surface1)
             .border(1.dp, if (lib.isCurrentRoot) Amber else Line, RoundedCornerShape(12.dp))
             .padding(12.dp),
     ) {
@@ -1555,6 +1564,7 @@ private fun SyncTierSelector(current: Int, tier3Available: Boolean, owner: Strin
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
+            .background(Surface1)
             .border(1.dp, Line, RoundedCornerShape(12.dp)),
     ) {
         TierOption(
@@ -1617,7 +1627,7 @@ private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = Parchment, fontSize = 14.sp)
-        Switch(checked = checked, onCheckedChange = onChange)
+        HomerSwitch(checked =checked, onCheckedChange = onChange)
     }
 }
 
@@ -1716,7 +1726,7 @@ private fun EditBookDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Mark as finished", fontSize = 14.sp)
-                    Switch(checked = finished, onCheckedChange = { finished = it })
+                    HomerSwitch(checked =finished, onCheckedChange = { finished = it })
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -1724,7 +1734,7 @@ private fun EditBookDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Hide from library", fontSize = 14.sp)
-                    Switch(checked = hidden, onCheckedChange = { hidden = it })
+                    HomerSwitch(checked =hidden, onCheckedChange = { hidden = it })
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

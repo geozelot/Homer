@@ -57,7 +57,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -82,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
+import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -328,7 +328,7 @@ private fun PlayerTopBar(
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text("Offline") },
-                    trailingIcon = { Switch(checked = offline, onCheckedChange = { onToggleOffline() }) },
+                    trailingIcon = { HomerSwitch(checked = offline, onCheckedChange = { onToggleOffline() }) },
                     onClick = { onToggleOffline() },
                 )
             }
