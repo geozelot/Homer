@@ -18,6 +18,7 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -80,6 +81,7 @@ class PlaybackConnection @Inject constructor(
     private val bookmarkMetaDao: BookmarkMetaDao,
     downloadDao: DownloadDao,
     private val homerSync: HomerSyncRepository,
+    localMirror: LocalMirror,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
@@ -102,7 +104,7 @@ class PlaybackConnection @Inject constructor(
         onChanged = ::pushState,
         onShake = ::extendSleepByPreference,
     )
-    private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, ::positionSnapshot)
+    private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, localMirror, ::positionSnapshot)
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
 
     private val listener = object : Player.Listener {

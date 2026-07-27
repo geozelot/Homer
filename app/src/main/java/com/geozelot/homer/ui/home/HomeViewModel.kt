@@ -24,6 +24,7 @@ import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
 import com.geozelot.homer.data.sync.HomerCatalogRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
@@ -141,6 +142,7 @@ class HomeViewModel @Inject constructor(
     private val discovery: LibraryDiscovery,
     private val coverCache: CoverCache,
     private val storageLocation: StorageLocation,
+    private val localMirror: LocalMirror,
     @ApplicationContext private val context: Context,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
@@ -515,9 +517,12 @@ class HomeViewModel @Inject constructor(
      * since their Uris pointed at the old area.
      */
     private suspend fun relocateStorage() {
-        downloadDao.deleteAll()
         bookDao.resetCoverArt()
         bookDao.clearCustomCovers()
+        // Adopt whatever the new folder already holds: import its progress mirror, and recompute
+        // download status against it (present → done without re-downloading, absent → cleared).
+        localMirror.import()
+        localMirror.adoptDownloads()
         libraryIndexManager.fetchMissingCovers()
     }
 

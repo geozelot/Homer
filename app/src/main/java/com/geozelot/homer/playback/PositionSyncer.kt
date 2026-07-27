@@ -5,6 +5,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
+import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -24,6 +25,7 @@ class PositionSyncer(
     private val scope: CoroutineScope,
     private val playbackStateDao: PlaybackStateDao,
     private val homerSync: HomerSyncRepository,
+    private val localMirror: LocalMirror,
     private val snapshot: () -> PositionSnapshot?,
 ) {
     private var syncJob: Job? = null
@@ -55,6 +57,8 @@ class PositionSyncer(
         syncJob?.cancel()
         syncJob = scope.launch {
             delay(SYNC_DEBOUNCE_MS)
+            // Local mirror first (cheap, offline-safe, all tiers), then the server manifest.
+            localMirror.export()
             homerSync.sync()
         }
     }
