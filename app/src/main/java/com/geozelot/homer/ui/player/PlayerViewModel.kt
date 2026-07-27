@@ -9,13 +9,14 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
-import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.download.DownloadManager
+import com.geozelot.homer.data.library.BookEditor
+import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.settings.PlaybackSettings
-import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
+import com.geozelot.homer.ui.components.EditableBook
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +51,7 @@ class PlayerViewModel @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
-    private val homerSync: HomerSyncRepository,
+    private val bookEditor: BookEditor,
     chapterDao: ChapterDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
@@ -165,6 +166,32 @@ class PlayerViewModel @Inject constructor(
         forced ?: (left != null && left <= 0L)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    private val bookEntity = bookId.flatMapLatest { id ->
+        if (id == null) flowOf(null) else bookDao.observeById(id)
+    }
+    private val override = bookId.flatMapLatest { id ->
+        if (id == null) flowOf(null) else bookOverrideDao.observeById(id)
+    }
+
+    /** The current book as an editable model (effective values applied) for the shared edit dialog. */
+    val editableBook: StateFlow<EditableBook?> =
+        combine(bookEntity, override, finished) { book, ov, fin ->
+            if (book == null) return@combine null
+            val eff = book.applyOverride(ov)
+            EditableBook(
+                id = book.id,
+                title = eff.title,
+                author = eff.author,
+                series = eff.series,
+                seriesIndex = eff.seriesIndex,
+                genre = eff.genre,
+                tags = ov?.tags?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
+                hidden = ov?.hidden ?: false,
+                finished = fin,
+                hasCustomCover = book.customCoverPath != null,
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun play(bookId: String) {
         this.bookId.value = bookId
         connection.playBook(bookId)
@@ -199,28 +226,43 @@ class PlayerViewModel @Inject constructor(
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
-    /** Forces the finished flag to the opposite of the current effective value, preserving other
-     *  override fields, and syncs the change out. */
+    /** Forces the finished flag to the opposite of the current effective value. */
     fun toggleFinished() {
         val id = bookId.value ?: return
         val target = !finished.value
+        viewModelScope.launch { bookEditor.setFinished(id, target) }
+    }
+
+    /** Saves metadata corrections for the current book from the shared edit dialog. */
+    fun saveOverride(
+        title: String,
+        author: String,
+        series: String,
+        seriesIndex: String,
+        genre: String,
+        tags: String,
+        hidden: Boolean,
+        finishedChange: Boolean?,
+    ) {
+        val id = bookId.value ?: return
         viewModelScope.launch {
-            val existing = bookOverrideDao.findById(id)
-            bookOverrideDao.upsert(
-                existing?.copy(finished = target, updatedAt = System.currentTimeMillis())
-                    ?: BookOverrideEntity(
-                        bookId = id,
-                        title = null,
-                        author = null,
-                        series = null,
-                        seriesIndex = null,
-                        finished = target,
-                        hidden = false,
-                        updatedAt = System.currentTimeMillis(),
-                    ),
-            )
-            homerSync.sync()
+            bookEditor.saveOverride(id, title, author, series, seriesIndex, genre, tags, hidden, finishedChange)
         }
+    }
+
+    fun clearOverride() {
+        val id = bookId.value ?: return
+        viewModelScope.launch { bookEditor.clearOverride(id) }
+    }
+
+    fun setCustomCover(uri: android.net.Uri) {
+        val id = bookId.value ?: return
+        viewModelScope.launch { bookEditor.setCustomCover(id, uri) }
+    }
+
+    fun clearCustomCover() {
+        val id = bookId.value ?: return
+        viewModelScope.launch { bookEditor.clearCustomCover(id) }
     }
 
     fun download() = bookId.value?.let(downloadManager::download)

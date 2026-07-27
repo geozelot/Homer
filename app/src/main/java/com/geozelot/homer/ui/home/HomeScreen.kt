@@ -102,6 +102,8 @@ import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.components.EditBookDialog
+import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -238,7 +240,7 @@ fun HomeScreen(
 
     editing?.let { book ->
         EditBookDialog(
-            book = book,
+            book = book.toEditable(),
             onSave = { title, author, series, index, genre, tags, hidden, finishedChange ->
                 viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, finishedChange)
                 editing = null
@@ -264,6 +266,20 @@ fun HomeScreen(
         )
     }
 }
+
+/** Maps a library row to the shared edit dialog's minimal model (effective values). */
+private fun BookListItem.toEditable() = EditableBook(
+    id = id,
+    title = title,
+    author = author,
+    series = series,
+    seriesIndex = seriesIndex,
+    genre = genre,
+    tags = tags,
+    hidden = hidden,
+    finished = finished,
+    hasCustomCover = hasCustomCover,
+)
 
 /** Callbacks a card/row needs for its context menu, bundled to keep signatures small. */
 private class BookActions(
@@ -1659,127 +1675,6 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
         is ScanState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         ScanState.Idle -> if (bookCount > 0) Text("$bookCount books", color = Muted, fontSize = 12.sp)
     }
-}
-
-// ── Edit dialog (unchanged behaviour) ─────────────────────────────────────────
-
-@Composable
-private fun EditBookDialog(
-    book: BookListItem,
-    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?) -> Unit,
-    onReset: () -> Unit,
-    onPickCover: (Uri) -> Unit,
-    onClearCover: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val pickCover = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri -> if (uri != null) onPickCover(uri) }
-    var title by remember { mutableStateOf(book.title) }
-    var author by remember { mutableStateOf(book.author.orEmpty()) }
-    var series by remember { mutableStateOf(book.series.orEmpty()) }
-    var index by remember { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
-    var genre by remember { mutableStateOf(book.genre.orEmpty()) }
-    var tags by remember { mutableStateOf(book.tags.joinToString(", ")) }
-    var hidden by remember { mutableStateOf(book.hidden) }
-    // Tri-state finished: the switch starts at the effective value; only a change from that value
-    // forces the flag (null preserves the existing auto/forced state on save).
-    val initialFinished = book.finished
-    var finished by remember { mutableStateOf(initialFinished) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit book") },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = author,
-                    onValueChange = { author = it },
-                    label = { Text("Author") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                OutlinedTextField(
-                    value = series,
-                    onValueChange = { series = it },
-                    label = { Text("Series") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                OutlinedTextField(
-                    value = index,
-                    onValueChange = { index = it },
-                    label = { Text("Series #") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                OutlinedTextField(
-                    value = genre,
-                    onValueChange = { genre = it },
-                    label = { Text("Genre") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                OutlinedTextField(
-                    value = tags,
-                    onValueChange = { tags = it },
-                    label = { Text("Tags") },
-                    placeholder = { Text("comma, separated") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Mark as finished", fontSize = 14.sp)
-                    HomerSwitch(checked =finished, onCheckedChange = { finished = it })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Hide from library", fontSize = 14.sp)
-                    HomerSwitch(checked =hidden, onCheckedChange = { hidden = it })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = {
-                        pickCover.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    }) { Text(if (book.hasCustomCover) "Change cover" else "Choose cover") }
-                    if (book.hasCustomCover) {
-                        TextButton(onClick = onClearCover) { Text("Clear cover") }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val finishedChange = if (finished != initialFinished) finished else null
-                onSave(title, author, series, index, genre, tags, hidden, finishedChange)
-            }) { Text("Save") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onReset) { Text("Reset") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
 }
 
 /** Edits the series-level fields (name + author) and pushes them to every book in the series. */

@@ -1,6 +1,5 @@
 package com.geozelot.homer.ui.home
 
-import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,17 +10,16 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookEntity
-import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
+import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
-import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
@@ -32,8 +30,6 @@ import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -138,13 +134,12 @@ class HomeViewModel @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
     private val bookDao: BookDao,
+    private val bookEditor: BookEditor,
     private val connection: PlaybackConnection,
     private val catalog: HomerCatalogRepository,
     private val discovery: LibraryDiscovery,
-    private val coverCache: CoverCache,
     private val storageLocation: StorageLocation,
     private val localMirror: LocalMirror,
-    @ApplicationContext private val context: Context,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
 ) : ViewModel() {
@@ -452,75 +447,21 @@ class HomeViewModel @Inject constructor(
         finishedChange: Boolean?,
     ) {
         viewModelScope.launch {
-            val finished = finishedChange ?: bookOverrideDao.findById(bookId)?.finished
-            val tagList = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }
-            bookOverrideDao.upsert(
-                BookOverrideEntity(
-                    bookId = bookId,
-                    title = title.trim().ifBlank { null },
-                    author = author.trim().ifBlank { null },
-                    series = series.trim().ifBlank { null },
-                    seriesIndex = seriesIndex.trim().toIntOrNull(),
-                    genre = genre.trim().ifBlank { null },
-                    tags = tagList.takeIf { it.isNotEmpty() }?.joinToString("\n"),
-                    finished = finished,
-                    hidden = hidden,
-                    updatedAt = System.currentTimeMillis(),
-                ),
-            )
-            homerSync.sync()
+            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, finishedChange)
         }
     }
 
     /**
-     * Applies a series-level edit (name + author) to every member book, preserving each book's
-     * own title/index/genre/tags/finished/hidden. Blank reverts that field to detection. Members
-     * re-group under the new series name; the change syncs like any override.
+     * Applies a series-level edit (name + author) to every member book (see [BookEditor]).
+     * Members re-group under the new series name; the change syncs like any override.
      */
     fun saveSeriesOverride(bookIds: List<String>, series: String, author: String) {
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val s = series.trim().ifBlank { null }
-            val a = author.trim().ifBlank { null }
-            for (id in bookIds) {
-                val existing = bookOverrideDao.findById(id)
-                bookOverrideDao.upsert(
-                    existing?.copy(series = s, author = a, updatedAt = now)
-                        ?: BookOverrideEntity(
-                            bookId = id,
-                            title = null,
-                            author = a,
-                            series = s,
-                            seriesIndex = null,
-                            hidden = false,
-                            updatedAt = now,
-                        ),
-                )
-            }
-            homerSync.sync()
-        }
+        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author) }
     }
 
-    /**
-     * Reverts a book to pure detection. Stored as an all-null "cleared" override (not a
-     * row delete) with a fresh timestamp, so the reset propagates to other devices via
-     * last-write-wins instead of being resurrected on the next pull.
-     */
+    /** Reverts a book to pure detection (see [BookEditor.clearOverride]). */
     fun clearOverride(bookId: String) {
-        viewModelScope.launch {
-            bookOverrideDao.upsert(
-                BookOverrideEntity(
-                    bookId = bookId,
-                    title = null,
-                    author = null,
-                    series = null,
-                    seriesIndex = null,
-                    hidden = false,
-                    updatedAt = System.currentTimeMillis(),
-                ),
-            )
-            homerSync.sync()
-        }
+        viewModelScope.launch { bookEditor.clearOverride(bookId) }
     }
 
     fun setGridView(grid: Boolean) {
@@ -529,18 +470,12 @@ class HomeViewModel @Inject constructor(
 
     /** Copies a user-picked image into the cover cache and sets it as the book's custom cover. */
     fun setCustomCover(bookId: String, uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val bytes = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            }.getOrNull() ?: return@launch
-            val path = coverCache.writeCustom(bookId, bytes, System.currentTimeMillis())
-            bookDao.updateCustomCover(bookId, path)
-        }
+        viewModelScope.launch { bookEditor.setCustomCover(bookId, uri) }
     }
 
     /** Clears a custom cover, reverting to detected/extracted/online art. */
     fun clearCustomCover(bookId: String) {
-        viewModelScope.launch { bookDao.updateCustomCover(bookId, null) }
+        viewModelScope.launch { bookEditor.clearCustomCover(bookId) }
     }
 
     /** Points storage at a user-picked SAF folder (survives uninstall) and rebuilds data there. */
@@ -595,22 +530,7 @@ class HomeViewModel @Inject constructor(
 
     /** Quick hide/show from the context menu, preserving any existing metadata override. */
     fun setHidden(bookId: String, hidden: Boolean) {
-        viewModelScope.launch {
-            val existing = bookOverrideDao.findById(bookId)
-            bookOverrideDao.upsert(
-                existing?.copy(hidden = hidden, updatedAt = System.currentTimeMillis())
-                    ?: BookOverrideEntity(
-                        bookId = bookId,
-                        title = null,
-                        author = null,
-                        series = null,
-                        seriesIndex = null,
-                        hidden = hidden,
-                        updatedAt = System.currentTimeMillis(),
-                    ),
-            )
-            homerSync.sync()
-        }
+        viewModelScope.launch { bookEditor.setHidden(bookId, hidden) }
     }
 
     /**
@@ -618,23 +538,7 @@ class HomeViewModel @Inject constructor(
      * [finished] = true forces finished, false forces not-finished, null reverts to auto.
      */
     fun setFinished(bookId: String, finished: Boolean?) {
-        viewModelScope.launch {
-            val existing = bookOverrideDao.findById(bookId)
-            bookOverrideDao.upsert(
-                existing?.copy(finished = finished, updatedAt = System.currentTimeMillis())
-                    ?: BookOverrideEntity(
-                        bookId = bookId,
-                        title = null,
-                        author = null,
-                        series = null,
-                        seriesIndex = null,
-                        finished = finished,
-                        hidden = false,
-                        updatedAt = System.currentTimeMillis(),
-                    ),
-            )
-            homerSync.sync()
-        }
+        viewModelScope.launch { bookEditor.setFinished(bookId, finished) }
     }
 
     /** Toggle play/pause on the currently-loaded book (docked mini-player). */

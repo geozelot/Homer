@@ -84,6 +84,7 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -116,10 +117,12 @@ fun PlayerScreen(
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
+    val editableBook by viewModel.editableBook.collectAsStateWithLifecycle()
 
     var showSleepDialog by remember { mutableStateOf(false) }
     var showBookmarksDialog by remember { mutableStateOf(false) }
     var showChaptersDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -145,9 +148,11 @@ fun PlayerScreen(
         PlayerTopBar(
             finished = finished,
             offline = offline,
+            canEdit = editableBook != null,
             onBack = onBack,
             onToggleFinished = viewModel::toggleFinished,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
+            onEdit = { showEditDialog = true },
         )
 
         // Artwork centered in the flexible space above the controls, sized to the largest
@@ -281,6 +286,25 @@ fun PlayerScreen(
         )
     }
 
+    if (showEditDialog) {
+        editableBook?.let { editable ->
+            EditBookDialog(
+                book = editable,
+                onSave = { title, author, series, index, genre, tags, hidden, finishedChange ->
+                    viewModel.saveOverride(title, author, series, index, genre, tags, hidden, finishedChange)
+                    showEditDialog = false
+                },
+                onReset = {
+                    viewModel.clearOverride()
+                    showEditDialog = false
+                },
+                onPickCover = viewModel::setCustomCover,
+                onClearCover = viewModel::clearCustomCover,
+                onDismiss = { showEditDialog = false },
+            )
+        }
+    }
+
     if (showSleepDialog) {
         SleepSettingsDialog(
             isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
@@ -303,9 +327,11 @@ fun PlayerScreen(
 private fun PlayerTopBar(
     finished: Boolean,
     offline: Boolean,
+    canEdit: Boolean,
     onBack: () -> Unit,
     onToggleFinished: () -> Unit,
     onToggleOffline: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -331,6 +357,15 @@ private fun PlayerTopBar(
                         overflowOpen = false
                     },
                 )
+                if (canEdit) {
+                    DropdownMenuItem(
+                        text = { Text("Edit book") },
+                        onClick = {
+                            onEdit()
+                            overflowOpen = false
+                        },
+                    )
+                }
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text("Offline") },
