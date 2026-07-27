@@ -89,6 +89,11 @@ class PlaybackConnection @Inject constructor(
     private var currentCoverModel: Any? = null
     private var currentOffline = false
 
+    /** Measured per-chapter durations (mediaId → ms) for the loaded book, so the scrubber and
+     *  time-left reflect the saved position before playback prepares the player. */
+    @Volatile
+    private var currentDurations: Map<String, Long> = emptyMap()
+
     /** True while [playBook] is switching to a new book: the state listener must not overwrite
      *  the optimistic new-book state with the still-outgoing controller's state mid-load. */
     @Volatile
@@ -149,6 +154,7 @@ class PlaybackConnection @Inject constructor(
             currentBookId = bookId
             currentCoverModel = playlist?.coverModel
             currentOffline = playlist?.offline ?: false
+            currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
             pushState()
             downloadReloadWatcher.watch(
                 bookId = bookId,
@@ -194,6 +200,7 @@ class PlaybackConnection @Inject constructor(
             currentBookId = bookId
             currentCoverModel = playlist.coverModel
             currentOffline = playlist.offline
+            currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
             val saved = playbackStateDao.findByBookId(bookId)
             val startIndex = saved
                 ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
@@ -206,6 +213,7 @@ class PlaybackConnection @Inject constructor(
                 chapterIndex = startIndex,
                 chapterCount = playlist.items.size,
                 positionMs = saved?.positionMs ?: 0L,
+                durationMs = currentDurations[playlist.items.getOrNull(startIndex)?.mediaId] ?: 0L,
                 playbackSpeed = _state.value.playbackSpeed,
                 sleepRemainingMs = sleepTimer.remainingMs(),
                 sleepEndOfChapter = sleepTimer.endOfChapter,
@@ -469,7 +477,9 @@ class PlaybackConnection @Inject constructor(
             chapterIndex = c.currentMediaItemIndex,
             chapterCount = c.mediaItemCount,
             positionMs = c.currentPosition.coerceAtLeast(0L),
-            durationMs = c.duration.coerceAtLeast(0L),
+            // Before playback prepares the player, c.duration is unknown — fall back to the
+            // measured chapter duration so the scrubber shows real progress on a resumed book.
+            durationMs = c.duration.takeIf { it > 0 } ?: (currentDurations[c.currentMediaItem?.mediaId] ?: 0L),
             playbackSpeed = c.playbackParameters.speed,
             sleepRemainingMs = sleepTimer.remainingMs(),
             sleepEndOfChapter = sleepTimer.endOfChapter,
