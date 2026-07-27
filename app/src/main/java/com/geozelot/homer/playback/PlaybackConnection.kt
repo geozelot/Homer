@@ -139,7 +139,7 @@ class PlaybackConnection @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "eager connect failed", e)
                 return@launch
-            }
+            } ?: return@launch
             if (currentBookId != null || c.mediaItemCount == 0) return@launch
             val mediaId = c.currentMediaItem?.mediaId ?: return@launch
             val bookId = audioFileDao.findBookIdForFile(mediaId) ?: return@launch
@@ -163,6 +163,9 @@ class PlaybackConnection @Inject constructor(
                 awaitController()
             } catch (e: Exception) {
                 Log.w(TAG, "cannot connect media controller", e)
+                return@launch
+            } ?: run {
+                Log.w(TAG, "media controller unavailable (timed out)")
                 return@launch
             }
             // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
@@ -379,9 +382,16 @@ class PlaybackConnection @Inject constructor(
         c.seekTo(index, positionMs)
     }
 
-    private suspend fun awaitController(): MediaController {
+    /**
+     * Connects (or reuses) the [MediaController]. Time-boxed: if [PlaybackService] was killed
+     * during a long idle and the async connect never completes, this returns null instead of
+     * suspending the caller forever (which would leave transport controls dead). The pending
+     * connect future is cancelled on timeout via [suspendCancellableCoroutine]'s cancellation.
+     */
+    private suspend fun awaitController(): MediaController? {
         controller?.let { return it }
-        return suspendCancellableCoroutine { cont ->
+        return withTimeoutOrNull(CONTROLLER_CONNECT_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
             val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
             val future = MediaController.Builder(context, token)
                 .setListener(object : MediaController.Listener {
@@ -410,6 +420,7 @@ class PlaybackConnection @Inject constructor(
                     if (cont.isActive) cont.resumeWithException(e)
                 }
             }, ContextCompat.getMainExecutor(context))
+            }
         }
     }
 
@@ -462,6 +473,7 @@ class PlaybackConnection @Inject constructor(
     private companion object {
         const val TAG = "HomerPlay"
         const val RESUME_SYNC_TIMEOUT_MS = 5_000L
+        const val CONTROLLER_CONNECT_TIMEOUT_MS = 10_000L
         const val POSITION_POLL_MS = 500L
         const val DEFAULT_EXTEND_MS = 15 * 60_000L
     }

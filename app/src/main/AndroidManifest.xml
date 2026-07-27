@@ -4,6 +4,8 @@
 
     <!-- WebDAV over HTTPS. Cleartext is disabled below (locked decision). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Read connectivity so sync can fail fast when offline instead of stalling. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Background audio playback + its media notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

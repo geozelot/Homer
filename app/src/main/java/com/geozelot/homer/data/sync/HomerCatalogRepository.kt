@@ -9,6 +9,7 @@ import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.CoverCache
+import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -37,20 +38,44 @@ class HomerCatalogRepository @Inject constructor(
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
     private val coverCache: CoverCache,
+    private val networkMonitor: NetworkMonitor,
     private val json: Json,
 ) {
-    /** True if a shared catalog exists at the library root (⇒ Tier 3 is available here). */
-    suspend fun exists(): Boolean =
-        credentialStore.credentials.value != null && webDavClient.getText(catalogPath()) != null
+    /**
+     * True if a shared catalog exists at the library root (⇒ Tier 3 is available here).
+     * Best-effort like the rest of the repo: offline or on any network error it returns false
+     * rather than throwing (this is called from a fire-and-forget init coroutine — an escaped
+     * exception there crashes the app).
+     */
+    suspend fun exists(): Boolean {
+        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return false
+        return try {
+            webDavClient.getText(catalogPath()) != null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "catalog exists() check failed", e)
+            false
+        }
+    }
 
     /**
      * Whether this user may CREATE the shared catalog — the Nextcloud folder owner, or
      * (when ownership can't be determined) anyone, claim-based. Not consulted once it exists.
+     * Best-effort: any failure resolves to false.
      */
     suspend fun isOwner(): Boolean {
         val me = credentialStore.credentials.value?.loginName ?: return false
-        val owner = webDavClient.fetchOwnerId(librarySettings.libraryRoot.first())
-        return owner == null || owner.equals(me, ignoreCase = true)
+        if (!networkMonitor.isOnline()) return false
+        return try {
+            val owner = webDavClient.fetchOwnerId(librarySettings.libraryRoot.first())
+            owner == null || owner.equals(me, ignoreCase = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "catalog isOwner() check failed", e)
+            false
+        }
     }
 
     /** Publishes only if allowed: the catalog already exists (open updates) or we're the owner. */
@@ -60,7 +85,7 @@ class HomerCatalogRepository @Inject constructor(
 
     /** Merges the local library into the shared catalog and pushes it. */
     suspend fun publish() {
-        if (credentialStore.credentials.value == null) return
+        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return
         try {
             val local = buildLocalCatalog()
             val path = catalogPath()
@@ -99,7 +124,7 @@ class HomerCatalogRepository @Inject constructor(
 
     /** Pulls the shared catalog into Room (books + files), newest-wins per book. */
     suspend fun consume(): Boolean {
-        if (credentialStore.credentials.value == null) return false
+        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return false
         return try {
             val body = webDavClient.getText(catalogPath())?.content?.takeIf { it.isNotBlank() } ?: return false
             val catalog = json.decodeFromString<HomerCatalog>(body)

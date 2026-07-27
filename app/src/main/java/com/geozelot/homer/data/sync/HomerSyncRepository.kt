@@ -10,6 +10,7 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
+import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -46,6 +47,7 @@ class HomerSyncRepository @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
+    private val networkMonitor: NetworkMonitor,
     private val json: Json,
 ) {
     private val mutex = Mutex()
@@ -61,6 +63,12 @@ class HomerSyncRepository @Inject constructor(
         // Tier 1 = on-device only: never touch the .homer manifest.
         if (librarySettings.syncTier.first() < TIER_PROGRESS) {
             Log.i(TAG, "sync skipped: on-device-only tier")
+            return
+        }
+        // Offline: don't burn the connect timeout on a doomed round-trip. Local Room writes have
+        // already happened; the next trigger (open, pause, chapter, background) syncs once online.
+        if (!networkMonitor.isOnline()) {
+            Log.i(TAG, "sync skipped: offline")
             return
         }
         mutex.withLock {
