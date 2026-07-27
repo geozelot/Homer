@@ -34,8 +34,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
@@ -87,7 +85,6 @@ import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
-import com.geozelot.homer.ui.theme.Sage
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface2
@@ -134,12 +131,15 @@ fun PlayerScreen(
             .navigationBarsPadding()
             .padding(horizontal = 22.dp),
     ) {
+        val offline = download?.status == DownloadStatus.DONE
         PlayerTopBar(
             skipSilence = skipSilence,
             finished = finished,
+            offline = offline,
             onBack = onBack,
             onToggleSkipSilence = viewModel::setSkipSilence,
             onToggleFinished = viewModel::toggleFinished,
+            onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
         )
 
         // Artwork centered in the flexible space above the controls, sized to the largest
@@ -181,52 +181,45 @@ fun PlayerScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            // Chapter line. When a chapter list is available (multi-file files, or a single file's
-            // embedded marks) it reflects that list and is tappable to open the picker.
+            // Chapter line (info). A chapter list is available for multi-file books and single
+            // files with embedded marks; the picker itself is the button left of the scrubber.
             val hasPicker = chapters.isNotEmpty()
             val chapterCount = if (hasPicker) chapters.size else state.chapterCount
             val chapterNumber =
                 if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
                 else state.chapterIndex + 1
             if (chapterCount > 0) {
-                Row(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .then(if (hasPicker) Modifier.clickable { showChaptersDialog = true } else Modifier),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = buildString {
-                            append("Chapter $chapterNumber of $chapterCount")
-                            timeLeftMs?.let {
-                                append(" · ")
-                                append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
-                            }
-                        },
-                        color = Faint,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                    )
-                    if (hasPicker) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = "Chapters",
-                            tint = Faint,
-                            modifier = Modifier.padding(start = 5.dp).size(15.dp),
-                        )
-                    }
-                }
+                Text(
+                    text = buildString {
+                        append("Chapter $chapterNumber of $chapterCount")
+                        timeLeftMs?.let {
+                            append(" · ")
+                            append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
+                        }
+                    },
+                    color = Faint,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
-            Scrubber(
-                positionMs = state.positionMs,
-                durationMs = state.durationMs,
-                onSeek = viewModel::seekTo,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (hasPicker) {
+                    IconButton(onClick = { showChaptersDialog = true }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters", tint = Muted)
+                    }
+                }
+                Scrubber(
+                    positionMs = state.positionMs,
+                    durationMs = state.durationMs,
+                    onSeek = viewModel::seekTo,
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
             Transport(
                 isPlaying = state.isPlaying,
@@ -240,15 +233,12 @@ fun PlayerScreen(
                 speed = state.playbackSpeed,
                 sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
                 sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
-                downloadStatus = download?.status,
                 onSpeed = viewModel::setSpeed,
                 onSleepMinutes = viewModel::startSleepTimer,
                 onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
                 onSleepOff = viewModel::cancelSleepTimer,
                 onSleepSettings = { showSleepDialog = true },
                 onMark = { showBookmarksDialog = true },
-                onDownload = viewModel::download,
-                onRemoveDownload = viewModel::deleteDownload,
             )
         }
     }
@@ -299,9 +289,11 @@ fun PlayerScreen(
 private fun PlayerTopBar(
     skipSilence: Boolean,
     finished: Boolean,
+    offline: Boolean,
     onBack: () -> Unit,
     onToggleSkipSilence: (Boolean) -> Unit,
     onToggleFinished: () -> Unit,
+    onToggleOffline: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -320,6 +312,11 @@ private fun PlayerTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Muted)
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Offline") },
+                    trailingIcon = { Switch(checked = offline, onCheckedChange = { onToggleOffline() }) },
+                    onClick = { onToggleOffline() },
+                )
                 DropdownMenuItem(
                     text = { Text("Skip silence") },
                     trailingIcon = {
@@ -425,22 +422,19 @@ private fun Transport(
     }
 }
 
-// ── Tool row (speed / sleep / mark / save) ────────────────────────────────────
+// ── Tool row (speed / sleep / mark) ───────────────────────────────────────────
 
 @Composable
 private fun ToolRow(
     speed: Float,
     sleepLabel: String,
     sleepActive: Boolean,
-    downloadStatus: String?,
     onSpeed: (Float) -> Unit,
     onSleepMinutes: (Long) -> Unit,
     onSleepEndOfChapter: () -> Unit,
     onSleepOff: () -> Unit,
     onSleepSettings: () -> Unit,
     onMark: () -> Unit,
-    onDownload: () -> Unit,
-    onRemoveDownload: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -513,22 +507,6 @@ private fun ToolRow(
             label = "Mark",
             active = false,
             onClick = onMark,
-        )
-
-        // Save — offline download.
-        val downloaded = downloadStatus == DownloadStatus.DONE
-        val downloading = downloadStatus == DownloadStatus.DOWNLOADING
-        ToolButton(
-            icon = if (downloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
-            label = when {
-                downloaded -> "Saved"
-                downloading -> "Saving…"
-                downloadStatus == DownloadStatus.FAILED -> "Retry"
-                else -> "Save"
-            },
-            active = downloaded,
-            activeColor = Sage,
-            onClick = { if (downloaded) onRemoveDownload() else onDownload() },
         )
     }
 }

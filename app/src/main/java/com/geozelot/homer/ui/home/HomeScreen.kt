@@ -1101,19 +1101,23 @@ private fun BookMenu(
             leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
             onClick = onDismiss, // tapping the card already opens the player
         )
-        if (book.isDownloaded) {
-            DropdownMenuItem(
-                text = { Text("Remove download") },
-                leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Muted) },
-                onClick = { actions.onRemove(book.id); onDismiss() },
-            )
-        } else {
-            DropdownMenuItem(
-                text = { Text("Download") },
-                leadingIcon = { Icon(Icons.Filled.Download, null, tint = Muted) },
-                onClick = { actions.onDownload(book.id); onDismiss() },
-            )
-        }
+        DropdownMenuItem(
+            text = { Text("Offline") },
+            leadingIcon = { Icon(Icons.Filled.Download, null, tint = if (book.isDownloaded) Sage else Muted) },
+            trailingIcon = {
+                Switch(
+                    checked = book.isDownloaded,
+                    onCheckedChange = {
+                        if (book.isDownloaded) actions.onRemove(book.id) else actions.onDownload(book.id)
+                        onDismiss()
+                    },
+                )
+            },
+            onClick = {
+                if (book.isDownloaded) actions.onRemove(book.id) else actions.onDownload(book.id)
+                onDismiss()
+            },
+        )
         DropdownMenuItem(
             text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
             leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
