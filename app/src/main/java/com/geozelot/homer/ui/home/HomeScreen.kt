@@ -122,6 +122,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val libraryLoaded by viewModel.libraryLoaded.collectAsStateWithLifecycle()
     val continueShelf by viewModel.continueShelf.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
@@ -160,14 +161,19 @@ fun HomeScreen(
         )
 
         if (entries.isEmpty()) {
-            if (searching && searchQuery.isNotBlank()) {
-                EmptyResults(modifier = Modifier.weight(1f))
-            } else {
-                EmptyLibrary(
-                    scanning = scanState is ScanState.Scanning,
-                    onOpenSettings = { showSettings = true },
-                    modifier = Modifier.weight(1f),
-                )
+            when {
+                // Room hasn't delivered yet (or a scan is running): show a discovery phase rather
+                // than flashing "your shelf is empty" on every launch.
+                !libraryLoaded || scanState is ScanState.Scanning ->
+                    LibraryLoading(scanState = scanState, modifier = Modifier.weight(1f))
+                searching && searchQuery.isNotBlank() ->
+                    EmptyResults(modifier = Modifier.weight(1f))
+                else ->
+                    EmptyLibrary(
+                        scanning = false,
+                        onOpenSettings = { showSettings = true },
+                        modifier = Modifier.weight(1f),
+                    )
             }
         } else {
             LazyVerticalGrid(
@@ -1099,6 +1105,27 @@ private fun BookMenu(
 }
 
 // ── Empty state ──────────────────────────────────────────────────────────────
+
+/**
+ * Brief discovery phase shown while the library is being read from the database (or scanned), so
+ * the empty-shelf screen never flashes on a launch that actually has books.
+ */
+@Composable
+private fun LibraryLoading(scanState: ScanState, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator(color = Amber)
+        Spacer(Modifier.height(16.dp))
+        val label = when (val s = scanState) {
+            is ScanState.Scanning -> "Scanning your library… ${s.directoriesVisited} folders · ${s.booksFound} books"
+            else -> "Opening your library…"
+        }
+        Text(label, color = Muted, fontSize = 14.sp)
+    }
+}
 
 @Composable
 private fun EmptyResults(modifier: Modifier = Modifier) {

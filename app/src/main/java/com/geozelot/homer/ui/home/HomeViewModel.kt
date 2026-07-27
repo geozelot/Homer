@@ -286,6 +286,16 @@ class HomeViewModel @Inject constructor(
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /**
+     * False until Room has delivered the book list at least once. Derived from the raw Room flow
+     * (not the seeded [books] StateFlow, whose initial empty value is indistinguishable from a
+     * genuinely empty library), so the UI can show a brief "opening library" phase instead of
+     * flashing the empty-shelf screen on every launch.
+     */
+    val libraryLoaded: StateFlow<Boolean> = libraryRepository.books
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val scanState: StateFlow<ScanState> = libraryRepository.scanState
 
     private val _libraryRoot = MutableStateFlow("")
