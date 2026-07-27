@@ -1,26 +1,29 @@
 package com.geozelot.homer.data.download
 
+import android.net.Uri
 import com.geozelot.homer.data.storage.StorageLocation
-import java.io.File
+import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Where offline audio lives: under the app's [StorageLocation] `downloads/` root. Files mirror
+ * Where offline audio lives: under the app's [StorageLocation] `downloads/` area. Files mirror
  * the server layout, so a book's files all sit beneath `downloads/<bookId>` (bookId is the book
- * folder path).
+ * folder path). Backend-agnostic (plain files or a SAF tree) via [StorageLocation.area].
  */
 @Singleton
 class DownloadStorage @Inject constructor(
-    storageLocation: StorageLocation,
+    private val storageLocation: StorageLocation,
 ) {
-    private val root = storageLocation.downloadsDir
+    private fun path(relativePath: String) = "downloads/$relativePath"
 
-    /** Local destination for a file given its library-relative path. */
-    fun fileFor(relativePath: String): File = File(root, relativePath)
+    /** Streams a file into place (atomically where the backend allows); returns its playable Uri. */
+    suspend fun writeStream(relativePath: String, block: (OutputStream) -> Unit): Uri =
+        storageLocation.area().writeStream(path(relativePath), block)
+
+    /** Playable Uri of a downloaded file, or null if it isn't present. */
+    suspend fun uri(relativePath: String): Uri? = storageLocation.area().uri(path(relativePath))
 
     /** Removes all downloaded files for a book. */
-    fun deleteBook(bookId: String) {
-        File(root, bookId).deleteRecursively()
-    }
+    suspend fun deleteBook(bookId: String) = storageLocation.area().delete(path(bookId))
 }

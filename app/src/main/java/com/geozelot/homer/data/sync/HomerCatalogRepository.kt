@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -204,8 +203,7 @@ class HomerCatalogRepository @Inject constructor(
         for ((id, cb) in local.books) {
             if (!cb.hasCachedCover) continue
             if (remote?.books?.get(id)?.hasCachedCover == true) continue // already in the shared cache
-            val path = bookDao.findById(id)?.localCoverPath ?: continue
-            val bytes = runCatching { File(path).readBytes() }.getOrNull() ?: continue
+            val bytes = coverCache.readBytes(id) ?: continue
             try {
                 if (!dirEnsured) { webDavClient.mkcol(coversDir); dirEnsured = true }
                 webDavClient.putBytes("$coversDir/${coverCache.coverName(id)}", bytes)

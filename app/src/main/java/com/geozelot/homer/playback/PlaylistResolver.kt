@@ -45,20 +45,25 @@ class PlaylistResolver @Inject constructor(
 
         val libraryRoot = librarySettings.libraryRoot.first()
         val coverModel = BookCover.model(book, credentials, webDavClient, libraryRoot)
-        // Local cached cover as a file:// URI so the media notification shows it on
-        // every chapter (the notification's loader can't authenticate remote WebDAV).
-        val artworkUri = book.localCoverPath?.let { Uri.fromFile(java.io.File(it)) }
+        // Local cached cover (custom preferred) as a file://|content:// URI so the media
+        // notification shows it on every chapter (its loader can't authenticate remote WebDAV).
+        val artworkUri = (book.customCoverPath ?: book.localCoverPath)?.let { value ->
+            if (value.startsWith("content://") || value.startsWith("file://")) {
+                Uri.parse(value)
+            } else {
+                Uri.fromFile(java.io.File(value)) // legacy pre-relocation path
+            }
+        }
 
         // Play from local files when the book is fully downloaded; otherwise stream.
         val offline = downloadDao.findByBookId(bookId)?.status == DownloadStatus.DONE
 
         val items = files.map { file ->
-            val localFile = downloadStorage.fileFor(file.relativePath)
-            val url = if (offline && localFile.exists()) {
-                Uri.fromFile(localFile).toString()
-            } else {
-                webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
-            }
+            // Play the downloaded copy when present (file:// or content:// depending on the
+            // storage backend); otherwise stream. `map` is inline, so the suspend uri() is fine.
+            val localUri = if (offline) downloadStorage.uri(file.relativePath) else null
+            val url = localUri?.toString()
+                ?: webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
             val chapterTitle = file.fileName.substringBeforeLast('.')
             MediaItem.Builder()
                 .setMediaId(file.relativePath)

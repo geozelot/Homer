@@ -26,7 +26,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
 import java.io.IOException
 
 /**
@@ -70,19 +69,14 @@ class DownloadWorker @AssistedInject constructor(
                 // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
                 if (isStopped) return Result.failure()
                 setForegroundSafely(foregroundInfo(notifId, title, index, files.size))
-                val dest = storage.fileFor(file.relativePath)
-                dest.parentFile?.mkdirs()
-                // Write to a .part file and move into place only after a complete write, so a
-                // truncated file can never be mistaken for a finished download.
-                val part = File(dest.parentFile, dest.name + ".part")
+                // The storage area streams into place (atomically where the backend supports it),
+                // so a truncated write is never mistaken for a finished download.
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, libraryRoot, file.relativePath)).build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
                     val body = response.body ?: throw IOException("empty body for ${file.relativePath}")
-                    body.byteStream().use { input -> part.outputStream().use { output -> input.copyTo(output) } }
+                    storage.writeStream(file.relativePath) { output -> body.byteStream().use { it.copyTo(output) } }
                 }
-                if (dest.exists()) dest.delete()
-                if (!part.renameTo(dest)) throw IOException("could not finalize ${file.relativePath}")
                 if (isStopped) return Result.failure()
                 downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, index + 1, files.size, now()))
             }
