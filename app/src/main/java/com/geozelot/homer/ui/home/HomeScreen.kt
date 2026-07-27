@@ -47,7 +47,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -162,6 +162,7 @@ fun HomeScreen(
                 searching = false
                 viewModel.setSearchQuery("")
             },
+            onOpenLibrarySync = { showLibrarySync = true },
             onSettings = { showAppSettings = true },
         )
 
@@ -221,10 +222,6 @@ fun HomeScreen(
     if (showAppSettings) {
         AppSettingsSheet(
             viewModel = viewModel,
-            onOpenLibrarySync = {
-                showAppSettings = false
-                showLibrarySync = true
-            },
             onDismiss = { showAppSettings = false },
         )
     }
@@ -268,6 +265,7 @@ private fun TopBar(
     onQueryChange: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
+    onOpenLibrarySync: () -> Unit,
     onSettings: () -> Unit,
 ) {
     Row(
@@ -290,6 +288,9 @@ private fun TopBar(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onOpenSearch) {
                     Icon(Icons.Filled.Search, contentDescription = "Search", tint = Muted)
+                }
+                IconButton(onClick = onOpenLibrarySync) {
+                    Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = "Library & Sync", tint = Muted)
                 }
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Muted)
@@ -1199,7 +1200,6 @@ private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier
 @Composable
 private fun AppSettingsSheet(
     viewModel: HomeViewModel,
-    onOpenLibrarySync: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
@@ -1237,13 +1237,6 @@ private fun AppSettingsSheet(
                 }
                 TextButton(onClick = viewModel::logout) { Text("Log out") }
             }
-
-            Spacer(Modifier.height(16.dp))
-            NavRow(
-                title = "Library & Sync",
-                subtitle = "Library folder, scanning, discovered libraries and sync",
-                onClick = onOpenLibrarySync,
-            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
@@ -1301,26 +1294,6 @@ private fun AppSettingsSheet(
 /** A readable folder name from a SAF tree Uri (e.g. …/tree/primary%3AAudiobooks → "Audiobooks"). */
 private fun storageFolderName(treeUri: String): String =
     Uri.decode(treeUri).substringAfterLast('/').substringAfterLast(':').ifBlank { "selected folder" }
-
-/** A tappable settings row that leads to another surface (chevron affordance). */
-@Composable
-private fun NavRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = Parchment, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 12.sp)
-        }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Muted)
-    }
-}
 
 // ── Library & Sync sheet ─────────────────────────────────────────────────────
 
