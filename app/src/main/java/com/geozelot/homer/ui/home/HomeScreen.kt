@@ -509,26 +509,39 @@ private fun SortGroupBar(
     onSortChange: (LibrarySort) -> Unit,
     onGroupChange: (LibraryGroup) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp, start = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        DropdownChip(
-            label = "Sort · ${sort.label}",
-            options = LibrarySort.values().toList(),
-            selected = sort,
-            labelOf = { it.label },
-            onSelect = onSortChange,
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp, start = 2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DropdownChip(
+                label = "Group · ${group.label}",
+                options = LibraryGroup.values().toList(),
+                selected = group,
+                labelOf = { it.label },
+                onSelect = onGroupChange,
+            )
+            DropdownChip(
+                label = "Sort · ${sort.label}",
+                options = LibrarySort.values().toList(),
+                selected = sort,
+                labelOf = { it.label },
+                onSelect = onSortChange,
+            )
+        }
+        Text(
+            text = arrangementSummary(group, sort),
+            color = Faint,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, start = 2.dp),
         )
-        DropdownChip(
-            label = "Group · ${group.label}",
-            options = LibraryGroup.values().toList(),
-            selected = group,
-            labelOf = { it.label },
-            onSelect = onGroupChange,
-        )
+    }
+}
+
+/** Plain-language description of the active grouping + sort, e.g. "Grouped by author · sorted by title". */
+private fun arrangementSummary(group: LibraryGroup, sort: LibrarySort): String {
+    val sortLabel = sort.label.lowercase()
+    return when (group) {
+        LibraryGroup.NONE -> "All books, sorted by $sortLabel"
+        LibraryGroup.SERIES -> "Series grouped into shelves · sorted by $sortLabel"
+        else -> "Grouped by ${group.label.lowercase()} · sorted by $sortLabel"
     }
 }
 

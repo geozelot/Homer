@@ -102,11 +102,11 @@ sealed interface LibraryEntry {
     ) : LibraryEntry
 }
 
-/** How the library list is ordered. */
+/** How the library list is ordered (within each group). */
 enum class LibrarySort(val key: String, val label: String) {
-    AUTHOR("author", "Author"),
-    TITLE("title", "Title"),
     RECENT("recent", "Recently played"),
+    TITLE("title", "Title"),
+    AUTHOR("author", "Author"),
     DURATION("duration", "Duration");
 
     companion object {
@@ -114,10 +114,11 @@ enum class LibrarySort(val key: String, val label: String) {
     }
 }
 
-/** How the library list is sectioned. */
+/** How the library list is sectioned into shelves/headers. */
 enum class LibraryGroup(val key: String, val label: String) {
-    NONE("none", "No grouping"),
+    NONE("none", "None"),
     AUTHOR("author", "Author"),
+    SERIES("series", "Series"),
     GENRE("genre", "Genre");
 
     companion object {
@@ -599,57 +600,109 @@ class HomeViewModel @Inject constructor(
     }
 }
 
-/** Orders [books] by [sort] and sections them by [group], producing the render list. */
+/**
+ * Builds the render list. [group] alone decides sectioning and whether series collapse into
+ * shelves (decoupled from [sort], which orders the units within): Author/Series group into shelves,
+ * a series shelf positioned by [sort] but its episodes always in reading order; None is a flat
+ * sorted list; Genre sections flat by genre.
+ */
 private fun buildEntries(
     books: List<BookListItem>,
     sort: LibrarySort,
     group: LibraryGroup,
 ): List<LibraryEntry> {
-    val ordered = books.sortedWith(sort.comparator())
-    // Series shelves only make sense when books are in author/series order.
-    val shelves = sort == LibrarySort.AUTHOR
+    val collapse = group == LibraryGroup.AUTHOR || group == LibraryGroup.SERIES
+    val units = if (collapse) collapseIntoUnits(books) else books.map { SortUnit.Solo(it) }
+    val ordered = units.sortedWith(unitComparator(sort))
 
-    if (group == LibraryGroup.NONE) {
-        return if (shelves) groupIntoEntries(ordered) else ordered.map(LibraryEntry::Standalone)
-    }
-
-    val keyOf: (BookListItem) -> String? = when (group) {
-        LibraryGroup.AUTHOR -> { b -> b.author }
-        LibraryGroup.GENRE -> { b -> b.genre }
-        LibraryGroup.NONE -> { _ -> null }
-    }
-    val fallback = if (group == LibraryGroup.AUTHOR) "Unknown author" else "No genre"
-    val byKey = ordered.groupBy(keyOf)
-    val orderedKeys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
-
-    return buildList {
-        for (key in orderedKeys) {
-            add(LibraryEntry.Header(key ?: fallback))
-            val groupBooks = byKey.getValue(key)
-            // Keep series shelves within an author section when sorted by author.
-            if (shelves && group == LibraryGroup.AUTHOR) {
-                addAll(groupIntoEntries(groupBooks))
-            } else {
-                groupBooks.forEach { add(LibraryEntry.Standalone(it)) }
-            }
-        }
+    return when (group) {
+        LibraryGroup.NONE, LibraryGroup.SERIES -> ordered.map { it.toEntry() }
+        LibraryGroup.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
+        LibraryGroup.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
     }
 }
 
-private fun LibrarySort.comparator(): Comparator<BookListItem> = when (this) {
+/** A list unit awaiting placement: a standalone book or a collapsed series shelf. */
+private sealed interface SortUnit {
+    data class Solo(val book: BookListItem) : SortUnit
+    data class Ser(val series: LibraryEntry.Series) : SortUnit
+
+    val author: String?
+        get() = when (this) {
+            is Solo -> book.author
+            is Ser -> series.author
+        }
+
+    fun toEntry(): LibraryEntry = when (this) {
+        is Solo -> LibraryEntry.Standalone(book)
+        is Ser -> series
+    }
+}
+
+/** Reading order within a series: by series index when known, then title. */
+private val inSeriesOrder: Comparator<BookListItem> =
+    compareBy({ it.seriesIndex == null }, { it.seriesIndex }, { it.title.lowercase() })
+
+/** Collapses author+series sets (2+) into ordered series units; everything else stays solo. */
+private fun collapseIntoUnits(books: List<BookListItem>): List<SortUnit> {
+    val bySeries = books.filter { it.series != null }.groupBy { "${it.author.orEmpty()}|${it.series}" }
+    val consumed = HashSet<String>()
+    val units = mutableListOf<SortUnit>()
+    for ((key, members) in bySeries) {
+        if (members.size < 2) continue
+        units += SortUnit.Ser(
+            LibraryEntry.Series(
+                key = key,
+                name = members.first().series!!,
+                author = members.first().author,
+                books = members.sortedWith(inSeriesOrder),
+            ),
+        )
+        members.forEach { consumed += it.id }
+    }
+    books.forEach { if (it.id !in consumed) units += SortUnit.Solo(it) }
+    return units
+}
+
+private fun unitComparator(sort: LibrarySort): Comparator<SortUnit> = when (sort) {
+    LibrarySort.TITLE -> compareBy { unitTitle(it).lowercase() }
     LibrarySort.AUTHOR -> compareBy(
-        { it.author == null },
-        { it.author?.lowercase() },
-        { it.series == null },
-        { it.series?.lowercase() },
-        { it.seriesIndex == null },
-        { it.seriesIndex },
-        { it.title.lowercase() },
+        { it.author == null }, { it.author?.lowercase() }, { unitTitle(it).lowercase() },
     )
-    LibrarySort.TITLE -> compareBy { it.title.lowercase() }
     // Never-played / unmeasured sort last under the descending orders.
-    LibrarySort.RECENT -> compareByDescending { it.lastPlayedAt ?: Long.MIN_VALUE }
-    LibrarySort.DURATION -> compareByDescending { it.totalDurationMs ?: -1L }
+    LibrarySort.RECENT -> compareByDescending { unitRecency(it) }
+    LibrarySort.DURATION -> compareByDescending { unitDuration(it) }
+}
+
+private fun unitTitle(u: SortUnit): String = when (u) {
+    is SortUnit.Solo -> u.book.title
+    is SortUnit.Ser -> u.series.name
+}
+
+private fun unitRecency(u: SortUnit): Long = when (u) {
+    is SortUnit.Solo -> u.book.lastPlayedAt ?: Long.MIN_VALUE
+    is SortUnit.Ser -> u.series.books.maxOf { it.lastPlayedAt ?: Long.MIN_VALUE }
+}
+
+private fun unitDuration(u: SortUnit): Long = when (u) {
+    is SortUnit.Solo -> u.book.totalDurationMs ?: -1L
+    is SortUnit.Ser -> u.series.books.sumOf { it.totalDurationMs ?: 0L }
+}
+
+/** Groups [units] into sections keyed by [keyOf] (nulls last under [fallback]) with headers. */
+private fun sectioned(
+    units: List<SortUnit>,
+    fallback: String,
+    keyOf: (SortUnit) -> String?,
+): List<LibraryEntry> {
+    val byKey = units.groupBy(keyOf)
+    val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
+    return buildList {
+        for (key in keys) {
+            add(LibraryEntry.Header(key ?: fallback))
+            byKey.getValue(key).forEach { add(it.toEntry()) }
+        }
+    }
 }
 
 /** Case-insensitive match across title, author, series, genre and tags. */
@@ -660,33 +713,3 @@ private fun BookListItem.matchesQuery(needle: String): Boolean =
         genre?.contains(needle, ignoreCase = true) == true ||
         tags.any { it.contains(needle, ignoreCase = true) }
 
-/**
- * Collapses runs of books sharing an author + series (2+) into a [LibraryEntry.Series];
- * everything else stays a [LibraryEntry.Standalone]. Input is already sorted by
- * author/series/index/title, so grouped books are contiguous.
- */
-private fun groupIntoEntries(items: List<BookListItem>): List<LibraryEntry> {
-    val entries = mutableListOf<LibraryEntry>()
-    var i = 0
-    while (i < items.size) {
-        val book = items[i]
-        val series = book.series
-        if (series != null) {
-            var j = i + 1
-            while (j < items.size && items[j].series == series && items[j].author == book.author) j++
-            if (j - i >= 2) {
-                entries += LibraryEntry.Series(
-                    key = "${book.author.orEmpty()}|$series",
-                    name = series,
-                    author = book.author,
-                    books = items.subList(i, j).toList(),
-                )
-                i = j
-                continue
-            }
-        }
-        entries += LibraryEntry.Standalone(book)
-        i++
-    }
-    return entries
-}
