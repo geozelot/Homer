@@ -1,6 +1,7 @@
 package com.geozelot.homer.di
 
 import com.geozelot.homer.data.auth.AuthInterceptor
+import com.geozelot.homer.data.net.CertPinningInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -39,10 +40,15 @@ object NetworkModule {
     @Provides
     @Singleton
     @Authed
-    fun provideAuthedClient(authInterceptor: AuthInterceptor): OkHttpClient =
+    fun provideAuthedClient(
+        authInterceptor: AuthInterceptor,
+        certPinningInterceptor: CertPinningInterceptor,
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .connectionSpecs(TLS_ONLY)
             .addInterceptor(authInterceptor)
+            // Network interceptor: needs the TLS handshake to read/verify the server certificate.
+            .addNetworkInterceptor(certPinningInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build()

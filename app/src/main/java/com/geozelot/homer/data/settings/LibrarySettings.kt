@@ -106,6 +106,31 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_APP_LOCK] = value }
     }
 
+    /**
+     * Pin the Nextcloud server's TLS certificate (trust-on-first-use). When enabled the first
+     * connection's certificate is captured into [pinnedServerCert] and every later connection must
+     * match it. Disabling clears the captured pin so it re-captures if re-enabled.
+     */
+    val certPinningEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_CERT_PIN] ?: false }
+
+    suspend fun setCertPinningEnabled(value: Boolean) {
+        context.settingsDataStore.edit {
+            it[KEY_CERT_PIN] = value
+            if (!value) it.remove(KEY_PINNED_CERT)
+        }
+    }
+
+    /** The captured pin ("sha256/…"), or null before first capture. */
+    val pinnedServerCert: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_PINNED_CERT] }
+
+    suspend fun setPinnedServerCert(pin: String?) {
+        context.settingsDataStore.edit {
+            if (pin == null) it.remove(KEY_PINNED_CERT) else it[KEY_PINNED_CERT] = pin
+        }
+    }
+
     private companion object {
         const val TIER_PROGRESS = 2
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
@@ -117,6 +142,8 @@ class LibrarySettings @Inject constructor(
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
+        val KEY_CERT_PIN = booleanPreferencesKey("cert_pinning_enabled")
+        val KEY_PINNED_CERT = stringPreferencesKey("pinned_server_cert")
     }
 }
 

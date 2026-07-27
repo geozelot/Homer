@@ -1305,6 +1305,7 @@ private fun AppSettingsSheet(
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val appLock by viewModel.appLockEnabled.collectAsStateWithLifecycle()
+    val certPinning by viewModel.certPinningEnabled.collectAsStateWithLifecycle()
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -1422,6 +1423,13 @@ private fun AppSettingsSheet(
             SettingSwitch("Require unlock to open", appLock, viewModel::setAppLock)
             Text(
                 "Asks for your fingerprint, face, or screen lock when Homer opens or returns from the background.",
+                color = Muted,
+                fontSize = 11.sp,
+            )
+            SettingSwitch("Pin server certificate", certPinning, viewModel::setCertPinning)
+            Text(
+                "Remembers your server's certificate on the next connection and refuses to connect if it " +
+                    "ever changes. Turn off and on again after a legitimate certificate renewal.",
                 color = Muted,
                 fontSize = 11.sp,
             )

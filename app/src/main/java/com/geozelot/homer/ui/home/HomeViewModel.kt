@@ -308,6 +308,10 @@ class HomeViewModel @Inject constructor(
     val appLockEnabled: StateFlow<Boolean> = librarySettings.appLockEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Whether the server's TLS certificate is pinned (trust-on-first-use). */
+    val certPinningEnabled: StateFlow<Boolean> = librarySettings.certPinningEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -417,6 +421,10 @@ class HomeViewModel @Inject constructor(
 
     fun setAppLock(value: Boolean) {
         viewModelScope.launch { librarySettings.setAppLockEnabled(value) }
+    }
+
+    fun setCertPinning(value: Boolean) {
+        viewModelScope.launch { librarySettings.setCertPinningEnabled(value) }
     }
 
     /** Toggles online cover lookup; enabling it re-arms art-less books and kicks a cover pass. */
