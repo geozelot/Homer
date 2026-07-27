@@ -183,8 +183,24 @@ class LibraryScanner @Inject constructor(
             bookmarkDao.relink(oldId, newId)
         }
 
+        // Prune vanished books — but NEVER wipe a non-empty library on an empty keep-set. A
+        // crawl can complete "successfully" yet come back empty (a transient 207 with no usable
+        // entries from a reverse proxy, a momentarily-unreachable-but-not-erroring server, or a
+        // mis-set root), and blindly running deleteAll() there deletes the whole library. Offline
+        // is already safe (PROPFIND throws and aborts the scan before this point); this guards the
+        // connected-but-empty case. A genuinely emptied library just keeps its stale rows until a
+        // real crawl finds books again.
         val keepList = keepIds.toList()
-        if (keepList.isEmpty()) bookDao.deleteAll() else bookDao.deleteMissing(keepList)
+        val currentCount = bookDao.count()
+        when {
+            keepList.isNotEmpty() -> bookDao.deleteMissing(keepList)
+            currentCount == 0 -> Unit // already empty — nothing to prune
+            else -> Log.w(
+                TAG,
+                "scan found no books but $currentCount are indexed; skipping prune to avoid " +
+                    "wiping the library on an empty or failed crawl",
+            )
+        }
 
         return Result(bookDao.count())
     }
