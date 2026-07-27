@@ -322,6 +322,15 @@ class PlaybackConnection @Inject constructor(
         scope.launch { playbackSettings.setSkipSilence(enabled) }
     }
 
+    /** Sets the volume override (reduced/normal/increased) on the service's player and persists it. */
+    fun setVolumeMode(mode: String) {
+        controller?.sendCustomCommand(
+            PlaybackCommands.SET_VOLUME_MODE,
+            Bundle().apply { putString(PlaybackCommands.KEY_VOLUME_MODE, mode) },
+        )
+        scope.launch { playbackSettings.setVolumeMode(mode) }
+    }
+
     fun startSleepTimer(durationMs: Long) {
         scope.launch { playbackSettings.setSleepLastDurationMs(durationMs) }
         sleepTimer.startCountdown(durationMs)

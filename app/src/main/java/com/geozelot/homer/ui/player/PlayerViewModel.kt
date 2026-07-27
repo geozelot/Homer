@@ -65,6 +65,10 @@ class PlayerViewModel @Inject constructor(
     val seekSeconds: StateFlow<Int> = playbackSettings.seekSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 15)
 
+    /** Volume override: "reduced" | "normal" | "increased". */
+    val volumeMode: StateFlow<String> = playbackSettings.volumeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "normal")
+
     val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
 
@@ -171,6 +175,7 @@ class PlayerViewModel @Inject constructor(
     fun seekBy(deltaSeconds: Int) = connection.seekBy(deltaSeconds * 1000L)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
     fun setSkipSilence(enabled: Boolean) = connection.setSkipSilence(enabled)
+    fun setVolumeMode(mode: String) = connection.setVolumeMode(mode)
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
     fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
     fun cancelSleepTimer() = connection.cancelSleepTimer()

@@ -32,6 +32,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -78,6 +81,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.playback.VolumeMode
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -104,6 +108,7 @@ fun PlayerScreen(
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val finished by viewModel.finished.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
+    val volumeMode by viewModel.volumeMode.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -136,11 +141,9 @@ fun PlayerScreen(
     ) {
         val offline = download?.status == DownloadStatus.DONE
         PlayerTopBar(
-            skipSilence = skipSilence,
             finished = finished,
             offline = offline,
             onBack = onBack,
-            onToggleSkipSilence = viewModel::setSkipSilence,
             onToggleFinished = viewModel::toggleFinished,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
         )
@@ -234,11 +237,15 @@ fun PlayerScreen(
                 speed = state.playbackSpeed,
                 sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
                 sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+                volumeMode = volumeMode,
+                skipSilence = skipSilence,
                 onSpeed = viewModel::setSpeed,
                 onSleepMinutes = viewModel::startSleepTimer,
                 onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
                 onSleepOff = viewModel::cancelSleepTimer,
                 onSleepSettings = { showSleepDialog = true },
+                onVolumeMode = viewModel::setVolumeMode,
+                onToggleSkipSilence = { viewModel.setSkipSilence(!skipSilence) },
                 onMark = { showBookmarksDialog = true },
             )
         }
@@ -288,11 +295,9 @@ fun PlayerScreen(
 
 @Composable
 private fun PlayerTopBar(
-    skipSilence: Boolean,
     finished: Boolean,
     offline: Boolean,
     onBack: () -> Unit,
-    onToggleSkipSilence: (Boolean) -> Unit,
     onToggleFinished: () -> Unit,
     onToggleOffline: () -> Unit,
 ) {
@@ -314,23 +319,17 @@ private fun PlayerTopBar(
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("Offline") },
-                    trailingIcon = { Switch(checked = offline, onCheckedChange = { onToggleOffline() }) },
-                    onClick = { onToggleOffline() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Skip silence") },
-                    trailingIcon = {
-                        Switch(checked = skipSilence, onCheckedChange = { onToggleSkipSilence(it) })
-                    },
-                    onClick = { onToggleSkipSilence(!skipSilence) },
-                )
-                DropdownMenuItem(
                     text = { Text(if (finished) "Mark as unfinished" else "Mark as finished") },
                     onClick = {
                         onToggleFinished()
                         overflowOpen = false
                     },
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Offline") },
+                    trailingIcon = { Switch(checked = offline, onCheckedChange = { onToggleOffline() }) },
+                    onClick = { onToggleOffline() },
                 )
             }
         }
@@ -399,16 +398,16 @@ private fun Transport(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        IconButton(onClick = onPrev) {
-            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(30.dp))
+        IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
+            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(38.dp))
         }
         SeekButton(seconds = seekSeconds, forward = false, onClick = onSeekBack)
         Box(
             modifier = Modifier
-                .size(66.dp)
-                .shadow(10.dp, CircleShape, spotColor = AmberDeep)
+                .size(84.dp)
+                .shadow(12.dp, CircleShape, spotColor = AmberDeep)
                 .clip(CircleShape)
                 .background(Amber)
                 .clickable(onClick = onPlayPause),
@@ -418,12 +417,12 @@ private fun Transport(
                 imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (isPlaying) "Pause" else "Play",
                 tint = OnAmber,
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(40.dp),
             )
         }
         SeekButton(seconds = seekSeconds, forward = true, onClick = onSeekForward)
-        IconButton(onClick = onNext) {
-            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(30.dp))
+        IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
+            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(38.dp))
         }
     }
 }
@@ -433,7 +432,7 @@ private fun Transport(
 private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(46.dp)
+            .size(56.dp)
             .clip(CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -443,9 +442,9 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
             contentDescription = if (forward) "Skip forward $seconds seconds" else "Skip back $seconds seconds",
             tint = Parchment,
             // The Replay glyph is a counter-clockwise arrow; mirror it for the forward button.
-            modifier = Modifier.size(34.dp).then(if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier),
+            modifier = Modifier.size(40.dp).then(if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier),
         )
-        Text("$seconds", color = Parchment, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+        Text("$seconds", color = Parchment, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -473,11 +472,15 @@ private fun ToolRow(
     speed: Float,
     sleepLabel: String,
     sleepActive: Boolean,
+    volumeMode: String,
+    skipSilence: Boolean,
     onSpeed: (Float) -> Unit,
     onSleepMinutes: (Long) -> Unit,
     onSleepEndOfChapter: () -> Unit,
     onSleepOff: () -> Unit,
     onSleepSettings: () -> Unit,
+    onVolumeMode: (String) -> Unit,
+    onToggleSkipSilence: () -> Unit,
     onMark: () -> Unit,
 ) {
     Row(
@@ -544,6 +547,45 @@ private fun ToolRow(
                 )
             }
         }
+
+        // Volume override — quick-select menu.
+        Box {
+            var open by remember { mutableStateOf(false) }
+            ToolButton(
+                icon = when (volumeMode) {
+                    VolumeMode.REDUCED -> Icons.AutoMirrored.Filled.VolumeDown
+                    VolumeMode.INCREASED -> Icons.AutoMirrored.Filled.VolumeUp
+                    else -> Icons.AutoMirrored.Filled.VolumeUp
+                },
+                label = when (volumeMode) {
+                    VolumeMode.REDUCED -> "Quiet"
+                    VolumeMode.INCREASED -> "Boost"
+                    else -> "Volume"
+                },
+                active = volumeMode != VolumeMode.NORMAL,
+                onClick = { open = true },
+            )
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                listOf(
+                    VolumeMode.REDUCED to "Reduced",
+                    VolumeMode.NORMAL to "Normal",
+                    VolumeMode.INCREASED to "Increased",
+                ).forEach { (mode, lbl) ->
+                    DropdownMenuItem(
+                        text = { Text(lbl, color = if (mode == volumeMode) Amber else Parchment) },
+                        onClick = { onVolumeMode(mode); open = false },
+                    )
+                }
+            }
+        }
+
+        // Skip silence — toggle.
+        ToolButton(
+            icon = Icons.Filled.ContentCut,
+            label = "Silence",
+            active = skipSilence,
+            onClick = onToggleSkipSilence,
+        )
 
         // Mark — bookmarks.
         ToolButton(

@@ -175,6 +175,14 @@ class PlaybackSettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SEEK_SECONDS] = value }
     }
 
+    /** Volume override: "reduced" | "normal" | "increased" (a loudness boost). */
+    val volumeMode: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_VOLUME_MODE] ?: DEFAULT_VOLUME_MODE }
+
+    suspend fun setVolumeMode(value: String) {
+        context.settingsDataStore.edit { it[KEY_VOLUME_MODE] = value }
+    }
+
     private companion object {
         val KEY_SPEED = floatPreferencesKey("playback_speed")
         val KEY_SKIP_SILENCE = booleanPreferencesKey("skip_silence")
@@ -183,8 +191,10 @@ class PlaybackSettings @Inject constructor(
         val KEY_SLEEP_EXTEND = stringPreferencesKey("sleep_extend")
         val KEY_SLEEP_LAST_MS = longPreferencesKey("sleep_last_duration_ms")
         val KEY_SEEK_SECONDS = intPreferencesKey("seek_seconds")
+        val KEY_VOLUME_MODE = stringPreferencesKey("volume_mode")
         const val DEFAULT_SLEEP_FADE = 5
         const val DEFAULT_SLEEP_EXTEND = "15"
         const val DEFAULT_SEEK_SECONDS = 15
+        const val DEFAULT_VOLUME_MODE = "normal"
     }
 }

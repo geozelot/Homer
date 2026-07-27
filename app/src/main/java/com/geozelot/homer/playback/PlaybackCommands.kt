@@ -13,4 +13,17 @@ object PlaybackCommands {
     const val KEY_ENABLED = "enabled"
 
     val SET_SKIP_SILENCE = SessionCommand(ACTION_SET_SKIP_SILENCE, Bundle.EMPTY)
+
+    /** Volume override: player volume + a loudness boost live on the ExoPlayer/audio session. */
+    const val ACTION_SET_VOLUME_MODE = "com.geozelot.homer.command.SET_VOLUME_MODE"
+    const val KEY_VOLUME_MODE = "volume_mode"
+
+    val SET_VOLUME_MODE = SessionCommand(ACTION_SET_VOLUME_MODE, Bundle.EMPTY)
+}
+
+/** Player volume override levels. "Increased" applies a loudness boost above unity gain. */
+object VolumeMode {
+    const val REDUCED = "reduced"
+    const val NORMAL = "normal"
+    const val INCREASED = "increased"
 }

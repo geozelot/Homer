@@ -1,5 +1,6 @@
 package com.geozelot.homer.playback
 
+import android.media.audiofx.LoudnessEnhancer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -41,6 +42,7 @@ class PlaybackService : MediaLibraryService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var player: ExoPlayer? = null
     private var session: MediaLibrarySession? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -58,10 +60,29 @@ class PlaybackService : MediaLibraryService() {
             .build()
         player = exoPlayer
 
-        // Apply the persisted skip-silence preference to this session's player.
-        serviceScope.launch { exoPlayer.skipSilenceEnabled = playbackSettings.skipSilence.first() }
+        // Apply persisted skip-silence + volume override to this session's player.
+        serviceScope.launch {
+            exoPlayer.skipSilenceEnabled = playbackSettings.skipSilence.first()
+            applyVolumeMode(playbackSettings.volumeMode.first())
+        }
 
         session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback()).build()
+    }
+
+    /** Applies a volume override: player volume for reduced/normal, plus a LoudnessEnhancer for
+     *  the "increased" boost (audio effects are flaky per-device, so failures degrade silently). */
+    private fun applyVolumeMode(mode: String) {
+        val exo = player ?: return
+        exo.volume = if (mode == VolumeMode.REDUCED) 0.45f else 1.0f
+        runCatching {
+            val enhancer = loudnessEnhancer ?: LoudnessEnhancer(exo.audioSessionId).also { loudnessEnhancer = it }
+            if (mode == VolumeMode.INCREASED) {
+                enhancer.setTargetGain(700) // +7 dB loudness boost
+                enhancer.enabled = true
+            } else {
+                enhancer.enabled = false
+            }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -69,6 +90,8 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        runCatching { loudnessEnhancer?.release() }
+        loudnessEnhancer = null
         session?.release()
         player?.release()
         session = null
@@ -87,6 +110,7 @@ class PlaybackService : MediaLibraryService() {
                 MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                     .buildUpon()
                     .add(PlaybackCommands.SET_SKIP_SILENCE)
+                    .add(PlaybackCommands.SET_VOLUME_MODE)
                     .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
@@ -99,9 +123,15 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: android.os.Bundle,
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction == PlaybackCommands.ACTION_SET_SKIP_SILENCE) {
-                player?.skipSilenceEnabled = args.getBoolean(PlaybackCommands.KEY_ENABLED)
-                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            when (customCommand.customAction) {
+                PlaybackCommands.ACTION_SET_SKIP_SILENCE -> {
+                    player?.skipSilenceEnabled = args.getBoolean(PlaybackCommands.KEY_ENABLED)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                PlaybackCommands.ACTION_SET_VOLUME_MODE -> {
+                    applyVolumeMode(args.getString(PlaybackCommands.KEY_VOLUME_MODE) ?: VolumeMode.NORMAL)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
             return super.onCustomCommand(session, controller, customCommand, args)
         }
