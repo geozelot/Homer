@@ -72,7 +72,7 @@ class DurationExtractor @Inject constructor(
                             // ExoPlayer folds the container tags into a unified MediaMetadata by
                             // STATE_READY, so genre + embedded ID3 chapters come free from the
                             // same probe (empty if none / not yet READY).
-                            val genre = exo.mediaMetadata.genre?.toString()?.trim()?.ifBlank { null }
+                            val genre = Id3Genres.resolve(exo.mediaMetadata.genre?.toString())
                             val chapters = readChapters(exo)
                             exo.release()
                             if (cont.isActive) cont.resume(Probe(duration, genre, chapters))
