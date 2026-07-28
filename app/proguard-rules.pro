@@ -5,6 +5,15 @@
 
 -dontwarn org.jetbrains.annotations.**
 
+# ── WorkManager ─────────────────────────────────────────────────────────────────
+# WorkManager instantiates the InputMerger (default OverwritingInputMerger) by class name via
+# reflection for EVERY job. R8 was stripping its no-arg constructor, so every worker failed with
+# "Could not create Input Merger" — breaking all background work (downloads, scans, covers) in
+# release builds while debug builds worked. Keep the InputMergers' constructors.
+-keep class androidx.work.OverwritingInputMerger { <init>(); }
+-keep class androidx.work.ArrayCreatingInputMerger { <init>(); }
+-keep class * extends androidx.work.InputMerger { <init>(); }
+
 # ── kotlinx.serialization ──────────────────────────────────────────────────────
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
