@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,7 +57,11 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 22.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -96,11 +102,23 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     }
 }
 
-/** Reads the app's own recent logcat (no permission needed for own-process logs). */
+/**
+ * Reads the app's own recent logcat (no permission needed for own-process logs), filtered to
+ * Homer's own tags at every level plus warnings/errors from anything else — so the useful lines
+ * (scan/download/sync progress, WorkManager failures, crashes) aren't buried under framework noise.
+ */
 private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
+    val filterSpec = HOMER_TAGS.map { "$it:V" } + "*:W" // Homer verbose+, everything else warn+
     runCatching {
-        val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "1500"))
+        val process = Runtime.getRuntime().exec(
+            arrayOf("logcat", "-d", "-v", "time", "-t", "1200") + filterSpec.toTypedArray(),
+        )
         process.inputStream.bufferedReader().use { it.readText() }
     }.getOrElse { "Could not read logs: ${it.message}" }
-        .ifBlank { "No log lines captured." }
+        .ifBlank { "No log lines captured. Reproduce the problem, then tap Refresh." }
 }
+
+private val HOMER_TAGS = listOf(
+    "HomerAuth", "HomerScan", "HomerMeta", "HomerDownload",
+    "HomerStore", "HomerSync", "HomerPlay", "HomerNet",
+)

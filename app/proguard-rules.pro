@@ -39,11 +39,12 @@
     <fields>;
 }
 
-# ── Strip verbose logging from release builds ───────────────────────────────────
-# Info/debug/verbose logs (which include server URLs and library paths) are removed by R8;
-# warnings and errors are kept. Only applies to minified (release) builds.
+# ── Strip only verbose/debug logging from release builds ────────────────────────
+# Verbose/debug logs are removed by R8. Info/warning/error are KEPT so the in-app Diagnostics
+# screen is useful on release builds too (Homer's own progress/errors survive). Homer's info logs
+# can include the server URL + library paths, but logcat is readable only by the app itself on
+# modern Android, so this stays on-device.
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
-    public static int i(...);
 }
