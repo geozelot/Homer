@@ -16,6 +16,12 @@
          app being closed. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Optional: let the user store downloads/covers in any folder they pick (a self-hosted,
+         sideloaded app; not distributed via Play). Only used when the user opts into an
+         all-files storage folder; the app otherwise uses its own private storage. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
     <!-- Android 11+ package visibility: resolve a browser / Custom Tabs provider
          for the Login Flow v2 web step. -->
     <queries>

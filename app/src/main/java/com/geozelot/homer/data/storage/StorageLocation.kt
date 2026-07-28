@@ -3,6 +3,8 @@ package com.geozelot.homer.data.storage
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import com.geozelot.homer.data.settings.LibrarySettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
@@ -34,28 +36,39 @@ class StorageLocation @Inject constructor(
     /** Old internal download location, kept only so the one-time relocation can reclaim its space. */
     private val legacyDownloads = File(context.filesDir, "downloads")
 
-    /** The active storage area: the custom SAF folder if configured and still permitted, else the default. */
+    /**
+     * The active custom location token, or null for the default area. A token is either a SAF tree
+     * `content://…` Uri or an absolute filesystem path (all-files access). The all-files path wins
+     * if both are somehow set.
+     */
+    suspend fun currentLocation(): String? =
+        librarySettings.customStoragePath.first() ?: librarySettings.customStorageUri.first()
+
+    /** The active storage area, honouring permissions; falls back to the default if a grant is lost. */
     suspend fun area(): StorageArea {
-        val custom = librarySettings.customStorageUri.first()?.let(Uri::parse)
-        return if (custom != null && hasPermission(custom)) SafStorageArea(context, custom) else defaultArea
+        librarySettings.customStoragePath.first()?.let { path ->
+            if (hasAllFilesAccess()) return FileStorageArea(File(path))
+        }
+        librarySettings.customStorageUri.first()?.let(Uri::parse)?.let { uri ->
+            if (hasPermission(uri)) return SafStorageArea(context, uri)
+        }
+        return defaultArea
     }
-
-    /** True when a custom folder is configured AND its permission is still held. */
-    suspend fun customActive(): Boolean {
-        val custom = librarySettings.customStorageUri.first()?.let(Uri::parse) ?: return false
-        return hasPermission(custom)
-    }
-
-    /** The configured custom folder Uri string, or null when on the default area. */
-    suspend fun currentCustomUri(): String? = librarySettings.customStorageUri.first()
 
     /**
-     * Builds an area for an explicit location — null → the default app-external area, else a SAF
-     * area for [uriString]. Used by the migrator to hold the source and target areas at once.
-     * The caller must hold a persisted permission for a custom uri (see [takePersistable]).
+     * Builds an area for an explicit [token] (see [currentLocation]) — null → the default area,
+     * a `content://` token → SAF, any other string → a filesystem path (all-files). Used by the
+     * migrator to hold the source and target areas at once.
      */
-    fun areaFor(uriString: String?): StorageArea =
-        if (uriString == null) defaultArea else SafStorageArea(context, Uri.parse(uriString))
+    fun areaFor(token: String?): StorageArea = when {
+        token == null -> defaultArea
+        token.startsWith("content://") -> SafStorageArea(context, Uri.parse(token))
+        else -> FileStorageArea(File(token))
+    }
+
+    /** Whether the app holds all-files access (needed for a filesystem-path location). */
+    fun hasAllFilesAccess(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
 
     /** Takes a durable read/write grant on a SAF tree (idempotent). */
     fun takePersistable(uriString: String) {
@@ -67,18 +80,27 @@ class StorageLocation @Inject constructor(
         runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(uriString), RW_FLAGS) }
     }
 
-    /** Persists a user-picked SAF tree as the storage folder, taking a durable read/write grant. */
-    suspend fun setCustomFolder(treeUri: Uri) {
-        context.contentResolver.takePersistableUriPermission(treeUri, RW_FLAGS)
-        librarySettings.setCustomStorageUri(treeUri.toString())
-    }
-
-    /** Reverts to the default app-external storage, releasing any held custom grant. */
-    suspend fun useDefault() {
-        librarySettings.customStorageUri.first()?.let { old ->
-            runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(old), RW_FLAGS) }
+    /**
+     * Commits the active storage location to [token]: null = default (clears both custom kinds),
+     * a `content://` = a SAF folder (takes the grant), anything else = a filesystem path. The two
+     * custom kinds are mutually exclusive, so setting one clears the other.
+     */
+    suspend fun commit(token: String?) {
+        when {
+            token == null -> {
+                librarySettings.setCustomStoragePath(null)
+                librarySettings.setCustomStorageUri(null)
+            }
+            token.startsWith("content://") -> {
+                context.contentResolver.takePersistableUriPermission(Uri.parse(token), RW_FLAGS)
+                librarySettings.setCustomStoragePath(null)
+                librarySettings.setCustomStorageUri(token)
+            }
+            else -> {
+                librarySettings.setCustomStorageUri(null)
+                librarySettings.setCustomStoragePath(token)
+            }
         }
-        librarySettings.setCustomStorageUri(null)
     }
 
     private fun hasPermission(uri: Uri): Boolean =

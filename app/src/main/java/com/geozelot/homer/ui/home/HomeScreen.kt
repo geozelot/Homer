@@ -101,6 +101,7 @@ import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.storage.StorageMigrator
+import com.geozelot.homer.ui.storage.StorageBrowserScreen
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.CoverImage
@@ -150,6 +151,7 @@ fun HomeScreen(
     var editing by remember { mutableStateOf<BookListItem?>(null) }
     var editingSeries by remember { mutableStateOf<LibraryEntry.Series?>(null) }
     var showAppSettings by remember { mutableStateOf(false) }
+    var showStorageBrowser by remember { mutableStateOf(false) }
     var showLibrarySync by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
@@ -250,11 +252,25 @@ fun HomeScreen(
                 showAppSettings = false
                 onOpenDiagnostics()
             },
+            onOpenStorageBrowser = {
+                showAppSettings = false
+                showStorageBrowser = true
+            },
             onDismiss = { showAppSettings = false },
         )
     }
     if (showLibrarySync) {
         LibrarySyncSheet(viewModel = viewModel, onDismiss = { showLibrarySync = false })
+    }
+
+    if (showStorageBrowser) {
+        StorageBrowserScreen(
+            onPicked = { path ->
+                viewModel.setCustomStoragePath(path)
+                showStorageBrowser = false
+            },
+            onBack = { showStorageBrowser = false },
+        )
     }
 
     editing?.let { book ->
@@ -1347,11 +1363,13 @@ private fun AppSettingsSheet(
     onOpenLicenses: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenStorageBrowser: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
+    val customStoragePath by viewModel.customStoragePath.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
@@ -1400,14 +1418,19 @@ private fun AppSettingsSheet(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
+            val custom = customStoragePath ?: customStorageUri
             Text("STORAGE", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
             Text(
-                if (customStorageUri != null) "Custom folder: ${storageFolderName(customStorageUri!!)}" else "App storage (default)",
+                when {
+                    customStoragePath != null -> "Folder: $customStoragePath"
+                    customStorageUri != null -> "Custom folder: ${storageFolderName(customStorageUri!!)}"
+                    else -> "App storage (default)"
+                },
                 color = Parchment,
                 fontSize = 14.sp,
             )
             Text(
-                if (customStorageUri != null) {
+                if (custom != null) {
                     "Downloads, covers and progress live in your chosen folder — kept if you reinstall."
                 } else {
                     "Downloads and covers live in the app's storage, which is cleared if you uninstall. " +
@@ -1421,8 +1444,12 @@ private fun AppSettingsSheet(
                 TextButton(
                     onClick = { folderPicker.launch(null) },
                     contentPadding = PaddingValues(horizontal = 4.dp),
-                ) { Text(if (customStorageUri != null) "Change folder…" else "Choose folder…") }
-                if (customStorageUri != null) {
+                ) { Text("System picker…") }
+                TextButton(
+                    onClick = onOpenStorageBrowser,
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                ) { Text("Browse device…") }
+                if (custom != null) {
                     TextButton(
                         onClick = viewModel::useDefaultStorage,
                         contentPadding = PaddingValues(horizontal = 4.dp),
@@ -1430,7 +1457,9 @@ private fun AppSettingsSheet(
                 }
             }
             Text(
-                "Changing the location clears offline downloads and cached covers — they rebuild in the new place.",
+                "“System picker” uses Android's folder chooser; “Browse device” uses all-files access " +
+                    "(pick any folder) if the picker won't cooperate. Changing location moves your " +
+                    "downloads and covers to the new place.",
                 color = Faint,
                 fontSize = 11.sp,
             )

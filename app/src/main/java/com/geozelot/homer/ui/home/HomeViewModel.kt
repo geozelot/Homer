@@ -307,6 +307,13 @@ class HomeViewModel @Inject constructor(
     val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Configured all-files storage folder path (null = not using an all-files path). */
+    val customStoragePath: StateFlow<String?> = librarySettings.customStoragePath
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether the app currently holds all-files access (for the storage folder browser). */
+    fun hasAllFilesAccess(): Boolean = storageLocation.hasAllFilesAccess()
+
     /** Whether opening/resuming the app requires a biometric / device-credential unlock. */
     val appLockEnabled: StateFlow<Boolean> = librarySettings.appLockEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -517,16 +524,23 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { requestStorageChange(null) }
     }
 
+    /** Points storage at an absolute folder path via all-files access (bypasses SAF). */
+    fun setCustomStoragePath(path: String) {
+        viewModelScope.launch { requestStorageChange(path) }
+    }
+
+    /** A storage-location token is either a SAF `content://` tree or an absolute filesystem path. */
+    private fun isSafToken(token: String?) = token?.startsWith("content://") == true
+
     private suspend fun requestStorageChange(target: String?) {
-        val source = storageLocation.currentCustomUri()
+        val source = storageLocation.currentLocation()
         Log.w(TAG_STORAGE, "requestStorageChange: source=$source target=$target")
         if (source == target) return // already there
-        // Take a durable grant so we can probe + write the target folder. A provider that won't
-        // grant a persistable RW permission (some pickers refuse certain folders) throws here —
-        // log and abort rather than crash or silently half-switch.
-        if (target != null) {
+        // A SAF folder needs a durable grant taken before we can read/write it (and some pickers
+        // refuse certain folders, throwing here). An all-files path needs no per-folder grant.
+        if (isSafToken(target)) {
             try {
-                storageLocation.takePersistable(target)
+                storageLocation.takePersistable(target!!)
                 Log.w(TAG_STORAGE, "took persistable permission for $target")
             } catch (e: Exception) {
                 Log.w(TAG_STORAGE, "could not take a durable permission for the chosen folder", e)
@@ -549,10 +563,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Commits the active storage location immediately and releases the old folder's grant. */
+    /** Commits the active storage location immediately and releases the old SAF grant if any. */
     private suspend fun commitLocation(source: String?, target: String?) {
-        if (target == null) storageLocation.useDefault() else storageLocation.setCustomFolder(Uri.parse(target))
-        if (source != null && source != target) storageLocation.releasePersistable(source)
+        storageLocation.commit(target)
+        if (isSafToken(source) && source != target) storageLocation.releasePersistable(source!!)
         Log.w(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
     }
 
@@ -576,13 +590,14 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Abandon a pending storage change, releasing the grant taken to probe the folder. */
+    /** Abandon a pending storage change, releasing the SAF grant taken to probe the folder. */
     fun cancelPendingStorage() {
         val p = _pendingStorageChange.value ?: return
         _pendingStorageChange.value = null
-        val target = p.target ?: return
+        val target = p.target
+        if (!isSafToken(target)) return
         viewModelScope.launch {
-            if (target != storageLocation.currentCustomUri()) storageLocation.releasePersistable(target)
+            if (target != storageLocation.currentLocation()) storageLocation.releasePersistable(target!!)
         }
     }
 

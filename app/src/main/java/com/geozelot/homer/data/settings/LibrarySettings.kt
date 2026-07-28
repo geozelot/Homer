@@ -106,6 +106,16 @@ class LibrarySettings @Inject constructor(
         }
     }
 
+    /** Absolute filesystem path for an all-files-access storage folder; null = not used. */
+    val customStoragePath: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_CUSTOM_STORAGE_PATH] }
+
+    suspend fun setCustomStoragePath(path: String?) {
+        context.settingsDataStore.edit {
+            if (path == null) it.remove(KEY_CUSTOM_STORAGE_PATH) else it[KEY_CUSTOM_STORAGE_PATH] = path
+        }
+    }
+
     /** Require a biometric / device-credential unlock when the app is opened or resumed. */
     val appLockEnabled: Flow<Boolean> =
         context.settingsDataStore.data.map { it[KEY_APP_LOCK] ?: false }
@@ -153,6 +163,7 @@ class LibrarySettings @Inject constructor(
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")
+        val KEY_CUSTOM_STORAGE_PATH = stringPreferencesKey("custom_storage_path")
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
         val KEY_CERT_PIN = booleanPreferencesKey("cert_pinning_enabled")
         val KEY_PINNED_CERT = stringPreferencesKey("pinned_server_cert")
