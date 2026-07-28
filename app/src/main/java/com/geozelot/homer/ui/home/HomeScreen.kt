@@ -1534,8 +1534,9 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
-    val syncTier by viewModel.syncTier.collectAsStateWithLifecycle()
-    val tier3Available by viewModel.tier3Available.collectAsStateWithLifecycle()
+    val progressSync by viewModel.progressSyncEnabled.collectAsStateWithLifecycle()
+    val sharedCatalog by viewModel.sharedCatalogEnabled.collectAsStateWithLifecycle()
+    val sharedCatalogAvailable by viewModel.sharedCatalogAvailable.collectAsStateWithLifecycle()
     val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
     val discovered by viewModel.discovered.collectAsStateWithLifecycle()
     val discovering by viewModel.discovering.collectAsStateWithLifecycle()
@@ -1606,11 +1607,13 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            SyncTierSelector(
-                current = syncTier,
-                tier3Available = tier3Available,
+            SyncSettings(
+                progressSync = progressSync,
+                sharedCatalog = sharedCatalog,
+                sharedCatalogAvailable = sharedCatalogAvailable,
                 owner = libraryOwner,
-                onSelect = viewModel::setSyncTier,
+                onProgressSync = viewModel::setProgressSync,
+                onSharedCatalog = viewModel::setSharedCatalog,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
@@ -1701,66 +1704,51 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
     }
 }
 
+/**
+ * Two independent switches (they replaced a linear 1/2/3 tier): syncing my own progress, and
+ * using the shared library catalog. They're orthogonal — either can be on without the other.
+ */
 @Composable
-private fun SyncTierSelector(current: Int, tier3Available: Boolean, owner: String?, onSelect: (Int) -> Unit) {
+private fun SyncSettings(
+    progressSync: Boolean,
+    sharedCatalog: Boolean,
+    sharedCatalogAvailable: Boolean,
+    owner: String?,
+    onProgressSync: (Boolean) -> Unit,
+    onSharedCatalog: (Boolean) -> Unit,
+) {
     Text("SYNC", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface1)
-            .border(1.dp, Line, RoundedCornerShape(12.dp)),
-    ) {
-        TierOption(
-            selected = current <= 1,
-            title = "On this device only",
-            subtitle = "Nothing is written to your server.",
-            onClick = { onSelect(1) },
-        )
-        HorizontalDivider(color = Line)
-        TierOption(
-            selected = current == 2,
-            title = "My devices",
-            subtitle = "Positions, bookmarks and edits sync privately across your devices.",
-            onClick = { onSelect(2) },
-        )
-        HorizontalDivider(color = Line)
-        TierOption(
-            selected = current >= 3,
-            title = "Shared library",
-            subtitle = buildString {
-                append(
-                    if (tier3Available) {
-                        "Uses the shared library catalog — no scan needed on new devices."
-                    } else {
-                        "Publishes the full library so others (and new devices) skip scanning."
-                    },
-                )
-                append(if (owner != null) "  Owner: $owner." else "  Owner: not detected.")
-            },
-            onClick = { onSelect(3) },
-        )
-    }
-}
 
-@Composable
-private fun TierOption(selected: Boolean, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (selected) AmberSoft else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = if (selected) Amber else Parchment, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 11.sp)
-        }
-        if (selected) {
-            Icon(Icons.Filled.Check, contentDescription = "Selected", tint = Amber, modifier = Modifier.size(18.dp))
-        }
-    }
+    SettingSwitch("Sync my progress across my devices", progressSync, onProgressSync)
+    Text(
+        if (progressSync) {
+            "Positions, bookmarks and edits are saved privately to your account and follow you across your devices."
+        } else {
+            "Progress stays on this device only — nothing is written to your server."
+        },
+        color = Muted,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(bottom = 10.dp),
+    )
+
+    SettingSwitch("Use a shared library catalog", sharedCatalog, onSharedCatalog)
+    Text(
+        buildString {
+            append(
+                when {
+                    sharedCatalog && sharedCatalogAvailable ->
+                        "Reads the shared catalog + covers at the library root, so new devices skip scanning."
+                    sharedCatalog ->
+                        "Publishes the library catalog + covers so other devices skip scanning and re-extracting art."
+                    else ->
+                        "Each device scans the library and extracts its own covers."
+                },
+            )
+            if (sharedCatalog) append(if (owner != null) "  Owner: $owner." else "  Owner: not detected.")
+        },
+        color = Muted,
+        fontSize = 11.sp,
+    )
 }
 
 @Composable

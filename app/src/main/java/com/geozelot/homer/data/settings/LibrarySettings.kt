@@ -48,16 +48,24 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SORT_MODE] = value }
     }
 
-    /**
-     * Sync level (per-user, per-device): 1 = on-device only (no `.homer` reads/writes),
-     * 2 = progress sync via the user's `.homer/index.json`, 3 = shared library cache (later).
-     * Default 2 preserves the existing cross-device behaviour.
-     */
-    val syncTier: Flow<Int> =
-        context.settingsDataStore.data.map { it[KEY_SYNC_TIER] ?: TIER_PROGRESS }
+    // Two independent switches (they replaced a linear "sync tier"). Each falls back to the legacy
+    // KEY_SYNC_TIER when its own key isn't set yet, so existing installs keep their behaviour:
+    // tier 1 → (progress off, catalog off), tier 2 → (on, off), tier 3 → (on, on).
 
-    suspend fun setSyncTier(tier: Int) {
-        context.settingsDataStore.edit { it[KEY_SYNC_TIER] = tier }
+    /** Sync my listening progress to my account's `.homer/index.json` (cross-device for me). */
+    val progressSyncEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_PROGRESS_SYNC] ?: ((it[KEY_SYNC_TIER] ?: LEGACY_TIER_PROGRESS) >= LEGACY_TIER_PROGRESS) }
+
+    suspend fun setProgressSyncEnabled(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_PROGRESS_SYNC] = value }
+    }
+
+    /** Use the shared library catalog + cover cache at the library root's `.homer/`. */
+    val sharedCatalogEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_SHARED_CATALOG] ?: ((it[KEY_SYNC_TIER] ?: LEGACY_TIER_PROGRESS) >= LEGACY_TIER_SHARED) }
+
+    suspend fun setSharedCatalogEnabled(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_SHARED_CATALOG] = value }
     }
 
     /** Library grouping: "none" | "author" | "genre". */
@@ -132,12 +140,16 @@ class LibrarySettings @Inject constructor(
     }
 
     private companion object {
-        const val TIER_PROGRESS = 2
+        // Legacy linear tiers, kept only to migrate old installs into the two new booleans.
+        const val LEGACY_TIER_PROGRESS = 2
+        const val LEGACY_TIER_SHARED = 3
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
+        val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
+        val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")

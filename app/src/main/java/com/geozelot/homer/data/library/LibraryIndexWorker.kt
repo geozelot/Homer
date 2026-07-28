@@ -58,8 +58,8 @@ class LibraryIndexWorker @AssistedInject constructor(
                 setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
             }
 
-            // Tier 3: publish the freshly-scanned catalog (owner-gated creation, open updates).
-            if (doScan && librarySettings.syncTier.first() >= 3) {
+            // Shared catalog: publish the freshly-scanned catalog (owner-gated creation, open updates).
+            if (doScan && librarySettings.sharedCatalogEnabled.first()) {
                 setForegroundSafely(foregroundInfo("Updating shared library…", 0, 0))
                 catalog.publishIfAllowed()
             }

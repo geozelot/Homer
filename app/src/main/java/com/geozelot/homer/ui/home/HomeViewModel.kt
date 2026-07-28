@@ -265,13 +265,17 @@ class HomeViewModel @Inject constructor(
     val gridView: StateFlow<Boolean> = librarySettings.gridView
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    /** Sync level: 1 = on-device only, 2 = cross-device progress sync, 3 = shared library cache. */
-    val syncTier: StateFlow<Int> = librarySettings.syncTier
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 2)
+    /** Sync my listening progress to my account (cross-device for me). */
+    val progressSyncEnabled: StateFlow<Boolean> = librarySettings.progressSyncEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    /** Whether a Tier-3 shared catalog exists in this library (advisory, for the settings UI). */
-    private val _tier3Available = MutableStateFlow(false)
-    val tier3Available: StateFlow<Boolean> = _tier3Available.asStateFlow()
+    /** Use the shared library catalog + cover cache at the library root. */
+    val sharedCatalogEnabled: StateFlow<Boolean> = librarySettings.sharedCatalogEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Whether a shared catalog exists in this library (advisory, for the settings UI). */
+    private val _sharedCatalogAvailable = MutableStateFlow(false)
+    val sharedCatalogAvailable: StateFlow<Boolean> = _sharedCatalogAvailable.asStateFlow()
 
     /** Detected Nextcloud owner of the library folder, or null if not discoverable. */
     private val _libraryOwner = MutableStateFlow<String?>(null)
@@ -358,9 +362,9 @@ class HomeViewModel @Inject constructor(
         // Tier 3: pull the shared catalog so the library is present without scanning. Never
         // touch the network at tier 1 (on-device only).
         viewModelScope.launch {
-            if (librarySettings.syncTier.first() >= 3) {
+            if (librarySettings.sharedCatalogEnabled.first()) {
                 catalog.consume()
-                _tier3Available.value = catalog.exists()
+                _sharedCatalogAvailable.value = catalog.exists()
             }
         }
     }
@@ -377,7 +381,7 @@ class HomeViewModel @Inject constructor(
                 val libraries = discovery.discover()
                 _discovered.value = libraries
                 val current = libraries.firstOrNull { it.isCurrentRoot }
-                _tier3Available.value = current?.hasSharedCatalog == true
+                _sharedCatalogAvailable.value = current?.hasSharedCatalog == true
                 _libraryOwner.value = current?.owner
             } finally {
                 _discovering.value = false
@@ -595,13 +599,19 @@ class HomeViewModel @Inject constructor(
         libraryIndexManager.fetchMissingCovers()
     }
 
-    fun setSyncTier(tier: Int) {
+    /** Toggle syncing my listening progress to my account's `.homer/index.json`. */
+    fun setProgressSync(enabled: Boolean) {
+        viewModelScope.launch { librarySettings.setProgressSyncEnabled(enabled) }
+    }
+
+    /** Toggle the shared library catalog. Turning it on bootstraps from (or creates) the catalog. */
+    fun setSharedCatalog(enabled: Boolean) {
         viewModelScope.launch {
-            librarySettings.setSyncTier(tier)
-            if (tier >= 3) {
+            librarySettings.setSharedCatalogEnabled(enabled)
+            if (enabled) {
                 if (catalog.exists()) catalog.consume() // bootstrap from the shared library
                 else catalog.publishIfAllowed()         // create it (owner, or claim-based)
-                _tier3Available.value = catalog.exists()
+                _sharedCatalogAvailable.value = catalog.exists()
             }
         }
     }

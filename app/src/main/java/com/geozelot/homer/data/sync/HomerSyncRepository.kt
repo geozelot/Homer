@@ -60,9 +60,9 @@ class HomerSyncRepository @Inject constructor(
             Log.i(TAG, "sync skipped: no account")
             return
         }
-        // Tier 1 = on-device only: never touch the .homer manifest.
-        if (librarySettings.syncTier.first() < TIER_PROGRESS) {
-            Log.i(TAG, "sync skipped: on-device-only tier")
+        // Progress sync off = on-device only: never touch the .homer manifest.
+        if (!librarySettings.progressSyncEnabled.first()) {
+            Log.i(TAG, "sync skipped: progress sync disabled (device-only)")
             return
         }
         // Offline: don't burn the connect timeout on a doomed round-trip. Local Room writes have
@@ -263,7 +263,6 @@ class HomerSyncRepository @Inject constructor(
         const val DIR = ".homer"
         const val FILE = "index.json"
         const val MAX_ATTEMPTS = 3
-        const val TIER_PROGRESS = 2
     }
 }
 

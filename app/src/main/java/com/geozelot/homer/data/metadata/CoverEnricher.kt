@@ -38,11 +38,11 @@ class CoverEnricher @Inject constructor(
     suspend fun enrich(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }) {
         val credentials = credentialStore.awaitCredentials() ?: return
         val libraryRoot = librarySettings.libraryRoot.first()
-        val tier = librarySettings.syncTier.first()
+        val sharedCatalog = librarySettings.sharedCatalogEnabled.first()
         val onlineLookup = librarySettings.onlineCoverLookup.first()
-        // At Tier 3 consider every art-less book (even ones a prior local extraction gave up on),
-        // so the shared cache is always tried; at lower tiers only fresh, untried books.
-        val books = if (tier >= 3) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
+        // With the shared catalog on, consider every art-less book (even ones a prior local
+        // extraction gave up on) so the shared cache is always tried; otherwise only fresh books.
+        val books = if (sharedCatalog) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
         val total = books.size
         if (total == 0) return
         Log.i(TAG, "enriching covers for $total books")
@@ -50,9 +50,9 @@ class CoverEnricher @Inject constructor(
         for ((index, book) in books.withIndex()) {
             coroutineContext.ensureActive()
             onProgress(index, total)
-            // Tier 3: prefer the shared cover cache (a small download) over re-extracting the
-            // art by streaming the first file.
-            if (tier >= 3) {
+            // Shared catalog: prefer the shared cover cache (a small download) over re-extracting
+            // the art by streaming the first file.
+            if (sharedCatalog) {
                 val cached = runCatching {
                     webDavClient.getBytes("$libraryRoot/.homer/covers/${coverCache.coverName(book.id)}")
                 }.getOrNull()
