@@ -532,8 +532,17 @@ class HomeViewModel @Inject constructor(
             // The folder already has Homer data — let the user choose load vs replace.
             _pendingStorageChange.value = PendingStorageChange(source, target)
         } else {
+            // Empty target: switch the location NOW (synchronous + reliable, independent of the
+            // worker), then move any existing local data across in the background.
+            commitLocation(source, target)
             storageMigrationManager.migrate(source, target, overwrite = false)
         }
+    }
+
+    /** Commits the active storage location immediately and releases the old folder's grant. */
+    private suspend fun commitLocation(source: String?, target: String?) {
+        if (target == null) storageLocation.useDefault() else storageLocation.setCustomFolder(Uri.parse(target))
+        if (source != null && source != target) storageLocation.releasePersistable(source)
     }
 
     /** Adopt the library already in the chosen folder (merge progress, keep its downloads). */
@@ -541,17 +550,19 @@ class HomeViewModel @Inject constructor(
         val p = _pendingStorageChange.value ?: return
         _pendingStorageChange.value = null
         viewModelScope.launch {
-            if (p.target == null) storageLocation.useDefault() else storageLocation.setCustomFolder(Uri.parse(p.target))
-            if (p.source != null && p.source != p.target) storageLocation.releasePersistable(p.source)
+            commitLocation(p.source, p.target)
             adoptCurrentArea()
         }
     }
 
-    /** Overwrite the chosen folder's Homer data with this device's (a full move, clearing target). */
+    /** Overwrite the chosen folder's Homer data with this device's (switch now, move in background). */
     fun replacePendingStorage() {
         val p = _pendingStorageChange.value ?: return
         _pendingStorageChange.value = null
-        storageMigrationManager.migrate(p.source, p.target, overwrite = true)
+        viewModelScope.launch {
+            commitLocation(p.source, p.target)
+            storageMigrationManager.migrate(p.source, p.target, overwrite = true)
+        }
     }
 
     /** Abandon a pending storage change, releasing the grant taken to probe the folder. */

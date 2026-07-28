@@ -95,17 +95,13 @@ class StorageMigrator @Inject constructor(
                 report("Moving covers", ++done, total, onProgress)
             }
 
-            // Clean up the source's now-empty Homer subtree while we still hold its permission.
+            // Clean up the source's now-empty Homer subtree.
             source.delete("downloads"); source.delete("covers"); source.delete(".homer")
 
             report("Finishing…", done, total, onProgress)
-            // Commit the location switch. useDefault releases the old custom grant; when moving
-            // between two custom folders we release the source grant explicitly below.
-            if (targetUri == null) storageLocation.useDefault()
-            else storageLocation.setCustomFolder(Uri.parse(targetUri))
-            if (sourceUri != null && sourceUri != targetUri) storageLocation.releasePersistable(sourceUri)
-
-            // Repoint the cover paths (absolute Uris) at the new area, now that it's active.
+            // The active location was already committed by the caller (so switching is instant and
+            // not gated on this worker running). Repoint the cover paths (absolute Uris) at the new
+            // area now that its files are in place.
             val targetArea = storageLocation.areaFor(targetUri)
             for (job in coverJobs) {
                 val u = targetArea.uri(job.rel)?.toString() ?: continue
