@@ -176,7 +176,7 @@ object DatabaseModule {
                 MIGRATION_12_13, MIGRATION_13_14,
             )
             // Safety net for any other version mismatch during development.
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides

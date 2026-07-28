@@ -78,6 +78,10 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+        // Adopt the future default (KT-73255): annotations without an explicit use-site target
+        // apply to the parameter AND the property/field. Silences the warnings on qualifier/DI
+        // annotations on constructor `val` params; harmless for Hilt (it reads the parameter).
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
 }
 
