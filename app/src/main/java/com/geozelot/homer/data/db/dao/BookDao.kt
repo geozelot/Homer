@@ -31,6 +31,10 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL AND coverAttempted = 0")
     suspend fun booksNeedingCover(): List<BookEntity>
 
+    /** All books still without art (ignores the attempted flag) — Tier-3 shared-cache targets. */
+    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL")
+    suspend fun booksWithoutArt(): List<BookEntity>
+
     @Query("UPDATE books SET localCoverPath = :path WHERE id = :bookId")
     suspend fun updateLocalCover(bookId: String, path: String)
 

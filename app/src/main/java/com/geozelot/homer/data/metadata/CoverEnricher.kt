@@ -40,7 +40,9 @@ class CoverEnricher @Inject constructor(
         val libraryRoot = librarySettings.libraryRoot.first()
         val tier = librarySettings.syncTier.first()
         val onlineLookup = librarySettings.onlineCoverLookup.first()
-        val books = bookDao.booksNeedingCover()
+        // At Tier 3 consider every art-less book (even ones a prior local extraction gave up on),
+        // so the shared cache is always tried; at lower tiers only fresh, untried books.
+        val books = if (tier >= 3) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
         val total = books.size
         if (total == 0) return
         Log.i(TAG, "enriching covers for $total books")
@@ -59,6 +61,9 @@ class CoverEnricher @Inject constructor(
                     found++
                     continue
                 }
+                // Shared cache missed and we already tried extracting this one before — don't
+                // re-stream it every pass; leave it for a future publish to the shared cache.
+                if (book.coverAttempted) continue
             }
             val firstFile = audioFileDao.findForBook(book.id).firstOrNull()
             val bytes = firstFile?.let {

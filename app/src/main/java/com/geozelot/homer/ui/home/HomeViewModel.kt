@@ -529,7 +529,10 @@ class HomeViewModel @Inject constructor(
                 return
             }
         }
-        val hasExisting = runCatching { storageLocation.areaFor(target).exists(MIRROR_MARKER) }.getOrDefault(false)
+        val hasExisting = runCatching {
+            val area = storageLocation.areaFor(target)
+            area.exists(MIRROR_MARKER) || area.exists(LEGACY_MIRROR_MARKER)
+        }.getOrDefault(false)
         if (hasExisting) {
             // The folder already has Homer data — let the user choose load vs replace.
             Log.w(TAG_STORAGE, "target already has a Homer library; prompting load-vs-replace")
@@ -634,7 +637,8 @@ class HomeViewModel @Inject constructor(
 
     private companion object {
         const val CONTINUE_LIMIT = 12
-        const val MIRROR_MARKER = ".homer/index.json"
+        const val MIRROR_MARKER = "progress.json"
+        const val LEGACY_MIRROR_MARKER = ".homer/index.json"
         const val TAG_STORAGE = "HomerStore"
     }
 }
