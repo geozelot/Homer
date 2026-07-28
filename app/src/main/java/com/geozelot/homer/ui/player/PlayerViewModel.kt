@@ -189,6 +189,7 @@ class PlayerViewModel @Inject constructor(
                 hidden = ov?.hidden ?: false,
                 finished = fin,
                 hasCustomCover = book.customCoverPath != null,
+                downloadOnPlay = ov?.downloadOnPlay,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -243,10 +244,11 @@ class PlayerViewModel @Inject constructor(
         tags: String,
         hidden: Boolean,
         finishedChange: Boolean?,
+        downloadOnPlay: Boolean?,
     ) {
         val id = bookId.value ?: return
         viewModelScope.launch {
-            bookEditor.saveOverride(id, title, author, series, seriesIndex, genre, tags, hidden, finishedChange)
+            bookEditor.saveOverride(id, title, author, series, seriesIndex, genre, tags, hidden, finishedChange, downloadOnPlay)
         }
     }
 

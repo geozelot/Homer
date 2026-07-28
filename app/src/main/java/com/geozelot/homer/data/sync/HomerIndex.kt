@@ -63,6 +63,8 @@ data class HomerOverride(
     val genre: String? = null,
     val tags: List<String> = emptyList(),
     val finished: Boolean? = null,
+    /** Per-book playback mode: null = follow global, true = download on play, false = stream. */
+    val downloadOnPlay: Boolean? = null,
     val hidden: Boolean = false,
     val updatedAt: Long,
 )

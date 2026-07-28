@@ -4,12 +4,16 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -23,9 +27,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberSoft
+import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.theme.Surface2
+
+/** A small selectable chip for the tri-state "on play" mode in the edit dialog. */
+@Composable
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (selected) Amber else Parchment,
+        fontSize = 12.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .border(1.dp, if (selected) Amber else Line, RoundedCornerShape(50))
+            .background(if (selected) AmberSoft else Surface2)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+}
 
 /**
  * The minimal, screen-agnostic view of a book that the edit dialog needs, so both the library
@@ -43,6 +69,8 @@ data class EditableBook(
     val hidden: Boolean,
     val finished: Boolean,
     val hasCustomCover: Boolean,
+    /** Per-book play mode override: null = follow global, true = download on play, false = stream. */
+    val downloadOnPlay: Boolean?,
 )
 
 /**
@@ -53,7 +81,7 @@ data class EditableBook(
 @Composable
 fun EditBookDialog(
     book: EditableBook,
-    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?) -> Unit,
+    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?, downloadOnPlay: Boolean?) -> Unit,
     onReset: () -> Unit,
     onPickCover: (Uri) -> Unit,
     onClearCover: () -> Unit,
@@ -73,6 +101,8 @@ fun EditBookDialog(
     // forces the flag (null preserves the existing auto/forced state on save).
     val initialFinished = book.finished
     var finished by remember { mutableStateOf(initialFinished) }
+    // Per-book play mode: null = follow the global setting, true = download on play, false = stream.
+    var playMode by remember { mutableStateOf(book.downloadOnPlay) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -139,6 +169,12 @@ fun EditBookDialog(
                     Text("Hide from library", fontSize = 14.sp)
                     HomerSwitch(checked = hidden, onCheckedChange = { hidden = it })
                 }
+                Text("On play", fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+                Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChip("Default", playMode == null) { playMode = null }
+                    ModeChip("Download", playMode == true) { playMode = true }
+                    ModeChip("Stream", playMode == false) { playMode = false }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -157,7 +193,7 @@ fun EditBookDialog(
         confirmButton = {
             TextButton(onClick = {
                 val finishedChange = if (finished != initialFinished) finished else null
-                onSave(title, author, series, index, genre, tags, hidden, finishedChange)
+                onSave(title, author, series, index, genre, tags, hidden, finishedChange, playMode)
             }) { Text("Save") }
         },
         dismissButton = {

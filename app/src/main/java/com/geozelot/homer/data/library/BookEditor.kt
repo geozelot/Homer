@@ -44,6 +44,7 @@ class BookEditor @Inject constructor(
         tags: String,
         hidden: Boolean,
         finishedChange: Boolean?,
+        downloadOnPlay: Boolean?,
     ) {
         val finished = finishedChange ?: bookOverrideDao.findById(bookId)?.finished
         val tagList = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }
@@ -57,6 +58,7 @@ class BookEditor @Inject constructor(
                 genre = genre.trim().ifBlank { null },
                 tags = tagList.takeIf { it.isNotEmpty() }?.joinToString("\n"),
                 finished = finished,
+                downloadOnPlay = downloadOnPlay,
                 hidden = hidden,
                 updatedAt = System.currentTimeMillis(),
             ),

@@ -24,6 +24,8 @@ data class BookOverrideEntity(
     val tags: String? = null,
     /** Tri-state finished flag: null = auto (derive from position), true/false = forced. */
     val finished: Boolean? = null,
+    /** Per-book playback mode: null = follow the global setting, true = download on play, false = stream. */
+    val downloadOnPlay: Boolean? = null,
     val hidden: Boolean,
     val updatedAt: Long,
 )

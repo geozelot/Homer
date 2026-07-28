@@ -253,6 +253,18 @@ class PlaybackSettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_AUTO_REWIND] = value }
     }
 
+    /**
+     * Global default: when true, pressing Play downloads the whole book for offline use (while it
+     * streams immediately); when false, playback just streams and downloads stay manual. A per-book
+     * override can force either mode for a specific book. Default true.
+     */
+    val downloadOnPlay: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_DOWNLOAD_ON_PLAY] ?: true }
+
+    suspend fun setDownloadOnPlay(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_DOWNLOAD_ON_PLAY] = value }
+    }
+
     private companion object {
         val KEY_SPEED = floatPreferencesKey("playback_speed")
         val KEY_SKIP_SILENCE = booleanPreferencesKey("skip_silence")
@@ -263,6 +275,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_SEEK_SECONDS = intPreferencesKey("seek_seconds")
         val KEY_VOLUME_MODE = stringPreferencesKey("volume_mode")
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
+        val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
         const val DEFAULT_SLEEP_EXTEND = "15"
         const val DEFAULT_SEEK_SECONDS = 15

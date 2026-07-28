@@ -69,6 +69,8 @@ data class BookListItem(
     val lastPlayedAt: Long?,
     /** Forced finished flag: null = auto-derive, true/false = user override. */
     val finishedOverride: Boolean?,
+    /** Per-book play mode: null = follow global, true = download on play, false = stream. */
+    val downloadOnPlayOverride: Boolean?,
     /** Offline-download status ([com.geozelot.homer.data.db.entity.DownloadStatus]) or null. */
     val downloadStatus: String?,
     val downloadedFiles: Int,
@@ -87,6 +89,7 @@ private data class EffectiveBook(
     val hidden: Boolean,
     val tags: List<String>,
     val finishedOverride: Boolean?,
+    val downloadOnPlayOverride: Boolean?,
     /** Resolved cover model, computed here (rarely) rather than on every progress tick. */
     val coverModel: Any?,
 )
@@ -181,6 +184,7 @@ class HomeViewModel @Inject constructor(
                         hidden = override?.hidden == true,
                         tags = override?.tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
                         finishedOverride = override?.finished,
+                        downloadOnPlayOverride = override?.downloadOnPlay,
                         coverModel = BookCover.model(effective, credentials, webDavClient, libraryRoot),
                     )
                 }
@@ -220,6 +224,7 @@ class HomeViewModel @Inject constructor(
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
                     lastPlayedAt = bookProgress?.updatedAt,
                     finishedOverride = eff.finishedOverride,
+                    downloadOnPlayOverride = eff.downloadOnPlayOverride,
                     downloadStatus = download?.status,
                     downloadedFiles = download?.downloadedFiles ?: 0,
                     hidden = eff.hidden,
@@ -302,6 +307,10 @@ class HomeViewModel @Inject constructor(
     /** Seconds to rewind on resume; 0 = off (default). */
     val autoRewindSeconds: StateFlow<Int> = playbackSettings.autoRewindSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Global default: press Play downloads the book (true) vs streams only (false). */
+    val downloadOnPlay: StateFlow<Boolean> = playbackSettings.downloadOnPlay
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     /** Configured custom storage folder Uri (null = app-external default). */
     val customStorageUri: StateFlow<String?> = librarySettings.customStorageUri
@@ -436,6 +445,10 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setAutoRewindSeconds(value) }
     }
 
+    fun setDownloadOnPlay(value: Boolean) {
+        viewModelScope.launch { playbackSettings.setDownloadOnPlay(value) }
+    }
+
     fun setAppLock(value: Boolean) {
         viewModelScope.launch { librarySettings.setAppLockEnabled(value) }
     }
@@ -478,9 +491,10 @@ class HomeViewModel @Inject constructor(
         tags: String,
         hidden: Boolean,
         finishedChange: Boolean?,
+        downloadOnPlay: Boolean?,
     ) {
         viewModelScope.launch {
-            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, finishedChange)
+            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, finishedChange, downloadOnPlay)
         }
     }
 

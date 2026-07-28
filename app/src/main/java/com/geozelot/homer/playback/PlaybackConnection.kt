@@ -13,10 +13,13 @@ import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
+import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
@@ -85,7 +88,9 @@ class PlaybackConnection @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookmarkDao: BookmarkDao,
     private val bookmarkMetaDao: BookmarkMetaDao,
-    downloadDao: DownloadDao,
+    private val downloadDao: DownloadDao,
+    private val bookOverrideDao: BookOverrideDao,
+    private val downloadManager: DownloadManager,
     private val homerSync: HomerSyncRepository,
     localMirror: LocalMirror,
 ) {
@@ -113,6 +118,10 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var autoRewindMs = 0L
 
+    /** Global "download on play" default (cached from settings); a per-book override can flip it. */
+    @Volatile
+    private var downloadOnPlayGlobal = true
+
     /** Set when the player reports an error; surfaced in [state] so the UI can offer a retry. */
     @Volatile
     private var playbackError = false
@@ -123,6 +132,9 @@ class PlaybackConnection @Inject constructor(
     init {
         scope.launch {
             playbackSettings.autoRewindSeconds.collect { autoRewindMs = it * 1000L }
+        }
+        scope.launch {
+            playbackSettings.downloadOnPlay.collect { downloadOnPlayGlobal = it }
         }
     }
 
@@ -319,9 +331,24 @@ class PlaybackConnection @Inject constructor(
         // Auto-rewind: on resume, step back a little so the listener re-hears some context.
         // Skipped on a brand-new start (position ~0, clamped by seekBy anyway).
         if (autoRewindMs > 0L && c.currentPosition > 0L) seekBy(-autoRewindMs)
+        // Download-on-play: keep the book offline as it plays (it streams meanwhile; the download
+        // watcher swaps to local files once complete). Per-book override wins over the global.
+        currentBookId?.let(::maybeAutoDownload)
         // First play after loading: prepare (which begins buffering/streaming) then play.
         if (c.playbackState == Player.STATE_IDLE) c.prepare()
         c.play()
+    }
+
+    /** Kicks a background download for [bookId] if the effective play-mode wants it and it isn't
+     *  already downloaded or in flight. */
+    private fun maybeAutoDownload(bookId: String) {
+        scope.launch {
+            val enabled = bookOverrideDao.findById(bookId)?.downloadOnPlay ?: downloadOnPlayGlobal
+            if (!enabled) return@launch
+            val status = downloadDao.findByBookId(bookId)?.status
+            // Only start if never downloaded or a prior attempt failed; leave done/in-flight/paused.
+            if (status == null || status == DownloadStatus.FAILED) downloadManager.download(bookId)
+        }
     }
 
     /** Re-prepares the current media after a playback error (e.g. a connection was restored). */

@@ -276,8 +276,8 @@ fun HomeScreen(
     editing?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, genre, tags, hidden, finishedChange ->
-                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, finishedChange)
+            onSave = { title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay ->
+                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay)
                 editing = null
             },
             onReset = {
@@ -377,6 +377,7 @@ private fun BookListItem.toEditable() = EditableBook(
     hidden = hidden,
     finished = finished,
     hasCustomCover = hasCustomCover,
+    downloadOnPlay = downloadOnPlayOverride,
 )
 
 /** Callbacks a card/row needs for its context menu, bundled to keep signatures small. */
@@ -1373,6 +1374,7 @@ private fun AppSettingsSheet(
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val appLock by viewModel.appLockEnabled.collectAsStateWithLifecycle()
     val certPinning by viewModel.certPinningEnabled.collectAsStateWithLifecycle()
 
@@ -1502,6 +1504,15 @@ private fun AppSettingsSheet(
                     onSelect = viewModel::setAutoRewindSeconds,
                 )
             }
+            SettingSwitch("Download books when you play them", downloadOnPlay, viewModel::setDownloadOnPlay)
+            Text(
+                "Pressing Play keeps the book for offline listening (it streams right away while it " +
+                    "downloads). Turn off to stream only and download manually. A single book can " +
+                    "override this from its Edit dialog.",
+                color = Muted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
             SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
