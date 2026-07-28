@@ -80,22 +80,19 @@ class StorageMigrator @Inject constructor(
             }
             val total = downloadRels.size + coverJobs.size
 
-            if (overwrite) {
-                report("Preparing…", 0, total, onProgress)
-                target.delete("downloads"); target.delete("covers"); target.delete(".homer")
-            }
-
             // Copy each file independently: a single unwritable name (e.g. a character the target
-            // volume rejects) must not abort the whole move.
+            // volume rejects) must not abort the whole move. [overwrite] re-copies files that
+            // already exist at the target (this device wins) but NEVER bulk-deletes the target
+            // first — so a move that finds little/nothing at the source can't wipe good data.
             var done = 0
             var failures = 0
             for (rel in downloadRels) {
-                runCatching { copyThenDeleteSource(source, target, rel) }
+                runCatching { copyThenDeleteSource(source, target, rel, overwrite) }
                     .onFailure { failures++; Log.w(TAG, "skipped $rel", it) }
                 report("Moving downloads", ++done, total, onProgress)
             }
             for (job in coverJobs) {
-                runCatching { copyThenDeleteSource(source, target, job.rel) }
+                runCatching { copyThenDeleteSource(source, target, job.rel, overwrite) }
                     .onFailure { failures++; Log.w(TAG, "skipped ${job.rel}", it) }
                 report("Moving covers", ++done, total, onProgress)
             }
@@ -125,10 +122,14 @@ class StorageMigrator @Inject constructor(
         }
     }
 
-    /** Copies [rel] to [target] if not already there, verifies it, then removes it from [source]. */
-    private suspend fun copyThenDeleteSource(source: StorageArea, target: StorageArea, rel: String) {
-        if (!target.exists(rel)) {
-            val input = source.openInputStream(rel) ?: return
+    /**
+     * Copies [rel] from [source] to [target] (skipping if already present unless [overwrite]),
+     * verifies it landed, then removes it from [source]. If the source file isn't there, nothing
+     * is copied and — crucially — the target's existing copy is left untouched.
+     */
+    private suspend fun copyThenDeleteSource(source: StorageArea, target: StorageArea, rel: String, overwrite: Boolean) {
+        if (overwrite || !target.exists(rel)) {
+            val input = source.openInputStream(rel) ?: return // nothing at source → don't touch target
             target.writeStream(rel) { out -> input.use { it.copyTo(out) } }
         }
         if (target.exists(rel)) source.delete(rel)
