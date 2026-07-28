@@ -166,7 +166,19 @@ fun PlayerScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
+                .padding(vertical = 16.dp)
+                // Swipe down anywhere on the artwork to collapse back to the mini-player.
+                .pointerInput(Unit) {
+                    val threshold = 60.dp.toPx()
+                    var dragged = 0f
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (dragged > threshold) onBack()
+                            dragged = 0f
+                        },
+                        onVerticalDrag = { _, delta -> dragged += delta },
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f)
@@ -342,19 +354,7 @@ private fun PlayerTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp)
-            // Swipe down on the header to collapse back to the mini-player.
-            .pointerInput(Unit) {
-                val threshold = 48.dp.toPx()
-                var dragged = 0f
-                detectVerticalDragGestures(
-                    onDragEnd = {
-                        if (dragged > threshold) onBack()
-                        dragged = 0f
-                    },
-                    onVerticalDrag = { _, delta -> dragged += delta },
-                )
-            },
+            .padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
