@@ -45,11 +45,13 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            # A PKCS12 keystore (keytool's modern default) uses one password for both the store
+            # and the key, so KEY_PASSWORD is optional here — fall back to the store password.
             cat > keystore.properties <<EOF
           storeFile=$RUNNER_TEMP/release.jks
           storePassword=$KEYSTORE_PASSWORD
           keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
+          keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
           EOF
             echo "Release signing configured."
           else
