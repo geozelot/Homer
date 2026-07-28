@@ -144,6 +144,7 @@ fun HomeScreen(
     val groupMode by viewModel.groupMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
+    val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val pendingStorage by viewModel.pendingStorageChange.collectAsStateWithLifecycle()
     val migration by viewModel.migrationProgress.collectAsStateWithLifecycle()
@@ -234,6 +235,8 @@ fun HomeScreen(
             onPlayPause = viewModel::playPause,
             onRetry = viewModel::retry,
             modifier = Modifier.navigationBarsPadding(),
+            liveCover = miniPlayerBook?.coverModel,
+            liveTitle = miniPlayerBook?.title,
         )
     }
 

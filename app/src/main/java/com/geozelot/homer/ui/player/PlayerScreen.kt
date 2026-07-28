@@ -121,6 +121,7 @@ fun PlayerScreen(
     val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
     val editableBook by viewModel.editableBook.collectAsStateWithLifecycle()
+    val cover by viewModel.cover.collectAsStateWithLifecycle()
 
     var showSleepDialog by remember { mutableStateOf(false) }
     var showBookmarksDialog by remember { mutableStateOf(false) }
@@ -183,7 +184,8 @@ fun PlayerScreen(
         ) {
             val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f)
             CoverImage(
-                model = state.coverModel ?: state.artworkData,
+                // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
+                model = cover ?: state.coverModel ?: state.artworkData,
                 modifier = Modifier
                     .width(coverWidth)
                     .aspectRatio(1f / 1.3f)
@@ -203,7 +205,10 @@ fun PlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { "Loading…" } },
+                // Prefer the live (override-applied) title so an in-place edit updates immediately;
+                // fall back to the playback snapshot before the book row has loaded.
+                text = editableBook?.title?.ifBlank { null }
+                    ?: state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { "Loading…" } },
                 style = SerifTitle.copy(fontSize = 20.sp),
                 color = Parchment,
                 textAlign = TextAlign.Center,

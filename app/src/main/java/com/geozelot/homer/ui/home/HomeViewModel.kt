@@ -255,6 +255,16 @@ class HomeViewModel @Inject constructor(
             buildEntries(filtered, sort, group)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * The currently-playing book as its live library row, so the docked mini-player shows an
+     * up-to-date cover/title (the playback snapshot's cover is captured at play time and doesn't
+     * reflect a later refresh/edit). Null when nothing is playing or the row isn't loaded yet.
+     */
+    val miniPlayerBook: StateFlow<BookListItem?> =
+        combine(playback, books) { state, list ->
+            state.bookId?.let { id -> list.firstOrNull { it.id == id } }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** In-progress books (started, not finished), most-recently-played first. */
     val continueShelf: StateFlow<List<BookListItem>> = books
         .map { list ->

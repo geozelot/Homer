@@ -8,11 +8,17 @@ import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.DownloadDao
+import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
+import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.download.DownloadManager
+import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
@@ -23,9 +29,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -52,12 +61,28 @@ class PlayerViewModel @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
     private val bookEditor: BookEditor,
+    private val webDavClient: WebDavClient,
+    credentialStore: CredentialStore,
+    librarySettings: LibrarySettings,
     chapterDao: ChapterDao,
     downloadDao: DownloadDao,
 ) : ViewModel() {
     val state: StateFlow<PlaybackUiState> = connection.state
 
     private val bookId = MutableStateFlow<String?>(null)
+
+    /**
+     * The current book's cover, observed live from the DB — so a refresh/extraction updates the
+     * player without reopening the book (unlike [PlaybackUiState.coverModel], a play-time snapshot).
+     * Null until known; the screen falls back to embedded artwork meanwhile.
+     */
+    val cover: StateFlow<Any?> = combine(
+        bookId.flatMapLatest { id -> if (id == null) flowOf(null) else bookDao.observeById(id) },
+        credentialStore.credentials,
+        librarySettings.libraryRoot,
+    ) { book, creds, root ->
+        book?.let { BookCover.model(it, creds, webDavClient, root) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -88,11 +113,16 @@ class PlayerViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    // Emit an empty list the instant the book changes, then the new book's data. Without this,
+    // combine() would keep the previous book's files until the DB query returns and briefly pair
+    // them with the new book's playback state — flashing the wrong chapter names on a switch.
     private val embeddedChapters = bookId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else chapterDao.observeForBook(id)
+        if (id == null) flowOf(emptyList())
+        else flow { emit(emptyList<ChapterEntity>()); emitAll(chapterDao.observeForBook(id)) }
     }
     private val bookFiles = bookId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else audioFileDao.observeForBook(id)
+        if (id == null) flowOf(emptyList())
+        else flow { emit(emptyList<AudioFileEntity>()); emitAll(audioFileDao.observeForBook(id)) }
     }
 
     /**
@@ -101,6 +131,9 @@ class PlayerViewModel @Inject constructor(
      */
     val chapters: StateFlow<List<PlayerChapter>> =
         combine(embeddedChapters, bookFiles, state) { embedded, files, s ->
+            // Only compute when the playback state and the loaded files refer to the same book,
+            // so a mid-switch mismatch never marks the wrong chapter current.
+            if (s.bookId != null && s.bookId != bookId.value) return@combine emptyList()
             when {
                 embedded.isNotEmpty() -> {
                     // Single file: the current mark is the last one starting at/before the position.
@@ -136,7 +169,8 @@ class PlayerViewModel @Inject constructor(
     private val chapterDurations: StateFlow<List<Long>?> = bookId
         .flatMapLatest { id ->
             if (id == null) flowOf(null)
-            else audioFileDao.observeForBook(id).map { files ->
+            // Empty-first (see [bookFiles]) so time-left doesn't briefly use the old book's durations.
+            else audioFileDao.observeForBook(id).onStart { emit(emptyList()) }.map { files ->
                 // Null until every chapter is measured, so "time left" is never misleading.
                 if (files.isNotEmpty() && files.all { it.durationMs != null }) {
                     files.map { it.durationMs!! }
@@ -149,6 +183,7 @@ class PlayerViewModel @Inject constructor(
 
     /** Time remaining in the whole book from the current chapter + position; live. */
     val timeLeftMs: StateFlow<Long?> = combine(chapterDurations, state) { durations, s ->
+        if (s.bookId != null && s.bookId != bookId.value) return@combine null
         if (durations == null) return@combine null
         val index = s.chapterIndex.coerceIn(0, durations.size)
         val elapsed = durations.take(index).sum() + s.positionMs.coerceAtLeast(0)

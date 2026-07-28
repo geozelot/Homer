@@ -50,6 +50,9 @@ fun MiniPlayer(
     onPlayPause: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Live cover/title from the library row (update on refresh/edit); fall back to the snapshot. */
+    liveCover: Any? = null,
+    liveTitle: String? = null,
 ) {
     val bookId = state.bookId ?: return
     // Prefer whole-book progress (from measured durations) for the hairline; fall back to the
@@ -93,7 +96,7 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CoverImage(
-                model = state.coverModel ?: state.artworkData,
+                model = liveCover ?: state.coverModel ?: state.artworkData,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(7.dp)),
@@ -104,7 +107,7 @@ fun MiniPlayer(
                     .padding(horizontal = 11.dp),
             ) {
                 Text(
-                    text = state.bookTitle.ifEmpty { state.chapterTitle },
+                    text = liveTitle?.ifBlank { null } ?: state.bookTitle.ifEmpty { state.chapterTitle },
                     color = Parchment,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
