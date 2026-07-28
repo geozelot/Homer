@@ -1360,7 +1360,14 @@ private fun AppSettingsSheet(
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
-    ) { uri -> if (uri != null) viewModel.setCustomStorageFolder(uri) }
+    ) { uri ->
+        if (uri != null) {
+            android.util.Log.w("HomerStore", "folder picker returned: $uri")
+            viewModel.setCustomStorageFolder(uri)
+        } else {
+            android.util.Log.w("HomerStore", "folder picker returned null (cancelled or denied by the system)")
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

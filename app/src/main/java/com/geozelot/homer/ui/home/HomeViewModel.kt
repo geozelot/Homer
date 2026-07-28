@@ -515,6 +515,7 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun requestStorageChange(target: String?) {
         val source = storageLocation.currentCustomUri()
+        Log.w(TAG_STORAGE, "requestStorageChange: source=$source target=$target")
         if (source == target) return // already there
         // Take a durable grant so we can probe + write the target folder. A provider that won't
         // grant a persistable RW permission (some pickers refuse certain folders) throws here —
@@ -522,14 +523,16 @@ class HomeViewModel @Inject constructor(
         if (target != null) {
             try {
                 storageLocation.takePersistable(target)
+                Log.w(TAG_STORAGE, "took persistable permission for $target")
             } catch (e: Exception) {
-                Log.w("HomerStore", "could not take a durable permission for the chosen folder", e)
+                Log.w(TAG_STORAGE, "could not take a durable permission for the chosen folder", e)
                 return
             }
         }
         val hasExisting = runCatching { storageLocation.areaFor(target).exists(MIRROR_MARKER) }.getOrDefault(false)
         if (hasExisting) {
             // The folder already has Homer data — let the user choose load vs replace.
+            Log.w(TAG_STORAGE, "target already has a Homer library; prompting load-vs-replace")
             _pendingStorageChange.value = PendingStorageChange(source, target)
         } else {
             // Empty target: switch the location NOW (synchronous + reliable, independent of the
@@ -543,6 +546,7 @@ class HomeViewModel @Inject constructor(
     private suspend fun commitLocation(source: String?, target: String?) {
         if (target == null) storageLocation.useDefault() else storageLocation.setCustomFolder(Uri.parse(target))
         if (source != null && source != target) storageLocation.releasePersistable(source)
+        Log.w(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
     }
 
     /** Adopt the library already in the chosen folder (merge progress, keep its downloads). */
@@ -631,6 +635,7 @@ class HomeViewModel @Inject constructor(
     private companion object {
         const val CONTINUE_LIMIT = 12
         const val MIRROR_MARKER = ".homer/index.json"
+        const val TAG_STORAGE = "HomerStore"
     }
 }
 
