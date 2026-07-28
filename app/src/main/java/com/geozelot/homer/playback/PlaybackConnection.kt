@@ -126,6 +126,10 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var playbackError = false
 
+    /** A play tap that arrived while a book switch was still loading; honoured once the queue is ready. */
+    @Volatile
+    private var pendingPlay = false
+
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
@@ -256,6 +260,11 @@ class PlaybackConnection @Inject constructor(
                 ?.takeIf { it >= 0 } ?: 0
             val savedPos = saved?.positionMs ?: 0L
             val before = (0 until startIndex).sumOf { currentDurations[playlist.items[it].mediaId] ?: 0L }
+            // Load the new queue NOW (at the locally-saved position), before the possibly-slow
+            // cross-device pull — otherwise the previous book's queue lingers in the controller and
+            // a play tap would resume IT for a few seconds. Not prepared/played (no-auto-start).
+            c.setMediaItems(playlist.items)
+            c.seekTo(startIndex, savedPos)
             _state.value = PlaybackUiState(
                 isConnected = true,
                 bookId = bookId,
@@ -272,23 +281,12 @@ class PlaybackConnection @Inject constructor(
                 sleepEndOfChapter = sleepTimer.endOfChapter,
                 coverModel = playlist.coverModel,
             )
-            // Per-file duration total (headless probe; reads headers, no main playback).
-            durationEnricher.enrich(bookId)
-
-            // Freshest cross-device position (time-boxed), then commit the queue unless a
-            // newer open superseded us while we waited.
-            withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-            if (currentBookId != bookId) return@launch
-            val resumed = playbackStateDao.findByBookId(bookId)
-            c.setMediaItems(playlist.items)
-            if (resumed != null) {
-                val index = playlist.items.indexOfFirst { it.mediaId == resumed.currentMediaId }
-                c.seekTo(if (index >= 0) index else 0, resumed.positionMs)
-            }
-            // Load the queue only — do NOT prepare()/play(), so opening a book streams no
-            // audio. Buffering + playback begin when the user hits play (see [playPause]).
             loading = false
             pushState()
+            // A play tap that arrived mid-switch was deferred; honour it now the queue is B's.
+            if (pendingPlay) { pendingPlay = false; startPlayback() }
+            // Per-file duration total (headless probe; reads headers, no main playback).
+            durationEnricher.enrich(bookId)
             // Watch for download-status flips only after the playlist is loaded, so the reload
             // can't race the initial setMediaItems.
             downloadReloadWatcher.watch(
@@ -296,6 +294,20 @@ class PlaybackConnection @Inject constructor(
                 isOffline = { currentOffline },
                 onSourceFlip = { reloadCurrentBook() },
             )
+
+            // In the background, pull a possibly-newer cross-device position and apply it — but
+            // only if the user hasn't started playing yet, so it never yanks an active listen.
+            scope.launch {
+                withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+                if (currentBookId != bookId) return@launch
+                val resumed = playbackStateDao.findByBookId(bookId) ?: return@launch
+                val cc = controller ?: return@launch
+                if (cc.playbackState == Player.STATE_IDLE && !cc.isPlaying) {
+                    val index = playlist.items.indexOfFirst { it.mediaId == resumed.currentMediaId }
+                    cc.seekTo(if (index >= 0) index else 0, resumed.positionMs)
+                    pushState()
+                }
+            }
         }
     }
 
@@ -328,6 +340,17 @@ class PlaybackConnection @Inject constructor(
             c.pause()
             return
         }
+        // A book switch is still loading the new queue — defer so we don't start the previous
+        // book's leftover queue. [playBook] runs the deferred play once the queue is B's.
+        if (loading) {
+            pendingPlay = true
+            return
+        }
+        startPlayback()
+    }
+
+    private fun startPlayback() {
+        val c = controller ?: return
         // Auto-rewind: on resume, step back a little so the listener re-hears some context.
         // Skipped on a brand-new start (position ~0, clamped by seekBy anyway).
         if (autoRewindMs > 0L && c.currentPosition > 0L) seekBy(-autoRewindMs)

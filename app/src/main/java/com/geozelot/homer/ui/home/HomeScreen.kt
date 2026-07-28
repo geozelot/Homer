@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
@@ -1208,21 +1209,21 @@ private fun CoverArt(model: Any?, title: String, modifier: Modifier = Modifier) 
         if (model != null) {
             CoverImage(model = model, modifier = Modifier.fillMaxSize())
         } else {
+            // No art: a clear, deliberate placeholder (the real title shows on the card/row itself,
+            // so it isn't crammed in here). Scales with the tile, so it works in grid and list.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Brush.linearGradient(listOf(Surface2, Surface1))),
-            )
-            Text(
-                title,
-                style = SerifTitle.copy(fontSize = 13.sp, lineHeight = 15.sp),
-                color = Parchment,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = title,
+                    tint = Muted,
+                    modifier = Modifier.fillMaxSize(0.34f),
+                )
+            }
         }
     }
 }
