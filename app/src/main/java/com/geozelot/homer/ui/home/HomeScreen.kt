@@ -130,6 +130,7 @@ fun HomeScreen(
     onBookClick: (String) -> Unit,
     onOpenLicenses: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -244,6 +245,10 @@ fun HomeScreen(
             onOpenPrivacy = {
                 showAppSettings = false
                 onOpenPrivacy()
+            },
+            onOpenDiagnostics = {
+                showAppSettings = false
+                onOpenDiagnostics()
             },
             onDismiss = { showAppSettings = false },
         )
@@ -1341,6 +1346,7 @@ private fun AppSettingsSheet(
     viewModel: HomeViewModel,
     onOpenLicenses: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
@@ -1484,6 +1490,7 @@ private fun AppSettingsSheet(
             Text("ABOUT", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
             NavRow("Privacy", onOpenPrivacy)
             NavRow("Open-source licenses", onOpenLicenses)
+            NavRow("Diagnostics (logs)", onOpenDiagnostics)
 
             Spacer(Modifier.height(12.dp))
             Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)
