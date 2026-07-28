@@ -3,6 +3,7 @@ package com.geozelot.homer.data.storage
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -50,7 +51,7 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
                 }
                 null
             }
-        }.getOrNull()
+        }.onFailure { Log.w(TAG, "SAF children query failed under $name", it) }.getOrNull()
     }
 
     /** Resolves the directory at [rel] (empty = the tree root), creating missing levels if [create]. */
@@ -156,6 +157,10 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
                 }
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "HomerStore"
     }
 
     private fun mimeFor(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {

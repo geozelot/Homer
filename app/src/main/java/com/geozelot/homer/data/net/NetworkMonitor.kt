@@ -21,12 +21,18 @@ class NetworkMonitor @Inject constructor(
     private val connectivityManager: ConnectivityManager? =
         context.getSystemService(ConnectivityManager::class.java)
 
-    /** True when the active network reports validated internet connectivity. */
+    /**
+     * True when the active network can carry traffic. Deliberately does NOT require
+     * NET_CAPABILITY_VALIDATED: a self-hosted Nextcloud is often reached over a LAN, a VPN, or a
+     * network whose internet-validation probe hasn't (or won't) pass, and requiring VALIDATED
+     * wrongly reported such setups as offline — blocking discovery/sync. This is only a fast-fail
+     * hint; callers stay resilient to thrown errors, so a false positive just lets the real request
+     * try and fail normally.
+     */
     fun isOnline(): Boolean {
         val cm = connectivityManager ?: return true // can't tell → don't block, let the call try
         val network = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(network) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 }

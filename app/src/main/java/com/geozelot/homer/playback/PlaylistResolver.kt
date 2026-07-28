@@ -37,7 +37,7 @@ class PlaylistResolver @Inject constructor(
     )
 
     suspend fun resolve(bookId: String): Playlist? {
-        val credentials = credentialStore.credentials.value ?: return null
+        val credentials = credentialStore.awaitCredentials() ?: return null
         // Apply user overrides so the now-playing title/author match the library.
         val book = bookDao.findById(bookId)?.applyOverride(bookOverrideDao.findById(bookId)) ?: return null
         val files = audioFileDao.findForBook(bookId)

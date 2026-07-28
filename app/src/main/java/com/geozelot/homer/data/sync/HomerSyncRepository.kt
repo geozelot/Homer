@@ -56,7 +56,7 @@ class HomerSyncRepository @Inject constructor(
 
     /** Pull-merge-push in one pass. No-op if no account is configured or sync is off (tier 1). */
     suspend fun sync() {
-        if (credentialStore.credentials.value == null) {
+        if (credentialStore.awaitCredentials() == null) {
             Log.i(TAG, "sync skipped: no account")
             return
         }

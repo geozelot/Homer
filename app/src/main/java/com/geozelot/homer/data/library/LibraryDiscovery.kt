@@ -49,7 +49,7 @@ class LibraryDiscovery @Inject constructor(
     private val json: Json,
 ) {
     suspend fun discover(): List<DiscoveredLibrary> = withContext(Dispatchers.IO) {
-        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) {
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) {
             return@withContext emptyList()
         }
         val libraryRoot = librarySettings.libraryRoot.first().trim('/')

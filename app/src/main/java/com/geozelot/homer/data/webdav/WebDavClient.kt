@@ -35,7 +35,7 @@ class WebDavClient @Inject constructor(
     /** Lists the immediate children of [relativePath] (plus the collection itself). */
     suspend fun propfind(relativePath: String, depth: Int = 1): List<DavResource> =
         withContext(Dispatchers.IO) {
-            val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+            val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
             val url = urlFor(credentials, relativePath)
             val body = PROPFIND_BODY.toRequestBody("application/xml; charset=utf-8".toMediaType())
             val request = Request.Builder()
@@ -54,7 +54,7 @@ class WebDavClient @Inject constructor(
 
     /** Downloads a small text file (e.g. the `.homer` manifest). Null if it doesn't exist. */
     suspend fun getText(relativePath: String): DavFile? = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
         val request = Request.Builder()
             .url(urlFor(credentials, relativePath))
             // Force an uncompressed response: gzip proxies (Apache mod_deflate) mangle the
@@ -78,7 +78,7 @@ class WebDavClient @Inject constructor(
      */
     suspend fun putText(relativePath: String, content: String, ifMatch: String? = null): String? =
         withContext(Dispatchers.IO) {
-            val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+            val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
             val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
             val builder = Request.Builder().url(urlFor(credentials, relativePath)).put(body)
             ifMatch?.let { builder.header("If-Match", it) }
@@ -97,7 +97,7 @@ class WebDavClient @Inject constructor(
      * claim-based owner. Nextcloud-specific; other backends simply return null.
      */
     suspend fun fetchOwnerId(relativePath: String): String? = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.credentials.value ?: return@withContext null
+        val credentials = credentialStore.awaitCredentials() ?: return@withContext null
         try {
             val body = OWNER_PROPFIND_BODY.toRequestBody("application/xml; charset=utf-8".toMediaType())
             val request = Request.Builder()
@@ -130,7 +130,7 @@ class WebDavClient @Inject constructor(
 
     /** Downloads a binary file (e.g. a cached cover). Null if it doesn't exist. */
     suspend fun getBytes(relativePath: String): ByteArray? = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
         val request = Request.Builder()
             .url(urlFor(credentials, relativePath))
             .header("Accept-Encoding", "identity")
@@ -151,7 +151,7 @@ class WebDavClient @Inject constructor(
         bytes: ByteArray,
         contentType: String = "application/octet-stream",
     ): Unit = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
         val body = bytes.toRequestBody(contentType.toMediaType())
         val request = Request.Builder().url(urlFor(credentials, relativePath)).put(body).build()
         client.newCall(request).execute().use { response ->
@@ -161,7 +161,7 @@ class WebDavClient @Inject constructor(
 
     /** Creates a collection (directory); a no-op if it already exists. */
     suspend fun mkcol(relativePath: String): Unit = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.credentials.value ?: throw NotAuthenticatedException()
+        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
         val request = Request.Builder().url(urlFor(credentials, relativePath)).method("MKCOL", null).build()
         client.newCall(request).execute().use { response ->
             // 201 = created, 405 = already exists; both are fine.

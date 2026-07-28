@@ -47,7 +47,7 @@ class HomerCatalogRepository @Inject constructor(
      * exception there crashes the app).
      */
     suspend fun exists(): Boolean {
-        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return false
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
             webDavClient.getText(catalogPath()) != null
         } catch (e: CancellationException) {
@@ -64,7 +64,7 @@ class HomerCatalogRepository @Inject constructor(
      * Best-effort: any failure resolves to false.
      */
     suspend fun isOwner(): Boolean {
-        val me = credentialStore.credentials.value?.loginName ?: return false
+        val me = credentialStore.awaitCredentials()?.loginName ?: return false
         if (!networkMonitor.isOnline()) return false
         return try {
             val owner = webDavClient.fetchOwnerId(librarySettings.libraryRoot.first())
@@ -84,7 +84,7 @@ class HomerCatalogRepository @Inject constructor(
 
     /** Merges the local library into the shared catalog and pushes it. */
     suspend fun publish() {
-        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
         try {
             val local = buildLocalCatalog()
             val path = catalogPath()
@@ -123,7 +123,7 @@ class HomerCatalogRepository @Inject constructor(
 
     /** Pulls the shared catalog into Room (books + files), newest-wins per book. */
     suspend fun consume(): Boolean {
-        if (credentialStore.credentials.value == null || !networkMonitor.isOnline()) return false
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
             val body = webDavClient.getText(catalogPath())?.content?.takeIf { it.isNotBlank() } ?: return false
             val catalog = json.decodeFromString<HomerCatalog>(body)
