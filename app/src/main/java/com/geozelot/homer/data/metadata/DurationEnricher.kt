@@ -49,7 +49,7 @@ class DurationEnricher @Inject constructor(
         if (!inFlight.add(bookId)) return
         scope.launch {
             try {
-                val credentials = credentialStore.credentials.value ?: return@launch
+                val credentials = credentialStore.awaitCredentials() ?: return@launch
                 val libraryRoot = librarySettings.libraryRoot.first()
                 val files = audioFileDao.findForBook(bookId)
                 val book = bookDao.findById(bookId)

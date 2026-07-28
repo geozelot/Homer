@@ -36,7 +36,7 @@ class CoverEnricher @Inject constructor(
 
     /** Fetches covers for all books missing one, reporting progress. Suspends until done. */
     suspend fun enrich(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }) {
-        val credentials = credentialStore.credentials.value ?: return
+        val credentials = credentialStore.awaitCredentials() ?: return
         val libraryRoot = librarySettings.libraryRoot.first()
         val tier = librarySettings.syncTier.first()
         val onlineLookup = librarySettings.onlineCoverLookup.first()

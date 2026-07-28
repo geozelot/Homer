@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +31,14 @@ interface CredentialStore {
      * gating waits on this so it never flashes the login screen on a cold start.
      */
     val loaded: StateFlow<Boolean>
+
+    /**
+     * Suspends until the initial load has completed, then returns the current credentials (or null
+     * if logged out). Background workers must use this rather than reading [credentials] eagerly:
+     * on a cold start in a fresh process the async load may not have landed yet, and a bare
+     * `credentials.value` would spuriously read null and abort the work.
+     */
+    suspend fun awaitCredentials(): NextcloudCredentials?
 
     fun save(credentials: NextcloudCredentials)
 
@@ -65,6 +74,11 @@ class EncryptedCredentialStore @Inject constructor(
 
     private val _loaded = MutableStateFlow(false)
     override val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
+    override suspend fun awaitCredentials(): NextcloudCredentials? {
+        _loaded.first { it }
+        return _credentials.value
+    }
 
     init {
         scope.launch {

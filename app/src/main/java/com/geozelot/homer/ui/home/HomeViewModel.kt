@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.home
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
@@ -515,9 +516,19 @@ class HomeViewModel @Inject constructor(
     private suspend fun requestStorageChange(target: String?) {
         val source = storageLocation.currentCustomUri()
         if (source == target) return // already there
-        // Take a durable grant so we can probe + write the target folder.
-        if (target != null) storageLocation.takePersistable(target)
-        if (storageLocation.areaFor(target).exists(MIRROR_MARKER)) {
+        // Take a durable grant so we can probe + write the target folder. A provider that won't
+        // grant a persistable RW permission (some pickers refuse certain folders) throws here —
+        // log and abort rather than crash or silently half-switch.
+        if (target != null) {
+            try {
+                storageLocation.takePersistable(target)
+            } catch (e: Exception) {
+                Log.w("HomerStore", "could not take a durable permission for the chosen folder", e)
+                return
+            }
+        }
+        val hasExisting = runCatching { storageLocation.areaFor(target).exists(MIRROR_MARKER) }.getOrDefault(false)
+        if (hasExisting) {
             // The folder already has Homer data — let the user choose load vs replace.
             _pendingStorageChange.value = PendingStorageChange(source, target)
         } else {

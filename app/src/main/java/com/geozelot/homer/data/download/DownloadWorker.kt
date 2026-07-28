@@ -53,7 +53,9 @@ class DownloadWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val bookId = inputData.getString(KEY_BOOK_ID) ?: return Result.failure()
-        val credentials = credentialStore.credentials.value ?: return Result.failure()
+        // Wait for the credential store to finish its async load; reading eagerly could see null
+        // in a fresh worker process and abort a perfectly valid download.
+        val credentials = credentialStore.awaitCredentials() ?: return Result.failure()
         val files = audioFileDao.findForBook(bookId)
         if (files.isEmpty()) return Result.success()
         val libraryRoot = librarySettings.libraryRoot.first()
