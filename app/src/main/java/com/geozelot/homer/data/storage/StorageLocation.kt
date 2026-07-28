@@ -47,7 +47,7 @@ class StorageLocation @Inject constructor(
     /** The active storage area, honouring permissions; falls back to the default if a grant is lost. */
     suspend fun area(): StorageArea {
         librarySettings.customStoragePath.first()?.let { path ->
-            if (hasAllFilesAccess()) return FileStorageArea(File(path))
+            if (hasAllFilesAccess()) return FileStorageArea(File(path), sanitize = true)
         }
         librarySettings.customStorageUri.first()?.let(Uri::parse)?.let { uri ->
             if (hasPermission(uri)) return SafStorageArea(context, uri)
@@ -63,7 +63,7 @@ class StorageLocation @Inject constructor(
     fun areaFor(token: String?): StorageArea = when {
         token == null -> defaultArea
         token.startsWith("content://") -> SafStorageArea(context, Uri.parse(token))
-        else -> FileStorageArea(File(token))
+        else -> FileStorageArea(File(token), sanitize = true) // a public path needs safe names
     }
 
     /** Whether the app holds all-files access (needed for a filesystem-path location). */

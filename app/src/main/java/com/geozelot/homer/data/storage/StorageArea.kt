@@ -8,6 +8,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
+/** Characters that public shared storage (FUSE/vfat) rejects in a file or folder name. */
+private const val ILLEGAL_NAME_CHARS = ":*?\"<>|\\"
+
 /**
  * Backend-agnostic file area rooted at the app's chosen storage location (`Homer/`). Relative
  * paths are POSIX-style, e.g. `downloads/Author/Book/01.mp3`. Two implementations back it: a plain
@@ -38,10 +41,26 @@ interface StorageArea {
     suspend fun deleteMatching(dirRel: String, namePrefix: String)
 }
 
-/** [StorageArea] over a plain filesystem [root] (the app-external default). */
-class FileStorageArea(private val root: File) : StorageArea {
+/**
+ * [StorageArea] over a plain filesystem [root]. When [sanitize] is set, each path segment is
+ * mapped to a name that's legal on public shared storage (a FUSE/vfat volume forbids `: * ? " < >
+ * | \\` and control chars, and dislikes trailing dots/spaces). The app-private default dir
+ * tolerates those characters, so it uses [sanitize] = false to keep existing file names intact;
+ * a user-chosen public folder uses [sanitize] = true. Translation is deterministic, so every
+ * read/write/delete for the same relative path maps to the same on-disk file.
+ */
+class FileStorageArea(private val root: File, private val sanitize: Boolean = false) : StorageArea {
 
-    private fun file(rel: String) = File(root, rel)
+    private fun file(rel: String): File {
+        if (!sanitize) return File(root, rel)
+        val safe = rel.split('/').filter { it.isNotEmpty() }.joinToString("/") { safeSegment(it) }
+        return File(root, safe)
+    }
+
+    private fun safeSegment(seg: String): String =
+        buildString {
+            for (c in seg) append(if (c.code < 0x20 || c in ILLEGAL_NAME_CHARS) '_' else c)
+        }.trimEnd(' ', '.').ifBlank { "_" }
 
     override suspend fun write(rel: String, bytes: ByteArray): Uri = withContext(Dispatchers.IO) {
         val f = file(rel)

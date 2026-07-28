@@ -85,15 +85,21 @@ class StorageMigrator @Inject constructor(
                 target.delete("downloads"); target.delete("covers"); target.delete(".homer")
             }
 
+            // Copy each file independently: a single unwritable name (e.g. a character the target
+            // volume rejects) must not abort the whole move.
             var done = 0
+            var failures = 0
             for (rel in downloadRels) {
-                copyThenDeleteSource(source, target, rel)
+                runCatching { copyThenDeleteSource(source, target, rel) }
+                    .onFailure { failures++; Log.w(TAG, "skipped $rel", it) }
                 report("Moving downloads", ++done, total, onProgress)
             }
             for (job in coverJobs) {
-                copyThenDeleteSource(source, target, job.rel)
+                runCatching { copyThenDeleteSource(source, target, job.rel) }
+                    .onFailure { failures++; Log.w(TAG, "skipped ${job.rel}", it) }
                 report("Moving covers", ++done, total, onProgress)
             }
+            if (failures > 0) Log.w(TAG, "$failures file(s) could not be moved to the new location")
 
             // Clean up the source's now-empty Homer subtree.
             source.delete("downloads"); source.delete("covers"); source.delete(".homer")
