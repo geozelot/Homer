@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -96,7 +97,7 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CoverImage(
-                model = liveCover ?: state.coverModel ?: state.artworkData,
+                model = liveCover ?: state.coverModel ?: state.artworkData?.bytes,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(7.dp)),
@@ -170,5 +171,5 @@ fun MiniPlayer(
 /** "1.25×" etc., or null at normal speed (nothing worth showing). */
 private fun formatSpeedShort(speed: Float): String? {
     if (kotlin.math.abs(speed - 1f) < 0.001f) return null
-    return "%.2f".format(speed).trimEnd('0').trimEnd('.') + "×"
+    return String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.') + "×"
 }

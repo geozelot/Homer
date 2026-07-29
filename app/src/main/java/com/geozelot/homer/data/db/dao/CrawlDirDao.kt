@@ -8,15 +8,9 @@ import com.geozelot.homer.data.db.entity.CrawlDirEntity
 @Dao
 interface CrawlDirDao {
 
-    @Query("SELECT * FROM crawl_dirs WHERE path = :path")
-    suspend fun findByPath(path: String): CrawlDirEntity?
-
     @Query("SELECT * FROM crawl_dirs")
     suspend fun getAll(): List<CrawlDirEntity>
 
     @Upsert
     suspend fun upsert(dir: CrawlDirEntity)
-
-    @Query("DELETE FROM crawl_dirs")
-    suspend fun clear()
 }

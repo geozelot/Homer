@@ -80,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.db.entity.BookmarkEntity
@@ -185,7 +186,7 @@ fun PlayerScreen(
             val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f)
             CoverImage(
                 // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
-                model = cover ?: state.coverModel ?: state.artworkData,
+                model = cover ?: state.coverModel ?: state.artworkData?.bytes,
                 modifier = Modifier
                     .width(coverWidth)
                     .aspectRatio(1f / 1.3f)
@@ -894,7 +895,7 @@ private fun ChapterPickerDialog(
 
 /** Trims trailing zeros: 1.0 -> "1", 1.25 -> "1.25", 1.5 -> "1.5". */
 private fun formatSpeed(speed: Float): String =
-    "%.2f".format(speed).trimEnd('0').trimEnd('.')
+    String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.')
 
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"

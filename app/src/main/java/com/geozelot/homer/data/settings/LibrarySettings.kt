@@ -17,9 +17,9 @@ import javax.inject.Singleton
 private val Context.settingsDataStore by preferencesDataStore(name = "homer_settings")
 
 /**
- * Non-secret app settings (DataStore). Currently just the library root: the WebDAV
- * folder (relative to the files root) where the audiobook crawl begins. Empty = the
- * whole drive.
+ * Non-secret app settings, persisted with DataStore. Covers the library root (the WebDAV folder,
+ * relative to the files root, where the crawl begins — empty = the whole drive), plus sync toggles,
+ * storage location, cover-lookup, security, and view/sort/group preferences.
  */
 @Singleton
 class LibrarySettings @Inject constructor(

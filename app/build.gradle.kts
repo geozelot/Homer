@@ -10,8 +10,8 @@ plugins {
 }
 
 // Release signing is driven by a gitignored keystore.properties at the repo root.
-// See BUILD.md. If absent, the release build falls back to unsigned (debug-signable),
-// so the project still configures and builds on a fresh checkout.
+// See the "Signed release APK" section of README.md. If absent, the release build falls back to
+// the debug key, so the project still configures and builds on a fresh checkout.
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) load(keystorePropsFile.inputStream())

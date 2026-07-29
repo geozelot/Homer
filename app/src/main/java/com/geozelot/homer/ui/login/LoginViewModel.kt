@@ -56,7 +56,7 @@ class LoginViewModel @Inject constructor(
         loginJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(status = Status.Connecting, error = null)
             try {
-                Log.i(TAG, "startLogin: server='${_uiState.value.serverUrl}'")
+                Log.d(TAG, "startLogin: server='${_uiState.value.serverUrl}'") // Log.d: stripped from release
                 val init = authRepository.beginLogin(_uiState.value.serverUrl)
                 _openBrowser.send(init.login)
                 _uiState.value = _uiState.value.copy(status = Status.WaitingForBrowser)

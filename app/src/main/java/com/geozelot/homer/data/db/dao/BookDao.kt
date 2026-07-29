@@ -78,7 +78,4 @@ interface BookDao {
     /** Removes books whose folders no longer exist (ids not seen in the latest scan). */
     @Query("DELETE FROM books WHERE id NOT IN (:keepIds)")
     suspend fun deleteMissing(keepIds: List<String>)
-
-    @Query("DELETE FROM books")
-    suspend fun deleteAll()
 }

@@ -67,10 +67,20 @@ data class PlaybackUiState(
     /** Book-level cover (WebDAV URL string or a cached File), stable across chapters. */
     val coverModel: Any? = null,
     /** Embedded artwork parsed from the current file — fallback before a cover is cached. */
-    val artworkData: ByteArray? = null,
+    val artworkData: ArtworkBytes? = null,
     /** A playback error is stalling the stream (usually a lost connection); offer a retry. */
     val hasError: Boolean = false,
 )
+
+/**
+ * Embedded artwork bytes with **content-based** equality. A bare `ByteArray` in [PlaybackUiState]
+ * (a data class backing a `StateFlow`) would compare by reference, defeating the flow's conflation;
+ * this makes equal artwork compare equal so identical states don't re-emit.
+ */
+class ArtworkBytes(val bytes: ByteArray) {
+    override fun equals(other: Any?): Boolean = other is ArtworkBytes && bytes.contentEquals(other.bytes)
+    override fun hashCode(): Int = bytes.contentHashCode()
+}
 
 /**
  * App-side bridge to [PlaybackService]. Lazily connects a [MediaController], exposes playback
@@ -637,7 +647,7 @@ class PlaybackConnection @Inject constructor(
             sleepRemainingMs = sleepTimer.remainingMs(),
             sleepEndOfChapter = sleepTimer.endOfChapter,
             coverModel = currentCoverModel,
-            artworkData = if (currentCoverModel == null) metadata.artworkData else null,
+            artworkData = if (currentCoverModel == null) metadata.artworkData?.let(::ArtworkBytes) else null,
             hasError = playbackError,
         )
     }
