@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -95,6 +97,11 @@ class PlaybackConnection @Inject constructor(
     localMirror: LocalMirror,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Serializes book-switching ([connect]/[playBook]) so their shared-state mutations can't
+     *  interleave across suspension points, and so the [MediaController] is only ever built once
+     *  (a concurrent cold-start connect + first tap must not each build one and leak a controller). */
+    private val switchMutex = Mutex()
     private var controller: MediaController? = null
     private var currentBookId: String? = null
     private var currentCoverModel: Any? = null
@@ -191,121 +198,128 @@ class PlaybackConnection @Inject constructor(
     fun connect() {
         if (currentBookId != null) return
         scope.launch {
-            val c = try {
-                awaitController()
-            } catch (e: Exception) {
-                Log.w(TAG, "eager connect failed", e)
-                return@launch
-            } ?: return@launch
-            if (currentBookId != null || c.mediaItemCount == 0) return@launch
-            val mediaId = c.currentMediaItem?.mediaId ?: return@launch
-            val bookId = audioFileDao.findBookIdForFile(mediaId) ?: return@launch
-            val playlist = playlistResolver.resolve(bookId)
-            currentBookId = bookId
-            currentCoverModel = playlist?.coverModel
-            currentOffline = playlist?.offline ?: false
-            currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
-            currentBookTotal = currentDurations.values.sum()
-            pushState()
-            downloadReloadWatcher.watch(
-                bookId = bookId,
-                isOffline = { currentOffline },
-                onSourceFlip = { reloadCurrentBook() },
-            )
+            switchMutex.withLock {
+                if (currentBookId != null) return@withLock
+                val c = try {
+                    awaitController()
+                } catch (e: Exception) {
+                    Log.w(TAG, "eager connect failed", e)
+                    return@withLock
+                } ?: return@withLock
+                if (currentBookId != null || c.mediaItemCount == 0) return@withLock
+                val mediaId = c.currentMediaItem?.mediaId ?: return@withLock
+                val bookId = audioFileDao.findBookIdForFile(mediaId) ?: return@withLock
+                val playlist = playlistResolver.resolve(bookId)
+                currentBookId = bookId
+                currentCoverModel = playlist?.coverModel
+                currentOffline = playlist?.offline ?: false
+                currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
+                currentBookTotal = currentDurations.values.sum()
+                pushState()
+                downloadReloadWatcher.watch(
+                    bookId = bookId,
+                    isOffline = { currentOffline },
+                    onSourceFlip = { reloadCurrentBook() },
+                )
+            }
         }
     }
 
     /** Loads a book and resumes from its saved position (or the start if none). */
     fun playBook(bookId: String) {
         scope.launch {
-            val c = try {
-                awaitController()
-            } catch (e: Exception) {
-                Log.w(TAG, "cannot connect media controller", e)
-                return@launch
-            } ?: run {
-                Log.w(TAG, "media controller unavailable (timed out)")
-                return@launch
-            }
-            // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
-            // (so they reflect other devices) and leave its queue + play state untouched.
-            if (currentBookId == bookId && c.mediaItemCount > 0) {
-                withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-                return@launch
-            }
+            switchMutex.withLock {
+                val c = try {
+                    awaitController()
+                } catch (e: Exception) {
+                    Log.w(TAG, "cannot connect media controller", e)
+                    return@withLock
+                } ?: run {
+                    Log.w(TAG, "media controller unavailable (timed out)")
+                    return@withLock
+                }
+                // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
+                // (so they reflect other devices) and leave its queue + play state untouched.
+                if (currentBookId == bookId && c.mediaItemCount > 0) {
+                    withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+                    return@withLock
+                }
 
-            // Persist the outgoing book's position before we leave it (synchronous snapshot,
-            // taken while currentBookId still points at it). Skip if a switch is already in
-            // flight — that one already persisted the truly-outgoing book, and currentBookId
-            // no longer matches the controller's loaded book.
-            if (!loading) positionSyncer.persist()
+                // Persist the outgoing book's position before we leave it. Switches are serialized
+                // by switchMutex, so currentBookId still points at the truly-outgoing book here.
+                positionSyncer.persist()
 
-            val playlist = playlistResolver.resolve(bookId) ?: return@launch
+                val playlist = playlistResolver.resolve(bookId) ?: return@withLock
 
-            // Switch to the new book: halt the outgoing one and flip the UI immediately —
-            // before the (possibly slow) sync + queue load — so the player never lingers on
-            // the previous book. `loading` shields the optimistic state from the listener.
-            loading = true
-            playbackError = false    // a fresh book starts without the previous one's error
-            c.stop()                 // halt outgoing audio; leaves the player IDLE so the new
-            c.playWhenReady = false  // queue won't auto-buffer or auto-play
-            currentBookId = bookId
-            currentCoverModel = playlist.coverModel
-            currentOffline = playlist.offline
-            currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
-            currentBookTotal = currentDurations.values.sum()
-            val saved = playbackStateDao.findByBookId(bookId)
-            val startIndex = saved
-                ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
-                ?.takeIf { it >= 0 } ?: 0
-            val savedPos = saved?.positionMs ?: 0L
-            val before = (0 until startIndex).sumOf { currentDurations[playlist.items[it].mediaId] ?: 0L }
-            // Load the new queue NOW (at the locally-saved position), before the possibly-slow
-            // cross-device pull — otherwise the previous book's queue lingers in the controller and
-            // a play tap would resume IT for a few seconds. Not prepared/played (no-auto-start).
-            c.setMediaItems(playlist.items)
-            c.seekTo(startIndex, savedPos)
-            _state.value = PlaybackUiState(
-                isConnected = true,
-                bookId = bookId,
-                bookTitle = playlist.bookTitle,
-                chapterTitle = playlist.items.getOrNull(startIndex)?.mediaMetadata?.title?.toString().orEmpty(),
-                chapterIndex = startIndex,
-                chapterCount = playlist.items.size,
-                positionMs = savedPos,
-                durationMs = currentDurations[playlist.items.getOrNull(startIndex)?.mediaId] ?: 0L,
-                bookElapsedMs = before + savedPos,
-                bookTotalMs = currentBookTotal,
-                playbackSpeed = _state.value.playbackSpeed,
-                sleepRemainingMs = sleepTimer.remainingMs(),
-                sleepEndOfChapter = sleepTimer.endOfChapter,
-                coverModel = playlist.coverModel,
-            )
-            loading = false
-            pushState()
-            // A play tap that arrived mid-switch was deferred; honour it now the queue is B's.
-            if (pendingPlay) { pendingPlay = false; startPlayback() }
-            // Per-file duration total (headless probe; reads headers, no main playback).
-            durationEnricher.enrich(bookId)
-            // Watch for download-status flips only after the playlist is loaded, so the reload
-            // can't race the initial setMediaItems.
-            downloadReloadWatcher.watch(
-                bookId = bookId,
-                isOffline = { currentOffline },
-                onSourceFlip = { reloadCurrentBook() },
-            )
+                // Switch to the new book: halt the outgoing one and flip the UI immediately —
+                // before the (possibly slow) sync + queue load — so the player never lingers on
+                // the previous book. `loading` shields the optimistic state from the listener;
+                // try/finally guarantees it clears even if a DAO read in between throws.
+                loading = true
+                try {
+                    playbackError = false    // a fresh book starts without the previous one's error
+                    c.stop()                 // halt outgoing audio; leaves the player IDLE so the new
+                    c.playWhenReady = false  // queue won't auto-buffer or auto-play
+                    currentBookId = bookId
+                    currentCoverModel = playlist.coverModel
+                    currentOffline = playlist.offline
+                    currentDurations = audioFileDao.findForBook(bookId).associate { it.relativePath to (it.durationMs ?: 0L) }
+                    currentBookTotal = currentDurations.values.sum()
+                    val saved = playbackStateDao.findByBookId(bookId)
+                    val startIndex = saved
+                        ?.let { s -> playlist.items.indexOfFirst { it.mediaId == s.currentMediaId } }
+                        ?.takeIf { it >= 0 } ?: 0
+                    val savedPos = saved?.positionMs ?: 0L
+                    val before = (0 until startIndex).sumOf { currentDurations[playlist.items[it].mediaId] ?: 0L }
+                    // Load the new queue NOW (at the locally-saved position), before the possibly-slow
+                    // cross-device pull — otherwise the previous book's queue lingers in the controller
+                    // and a play tap would resume IT for a few seconds. Not prepared/played.
+                    c.setMediaItems(playlist.items)
+                    c.seekTo(startIndex, savedPos)
+                    _state.value = PlaybackUiState(
+                        isConnected = true,
+                        bookId = bookId,
+                        bookTitle = playlist.bookTitle,
+                        chapterTitle = playlist.items.getOrNull(startIndex)?.mediaMetadata?.title?.toString().orEmpty(),
+                        chapterIndex = startIndex,
+                        chapterCount = playlist.items.size,
+                        positionMs = savedPos,
+                        durationMs = currentDurations[playlist.items.getOrNull(startIndex)?.mediaId] ?: 0L,
+                        bookElapsedMs = before + savedPos,
+                        bookTotalMs = currentBookTotal,
+                        playbackSpeed = _state.value.playbackSpeed,
+                        sleepRemainingMs = sleepTimer.remainingMs(),
+                        sleepEndOfChapter = sleepTimer.endOfChapter,
+                        coverModel = playlist.coverModel,
+                    )
+                } finally {
+                    loading = false
+                }
+                pushState()
+                // A play tap that arrived mid-switch was deferred; honour it now the queue is B's.
+                if (pendingPlay) { pendingPlay = false; startPlayback() }
+                // Per-file duration total (headless probe; reads headers, no main playback).
+                durationEnricher.enrich(bookId)
+                // Watch for download-status flips only after the playlist is loaded, so the reload
+                // can't race the initial setMediaItems.
+                downloadReloadWatcher.watch(
+                    bookId = bookId,
+                    isOffline = { currentOffline },
+                    onSourceFlip = { reloadCurrentBook() },
+                )
 
-            // In the background, pull a possibly-newer cross-device position and apply it — but
-            // only if the user hasn't started playing yet, so it never yanks an active listen.
-            scope.launch {
-                withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-                if (currentBookId != bookId) return@launch
-                val resumed = playbackStateDao.findByBookId(bookId) ?: return@launch
-                val cc = controller ?: return@launch
-                if (cc.playbackState == Player.STATE_IDLE && !cc.isPlaying) {
-                    val index = playlist.items.indexOfFirst { it.mediaId == resumed.currentMediaId }
-                    cc.seekTo(if (index >= 0) index else 0, resumed.positionMs)
-                    pushState()
+                // In the background, pull a possibly-newer cross-device position and apply it — but
+                // only if the user hasn't started playing yet, so it never yanks an active listen.
+                scope.launch {
+                    withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+                    if (currentBookId != bookId) return@launch
+                    val resumed = playbackStateDao.findByBookId(bookId) ?: return@launch
+                    val cc = controller ?: return@launch
+                    if (cc.playbackState == Player.STATE_IDLE && !cc.isPlaying) {
+                        val index = playlist.items.indexOfFirst { it.mediaId == resumed.currentMediaId }
+                        cc.seekTo(if (index >= 0) index else 0, resumed.positionMs)
+                        pushState()
+                    }
                 }
             }
         }
@@ -548,7 +562,7 @@ class PlaybackConnection @Inject constructor(
                     c.addListener(listener)
                     // Apply the persisted global speed to this session.
                     scope.launch { c.setPlaybackSpeed(playbackSettings.speed.first()) }
-                    startPositionUpdates()
+                    startPositionUpdates(c)
                     pushState()
                     cont.resume(c)
                 } catch (e: Exception) {
@@ -560,11 +574,13 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
-    private fun startPositionUpdates() {
+    private fun startPositionUpdates(c: MediaController) {
         scope.launch {
             var tick = 0
-            while (controller != null) {
-                if (!loading && controller?.isPlaying == true) {
+            // Loop only while THIS controller is the active one: if it's replaced by a reconnect,
+            // this loop ends instead of running in parallel with the new controller's loop.
+            while (controller === c) {
+                if (!loading && c.isPlaying) {
                     pushState()
                     if (++tick % 10 == 0) positionSyncer.save() // ~ every 5s while playing
                     if (tick % 600 == 0) positionSyncer.flush() // ~ every 5 min, bounds staleness

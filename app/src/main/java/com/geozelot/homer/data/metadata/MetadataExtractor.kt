@@ -30,21 +30,27 @@ class MetadataExtractor @Inject constructor(
             val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
             // Bounded wait: a stalled authed stream must not tie up the (sequential) cover
             // enrichment pass indefinitely. TimeoutException is handled by the catch below.
-            val trackGroups = MetadataRetriever.retrieveMetadata(mediaSourceFactory, mediaItem)
-                .get(EXTRACT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            for (i in 0 until trackGroups.length) {
-                val group = trackGroups.get(i)
-                for (j in 0 until group.length) {
-                    val metadata = group.getFormat(j).metadata ?: continue
-                    for (k in 0 until metadata.length()) {
-                        when (val entry = metadata.get(k)) {
-                            is ApicFrame -> return@withContext entry.pictureData
-                            is PictureFrame -> return@withContext entry.pictureData
+            val future = MetadataRetriever.retrieveMetadata(mediaSourceFactory, mediaItem)
+            try {
+                val trackGroups = future.get(EXTRACT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                for (i in 0 until trackGroups.length) {
+                    val group = trackGroups.get(i)
+                    for (j in 0 until group.length) {
+                        val metadata = group.getFormat(j).metadata ?: continue
+                        for (k in 0 until metadata.length()) {
+                            when (val entry = metadata.get(k)) {
+                                is ApicFrame -> return@withContext entry.pictureData
+                                is PictureFrame -> return@withContext entry.pictureData
+                            }
                         }
                     }
                 }
+                null
+            } finally {
+                // Cancel so a timed-out/abandoned probe releases its internal player, looper and
+                // open data source instead of lingering until the OkHttp read timeout fires.
+                future.cancel(true)
             }
-            null
         } catch (e: Exception) {
             // Log.d (stripped from release by R8): the URL carries the account + book path.
             Log.d(TAG, "cover extract failed for $mediaUri", e)
