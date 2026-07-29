@@ -75,6 +75,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,6 +85,7 @@ import androidx.compose.ui.unit.sp
 import java.util.Locale
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
@@ -128,6 +131,7 @@ fun PlayerScreen(
     var showBookmarksDialog by remember { mutableStateOf(false) }
     var showChaptersDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -205,11 +209,12 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val loadingLabel = stringResource(R.string.player_loading)
             Text(
                 // Prefer the live (override-applied) title so an in-place edit updates immediately;
                 // fall back to the playback snapshot before the book row has loaded.
                 text = editableBook?.title?.ifBlank { null }
-                    ?: state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { "Loading…" } },
+                    ?: state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { loadingLabel } },
                 style = SerifTitle.copy(fontSize = 20.sp),
                 color = Parchment,
                 textAlign = TextAlign.Center,
@@ -231,10 +236,10 @@ fun PlayerScreen(
             if (chapterCount > 0) {
                 Text(
                     text = buildString {
-                        append("Chapter $chapterNumber of $chapterCount")
+                        append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
                         timeLeftMs?.let {
                             append(" · ")
-                            append(if (it <= 0) "finished" else "${formatCompactDuration(it)} left")
+                            append(if (it <= 0) context.getString(R.string.status_finished) else context.getString(R.string.time_left, formatCompactDuration(it)))
                         }
                     },
                     color = Faint,
@@ -268,7 +273,7 @@ fun PlayerScreen(
 
             ToolRow(
                 speed = state.playbackSpeed,
-                sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter),
+                sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter, context),
                 sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
                 volumeMode = volumeMode,
                 skipSilence = skipSilence,
@@ -365,16 +370,16 @@ private fun PlayerTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Back", tint = Muted)
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_back), tint = Muted)
         }
-        Text("NOW PLAYING", style = SectionLabel, color = Muted)
+        Text(stringResource(R.string.player_now_playing), style = SectionLabel, color = Muted)
         Box {
             IconButton(onClick = { overflowOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Muted)
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Muted)
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text(if (finished) "Mark as unfinished" else "Mark as finished") },
+                    text = { Text(if (finished) stringResource(R.string.player_mark_unfinished) else stringResource(R.string.player_mark_finished)) },
                     onClick = {
                         onToggleFinished()
                         overflowOpen = false
@@ -382,7 +387,7 @@ private fun PlayerTopBar(
                 )
                 if (canEdit) {
                     DropdownMenuItem(
-                        text = { Text("Edit book") },
+                        text = { Text(stringResource(R.string.edit_title)) },
                         onClick = {
                             onEdit()
                             overflowOpen = false
@@ -391,7 +396,7 @@ private fun PlayerTopBar(
                 }
                 HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("Offline") },
+                    text = { Text(stringResource(R.string.menu_offline)) },
                     trailingIcon = {
                         if (downloading) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Amber, strokeWidth = 2.dp)
@@ -444,7 +449,7 @@ private fun Scrubber(
             Text(formatTime(sliderValue.toLong()), color = Muted, fontSize = 11.sp)
             val remaining = (durationMs - sliderValue.toLong()).coerceAtLeast(0)
             Text(
-                text = if (hasDuration) "-${formatTime(remaining)}" else "--:--",
+                text = if (hasDuration) stringResource(R.string.player_time_remaining, formatTime(remaining)) else stringResource(R.string.player_time_unknown),
                 color = Muted,
                 fontSize = 11.sp,
             )
@@ -471,7 +476,7 @@ private fun Transport(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter", tint = Parchment, modifier = Modifier.size(38.dp))
+            Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.player_cd_previous), tint = Parchment, modifier = Modifier.size(38.dp))
         }
         SeekButton(seconds = seekSeconds, forward = false, onClick = onSeekBack)
         Box(
@@ -485,14 +490,14 @@ private fun Transport(
         ) {
             Icon(
                 imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
+                contentDescription = if (isPlaying) stringResource(R.string.action_pause) else stringResource(R.string.action_play),
                 tint = OnAmber,
                 modifier = Modifier.size(40.dp),
             )
         }
         SeekButton(seconds = seekSeconds, forward = true, onClick = onSeekForward)
         IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter", tint = Parchment, modifier = Modifier.size(38.dp))
+            Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.player_cd_next), tint = Parchment, modifier = Modifier.size(38.dp))
         }
     }
 }
@@ -509,7 +514,7 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Filled.Replay,
-            contentDescription = if (forward) "Skip forward $seconds seconds" else "Skip back $seconds seconds",
+            contentDescription = if (forward) stringResource(R.string.player_cd_skip_forward, seconds) else stringResource(R.string.player_cd_skip_back, seconds),
             tint = Parchment,
             // The Replay glyph is a counter-clockwise arrow; mirror it for the forward button.
             modifier = Modifier.size(40.dp).then(if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier),
@@ -531,7 +536,7 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
-        Text("Chapters", color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -548,7 +553,7 @@ private fun ErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(Icons.Filled.Refresh, contentDescription = null, tint = Danger, modifier = Modifier.size(17.dp))
-        Text("Can't reach the server — Retry", color = Danger, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.player_error_banner), color = Danger, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -582,7 +587,7 @@ private fun ToolRow(
             var open by remember { mutableStateOf(false) }
             ToolButton(
                 icon = Icons.Filled.Speed,
-                label = "${formatSpeed(speed)}×",
+                label = stringResource(R.string.player_speed_value, formatSpeed(speed)),
                 active = abs(speed - 1f) > 0.001f,
                 onClick = { open = true },
             )
@@ -591,7 +596,7 @@ private fun ToolRow(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                "${formatSpeed(preset)}×",
+                                stringResource(R.string.player_speed_value, formatSpeed(preset)),
                                 color = if (abs(preset - speed) < 0.001f) Amber else Parchment,
                             )
                         },
@@ -613,23 +618,23 @@ private fun ToolRow(
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 listOf(15, 30, 45, 60).forEach { m ->
                     DropdownMenuItem(
-                        text = { Text("${m}m") },
+                        text = { Text(stringResource(R.string.player_sleep_minutes, m)) },
                         onClick = { onSleepMinutes(m * 60_000L); open = false },
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text("End of chapter") },
+                    text = { Text(stringResource(R.string.player_sleep_end_of_chapter)) },
                     onClick = { onSleepEndOfChapter(); open = false },
                 )
                 if (sleepActive) {
                     DropdownMenuItem(
-                        text = { Text("Turn off", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.player_sleep_turn_off), color = MaterialTheme.colorScheme.error) },
                         onClick = { onSleepOff(); open = false },
                     )
                 }
                 HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("Sleep settings…") },
+                    text = { Text(stringResource(R.string.player_sleep_settings)) },
                     onClick = { onSleepSettings(); open = false },
                 )
             }
@@ -645,18 +650,18 @@ private fun ToolRow(
                     else -> Icons.AutoMirrored.Filled.VolumeUp
                 },
                 label = when (volumeMode) {
-                    VolumeMode.REDUCED -> "Quiet"
-                    VolumeMode.INCREASED -> "Boost"
-                    else -> "Volume"
+                    VolumeMode.REDUCED -> stringResource(R.string.player_volume_quiet)
+                    VolumeMode.INCREASED -> stringResource(R.string.player_volume_boost)
+                    else -> stringResource(R.string.player_volume)
                 },
                 active = volumeMode != VolumeMode.NORMAL,
                 onClick = { open = true },
             )
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 listOf(
-                    VolumeMode.REDUCED to "Reduced",
-                    VolumeMode.NORMAL to "Normal",
-                    VolumeMode.INCREASED to "Increased",
+                    VolumeMode.REDUCED to stringResource(R.string.player_volume_reduced),
+                    VolumeMode.NORMAL to stringResource(R.string.player_volume_normal),
+                    VolumeMode.INCREASED to stringResource(R.string.player_volume_increased),
                 ).forEach { (mode, lbl) ->
                     DropdownMenuItem(
                         text = { Text(lbl, color = if (mode == volumeMode) Amber else Parchment) },
@@ -669,7 +674,7 @@ private fun ToolRow(
         // Skip silence — toggle.
         ToolButton(
             icon = Icons.Filled.ContentCut,
-            label = "Silence",
+            label = stringResource(R.string.player_silence),
             active = skipSilence,
             onClick = onToggleSkipSilence,
         )
@@ -677,7 +682,7 @@ private fun ToolRow(
         // Mark — bookmarks.
         ToolButton(
             icon = Icons.Filled.BookmarkBorder,
-            label = "Mark",
+            label = stringResource(R.string.player_mark),
             active = false,
             onClick = onMark,
         )
@@ -706,10 +711,10 @@ private fun ToolButton(
     }
 }
 
-private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean): String = when {
-    endOfChapter -> "Chapter"
+private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean, context: android.content.Context): String = when {
+    endOfChapter -> context.getString(R.string.player_sleep_chapter)
     remainingMs != null -> formatTime(remainingMs)
-    else -> "Sleep"
+    else -> context.getString(R.string.player_sleep)
 }
 
 // ── Sleep settings (advanced: shake-extend + fade) ────────────────────────────
@@ -725,16 +730,22 @@ private fun SleepSettingsDialog(
     onSetFade: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val extendOptions = listOf("5" to "+5m", "15" to "+15m", "30" to "+30m", "previous" to "Previous", "chapter" to "Chapter")
+    val extendOptions = listOf(
+        "5" to stringResource(R.string.player_sleep_extend_5),
+        "15" to stringResource(R.string.player_sleep_extend_15),
+        "30" to stringResource(R.string.player_sleep_extend_30),
+        "previous" to stringResource(R.string.player_sleep_extend_previous),
+        "chapter" to stringResource(R.string.player_sleep_extend_chapter),
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sleep settings") },
+        title = { Text(stringResource(R.string.player_sleep_settings_title)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Shake to extend", style = MaterialTheme.typography.labelMedium, color = Muted)
+                Text(stringResource(R.string.player_shake_to_extend), style = MaterialTheme.typography.labelMedium, color = Muted)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -748,22 +759,22 @@ private fun SleepSettingsDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Fade out", modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.player_fade_out), modifier = Modifier.weight(1f))
                     Stepper(
-                        value = if (fadeSeconds == 0) "Off" else "${fadeSeconds}s",
+                        value = if (fadeSeconds == 0) stringResource(R.string.settings_off) else stringResource(R.string.settings_seconds, fadeSeconds),
                         onDec = { onSetFade((fadeSeconds - 1).coerceAtLeast(0)) },
                         onInc = { onSetFade((fadeSeconds + 1).coerceAtMost(30)) },
                     )
                 }
                 if (isActive) {
                     TextButton(onClick = onOff, contentPadding = PaddingValues(0.dp)) {
-                        Text("Turn off timer", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.player_turn_off_timer), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 
@@ -788,15 +799,15 @@ private fun BookmarksDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Bookmarks") },
+        title = { Text(stringResource(R.string.player_bookmarks_title)) },
         text = {
             Column {
                 Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add at current position")
+                    Text(stringResource(R.string.player_bookmark_add))
                 }
                 if (bookmarks.isEmpty()) {
                     Text(
-                        "No bookmarks yet.",
+                        stringResource(R.string.player_bookmark_empty),
                         color = Muted,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(top = 12.dp),
@@ -815,9 +826,10 @@ private fun BookmarksDialog(
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                val chapterFallback = stringResource(R.string.player_chapter_fallback)
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        bookmark.chapterTitle.ifEmpty { "Chapter" },
+                                        bookmark.chapterTitle.ifEmpty { chapterFallback },
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 14.sp,
                                         maxLines = 1,
@@ -825,7 +837,7 @@ private fun BookmarksDialog(
                                     )
                                     Text(formatTime(bookmark.positionMs), color = Muted, fontSize = 12.sp)
                                 }
-                                TextButton(onClick = { onDelete(bookmark) }) { Text("Remove") }
+                                TextButton(onClick = { onDelete(bookmark) }) { Text(stringResource(R.string.action_remove)) }
                             }
                         }
                     }
@@ -833,7 +845,7 @@ private fun BookmarksDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 
@@ -853,10 +865,11 @@ private fun ChapterPickerDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Chapters") },
+        title = { Text(stringResource(R.string.player_chapters)) },
         text = {
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = 360.dp)) {
                 itemsIndexed(chapters) { index, chapter ->
+                    val chapterFallback = stringResource(R.string.chapter_numbered, index + 1)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -871,7 +884,7 @@ private fun ChapterPickerDialog(
                             fontSize = 12.sp,
                         )
                         Text(
-                            chapter.title.ifBlank { "Chapter ${index + 1}" },
+                            chapter.title.ifBlank { chapterFallback },
                             modifier = Modifier.weight(1f),
                             color = if (chapter.isCurrent) Amber else Parchment,
                             fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
@@ -887,7 +900,7 @@ private fun ChapterPickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 

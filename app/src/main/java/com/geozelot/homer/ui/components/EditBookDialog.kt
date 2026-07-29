@@ -28,9 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Line
@@ -106,34 +108,34 @@ fun EditBookDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit book") },
+        title = { Text(stringResource(R.string.edit_title)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title") },
+                    label = { Text(stringResource(R.string.edit_field_title)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = author,
                     onValueChange = { author = it },
-                    label = { Text("Author") },
+                    label = { Text(stringResource(R.string.edit_field_author)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = series,
                     onValueChange = { series = it },
-                    label = { Text("Series") },
+                    label = { Text(stringResource(R.string.edit_field_series)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = index,
                     onValueChange = { index = it },
-                    label = { Text("Series #") },
+                    label = { Text(stringResource(R.string.edit_field_series_index)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -141,15 +143,15 @@ fun EditBookDialog(
                 OutlinedTextField(
                     value = genre,
                     onValueChange = { genre = it },
-                    label = { Text("Genre") },
+                    label = { Text(stringResource(R.string.edit_field_genre)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = tags,
                     onValueChange = { tags = it },
-                    label = { Text("Tags") },
-                    placeholder = { Text("comma, separated") },
+                    label = { Text(stringResource(R.string.edit_field_tags)) },
+                    placeholder = { Text(stringResource(R.string.edit_tags_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
@@ -158,7 +160,7 @@ fun EditBookDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Mark as finished", fontSize = 14.sp)
+                    Text(stringResource(R.string.edit_mark_finished), fontSize = 14.sp)
                     HomerSwitch(checked = finished, onCheckedChange = { finished = it })
                 }
                 Row(
@@ -166,14 +168,14 @@ fun EditBookDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Hide from library", fontSize = 14.sp)
+                    Text(stringResource(R.string.edit_hide_from_library), fontSize = 14.sp)
                     HomerSwitch(checked = hidden, onCheckedChange = { hidden = it })
                 }
-                Text("On play", fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+                Text(stringResource(R.string.edit_on_play), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ModeChip("Default", playMode == null) { playMode = null }
-                    ModeChip("Download", playMode == true) { playMode = true }
-                    ModeChip("Stream", playMode == false) { playMode = false }
+                    ModeChip(stringResource(R.string.edit_mode_default), playMode == null) { playMode = null }
+                    ModeChip(stringResource(R.string.edit_mode_download), playMode == true) { playMode = true }
+                    ModeChip(stringResource(R.string.edit_mode_stream), playMode == false) { playMode = false }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -183,9 +185,9 @@ fun EditBookDialog(
                         pickCover.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                         )
-                    }) { Text(if (book.hasCustomCover) "Change cover" else "Choose cover") }
+                    }) { Text(if (book.hasCustomCover) stringResource(R.string.edit_change_cover) else stringResource(R.string.edit_choose_cover)) }
                     if (book.hasCustomCover) {
-                        TextButton(onClick = onClearCover) { Text("Clear cover") }
+                        TextButton(onClick = onClearCover) { Text(stringResource(R.string.edit_clear_cover)) }
                     }
                 }
             }
@@ -194,12 +196,12 @@ fun EditBookDialog(
             TextButton(onClick = {
                 val finishedChange = if (finished != initialFinished) finished else null
                 onSave(title, author, series, index, genre, tags, hidden, finishedChange, playMode)
-            }) { Text("Save") }
+            }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onReset) { Text("Reset") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onReset) { Text(stringResource(R.string.action_reset)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )

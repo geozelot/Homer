@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -38,6 +39,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Muted
@@ -85,8 +87,8 @@ fun BiometricGate(content: @Composable () -> Unit) {
         val host = activity ?: return
         authError = null
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Homer")
-            .setSubtitle("Confirm it's you to continue")
+            .setTitle(context.getString(R.string.lock_prompt_title))
+            .setSubtitle(context.getString(R.string.lock_prompt_subtitle))
             .setAllowedAuthenticators(AUTHENTICATORS)
             .build()
         BiometricPrompt(
@@ -130,12 +132,12 @@ private fun LockScreen(icon: ImageVector, error: String?, onUnlock: () -> Unit) 
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = null, tint = Amber, modifier = Modifier.size(56.dp))
-        Text("Homer", style = SerifDisplay, color = Parchment, modifier = Modifier.padding(top = 16.dp))
-        Text("Locked", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 24.dp))
+        Text(stringResource(R.string.app_name), style = SerifDisplay, color = Parchment, modifier = Modifier.padding(top = 16.dp))
+        Text(stringResource(R.string.lock_locked), color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 24.dp))
         Button(
             onClick = onUnlock,
             colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = OnAmber),
-        ) { Text("Unlock") }
+        ) { Text(stringResource(R.string.lock_unlock)) }
         if (error != null) {
             Text(
                 error,

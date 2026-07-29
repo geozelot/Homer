@@ -20,11 +20,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import com.geozelot.homer.R
 
 @Composable
 fun LoginScreen(
@@ -48,9 +50,9 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = "Homer", style = MaterialTheme.typography.displaySmall)
+        Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.displaySmall)
         Text(
-            text = "Connect your Nextcloud",
+            text = stringResource(R.string.login_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 4.dp, bottom = 32.dp),
         )
@@ -59,13 +61,12 @@ fun LoginScreen(
             LoginViewModel.Status.WaitingForBrowser -> {
                 CircularProgressIndicator()
                 Text(
-                    text = "Waiting for you to finish signing in…",
+                    text = stringResource(R.string.login_waiting),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 16.dp),
                 )
                 Text(
-                    text = "After you grant access in the browser, tap Back to " +
-                        "return to Homer — you'll be signed in automatically.",
+                    text = stringResource(R.string.login_waiting_detail),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
@@ -73,15 +74,15 @@ fun LoginScreen(
                 TextButton(
                     onClick = viewModel::cancelLogin,
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("Cancel") }
+                ) { Text(stringResource(R.string.action_cancel)) }
             }
 
             else -> {
                 OutlinedTextField(
                     value = state.serverUrl,
                     onValueChange = viewModel::onServerUrlChange,
-                    label = { Text("Server address") },
-                    placeholder = { Text("cloud.example.com") },
+                    label = { Text(stringResource(R.string.login_server_label)) },
+                    placeholder = { Text(stringResource(R.string.login_server_placeholder)) },
                     singleLine = true,
                     enabled = state.status == LoginViewModel.Status.Idle,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -100,7 +101,7 @@ fun LoginScreen(
                     if (state.status == LoginViewModel.Status.Connecting) {
                         CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
                     }
-                    Text("Log in")
+                    Text(stringResource(R.string.login_button))
                 }
             }
         }

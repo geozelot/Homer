@@ -23,11 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import com.geozelot.homer.R
 import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -115,17 +117,21 @@ fun MiniPlayer(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val errorText = stringResource(R.string.player_error_tap_retry)
+                val chapterText =
+                    if (state.chapterCount > 0) stringResource(R.string.chapter_numbered, state.chapterIndex + 1) else null
+                val leftText = bookLeftMs?.let { stringResource(R.string.time_left, formatCompactDuration(it)) }
                 Text(
-                    text = if (state.hasError) "Playback error — tap to retry" else buildString {
-                        if (state.chapterCount > 0) append("Chapter ${state.chapterIndex + 1}")
+                    text = if (state.hasError) errorText else buildString {
+                        chapterText?.let { append(it) }
                         val speed = formatSpeedShort(state.playbackSpeed)
                         if (speed != null) {
                             if (isNotEmpty()) append(" · ")
                             append(speed)
                         }
-                        bookLeftMs?.let {
+                        leftText?.let {
                             if (isNotEmpty()) append(" · ")
-                            append("${formatCompactDuration(it)} left")
+                            append(it)
                         }
                     },
                     color = if (state.hasError) Danger else Muted,
@@ -149,9 +155,9 @@ fun MiniPlayer(
                         else -> Icons.Filled.PlayArrow
                     },
                     contentDescription = when {
-                        state.hasError -> "Retry"
-                        state.isPlaying -> "Pause"
-                        else -> "Play"
+                        state.hasError -> stringResource(R.string.action_retry)
+                        state.isPlaying -> stringResource(R.string.action_pause)
+                        else -> stringResource(R.string.action_play)
                     },
                     tint = OnAmber,
                     modifier = Modifier.size(20.dp),

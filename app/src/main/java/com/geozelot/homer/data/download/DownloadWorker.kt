@@ -13,6 +13,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.geozelot.homer.R
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
@@ -125,7 +126,7 @@ class DownloadWorker @AssistedInject constructor(
         val manager = appContext.getSystemService(NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Downloads", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, appContext.getString(R.string.download_channel_name), NotificationManager.IMPORTANCE_LOW),
             )
         }
     }
@@ -136,11 +137,11 @@ class DownloadWorker @AssistedInject constructor(
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
-            .setContentText("Downloading $done/$total…")
+            .setContentText(appContext.getString(R.string.download_notification_progress, done, total))
             .setOngoing(true)
             .setProgress(total, done, done == 0)
-            .addAction(0, "Pause", actionIntent(DownloadActionReceiver.ACTION_PAUSE, bookId))
-            .addAction(0, "Cancel", actionIntent(DownloadActionReceiver.ACTION_CANCEL, bookId))
+            .addAction(0, appContext.getString(R.string.download_action_pause), actionIntent(DownloadActionReceiver.ACTION_PAUSE, bookId))
+            .addAction(0, appContext.getString(R.string.download_action_cancel), actionIntent(DownloadActionReceiver.ACTION_CANCEL, bookId))
             .build()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)

@@ -31,10 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifTitle
@@ -52,7 +54,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var reloadKey by remember { mutableStateOf(0) }
-    val log by produceState(initialValue = "Reading logs…", reloadKey) {
+    val log by produceState(initialValue = stringResource(R.string.diag_reading_logs), reloadKey) {
         value = captureLog()
     }
 
@@ -68,22 +70,20 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Muted)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = Muted)
             }
-            Text("Diagnostics", style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
+            Text(stringResource(R.string.diag_title), style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(log)) }) { Text("Copy") }
+            TextButton(onClick = { clipboard.setText(AnnotatedString(log)) }) { Text(stringResource(R.string.action_copy)) }
             TextButton(onClick = {
                 val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log)
-                context.startActivity(Intent.createChooser(intent, "Share logs"))
-            }) { Text("Share") }
-            TextButton(onClick = { reloadKey++ }) { Text("Refresh") }
+                context.startActivity(Intent.createChooser(intent, context.getString(R.string.diag_share_chooser)))
+            }) { Text(stringResource(R.string.action_share)) }
+            TextButton(onClick = { reloadKey++ }) { Text(stringResource(R.string.action_refresh)) }
         }
         Text(
-            "Homer's own recent log. Your server address and account name are masked, but it may " +
-                "still include your library's book and folder names — review before sharing. " +
-                "Reproduce the problem, then Refresh and Copy or Share.",
+            stringResource(R.string.diag_warning),
             color = Muted,
             fontSize = 11.sp,
             modifier = Modifier.padding(bottom = 8.dp),

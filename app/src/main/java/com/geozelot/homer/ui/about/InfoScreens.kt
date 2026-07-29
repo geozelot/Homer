@@ -18,10 +18,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.BuildConfig
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Muted
@@ -44,7 +46,7 @@ private fun InfoScaffold(title: String, onBack: () -> Unit, content: @Composable
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Muted)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = Muted)
             }
             Text(title, style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
         }
@@ -70,64 +72,35 @@ private fun SectionHeader(text: String) {
 /** What data Homer stores and where it goes — a plain-language privacy statement. */
 @Composable
 fun PrivacyScreen(onBack: () -> Unit) {
-    InfoScaffold("Privacy", onBack) {
-        Paragraph(
-            "Homer is a self-hosted audiobook player. It talks to one server: the Nextcloud you sign " +
-                "in to. There are no analytics, no advertising, no third-party tracking, and no Google " +
-                "Play Services.",
-        )
-        SectionHeader("YOUR ACCOUNT")
-        Paragraph(
-            "Signing in uses Nextcloud's Login Flow, which grants Homer a scoped, revocable app " +
-                "password — never your real password. It is stored only in Android's Keystore-backed " +
-                "encrypted storage on this device and sent solely to your server to authenticate requests.",
-        )
-        SectionHeader("YOUR LIBRARY")
-        Paragraph(
-            "Browsing, streaming, downloads, and cross-device progress all happen against your own " +
-                "server over WebDAV. Progress and metadata corrections are written to a .homer file in " +
-                "your own storage; nothing is uploaded anywhere else. Offline downloads and cover art are " +
-                "kept on this device (or the folder you choose).",
-        )
-        SectionHeader("OPTIONAL ONLINE COVERS")
-        Paragraph(
-            "If — and only if — you turn on \"Look up missing covers online,\" Homer sends the title and " +
-                "author of books that have no embedded art to Open Library (openlibrary.org) to find a " +
-                "cover. This is off by default and sends nothing about your account.",
-        )
-        SectionHeader("APP LOCK")
-        Paragraph(
-            "The optional app lock uses your device's biometric/credential prompt directly. Homer never " +
-                "sees or stores your biometrics.",
-        )
-        Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+    InfoScaffold(stringResource(R.string.about_privacy_title), onBack) {
+        Paragraph(stringResource(R.string.about_privacy_p1))
+        SectionHeader(stringResource(R.string.about_privacy_account_header))
+        Paragraph(stringResource(R.string.about_privacy_account_body))
+        SectionHeader(stringResource(R.string.about_privacy_library_header))
+        Paragraph(stringResource(R.string.about_privacy_library_body))
+        SectionHeader(stringResource(R.string.about_privacy_covers_header))
+        Paragraph(stringResource(R.string.about_privacy_covers_body))
+        SectionHeader(stringResource(R.string.about_privacy_lock_header))
+        Paragraph(stringResource(R.string.about_privacy_lock_body))
+        Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME), color = Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
 /** Open-source licenses for Homer's dependencies (all Apache License 2.0). */
 @Composable
 fun LicensesScreen(onBack: () -> Unit) {
-    InfoScaffold("Open-source licenses", onBack) {
-        Paragraph(
-            "Homer is built on open-source software. Every dependency below is distributed under the " +
-                "Apache License 2.0.",
-        )
+    InfoScaffold(stringResource(R.string.about_licenses_title), onBack) {
+        Paragraph(stringResource(R.string.about_licenses_intro))
         LIBRARIES.forEach { (name, holder) ->
             Column(modifier = Modifier.padding(bottom = 10.dp)) {
                 Text(name, color = Parchment, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text("$holder · Apache License 2.0", color = Muted, fontSize = 12.sp)
+                Text(stringResource(R.string.about_license_holder, holder), color = Muted, fontSize = 12.sp)
             }
         }
-        SectionHeader("APACHE LICENSE 2.0")
-        Paragraph(
-            "Licensed under the Apache License, Version 2.0 (the \"License\"); you may not use these files " +
-                "except in compliance with the License. You may obtain a copy of the License at " +
-                "https://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed " +
-                "to in writing, software distributed under the License is distributed on an \"AS IS\" BASIS, " +
-                "WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
-        )
-        Text("Homer itself", color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-        Paragraph("© geozelot. See the project repository for Homer's own license.")
+        SectionHeader(stringResource(R.string.about_apache_header))
+        Paragraph(stringResource(R.string.about_apache_body))
+        Text(stringResource(R.string.about_homer_itself), color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Paragraph(stringResource(R.string.about_homer_license))
     }
 }
 

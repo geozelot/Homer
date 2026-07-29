@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Muted
@@ -90,15 +92,14 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
 
             Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Muted)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = Muted)
                 }
-                Text("Choose a folder", style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
+                Text(stringResource(R.string.storage_choose_folder_title), style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
             }
 
             if (!hasAccess) {
                 Text(
-                    "To store your downloads and covers in a folder you choose, Homer needs " +
-                        "all-files access. You grant it once in system settings, then come back here.",
+                    stringResource(R.string.storage_grant_rationale),
                     color = Muted,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -120,7 +121,7 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = OnAmber),
-                ) { Text("Grant all-files access") }
+                ) { Text(stringResource(R.string.storage_grant_button)) }
                 return@Column
             }
 
@@ -158,7 +159,7 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
                         val created = withContext(Dispatchers.IO) { File(dir, "Homer").apply { mkdirs() } }
                         if (withContext(Dispatchers.IO) { created.isDirectory }) dir = created
                     }
-                }) { Text("New “Homer” folder") }
+                }) { Text(stringResource(R.string.storage_new_folder)) }
                 Button(
                     onClick = {
                         scope.launch {
@@ -166,7 +167,7 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = OnAmber),
-                ) { Text("Use this folder") }
+                ) { Text(stringResource(R.string.storage_use_folder)) }
             }
         }
     }

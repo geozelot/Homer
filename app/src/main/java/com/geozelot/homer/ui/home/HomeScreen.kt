@@ -91,6 +91,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -99,6 +101,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
+import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.storage.StorageMigrator
@@ -321,18 +324,15 @@ fun HomeScreen(
 private fun StorageConflictDialog(onLoad: () -> Unit, onReplace: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Folder already has a library") },
+        title = { Text(stringResource(R.string.home_storage_conflict_title)) },
         text = {
-            Text(
-                "This folder already contains Homer data. Load that library, or replace it with " +
-                    "this device's downloads and progress?",
-            )
+            Text(stringResource(R.string.home_storage_conflict_body))
         },
-        confirmButton = { TextButton(onClick = onLoad) { Text("Load it") } },
+        confirmButton = { TextButton(onClick = onLoad) { Text(stringResource(R.string.home_storage_load)) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onReplace) { Text("Replace") }
-                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = onReplace) { Text(stringResource(R.string.home_storage_replace)) }
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )
@@ -343,7 +343,7 @@ private fun StorageConflictDialog(onLoad: () -> Unit, onReplace: () -> Unit, onC
 private fun MigrationDialog(progress: StorageMigrator.Progress) {
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Moving your library") },
+        title = { Text(stringResource(R.string.home_migration_title)) },
         text = {
             Column {
                 Text(progress.label, color = Muted, fontSize = 13.sp)
@@ -355,7 +355,7 @@ private fun MigrationDialog(progress: StorageMigrator.Progress) {
                         color = Amber,
                     )
                     Text(
-                        "${progress.done} / ${progress.total} files",
+                        stringResource(R.string.home_migration_files, progress.done, progress.total),
                         color = Faint,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 6.dp),
@@ -424,16 +424,16 @@ private fun TopBar(
                 modifier = Modifier.weight(1f),
             )
         } else {
-            Wordmark("Homer")
+            Wordmark(stringResource(R.string.app_name))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onOpenSearch) {
-                    Icon(Icons.Filled.Search, contentDescription = "Search", tint = Muted)
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.home_cd_search), tint = Muted)
                 }
                 IconButton(onClick = onOpenLibrarySync) {
-                    Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = "Library & Sync", tint = Muted)
+                    Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = stringResource(R.string.home_cd_library_sync), tint = Muted)
                 }
                 IconButton(onClick = onSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Muted)
+                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.home_cd_settings), tint = Muted)
                 }
             }
         }
@@ -451,18 +451,18 @@ private fun SearchField(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search", tint = Muted)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.home_cd_close_search), tint = Muted)
         }
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            placeholder = { Text("Title, author, genre, tag…") },
+            placeholder = { Text(stringResource(R.string.home_search_placeholder)) },
             singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Faint) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear", tint = Muted)
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_clear), tint = Muted)
                     }
                 }
             },
@@ -512,7 +512,7 @@ private fun LazyGridScope.libraryContent(
     actions: BookActions,
 ) {
     if (continueShelf.isNotEmpty()) {
-        item(span = { GridItemSpan(maxLineSpan) }, key = "continue-head") { SectionLabelRow("Continue") }
+        item(span = { GridItemSpan(maxLineSpan) }, key = "continue-head") { SectionLabelRow(stringResource(R.string.home_section_continue)) }
         item(span = { GridItemSpan(maxLineSpan) }, key = "continue-shelf") {
             ContinueShelf(books = continueShelf, onOpen = onBookClick, actions = actions)
         }
@@ -520,7 +520,7 @@ private fun LazyGridScope.libraryContent(
 
     item(span = { GridItemSpan(maxLineSpan) }, key = "library-head") {
         LibraryHeader(
-            label = if (searching) "RESULTS" else "LIBRARY · $bookCount",
+            label = if (searching) stringResource(R.string.home_section_results) else stringResource(R.string.home_section_library, bookCount),
             gridView = gridView,
             onToggleView = onToggleView,
         )
@@ -621,10 +621,10 @@ private fun LibraryHeader(label: String, gridView: Boolean, onToggleView: (Boole
                 .border(1.dp, Line, RoundedCornerShape(8.dp))
                 .background(Surface1),
         ) {
-            ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = "Grid view") {
+            ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
                 onToggleView(true)
             }
-            ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = "List view") {
+            ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = stringResource(R.string.home_cd_list_view)) {
                 onToggleView(false)
             }
         }
@@ -661,17 +661,18 @@ private fun SortGroupBar(
     onSortChange: (LibrarySort) -> Unit,
     onGroupChange: (LibraryGroup) -> Unit,
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp, start = 2.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DropdownChip(
-                label = "Group · ${group.label}",
+                label = stringResource(R.string.home_sort_group_label, group.label),
                 options = LibraryGroup.values().toList(),
                 selected = group,
                 labelOf = { it.label },
                 onSelect = onGroupChange,
             )
             DropdownChip(
-                label = "Sort · ${sort.label}",
+                label = stringResource(R.string.home_sort_sort_label, sort.label),
                 options = LibrarySort.values().toList(),
                 selected = sort,
                 labelOf = { it.label },
@@ -679,7 +680,7 @@ private fun SortGroupBar(
             )
         }
         Text(
-            text = arrangementSummary(group, sort),
+            text = arrangementSummary(group, sort, context),
             color = Faint,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp, start = 2.dp),
@@ -688,12 +689,12 @@ private fun SortGroupBar(
 }
 
 /** Plain-language description of the active grouping + sort, e.g. "Grouped by author · sorted by title". */
-private fun arrangementSummary(group: LibraryGroup, sort: LibrarySort): String {
+private fun arrangementSummary(group: LibraryGroup, sort: LibrarySort, context: android.content.Context): String {
     val sortLabel = sort.label.lowercase()
     return when (group) {
-        LibraryGroup.NONE -> "All books, sorted by $sortLabel"
-        LibraryGroup.SERIES -> "Series grouped into shelves · sorted by $sortLabel"
-        else -> "Grouped by ${group.label.lowercase()} · sorted by $sortLabel"
+        LibraryGroup.NONE -> context.getString(R.string.home_arrange_all, sortLabel)
+        LibraryGroup.SERIES -> context.getString(R.string.home_arrange_series, sortLabel)
+        else -> context.getString(R.string.home_arrange_grouped, group.label.lowercase(), sortLabel)
     }
 }
 
@@ -779,10 +780,14 @@ private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            val timeLeftMs = book.timeLeftMs
+            val meta = when {
+                timeLeftMs == null -> book.author ?: stringResource(R.string.unknown_author)
+                timeLeftMs <= 0 -> stringResource(R.string.status_finished)
+                else -> stringResource(R.string.time_left, formatCompactDuration(timeLeftMs))
+            }
             Text(
-                text = book.timeLeftMs?.let {
-                    if (it <= 0) "finished" else "${formatCompactDuration(it)} left"
-                } ?: (book.author ?: "Unknown author"),
+                text = meta,
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -863,7 +868,7 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
-        GridCardText(title = book.title, meta = bookCardMeta(book))
+        GridCardText(title = book.title, meta = bookCardMeta(book, LocalContext.current))
     }
 }
 
@@ -893,8 +898,8 @@ private fun GridCardText(title: String, meta: String) {
     )
 }
 
-private fun bookCardMeta(book: BookListItem): String = buildString {
-    append(book.author ?: "Unknown author")
+private fun bookCardMeta(book: BookListItem, context: android.content.Context): String = buildString {
+    append(book.author ?: context.getString(R.string.unknown_author))
     book.totalDurationMs?.takeIf { it > 0 }?.let { append('\n'); append(formatCompactDuration(it)) }
 }
 
@@ -946,12 +951,12 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit, onEd
                 )
             }
         }
-        GridCardText(title = series.name, meta = seriesCardMeta(series))
+        GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current))
     }
 }
 
-private fun seriesCardMeta(series: LibraryEntry.Series): String = buildString {
-    append(seriesMeta(series))
+private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
+    append(seriesMeta(series, context))
     // Whole-series length as a second line, once every episode is measured.
     val measured = series.books.mapNotNull { it.totalDurationMs?.takeIf { d -> d > 0 } }
     if (measured.size == series.books.size && measured.isNotEmpty()) {
@@ -981,16 +986,16 @@ private fun ExpandedSeriesHeader(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(seriesMeta(series), color = Muted, fontSize = 11.5.sp)
+            Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
         }
-        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Collapse series", tint = Amber)
+        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
     }
 }
 
-private fun seriesMeta(series: LibraryEntry.Series): String = buildString {
-    append("${series.books.size} episodes")
+private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
+    append(context.getString(R.string.home_series_episodes, series.books.size))
     val downloaded = series.books.count { it.isDownloaded }
-    if (downloaded > 0) append(" · $downloaded offline")
+    if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
 }
 
 // ── List row ─────────────────────────────────────────────────────────────────
@@ -1044,7 +1049,7 @@ private fun BookListRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = listRowMeta(book),
+                text = listRowMeta(book, LocalContext.current),
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -1058,25 +1063,25 @@ private fun BookListRow(
                 ) {
                     book.genre?.let { TagChip(it, Amber, AmberSoft) }
                     book.tags.take(3).forEach { TagChip(it, Muted, Surface2) }
-                    if (book.isDownloaded) TagChip("offline", Sage, SageSoft)
+                    if (book.isDownloaded) TagChip(stringResource(R.string.home_tag_offline), Sage, SageSoft)
                 }
             }
         }
         Box {
             IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Faint)
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
     }
 }
 
-private fun listRowMeta(book: BookListItem): String = buildString {
-    append(book.author ?: "Unknown author")
+private fun listRowMeta(book: BookListItem, context: android.content.Context): String = buildString {
+    append(book.author ?: context.getString(R.string.unknown_author))
     book.totalDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatCompactDuration(it)}") }
     when {
-        book.finished -> append(" · finished")
-        book.progress != null -> append(" · ${(book.progress * 100).toInt()}%")
+        book.finished -> { append(" · "); append(context.getString(R.string.status_finished)) }
+        book.progress != null -> append(context.getString(R.string.home_meta_percent, (book.progress * 100).toInt()))
     }
 }
 
@@ -1140,19 +1145,15 @@ private fun SeriesShelfRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val downloaded = series.books.count { it.isDownloaded }
             Text(
-                text = buildString {
-                    append("${series.books.size} episodes")
-                    if (downloaded > 0) append(" · $downloaded offline")
-                },
+                text = seriesMeta(series, LocalContext.current),
                 color = Muted,
                 fontSize = 11.5.sp,
             )
         }
         Icon(
             imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = if (expanded) "Collapse" else "Expand",
+            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
             tint = Faint,
         )
     }
@@ -1169,7 +1170,7 @@ private fun StatusBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
             .background(Studio.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Check, contentDescription = "Finished or offline", tint = Sage, modifier = Modifier.size(iconSize))
+        Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.home_cd_finished_offline), tint = Sage, modifier = Modifier.size(iconSize))
     }
 }
 
@@ -1239,17 +1240,17 @@ private fun BookMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text("Play") },
+            text = { Text(stringResource(R.string.action_play)) },
             leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
             onClick = onDismiss, // tapping the card already opens the player
         )
         DropdownMenuItem(
-            text = { Text(if (book.finished) "Mark unfinished" else "Mark finished") },
+            text = { Text(if (book.finished) stringResource(R.string.home_menu_mark_unfinished) else stringResource(R.string.home_menu_mark_finished)) },
             leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
             onClick = { actions.onSetFinished(book.id, !book.finished); onDismiss() },
         )
         DropdownMenuItem(
-            text = { Text("Edit") }, // hide/unhide lives in the edit dialog
+            text = { Text(stringResource(R.string.action_edit)) }, // hide/unhide lives in the edit dialog
             leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
             onClick = { actions.onEdit(book); onDismiss() },
         )
@@ -1261,7 +1262,7 @@ private fun BookMenu(
         val offlineEnabled = book.downloadStatus != null
         val downloading = DownloadStatus.isActive(book.downloadStatus)
         DropdownMenuItem(
-            text = { Text("Offline") },
+            text = { Text(stringResource(R.string.menu_offline)) },
             leadingIcon = { Icon(Icons.Filled.Download, null, tint = if (book.isDownloaded) Sage else Muted) },
             trailingIcon = {
                 if (downloading) {
@@ -1283,15 +1284,15 @@ private fun BookMenu(
         )
         when (book.downloadStatus) {
             DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED -> DropdownMenuItem(
-                text = { Text("Pause download") },
+                text = { Text(stringResource(R.string.home_menu_pause_download)) },
                 onClick = { actions.onPause(book.id); onDismiss() },
             )
             DownloadStatus.PAUSED -> DropdownMenuItem(
-                text = { Text("Resume download") },
+                text = { Text(stringResource(R.string.home_menu_resume_download)) },
                 onClick = { actions.onResume(book.id); onDismiss() },
             )
             DownloadStatus.FAILED -> DropdownMenuItem(
-                text = { Text("Retry download") },
+                text = { Text(stringResource(R.string.home_menu_retry_download)) },
                 onClick = { actions.onResume(book.id); onDismiss() },
             )
         }
@@ -1314,8 +1315,8 @@ private fun LibraryLoading(scanState: ScanState, modifier: Modifier = Modifier) 
         CircularProgressIndicator(color = Amber)
         Spacer(Modifier.height(16.dp))
         val label = when (val s = scanState) {
-            is ScanState.Scanning -> "Scanning your library… ${s.directoriesVisited} folders · ${s.booksFound} books"
-            else -> "Opening your library…"
+            is ScanState.Scanning -> stringResource(R.string.home_scanning_progress, s.directoriesVisited, s.booksFound)
+            else -> stringResource(R.string.home_opening_library)
         }
         Text(label, color = Muted, fontSize = 14.sp)
     }
@@ -1328,9 +1329,9 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("No matches", style = SerifTitle, color = Parchment)
+        Text(stringResource(R.string.home_no_matches), style = SerifTitle, color = Parchment)
         Spacer(Modifier.height(8.dp))
-        Text("Try a different title, author, genre or tag.", color = Muted, fontSize = 13.sp)
+        Text(stringResource(R.string.home_no_matches_hint), color = Muted, fontSize = 13.sp)
     }
 }
 
@@ -1344,17 +1345,17 @@ private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier
         if (scanning) {
             CircularProgressIndicator(color = Amber)
             Spacer(Modifier.height(16.dp))
-            Text("Scanning your library…", color = Muted, fontSize = 14.sp)
+            Text(stringResource(R.string.home_scanning), color = Muted, fontSize = 14.sp)
         } else {
-            Text("Your shelf is empty", style = SerifTitle, color = Parchment)
+            Text(stringResource(R.string.home_empty_title), style = SerifTitle, color = Parchment)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Set your library folder and scan to fill it.",
+                stringResource(R.string.home_empty_hint),
                 color = Muted,
                 fontSize = 13.sp,
             )
             Spacer(Modifier.height(16.dp))
-            Button(onClick = onOpenSettings) { Text("Open settings") }
+            Button(onClick = onOpenSettings) { Text(stringResource(R.string.home_empty_open_settings)) }
         }
     }
 }
@@ -1381,6 +1382,7 @@ private fun AppSettingsSheet(
     val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val appLock by viewModel.appLockEnabled.collectAsStateWithLifecycle()
     val certPinning by viewModel.certPinningEnabled.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -1410,37 +1412,36 @@ private fun AppSettingsSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    Text("Settings", style = SerifTitle, color = Parchment)
+                    Text(stringResource(R.string.settings_title), style = SerifTitle, color = Parchment)
                     account?.let {
                         Text(
-                            "${it.loginName} · ${it.serverUrl.substringAfter("://")}",
+                            stringResource(R.string.settings_account, it.loginName, it.serverUrl.substringAfter("://")),
                             color = Muted,
                             fontSize = 12.sp,
                         )
                     }
                 }
-                TextButton(onClick = viewModel::logout) { Text("Log out") }
+                TextButton(onClick = viewModel::logout) { Text(stringResource(R.string.settings_logout)) }
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
             val custom = customStoragePath ?: customStorageUri
-            Text("STORAGE", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+            Text(stringResource(R.string.settings_storage_header), style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
             Text(
                 when {
-                    customStoragePath != null -> "Folder: $customStoragePath"
-                    customStorageUri != null -> "Custom folder: ${storageFolderName(customStorageUri!!)}"
-                    else -> "App storage (default)"
+                    customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath!!)
+                    customStorageUri != null -> stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri!!))
+                    else -> stringResource(R.string.settings_storage_default)
                 },
                 color = Parchment,
                 fontSize = 14.sp,
             )
             Text(
                 if (custom != null) {
-                    "Downloads, covers and progress live in your chosen folder — kept if you reinstall."
+                    stringResource(R.string.settings_storage_custom_desc)
                 } else {
-                    "Downloads and covers live in the app's storage, which is cleared if you uninstall. " +
-                        "Pick a folder to keep them across reinstalls."
+                    stringResource(R.string.settings_storage_default_desc)
                 },
                 color = Faint,
                 fontSize = 11.sp,
@@ -1450,31 +1451,29 @@ private fun AppSettingsSheet(
                 TextButton(
                     onClick = { folderPicker.launch(null) },
                     contentPadding = PaddingValues(horizontal = 4.dp),
-                ) { Text("System picker…") }
+                ) { Text(stringResource(R.string.settings_storage_system_picker)) }
                 TextButton(
                     onClick = onOpenStorageBrowser,
                     contentPadding = PaddingValues(horizontal = 4.dp),
-                ) { Text("Browse device…") }
+                ) { Text(stringResource(R.string.settings_storage_browse)) }
                 if (custom != null) {
                     TextButton(
                         onClick = viewModel::useDefaultStorage,
                         contentPadding = PaddingValues(horizontal = 4.dp),
-                    ) { Text("Use app storage") }
+                    ) { Text(stringResource(R.string.settings_storage_use_app)) }
                 }
             }
             Text(
-                "“System picker” uses Android's folder chooser; “Browse device” uses all-files access " +
-                    "(pick any folder) if the picker won't cooperate. Changing location moves your " +
-                    "downloads and covers to the new place.",
+                stringResource(R.string.settings_storage_picker_desc),
                 color = Faint,
                 fontSize = 11.sp,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
+            SettingSwitch(stringResource(R.string.settings_online_covers), onlineCovers, viewModel::setOnlineCoverLookup)
             Text(
-                "Sends only the title and author of art-less books to Open Library (openlibrary.org, run by the Internet Archive) — a third party — to find a cover. Your server, account and library stay private.",
+                stringResource(R.string.settings_online_covers_desc),
                 color = Muted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
@@ -1485,12 +1484,12 @@ private fun AppSettingsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Skip button interval", color = Parchment, fontSize = 14.sp)
+                Text(stringResource(R.string.settings_skip_interval), color = Parchment, fontSize = 14.sp)
                 DropdownChip(
-                    label = "${seekSeconds}s",
+                    label = stringResource(R.string.settings_seconds, seekSeconds),
                     options = listOf(5, 10, 15, 20, 30, 45, 60),
                     selected = seekSeconds,
-                    labelOf = { "${it}s" },
+                    labelOf = { context.getString(R.string.settings_seconds, it) },
                     onSelect = viewModel::setSeekSeconds,
                 )
             }
@@ -1499,52 +1498,49 @@ private fun AppSettingsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Rewind on resume", color = Parchment, fontSize = 14.sp)
+                Text(stringResource(R.string.settings_rewind), color = Parchment, fontSize = 14.sp)
                 DropdownChip(
-                    label = if (autoRewind == 0) "Off" else "${autoRewind}s",
+                    label = if (autoRewind == 0) stringResource(R.string.settings_off) else stringResource(R.string.settings_seconds, autoRewind),
                     options = listOf(0, 5, 10, 15, 20, 30),
                     selected = autoRewind,
-                    labelOf = { if (it == 0) "Off" else "${it}s" },
+                    labelOf = { if (it == 0) context.getString(R.string.settings_off) else context.getString(R.string.settings_seconds, it) },
                     onSelect = viewModel::setAutoRewindSeconds,
                 )
             }
-            SettingSwitch("Download books when you play them", downloadOnPlay, viewModel::setDownloadOnPlay)
+            SettingSwitch(stringResource(R.string.settings_download_on_play), downloadOnPlay, viewModel::setDownloadOnPlay)
             Text(
-                "Pressing Play keeps the book for offline listening (it streams right away while it " +
-                    "downloads). Turn off to stream only and download manually. A single book can " +
-                    "override this from its Edit dialog.",
+                stringResource(R.string.settings_download_on_play_desc),
                 color = Muted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
-            SettingSwitch("Download on Wi‑Fi only", wifiOnly, viewModel::setWifiOnlyDownloads)
+            SettingSwitch(stringResource(R.string.settings_wifi_only), wifiOnly, viewModel::setWifiOnlyDownloads)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            Text("SECURITY", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
-            SettingSwitch("Require unlock to open", appLock, viewModel::setAppLock)
+            Text(stringResource(R.string.settings_security_header), style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
+            SettingSwitch(stringResource(R.string.settings_app_lock), appLock, viewModel::setAppLock)
             Text(
-                "Asks for your fingerprint, face, or screen lock when Homer opens or returns from the background.",
+                stringResource(R.string.settings_app_lock_desc),
                 color = Muted,
                 fontSize = 11.sp,
             )
-            SettingSwitch("Pin server certificate", certPinning, viewModel::setCertPinning)
+            SettingSwitch(stringResource(R.string.settings_cert_pinning), certPinning, viewModel::setCertPinning)
             Text(
-                "Remembers your server's certificate on the next connection and refuses to connect if it " +
-                    "ever changes. Turn off and on again after a legitimate certificate renewal.",
+                stringResource(R.string.settings_cert_pinning_desc),
                 color = Muted,
                 fontSize = 11.sp,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            Text("ABOUT", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
-            NavRow("Privacy", onOpenPrivacy)
-            NavRow("Open-source licenses", onOpenLicenses)
-            NavRow("Diagnostics (logs)", onOpenDiagnostics)
+            Text(stringResource(R.string.settings_about_header), style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
+            NavRow(stringResource(R.string.about_privacy_title), onOpenPrivacy)
+            NavRow(stringResource(R.string.about_licenses_title), onOpenLicenses)
+            NavRow(stringResource(R.string.settings_diagnostics), onOpenDiagnostics)
 
             Spacer(Modifier.height(12.dp))
-            Text("Homer ${BuildConfig.VERSION_NAME}", color = Faint, fontSize = 11.sp)
+            Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME), color = Faint, fontSize = 11.sp)
         }
     }
 }
@@ -1601,14 +1597,14 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
         ) {
-            Text("Library & Sync", style = SerifTitle, color = Parchment)
+            Text(stringResource(R.string.sync_title), style = SerifTitle, color = Parchment)
 
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = libraryRoot,
                 onValueChange = viewModel::onLibraryRootChange,
-                label = { Text("Library folder") },
-                placeholder = { Text("e.g. Audiobooks (blank = whole drive)") },
+                label = { Text(stringResource(R.string.sync_library_folder)) },
+                placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
                 singleLine = true,
                 enabled = !scanning,
                 modifier = Modifier.fillMaxWidth(),
@@ -1620,22 +1616,21 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Button(onClick = viewModel::scan, enabled = !scanning, modifier = Modifier.weight(1f)) {
-                    Text(if (scanning) "Scanning…" else "Scan library")
+                    Text(if (scanning) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library))
                 }
                 FilledTonalButton(onClick = viewModel::refreshCoverArt, modifier = Modifier.weight(1f)) {
-                    Text("Refresh covers")
+                    Text(stringResource(R.string.sync_refresh_covers))
                 }
             }
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ScanStatus(scanState = scanState, bookCount = bookCount)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = viewModel::fullScan, enabled = !scanning, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    Text("Full re-scan")
+                    Text(stringResource(R.string.sync_full_rescan))
                 }
             }
             Text(
-                "Scan re-reads changed folders and fetches missing art. Refresh re-fetches all covers. " +
-                    "Full re-scan rebuilds the whole library.",
+                stringResource(R.string.sync_scan_desc),
                 color = Faint,
                 fontSize = 11.sp,
             )
@@ -1662,7 +1657,7 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)
 
-            SettingSwitch("Show hidden books", showHidden, viewModel::setShowHidden)
+            SettingSwitch(stringResource(R.string.sync_show_hidden), showHidden, viewModel::setShowHidden)
         }
     }
 }
@@ -1679,18 +1674,18 @@ private fun DiscoveredLibraries(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("DISCOVERED LIBRARIES", style = SectionLabel, color = Muted)
+        Text(stringResource(R.string.sync_discovered_header), style = SectionLabel, color = Muted)
         if (discovering) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
         } else {
             TextButton(onClick = onRediscover, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                Text("Rediscover")
+                Text(stringResource(R.string.sync_rediscover))
             }
         }
     }
     if (discovered.isEmpty()) {
         Text(
-            if (discovering) "Scanning your server…" else "No libraries found yet — try Rediscover.",
+            if (discovering) stringResource(R.string.sync_discovering) else stringResource(R.string.sync_no_libraries),
             color = Faint,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 4.dp),
@@ -1702,6 +1697,7 @@ private fun DiscoveredLibraries(
 
 @Composable
 private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Unit) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1713,7 +1709,7 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                lib.relativePath.ifEmpty { "Home (files root)" },
+                lib.relativePath.ifEmpty { stringResource(R.string.sync_home_files_root) },
                 color = Parchment,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1721,29 +1717,29 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (lib.isCurrentRoot) TagChip("in use", OnAmber, Amber)
+            if (lib.isCurrentRoot) TagChip(stringResource(R.string.sync_tag_in_use), OnAmber, Amber)
         }
         val detail = buildString {
             append(
                 when (lib.kind) {
-                    DiscoveredLibrary.Kind.FILES_ROOT -> "Your account root"
-                    DiscoveredLibrary.Kind.LIBRARY_ROOT -> "Configured library"
-                    DiscoveredLibrary.Kind.SHARED_FOLDER -> "Shared folder"
+                    DiscoveredLibrary.Kind.FILES_ROOT -> context.getString(R.string.sync_kind_files_root)
+                    DiscoveredLibrary.Kind.LIBRARY_ROOT -> context.getString(R.string.sync_kind_library_root)
+                    DiscoveredLibrary.Kind.SHARED_FOLDER -> context.getString(R.string.sync_kind_shared_folder)
                 },
             )
             if (lib.hasSharedCatalog) {
-                append(" · shared catalog")
-                lib.bookCount?.let { append(" ($it books)") }
+                append(context.getString(R.string.sync_detail_shared_catalog))
+                lib.bookCount?.let { append(context.getString(R.string.sync_detail_book_count, it)) }
             }
-            if (lib.hasPrivateIndex) append(" · private progress")
-            lib.owner?.let { append(" · owner: $it") }
+            if (lib.hasPrivateIndex) append(context.getString(R.string.sync_detail_private_progress))
+            lib.owner?.let { append(context.getString(R.string.sync_detail_owner, it)) }
         }
         Text(detail, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
         if (!lib.isCurrentRoot) {
             TextButton(
                 onClick = { onUse(lib.relativePath) },
                 contentPadding = PaddingValues(horizontal = 4.dp),
-            ) { Text("Use as library folder") }
+            ) { Text(stringResource(R.string.sync_use_as_library)) }
         }
     }
 }
@@ -1761,34 +1757,35 @@ private fun SyncSettings(
     onProgressSync: (Boolean) -> Unit,
     onSharedCatalog: (Boolean) -> Unit,
 ) {
-    Text("SYNC", style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+    val context = LocalContext.current
+    Text(stringResource(R.string.sync_sync_header), style = SectionLabel, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
 
-    SettingSwitch("Sync my progress across my devices", progressSync, onProgressSync)
+    SettingSwitch(stringResource(R.string.sync_progress_switch), progressSync, onProgressSync)
     Text(
         if (progressSync) {
-            "Positions, bookmarks and edits are saved privately to your account and follow you across your devices."
+            stringResource(R.string.sync_progress_on_desc)
         } else {
-            "Progress stays on this device only — nothing is written to your server."
+            stringResource(R.string.sync_progress_off_desc)
         },
         color = Muted,
         fontSize = 11.sp,
         modifier = Modifier.padding(bottom = 10.dp),
     )
 
-    SettingSwitch("Use a shared library catalog", sharedCatalog, onSharedCatalog)
+    SettingSwitch(stringResource(R.string.sync_shared_switch), sharedCatalog, onSharedCatalog)
     Text(
         buildString {
             append(
                 when {
                     sharedCatalog && sharedCatalogAvailable ->
-                        "Reads the shared catalog + covers at the library root, so new devices skip scanning."
+                        context.getString(R.string.sync_shared_reads)
                     sharedCatalog ->
-                        "Publishes the library catalog + covers so other devices skip scanning and re-extracting art."
+                        context.getString(R.string.sync_shared_publishes)
                     else ->
-                        "Each device scans the library and extracts its own covers."
+                        context.getString(R.string.sync_shared_each)
                 },
             )
-            if (sharedCatalog) append(if (owner != null) "  Owner: $owner." else "  Owner: not detected.")
+            if (sharedCatalog) append(if (owner != null) context.getString(R.string.sync_shared_owner, owner) else context.getString(R.string.sync_shared_owner_unknown))
         },
         color = Muted,
         fontSize = 11.sp,
@@ -1813,11 +1810,11 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
         is ScanState.Scanning -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Amber, strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
-            Text("${state.directoriesVisited} folders · ${state.booksFound} books", color = Muted, fontSize = 12.sp)
+            Text(stringResource(R.string.sync_scan_folders_books, state.directoriesVisited, state.booksFound), color = Muted, fontSize = 12.sp)
         }
-        is ScanState.Done -> Text("$bookCount books indexed", color = Muted, fontSize = 12.sp)
+        is ScanState.Done -> Text(stringResource(R.string.sync_books_indexed, bookCount), color = Muted, fontSize = 12.sp)
         is ScanState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-        ScanState.Idle -> if (bookCount > 0) Text("$bookCount books", color = Muted, fontSize = 12.sp)
+        ScanState.Idle -> if (bookCount > 0) Text(stringResource(R.string.sync_books_count, bookCount), color = Muted, fontSize = 12.sp)
     }
 }
 
@@ -1832,31 +1829,31 @@ private fun SeriesEditDialog(
     var author by remember { mutableStateOf(series.author.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit series") },
+        title = { Text(stringResource(R.string.home_series_edit_title)) },
         text = {
             Column {
                 Text(
-                    "${series.books.size} books — changes apply to all of them.",
+                    stringResource(R.string.home_series_edit_desc, series.books.size),
                     color = Muted,
                     fontSize = 12.sp,
                 )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Series") },
+                    label = { Text(stringResource(R.string.edit_field_series)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )
                 OutlinedTextField(
                     value = author,
                     onValueChange = { author = it },
-                    label = { Text("Author") },
+                    label = { Text(stringResource(R.string.edit_field_author)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, author) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(name, author) }) { Text(stringResource(R.string.action_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
