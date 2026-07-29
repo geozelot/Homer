@@ -34,7 +34,9 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         ChapterEntity::class,
     ],
     version = 15,
-    exportSchema = false,
+    // Export the schema (to app/schemas/) so migrations have a committed record and can be
+    // verified with Room's MigrationTestHelper. See app/build.gradle.kts room.schemaLocation.
+    exportSchema = true,
 )
 abstract class HomerDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao

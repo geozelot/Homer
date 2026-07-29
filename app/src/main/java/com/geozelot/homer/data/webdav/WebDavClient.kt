@@ -288,8 +288,12 @@ class WebDavClient @Inject constructor(
             if (idx < 0) return null
             // Skip the marker and the username segment.
             val afterFiles = decoded.substring(idx + FILES_MARKER.length)
-            val rel = afterFiles.substringAfter('/', missingDelimiterValue = "")
-            return rel.trim('/')
+            val rel = afterFiles.substringAfter('/', missingDelimiterValue = "").trim('/')
+            // A well-formed Nextcloud href never contains dot segments. Reject any that do so a
+            // malicious/compromised server can't smuggle a `..` path that, once used as a download
+            // relative path, would escape Homer's storage sandbox on write.
+            if (rel.split('/').any { it == ".." || it == "." }) return null
+            return rel
         }
 
         private fun parseStatusCode(status: String): Int =

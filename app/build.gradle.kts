@@ -74,6 +74,12 @@ android {
     }
 }
 
+// Export Room schemas to a committed directory so migrations have a versioned record and can be
+// covered by MigrationTestHelper tests. Requires exportSchema = true on @Database.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // Kotlin compiler settings for AGP built-in Kotlin.
 kotlin {
     compilerOptions {

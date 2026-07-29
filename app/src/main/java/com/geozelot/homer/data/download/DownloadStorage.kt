@@ -25,5 +25,10 @@ class DownloadStorage @Inject constructor(
     suspend fun uri(relativePath: String): Uri? = storageLocation.area().uri(path(relativePath))
 
     /** Removes all downloaded files for a book. */
-    suspend fun deleteBook(bookId: String) = storageLocation.area().delete(path(bookId))
+    suspend fun deleteBook(bookId: String) {
+        // A blank id would target `downloads/` itself and recursively wipe EVERY book's files;
+        // a dot segment could escape the area. Refuse both.
+        if (bookId.isBlank() || bookId.split('/').any { it == ".." || it == "." }) return
+        storageLocation.area().delete(path(bookId))
+    }
 }

@@ -52,9 +52,21 @@ interface StorageArea {
 class FileStorageArea(private val root: File, private val sanitize: Boolean = false) : StorageArea {
 
     private fun file(rel: String): File {
-        if (!sanitize) return File(root, rel)
-        val safe = rel.split('/').filter { it.isNotEmpty() }.joinToString("/") { safeSegment(it) }
-        return File(root, safe)
+        val f = if (!sanitize) {
+            File(root, rel)
+        } else {
+            val safe = rel.split('/').filter { it.isNotEmpty() }.joinToString("/") { safeSegment(it) }
+            File(root, safe)
+        }
+        // Containment guard (defense in depth): never resolve outside root, even if a caller
+        // somehow passed a `..` path. sanitize=true already neutralizes dot segments; this backs
+        // up the unsanitized default area against a traversal path slipping through.
+        val rootPath = root.canonicalPath
+        val resolved = f.canonicalPath
+        require(resolved == rootPath || resolved.startsWith(rootPath + File.separator)) {
+            "path escapes storage root: $rel"
+        }
+        return f
     }
 
     private fun safeSegment(seg: String): String =

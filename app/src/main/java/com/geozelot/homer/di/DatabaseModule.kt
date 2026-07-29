@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
@@ -182,8 +183,13 @@ object DatabaseModule {
                 MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
                 MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
             )
-            // Safety net for any other version mismatch during development.
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .apply {
+                // Destructive fallback is a DEBUG-ONLY convenience. In a release build a missing
+                // migration (or an APK downgrade to an older schema) must fail loudly instead of
+                // silently wiping every table — positions, bookmarks, overrides, downloads — which
+                // is exactly the data-loss class this app has been bitten by before.
+                if (BuildConfig.DEBUG) fallbackToDestructiveMigration(dropAllTables = true)
+            }
             .build()
 
     @Provides

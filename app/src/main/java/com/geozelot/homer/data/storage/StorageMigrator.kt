@@ -98,8 +98,15 @@ class StorageMigrator @Inject constructor(
             }
             if (failures > 0) Log.w(TAG, "$failures file(s) could not be moved to the new location")
 
-            // Clean up the source's now-empty Homer subtree.
-            source.delete("downloads"); source.delete("covers"); source.delete(".homer")
+            // Clean up the source's now-empty Homer subtree — but ONLY if every file copied. These
+            // are recursive deletes; if any copy failed, the un-migrated originals are still the
+            // sole copy (and custom covers aren't re-derivable), so leaving the source intact is the
+            // safe choice. copyThenDeleteSource already removed each file that landed at the target.
+            if (failures == 0) {
+                source.delete("downloads"); source.delete("covers"); source.delete(".homer")
+            } else {
+                Log.w(TAG, "left source data in place because $failures file(s) did not migrate")
+            }
 
             report("Finishing…", done, total, onProgress)
             // The active location was already committed by the caller (so switching is instant and
