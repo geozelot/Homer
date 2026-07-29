@@ -115,6 +115,7 @@
     <string name="home_cd_search">Search</string>
     <string name="home_cd_library_sync">Library &amp; Sync</string>
     <string name="home_cd_settings">Settings</string>
+    <string name="home_cd_menu">Library &amp; settings</string>
     <string name="home_cd_close_search">Close search</string>
     <string name="home_search_placeholder">Title, author, genre, tag…</string>
 

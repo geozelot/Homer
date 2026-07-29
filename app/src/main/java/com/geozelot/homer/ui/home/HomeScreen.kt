@@ -429,11 +429,23 @@ private fun TopBar(
                 IconButton(onClick = onOpenSearch) {
                     Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.home_cd_search), tint = Muted)
                 }
-                IconButton(onClick = onOpenLibrarySync) {
-                    Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = stringResource(R.string.home_cd_library_sync), tint = Muted)
-                }
-                IconButton(onClick = onSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.home_cd_settings), tint = Muted)
+                Box {
+                    var menuOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.home_cd_menu), tint = Muted)
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.home_cd_library_sync)) },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, null, tint = Muted) },
+                            onClick = { menuOpen = false; onOpenLibrarySync() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.home_cd_settings)) },
+                            leadingIcon = { Icon(Icons.Filled.Settings, null, tint = Muted) },
+                            onClick = { menuOpen = false; onSettings() },
+                        )
+                    }
                 }
             }
         }
