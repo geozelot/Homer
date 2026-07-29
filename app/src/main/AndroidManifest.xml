@@ -16,9 +16,12 @@
          app being closed. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- Optional: let the user store downloads/covers in any folder they pick (a self-hosted,
-         sideloaded app; not distributed via Play). Only used when the user opts into an
-         all-files storage folder; the app otherwise uses its own private storage. -->
+    <!-- Optional, opt-in only: lets the user store downloads/covers in a folder they pick. NEVER
+         requested at install/first run — the app sends the user to the system grant screen ONLY if
+         they explicitly choose "Browse device" for a custom folder (needed because SAF's folder
+         picker is refused on some ROMs, e.g. certain LineageOS builds). Without it Homer uses its
+         own app-private storage. This is why Homer is sideloaded / F-Droid, not on Google Play.
+         See README "Permissions". -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 

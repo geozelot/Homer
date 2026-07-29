@@ -39,6 +39,22 @@ state in a small `.homer` JSON file in your own Nextcloud storage.
 Tech: Kotlin, Jetpack Compose, Hilt, Room, Media3, OkHttp, DataStore, WorkManager.
 `minSdk 26`.
 
+## Permissions
+
+Homer requests only what it needs, and runs fully on its own app-private storage with no storage
+permission at all:
+
+- **`INTERNET`, `ACCESS_NETWORK_STATE`** — reach your Nextcloud, and fail fast when offline.
+- **`FOREGROUND_SERVICE` / `…_MEDIA_PLAYBACK` / `…_DATA_SYNC`, `POST_NOTIFICATIONS`** — background
+  audio playback and offline downloads that survive the app being closed, each with a notification.
+- **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
+  at install or first run. Homer only sends you to the system grant screen if you explicitly choose
+  to keep downloads in a folder you pick yourself (Library & Sync → *Browse device*). It exists
+  because the Android document picker (SAF) is refused on some ROMs — certain LineageOS builds
+  return no folder at all — which otherwise leaves no way to use a user-visible, uninstall-surviving
+  library folder. Skip that option and the permission stays ungranted. Because of this permission
+  Homer is distributed by sideloading / F-Droid rather than Google Play.
+
 ## Building
 
 Requires **JDK 17** and the Android SDK. Android Studio (Ladybug or newer) bundles both;
