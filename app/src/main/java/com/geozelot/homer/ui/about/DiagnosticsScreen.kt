@@ -81,7 +81,9 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             TextButton(onClick = { reloadKey++ }) { Text("Refresh") }
         }
         Text(
-            "Homer's own recent log. Reproduce the problem, then Refresh and Copy or Share this.",
+            "Homer's own recent log. Your server address and account name are masked, but it may " +
+                "still include your library's book and folder names — review before sharing. " +
+                "Reproduce the problem, then Refresh and Copy or Share.",
             color = Muted,
             fontSize = 11.sp,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -113,10 +115,19 @@ private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
         val process = Runtime.getRuntime().exec(
             arrayOf("logcat", "-d", "-v", "time", "-t", "1200") + filterSpec.toTypedArray(),
         )
-        process.inputStream.bufferedReader().use { it.readText() }
+        redact(process.inputStream.bufferedReader().use { it.readText() })
     }.getOrElse { "Could not read logs: ${it.message}" }
         .ifBlank { "No log lines captured. Reproduce the problem, then tap Refresh." }
 }
+
+/**
+ * Masks the two identifiers that shouldn't leave the device when a log is copied/shared: the
+ * Nextcloud account name (in WebDAV paths) and the server scheme+host of any URL. Book/folder
+ * names in the path portion are left in place (often needed to diagnose) — the UI warns about them.
+ */
+private fun redact(raw: String): String = raw
+    .replace(Regex("""(/remote\.php/dav/files/)[^/\s]+"""), "$1<account>")
+    .replace(Regex("""https?://[^/\s"']+"""), "https://<server>")
 
 private val HOMER_TAGS = listOf(
     "HomerAuth", "HomerScan", "HomerMeta", "HomerDownload",

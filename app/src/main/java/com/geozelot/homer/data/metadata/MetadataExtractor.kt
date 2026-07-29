@@ -46,7 +46,8 @@ class MetadataExtractor @Inject constructor(
             }
             null
         } catch (e: Exception) {
-            Log.w(TAG, "cover extract failed for $mediaUri", e)
+            // Log.d (stripped from release by R8): the URL carries the account + book path.
+            Log.d(TAG, "cover extract failed for $mediaUri", e)
             null
         }
     }

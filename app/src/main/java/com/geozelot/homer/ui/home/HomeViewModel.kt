@@ -558,14 +558,14 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun requestStorageChange(target: String?) {
         val source = storageLocation.currentLocation()
-        Log.w(TAG_STORAGE, "requestStorageChange: source=$source target=$target")
+        Log.d(TAG_STORAGE, "requestStorageChange: source=$source target=$target")
         if (source == target) return // already there
         // A SAF folder needs a durable grant taken before we can read/write it (and some pickers
         // refuse certain folders, throwing here). An all-files path needs no per-folder grant.
         if (isSafToken(target)) {
             try {
                 storageLocation.takePersistable(target!!)
-                Log.w(TAG_STORAGE, "took persistable permission for $target")
+                Log.d(TAG_STORAGE, "took persistable permission for $target")
             } catch (e: Exception) {
                 Log.w(TAG_STORAGE, "could not take a durable permission for the chosen folder", e)
                 return
@@ -577,7 +577,7 @@ class HomeViewModel @Inject constructor(
         }.getOrDefault(false)
         if (hasExisting) {
             // The folder already has Homer data — let the user choose load vs replace.
-            Log.w(TAG_STORAGE, "target already has a Homer library; prompting load-vs-replace")
+            Log.d(TAG_STORAGE, "target already has a Homer library; prompting load-vs-replace")
             _pendingStorageChange.value = PendingStorageChange(source, target)
         } else {
             // Empty target: switch the location NOW (synchronous + reliable, independent of the
@@ -591,7 +591,7 @@ class HomeViewModel @Inject constructor(
     private suspend fun commitLocation(source: String?, target: String?) {
         storageLocation.commit(target)
         if (isSafToken(source) && source != target) storageLocation.releasePersistable(source!!)
-        Log.w(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
+        Log.d(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
     }
 
     /** Adopt the library already in the chosen folder (merge progress, keep its downloads). */

@@ -49,7 +49,7 @@ class LoginFlowClient @Inject constructor(
     suspend fun initiate(rawServerUrl: String): LoginV2Init = withContext(Dispatchers.IO) {
         val base = normalizeServerUrl(rawServerUrl)
         val initUrl = "$base/index.php/login/v2"
-        Log.i(TAG, "initiate: POST $initUrl")
+        Log.d(TAG, "initiate: POST $initUrl") // Log.d (stripped from release): carries the server URL
         val request = Request.Builder()
             .url(initUrl)
             .header("User-Agent", USER_AGENT)
@@ -61,7 +61,7 @@ class LoginFlowClient @Inject constructor(
             }
             val body = response.body?.string() ?: throw IOException("Empty login init response")
             val init = json.decodeFromString(LoginV2Init.serializer(), body)
-            Log.i(TAG, "initiate OK: login=${init.login} pollEndpoint=${init.poll.endpoint}")
+            Log.d(TAG, "initiate OK: login=${init.login} pollEndpoint=${init.poll.endpoint}")
             init
         }
     }
@@ -77,7 +77,7 @@ class LoginFlowClient @Inject constructor(
             .post(FormBody.Builder().add("token", init.poll.token).build())
             .build()
         client.newCall(request).execute().use { response ->
-            Log.i(TAG, "poll: HTTP ${response.code} @ ${init.poll.endpoint}")
+            Log.d(TAG, "poll: HTTP ${response.code} @ ${init.poll.endpoint}")
             when {
                 response.code == 404 -> null // still waiting for the user
                 response.isSuccessful -> {

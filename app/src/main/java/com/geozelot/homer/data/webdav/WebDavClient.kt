@@ -107,19 +107,17 @@ class WebDavClient @Inject constructor(
                 .build()
             client.newCall(request).execute().use { response ->
                 if (response.code != 207) {
-                    android.util.Log.w(TAG, "owner probe '$relativePath': HTTP ${response.code}")
+                    // Log.d (stripped from release): the path names a library folder.
+                    android.util.Log.d(TAG, "owner probe '$relativePath': HTTP ${response.code}")
                     return@use null
                 }
                 val text = response.body?.string().orEmpty()
                 // Match any namespace prefix: <oc:owner-id>login</oc:owner-id>.
                 val owner = Regex("owner-id[^>]*>([^<]+)<").find(text)
                     ?.groupValues?.getOrNull(1)?.trim()?.ifBlank { null }
-                if (owner != null) {
-                    android.util.Log.i(TAG, "owner-id for '$relativePath' = $owner")
-                } else {
-                    // Nextcloud often omits owner-id on a non-shared (own) folder — expected.
-                    android.util.Log.i(TAG, "owner-id absent for '$relativePath'; body: ${text.take(400)}")
-                }
+                // Log.d only (stripped from release): owner is an account name, and the raw body
+                // can carry share metadata — neither should reach the release log.
+                android.util.Log.d(TAG, if (owner != null) "owner-id resolved for '$relativePath'" else "owner-id absent for '$relativePath'")
                 owner
             }
         } catch (e: Exception) {

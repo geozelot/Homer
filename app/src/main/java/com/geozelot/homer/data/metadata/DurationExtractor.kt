@@ -90,7 +90,7 @@ class DurationExtractor @Inject constructor(
                             }
 
                             override fun onPlayerError(error: PlaybackException) {
-                                Log.w(TAG, "duration probe failed for $mediaUri", error)
+                                Log.d(TAG, "duration probe failed for $mediaUri", error)
                                 finish(null)
                             }
                         })
@@ -106,7 +106,7 @@ class DurationExtractor @Inject constructor(
                     } catch (e: Throwable) {
                         // A synchronous failure (player build / prepare) would otherwise leave
                         // the coroutine hanging until the 30s timeout — resolve it now.
-                        Log.w(TAG, "duration probe setup failed for $mediaUri", e)
+                        Log.d(TAG, "duration probe setup failed for $mediaUri", e)
                         player?.release()
                         if (settled.compareAndSet(false, true) && cont.isActive) cont.resume(Probe(null, null))
                     }

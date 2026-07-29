@@ -1386,7 +1386,7 @@ private fun AppSettingsSheet(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         if (uri != null) {
-            android.util.Log.w("HomerStore", "folder picker returned: $uri")
+            android.util.Log.d("HomerStore", "folder picker returned: $uri") // Log.d: carries a storage path
             viewModel.setCustomStorageFolder(uri)
         } else {
             android.util.Log.w("HomerStore", "folder picker returned null (cancelled or denied by the system)")
@@ -1474,7 +1474,7 @@ private fun AppSettingsSheet(
 
             SettingSwitch("Look up missing covers online", onlineCovers, viewModel::setOnlineCoverLookup)
             Text(
-                "Searches Open Library by title and author for books without embedded art. Sends only those to a third-party server.",
+                "Sends only the title and author of art-less books to Open Library (openlibrary.org, run by the Internet Archive) — a third party — to find a cover. Your server, account and library stay private.",
                 color = Muted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(bottom = 4.dp),

@@ -39,7 +39,7 @@ class Mp4ChapterParser @Inject constructor(
     suspend fun parse(mediaUri: String): List<DurationExtractor.ChapterMark> = withContext(Dispatchers.IO) {
         runCatching { parseInternal(Uri.parse(mediaUri)) }
             .getOrElse {
-                Log.w(TAG, "mp4 chapter parse failed for $mediaUri", it)
+                Log.d(TAG, "mp4 chapter parse failed for $mediaUri", it)
                 emptyList()
             }
     }
