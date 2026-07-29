@@ -19,10 +19,10 @@ import javax.net.ssl.SSLPeerUnverifiedException
  * connection after the user enables pinning, the server's leaf certificate is captured; every
  * later connection must present the same certificate or the response is rejected.
  *
- * This is a *network* interceptor so it can read the TLS handshake. It verifies after the
- * handshake rather than during it (unlike OkHttp's [CertificatePinner], which would require
- * rebuilding the singleton client when the pin changes) — the mismatched response is closed and
- * never handed to the caller, which is enough to detect a swapped certificate for a personal app.
+ * This is a *network* interceptor so it can read the established TLS handshake. It verifies the
+ * pin BEFORE forwarding the request (unlike OkHttp's [CertificatePinner], which would require
+ * rebuilding the singleton client when the pin changes), so on a certificate mismatch the request
+ * — including its `Authorization: Basic` header — is never transmitted to the swapped peer.
  */
 @Singleton
 class CertPinningInterceptor @Inject constructor(
@@ -39,27 +39,27 @@ class CertPinningInterceptor @Inject constructor(
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val response = chain.proceed(chain.request())
-        if (!enabled) return response
+        if (!enabled) return chain.proceed(chain.request())
 
-        val leaf = chain.connection()?.handshake()?.peerCertificates?.firstOrNull() ?: return response
-        val current = CertificatePinner.pin(leaf)
-        val stored = pin
-        when {
-            stored == null -> {
-                // Trust on first use: remember this certificate as the pin.
-                Log.i(TAG, "pinning server certificate (first use)")
-                pin = current
-                scope.launch { librarySettings.setPinnedServerCert(current) }
-            }
-            stored != current -> {
-                response.close()
-                throw SSLPeerUnverifiedException(
+        // The connection/handshake is already established for a network interceptor, so we can
+        // check the pin here — before proceed() sends the request (and its credentials).
+        val leaf = chain.connection()?.handshake()?.peerCertificates?.firstOrNull()
+        if (leaf != null) {
+            val current = CertificatePinner.pin(leaf)
+            val stored = pin
+            when {
+                stored == null -> {
+                    // Trust on first use: remember this certificate as the pin.
+                    Log.i(TAG, "pinning server certificate (first use)")
+                    pin = current
+                    scope.launch { librarySettings.setPinnedServerCert(current) }
+                }
+                stored != current -> throw SSLPeerUnverifiedException(
                     "Server certificate does not match the pinned certificate",
                 )
             }
         }
-        return response
+        return chain.proceed(chain.request())
     }
 
     private companion object {
