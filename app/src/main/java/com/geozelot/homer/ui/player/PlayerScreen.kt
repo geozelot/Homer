@@ -116,7 +116,6 @@ fun PlayerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val timeLeftMs by viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
-    val finished by viewModel.finished.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val volumeMode by viewModel.volumeMode.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
@@ -155,12 +154,12 @@ fun PlayerScreen(
     ) {
         val offline = download?.status == DownloadStatus.DONE
         PlayerTopBar(
-            finished = finished,
+            started = state.bookElapsedMs > 0,
             offline = offline,
             downloading = DownloadStatus.isActive(download?.status),
             canEdit = editableBook != null,
             onBack = onBack,
-            onToggleFinished = viewModel::toggleFinished,
+            onMarkCompleted = viewModel::markCompleted,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
             onEdit = { showEditDialog = true },
         )
@@ -317,8 +316,8 @@ fun PlayerScreen(
         editableBook?.let { editable ->
             EditBookDialog(
                 book = editable,
-                onSave = { title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay ->
-                    viewModel.saveOverride(title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay)
+                onSave = { title, author, series, index, genre, tags, hidden, downloadOnPlay ->
+                    viewModel.saveOverride(title, author, series, index, genre, tags, hidden, downloadOnPlay)
                     showEditDialog = false
                 },
                 onReset = {
@@ -352,12 +351,12 @@ fun PlayerScreen(
 
 @Composable
 private fun PlayerTopBar(
-    finished: Boolean,
+    started: Boolean,
     offline: Boolean,
     downloading: Boolean,
     canEdit: Boolean,
     onBack: () -> Unit,
-    onToggleFinished: () -> Unit,
+    onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -378,13 +377,15 @@ private fun PlayerTopBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Muted)
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (finished) stringResource(R.string.player_mark_unfinished) else stringResource(R.string.player_mark_finished)) },
-                    onClick = {
-                        onToggleFinished()
-                        overflowOpen = false
-                    },
-                )
+                if (started) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mark_completed)) },
+                        onClick = {
+                            onMarkCompleted()
+                            overflowOpen = false
+                        },
+                    )
+                }
                 if (canEdit) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.edit_title)) },

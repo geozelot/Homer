@@ -52,12 +52,12 @@
     <string name="edit_field_genre">Genre</string>
     <string name="edit_field_tags">Tags</string>
     <string name="edit_tags_placeholder">comma, separated</string>
-    <string name="edit_mark_finished">Mark as finished</string>
     <string name="edit_hide_from_library">Hide from library</string>
     <string name="edit_on_play">On play</string>
     <string name="edit_mode_default">Default</string>
     <string name="edit_mode_download">Download</string>
     <string name="edit_mode_stream">Stream</string>
+    <string name="mark_completed">Mark as completed</string>
     <string name="edit_change_cover">Change cover</string>
     <string name="edit_choose_cover">Choose cover</string>
     <string name="edit_clear_cover">Clear cover</string>
@@ -132,13 +132,10 @@
     <string name="home_series_episodes">%1$d episodes</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>
-    <string name="home_tag_offline">offline</string>
     <string name="home_meta_percent"> · %1$d%%</string>
-    <string name="home_cd_finished_offline">Finished or offline</string>
+    <string name="home_cd_downloaded">Downloaded</string>
 
     <!-- Home: context menu -->
-    <string name="home_menu_mark_finished">Mark finished</string>
-    <string name="home_menu_mark_unfinished">Mark unfinished</string>
     <string name="home_menu_pause_download">Pause download</string>
     <string name="home_menu_resume_download">Resume download</string>
     <string name="home_menu_retry_download">Retry download</string>
@@ -230,8 +227,6 @@
     <string name="player_loading">Loading…</string>
     <string name="player_chapter_of">Chapter %1$d of %2$d</string>
     <string name="player_now_playing">NOW PLAYING</string>
-    <string name="player_mark_finished">Mark as finished</string>
-    <string name="player_mark_unfinished">Mark as unfinished</string>
     <string name="player_time_remaining">-%1$s</string>
     <string name="player_time_unknown">--:--</string>
     <string name="player_cd_previous">Previous chapter</string>

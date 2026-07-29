@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
@@ -167,7 +168,7 @@ fun HomeScreen(
             onRemove = viewModel::deleteDownload,
             onEdit = { editing = it },
             onSetHidden = viewModel::setHidden,
-            onSetFinished = viewModel::setFinished,
+            onMarkCompleted = viewModel::markCompleted,
             onEditSeries = { editingSeries = it },
             onPause = viewModel::pauseDownload,
             onResume = viewModel::resumeDownload,
@@ -283,8 +284,8 @@ fun HomeScreen(
     editing?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay ->
-                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, finishedChange, downloadOnPlay)
+            onSave = { title, author, series, index, genre, tags, hidden, downloadOnPlay ->
+                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, downloadOnPlay)
                 editing = null
             },
             onReset = {
@@ -379,7 +380,6 @@ private fun BookListItem.toEditable() = EditableBook(
     genre = genre,
     tags = tags,
     hidden = hidden,
-    finished = finished,
     hasCustomCover = hasCustomCover,
     downloadOnPlay = downloadOnPlayOverride,
 )
@@ -390,7 +390,7 @@ private class BookActions(
     val onRemove: (String) -> Unit,
     val onEdit: (BookListItem) -> Unit,
     val onSetHidden: (String, Boolean) -> Unit,
-    val onSetFinished: (String, Boolean?) -> Unit,
+    val onMarkCompleted: (String) -> Unit,
     val onEditSeries: (LibraryEntry.Series) -> Unit,
     val onPause: (String) -> Unit,
     val onResume: (String) -> Unit,
@@ -824,7 +824,6 @@ private fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
 private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
     var menuOpen by remember { mutableStateOf(false) }
     val showRing = book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished
-    val showCheck = book.finished || book.isDownloaded
 
     Column(
         modifier = Modifier
@@ -843,8 +842,8 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             CoverArt(model = book.coverModel, title = book.title, modifier = Modifier.fillMaxSize())
-            if (showCheck) {
-                StatusBadge(modifier = Modifier.align(Alignment.TopEnd).padding(7.dp))
+            if (book.isDownloaded) {
+                DownloadBadge(modifier = Modifier.align(Alignment.TopEnd).padding(7.dp))
             }
             if (showRing) {
                 ProgressRing(
@@ -1025,8 +1024,8 @@ private fun BookListRow(
                     .size(46.dp)
                     .clip(RoundedCornerShape(8.dp)),
             )
-            if (book.finished || book.isDownloaded) {
-                StatusBadge(
+            if (book.isDownloaded) {
+                DownloadBadge(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(0.dp)
@@ -1056,14 +1055,14 @@ private fun BookListRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 1.dp),
             )
-            if (book.genre != null || book.tags.isNotEmpty() || book.isDownloaded) {
+            // Offline is shown by the DownloadBadge on the cover; the chips carry genre + tags only.
+            if (book.genre != null || book.tags.isNotEmpty()) {
                 Row(
                     modifier = Modifier.padding(top = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     book.genre?.let { TagChip(it, Amber, AmberSoft) }
                     book.tags.take(3).forEach { TagChip(it, Muted, Surface2) }
-                    if (book.isDownloaded) TagChip(stringResource(R.string.home_tag_offline), Sage, SageSoft)
                 }
             }
         }
@@ -1162,7 +1161,7 @@ private fun SeriesShelfRow(
 // ── Status badge, progress ring ───────────────────────────────────────────────
 
 @Composable
-private fun StatusBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
+private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
     Box(
         modifier = modifier
             .size(20.dp)
@@ -1170,7 +1169,7 @@ private fun StatusBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
             .background(Studio.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.home_cd_finished_offline), tint = Sage, modifier = Modifier.size(iconSize))
+        Icon(Icons.Filled.DownloadDone, contentDescription = stringResource(R.string.home_cd_downloaded), tint = Sage, modifier = Modifier.size(iconSize))
     }
 }
 
@@ -1244,11 +1243,13 @@ private fun BookMenu(
             leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
             onClick = onDismiss, // tapping the card already opens the player
         )
-        DropdownMenuItem(
-            text = { Text(if (book.finished) stringResource(R.string.home_menu_mark_unfinished) else stringResource(R.string.home_menu_mark_finished)) },
-            leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.finished) Sage else Muted) },
-            onClick = { actions.onSetFinished(book.id, !book.finished); onDismiss() },
-        )
+        if (book.started) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.mark_completed)) },
+                leadingIcon = { Icon(Icons.Filled.Check, null, tint = Muted) },
+                onClick = { actions.onMarkCompleted(book.id); onDismiss() },
+            )
+        }
         DropdownMenuItem(
             text = { Text(stringResource(R.string.action_edit)) }, // hide/unhide lives in the edit dialog
             leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },

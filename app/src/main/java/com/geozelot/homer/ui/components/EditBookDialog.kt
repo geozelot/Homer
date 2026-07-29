@@ -69,21 +69,20 @@ data class EditableBook(
     val genre: String?,
     val tags: List<String>,
     val hidden: Boolean,
-    val finished: Boolean,
     val hasCustomCover: Boolean,
     /** Per-book play mode override: null = follow global, true = download on play, false = stream. */
     val downloadOnPlay: Boolean?,
 )
 
 /**
- * Edits a book's metadata override (title/author/series/genre/tags), finished + hidden flags, and
+ * Edits a book's metadata override (title/author/series/genre/tags), the hidden flag, and the
  * custom cover. Blank fields revert to detection; Reset clears the whole override. Shared between
  * the library screen (long-press) and the player overflow.
  */
 @Composable
 fun EditBookDialog(
     book: EditableBook,
-    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, finishedChange: Boolean?, downloadOnPlay: Boolean?) -> Unit,
+    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, downloadOnPlay: Boolean?) -> Unit,
     onReset: () -> Unit,
     onPickCover: (Uri) -> Unit,
     onClearCover: () -> Unit,
@@ -99,10 +98,6 @@ fun EditBookDialog(
     var genre by remember { mutableStateOf(book.genre.orEmpty()) }
     var tags by remember { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by remember { mutableStateOf(book.hidden) }
-    // Tri-state finished: the switch starts at the effective value; only a change from that value
-    // forces the flag (null preserves the existing auto/forced state on save).
-    val initialFinished = book.finished
-    var finished by remember { mutableStateOf(initialFinished) }
     // Per-book play mode: null = follow the global setting, true = download on play, false = stream.
     var playMode by remember { mutableStateOf(book.downloadOnPlay) }
 
@@ -160,14 +155,6 @@ fun EditBookDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(stringResource(R.string.edit_mark_finished), fontSize = 14.sp)
-                    HomerSwitch(checked = finished, onCheckedChange = { finished = it })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
                     Text(stringResource(R.string.edit_hide_from_library), fontSize = 14.sp)
                     HomerSwitch(checked = hidden, onCheckedChange = { hidden = it })
                 }
@@ -194,8 +181,7 @@ fun EditBookDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val finishedChange = if (finished != initialFinished) finished else null
-                onSave(title, author, series, index, genre, tags, hidden, finishedChange, playMode)
+                onSave(title, author, series, index, genre, tags, hidden, playMode)
             }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {

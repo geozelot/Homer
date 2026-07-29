@@ -19,6 +19,7 @@ import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -105,7 +106,7 @@ class PlaybackConnection @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
     private val homerSync: HomerSyncRepository,
-    localMirror: LocalMirror,
+    private val localMirror: LocalMirror,
 ) {
     // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
     // constraint after a concurrent scan pruned the row) is logged, not propagated to the
@@ -531,6 +532,24 @@ class PlaybackConnection @Inject constructor(
         scope.launch {
             bookmarkDao.deleteById(id)
             bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, System.currentTimeMillis()))
+            homerSync.sync()
+        }
+    }
+
+    /**
+     * "Mark as completed": resets a book's saved progress to the very start so it drops off the
+     * Continue shelf and reopens fresh. Writes position 0 at the first chapter with a fresh
+     * timestamp (so the reset wins cross-device via last-write-wins) and syncs. If it's the
+     * currently-loaded book, the controller is paused and rewound first so the position poll can't
+     * immediately re-save the old spot.
+     */
+    fun resetProgress(bookId: String) {
+        scope.launch {
+            val firstMediaId = audioFileDao.findForBook(bookId).firstOrNull()?.relativePath ?: return@launch
+            if (currentBookId == bookId) controller?.let { it.pause(); it.seekTo(0, 0L) }
+            playbackStateDao.upsert(PlaybackStateEntity(bookId, firstMediaId, 0L, System.currentTimeMillis()))
+            if (currentBookId == bookId) pushState()
+            localMirror.export()
             homerSync.sync()
         }
     }

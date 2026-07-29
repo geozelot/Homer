@@ -67,7 +67,11 @@ data class BookListItem(
     val progress: Float?,
     /** When this book was last played, for Continue-shelf recency; null if never. */
     val lastPlayedAt: Long?,
-    /** Forced finished flag: null = auto-derive, true/false = user override. */
+    /** Whether the book has real listening progress (a saved position past the very start), so
+     *  merely opening a book doesn't put it on the Continue shelf. */
+    val started: Boolean,
+    /** Forced finished flag: null = auto-derive, true/false = user override (legacy; kept for
+     *  cross-device compat and to hide already-marked books, but no longer set from the UI). */
     val finishedOverride: Boolean?,
     /** Per-book play mode: null = follow global, true = download on play, false = stream. */
     val downloadOnPlayOverride: Boolean?,
@@ -223,6 +227,7 @@ class HomeViewModel @Inject constructor(
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
                     lastPlayedAt = bookProgress?.updatedAt,
+                    started = (elapsed ?: 0L) > 0L,
                     finishedOverride = eff.finishedOverride,
                     downloadOnPlayOverride = eff.downloadOnPlayOverride,
                     downloadStatus = download?.status,
@@ -265,11 +270,12 @@ class HomeViewModel @Inject constructor(
             state.bookId?.let { id -> list.firstOrNull { it.id == id } }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** In-progress books (started, not finished), most-recently-played first. */
+    /** In-progress books: actually started (real progress), not finished/at-end, not hidden;
+     *  most-recently-played first. Merely opening a book (position 0) does NOT qualify. */
     val continueShelf: StateFlow<List<BookListItem>> = books
         .map { list ->
             list.asSequence()
-                .filter { it.lastPlayedAt != null && !it.finished && !it.hidden }
+                .filter { it.started && !it.finished && !it.hidden }
                 .sortedByDescending { it.lastPlayedAt }
                 .take(CONTINUE_LIMIT)
                 .toList()
@@ -486,11 +492,7 @@ class HomeViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
-    /**
-     * Saves metadata corrections + hidden flag; blank fields revert to detection.
-     * [finishedChange] carries the finished toggle: null leaves the existing flag untouched (the
-     * dialog didn't change it), true/false forces that value.
-     */
+    /** Saves metadata corrections + hidden flag; blank fields revert to detection. */
     fun saveOverride(
         bookId: String,
         title: String,
@@ -500,11 +502,10 @@ class HomeViewModel @Inject constructor(
         genre: String,
         tags: String,
         hidden: Boolean,
-        finishedChange: Boolean?,
         downloadOnPlay: Boolean?,
     ) {
         viewModelScope.launch {
-            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, finishedChange, downloadOnPlay)
+            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, downloadOnPlay)
         }
     }
 
@@ -668,13 +669,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { bookEditor.setHidden(bookId, hidden) }
     }
 
-    /**
-     * Mark/unmark finished from the context menu (preserving other override fields).
-     * [finished] = true forces finished, false forces not-finished, null reverts to auto.
-     */
-    fun setFinished(bookId: String, finished: Boolean?) {
-        viewModelScope.launch { bookEditor.setFinished(bookId, finished) }
-    }
+    /** "Mark as completed": resets the book's progress so it drops off Continue and reopens fresh. */
+    fun markCompleted(bookId: String) = connection.resetProgress(bookId)
 
     /** Toggle play/pause on the currently-loaded book (docked mini-player). */
     fun playPause() = connection.playPause()

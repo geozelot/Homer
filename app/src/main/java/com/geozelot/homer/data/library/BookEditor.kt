@@ -30,9 +30,9 @@ class BookEditor @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     /**
-     * Saves metadata corrections + the hidden flag; blank fields revert to detection.
-     * [finishedChange] carries the finished toggle: null leaves the existing flag untouched,
-     * true/false forces that value.
+     * Saves metadata corrections + the hidden flag; blank fields revert to detection. The legacy
+     * `finished` flag (no longer set from the UI — "completed" now resets progress instead) is
+     * preserved as-is so an edit never clobbers it.
      */
     suspend fun saveOverride(
         bookId: String,
@@ -43,10 +43,9 @@ class BookEditor @Inject constructor(
         genre: String,
         tags: String,
         hidden: Boolean,
-        finishedChange: Boolean?,
         downloadOnPlay: Boolean?,
     ) {
-        val finished = finishedChange ?: bookOverrideDao.findById(bookId)?.finished
+        val finished = bookOverrideDao.findById(bookId)?.finished
         val tagList = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }
         bookOverrideDao.upsert(
             BookOverrideEntity(
@@ -100,19 +99,6 @@ class BookEditor @Inject constructor(
         bookOverrideDao.upsert(
             existing?.copy(hidden = hidden, updatedAt = System.currentTimeMillis())
                 ?: blank(bookId).copy(hidden = hidden),
-        )
-        homerSync.sync()
-    }
-
-    /**
-     * Mark/unmark finished (preserving other override fields). [finished] = true forces finished,
-     * false forces not-finished, null reverts to auto.
-     */
-    suspend fun setFinished(bookId: String, finished: Boolean?) {
-        val existing = bookOverrideDao.findById(bookId)
-        bookOverrideDao.upsert(
-            existing?.copy(finished = finished, updatedAt = System.currentTimeMillis())
-                ?: blank(bookId).copy(finished = finished),
         )
         homerSync.sync()
     }

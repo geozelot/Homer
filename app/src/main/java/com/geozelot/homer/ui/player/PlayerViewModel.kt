@@ -190,17 +190,6 @@ class PlayerViewModel @Inject constructor(
         (durations.sum() - elapsed).coerceAtLeast(0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val finishedOverride: StateFlow<Boolean?> = bookId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(null) else bookOverrideDao.observeById(id).map { it?.finished }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    /** Effective finished flag: the forced override if set, else auto from time-left reaching zero. */
-    val finished: StateFlow<Boolean> = combine(finishedOverride, timeLeftMs) { forced, left ->
-        forced ?: (left != null && left <= 0L)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
     private val bookEntity = bookId.flatMapLatest { id ->
         if (id == null) flowOf(null) else bookDao.observeById(id)
     }
@@ -210,7 +199,7 @@ class PlayerViewModel @Inject constructor(
 
     /** The current book as an editable model (effective values applied) for the shared edit dialog. */
     val editableBook: StateFlow<EditableBook?> =
-        combine(bookEntity, override, finished) { book, ov, fin ->
+        combine(bookEntity, override) { book, ov ->
             if (book == null) return@combine null
             val eff = book.applyOverride(ov)
             EditableBook(
@@ -222,7 +211,6 @@ class PlayerViewModel @Inject constructor(
                 genre = eff.genre,
                 tags = ov?.tags?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
                 hidden = ov?.hidden ?: false,
-                finished = fin,
                 hasCustomCover = book.customCoverPath != null,
                 downloadOnPlay = ov?.downloadOnPlay,
             )
@@ -262,11 +250,10 @@ class PlayerViewModel @Inject constructor(
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
-    /** Forces the finished flag to the opposite of the current effective value. */
-    fun toggleFinished() {
+    /** "Mark as completed": resets the current book's progress so it drops off Continue. */
+    fun markCompleted() {
         val id = bookId.value ?: return
-        val target = !finished.value
-        viewModelScope.launch { bookEditor.setFinished(id, target) }
+        connection.resetProgress(id)
     }
 
     /** Saves metadata corrections for the current book from the shared edit dialog. */
@@ -278,12 +265,11 @@ class PlayerViewModel @Inject constructor(
         genre: String,
         tags: String,
         hidden: Boolean,
-        finishedChange: Boolean?,
         downloadOnPlay: Boolean?,
     ) {
         val id = bookId.value ?: return
         viewModelScope.launch {
-            bookEditor.saveOverride(id, title, author, series, seriesIndex, genre, tags, hidden, finishedChange, downloadOnPlay)
+            bookEditor.saveOverride(id, title, author, series, seriesIndex, genre, tags, hidden, downloadOnPlay)
         }
     }
 
