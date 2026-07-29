@@ -101,9 +101,9 @@ CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` an
 
 ## Status
 
-Homer is pre-1.0. Everything above works; some features (cross-device tiers 2/3,
-biometric lock, M4B chapters, certificate pinning) are best-effort and want verification
-across more devices and libraries.
+Homer is at **1.0** — stable for day-to-day listening. It's a personal, self-hosted
+project; a few advanced features (shared-library household sync, M4B chapter text-tracks,
+certificate pinning) are best-effort and still evolving. Issues and patches welcome.
 
 ## A note on how this was built
 
@@ -113,4 +113,6 @@ iterative process.
 
 ## License
 
-© geozelot. Licensing is at the author's discretion; see the repository for details.
+Homer is free software, licensed under the **GNU General Public License v3.0** — see
+[LICENSE](LICENSE). © geozelot. You may use, study, share, and modify it under the terms of the
+GPLv3; distributed modifications must remain under the same license.
