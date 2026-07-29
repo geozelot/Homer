@@ -10,6 +10,7 @@ import com.geozelot.homer.data.db.entity.ChapterTier
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,7 +42,10 @@ class DurationEnricher @Inject constructor(
     private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "unhandled duration-enrich error", e) },
+    )
     private val inFlight = Collections.synchronizedSet(mutableSetOf<String>())
 
     /** Fire-and-forget; no-op if this book is already fully measured or being measured. */

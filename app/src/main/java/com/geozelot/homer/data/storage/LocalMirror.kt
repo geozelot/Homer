@@ -80,21 +80,30 @@ class LocalMirror @Inject constructor(
     }
 
     /**
-     * Recomputes each book's download status against the active storage area: books whose files are
-     * present are marked done (so a reconnected folder's downloads aren't re-fetched); books whose
-     * files are absent are cleared. Existence is probed by the first file (a cheap heuristic).
+     * Recomputes each book's download status against the active storage area: a book with ALL files
+     * present is marked done (so a reconnected folder's downloads aren't re-fetched), a book with a
+     * partial (contiguous) prefix present is marked paused with the real count so the worker resumes
+     * the rest, and a book with nothing present is cleared. Verifying the whole prefix — not just
+     * the first file — stops an interrupted download from masquerading as complete.
      */
     suspend fun adoptDownloads() {
         val now = System.currentTimeMillis()
         var adopted = 0
         for (book in bookDao.getAll()) {
             val files = audioFileDao.findForBook(book.id)
-            val present = files.isNotEmpty() && downloadStorage.uri(files.first().relativePath) != null
-            if (present) {
-                downloadDao.upsert(DownloadEntity(book.id, DownloadStatus.DONE, files.size, files.size, now))
-                adopted++
-            } else {
-                downloadDao.delete(book.id)
+            // The worker downloads sequentially and resumes from downloadedFiles, so "downloaded"
+            // means a contiguous leading run of present files.
+            var prefix = 0
+            while (prefix < files.size && downloadStorage.uri(files[prefix].relativePath) != null) prefix++
+            when {
+                files.isNotEmpty() && prefix == files.size -> {
+                    downloadDao.upsert(DownloadEntity(book.id, DownloadStatus.DONE, files.size, files.size, now))
+                    adopted++
+                }
+                prefix > 0 -> {
+                    downloadDao.upsert(DownloadEntity(book.id, DownloadStatus.PAUSED, prefix, files.size, now))
+                }
+                else -> downloadDao.delete(book.id)
             }
         }
         Log.i(TAG, "adopted $adopted downloaded book(s) from the storage folder")

@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.download
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -14,6 +15,7 @@ import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.settings.PlaybackSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,7 +39,10 @@ class DownloadManager @Inject constructor(
     private val settings: PlaybackSettings,
 ) {
     private val workManager = WorkManager.getInstance(context)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "unhandled download-manager error", e) },
+    )
 
     /** Enqueues a download for [bookId]; a no-op if one is already pending/running. */
     fun download(bookId: String) {
@@ -92,5 +97,6 @@ class DownloadManager @Inject constructor(
 
     private companion object {
         const val WORK_PREFIX = "download:"
+        const val TAG = "HomerDownload"
     }
 }

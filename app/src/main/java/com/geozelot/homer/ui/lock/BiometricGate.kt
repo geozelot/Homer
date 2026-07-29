@@ -68,6 +68,7 @@ fun BiometricGate(content: @Composable () -> Unit) {
     }
 
     var unlocked by rememberSaveable { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
     val locked = canAuth && !unlocked
 
     // Re-lock when the app is backgrounded, so the next resume prompts again.
@@ -82,6 +83,7 @@ fun BiometricGate(content: @Composable () -> Unit) {
 
     fun prompt() {
         val host = activity ?: return
+        authError = null
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Homer")
             .setSubtitle("Confirm it's you to continue")
@@ -92,7 +94,21 @@ fun BiometricGate(content: @Composable () -> Unit) {
             ContextCompat.getMainExecutor(host),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    authError = null
                     unlocked = true
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    // A user-dismissed prompt is expected (they can retry with Unlock); anything
+                    // else — notably a lockout after too many attempts — needs to be shown, or the
+                    // user is stranded on a blank lock screen with no idea why nothing happened.
+                    authError = when (errorCode) {
+                        BiometricPrompt.ERROR_USER_CANCELED,
+                        BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+                        BiometricPrompt.ERROR_CANCELED,
+                        -> null
+                        else -> errString.toString()
+                    }
                 }
             },
         ).authenticate(info)
@@ -102,12 +118,12 @@ fun BiometricGate(content: @Composable () -> Unit) {
     LaunchedEffect(locked) { if (locked) prompt() }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (locked) LockScreen(icon = Icons.Filled.Lock, onUnlock = ::prompt) else content()
+        if (locked) LockScreen(icon = Icons.Filled.Lock, error = authError, onUnlock = ::prompt) else content()
     }
 }
 
 @Composable
-private fun LockScreen(icon: ImageVector, onUnlock: () -> Unit) {
+private fun LockScreen(icon: ImageVector, error: String?, onUnlock: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().background(Ground),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -120,6 +136,14 @@ private fun LockScreen(icon: ImageVector, onUnlock: () -> Unit) {
             onClick = onUnlock,
             colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = OnAmber),
         ) { Text("Unlock") }
+        if (error != null) {
+            Text(
+                error,
+                color = Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 16.dp, start = 32.dp, end = 32.dp),
+            )
+        }
     }
 }
 

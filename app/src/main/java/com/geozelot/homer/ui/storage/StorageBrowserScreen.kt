@@ -32,7 +32,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +46,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Muted
@@ -121,8 +126,13 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
 
             val root = remember { Environment.getExternalStorageDirectory() ?: File("/storage/emulated/0") }
             var dir by remember { mutableStateOf(root) }
-            val entries = remember(dir, resumeTick) {
-                dir.listFiles()?.filter { it.isDirectory && !it.isHidden }?.sortedBy { it.name.lowercase() } ?: emptyList()
+            val scope = rememberCoroutineScope()
+            // Enumerate directories off the main thread — listFiles() touches the disk and would
+            // block composition (an ANR on a large/slow folder) if done inline.
+            val entries by produceState(initialValue = emptyList<File>(), dir, resumeTick) {
+                value = withContext(Dispatchers.IO) {
+                    dir.listFiles()?.filter { it.isDirectory && !it.isHidden }?.sortedBy { it.name.lowercase() } ?: emptyList()
+                }
             }
 
             Text(dir.absolutePath, color = Amber, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
@@ -144,11 +154,17 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = {
-                    val created = File(dir, "Homer").apply { mkdirs() }
-                    if (created.isDirectory) dir = created
+                    scope.launch {
+                        val created = withContext(Dispatchers.IO) { File(dir, "Homer").apply { mkdirs() } }
+                        if (withContext(Dispatchers.IO) { created.isDirectory }) dir = created
+                    }
                 }) { Text("New “Homer” folder") }
                 Button(
-                    onClick = { if (dir.canWrite()) onPicked(dir.absolutePath) },
+                    onClick = {
+                        scope.launch {
+                            if (withContext(Dispatchers.IO) { dir.canWrite() }) onPicked(dir.absolutePath)
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = OnAmber),
                 ) { Text("Use this folder") }
             }

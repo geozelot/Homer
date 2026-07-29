@@ -1,6 +1,8 @@
 package com.geozelot.homer.ui.theme
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -47,8 +49,9 @@ fun HomerTheme(content: @Composable () -> Unit) {
         SideEffect {
             // Force light system-bar icons: the app is always dark, so even on a light-mode
             // device the bars must sit on our near-black ground. (enableEdgeToEdge already
-            // makes the bars transparent.)
-            val window = (view.context as Activity).window
+            // makes the bars transparent.) Resolve the Activity by walking the ContextWrapper
+            // chain rather than an unchecked cast that would crash under a wrapped context.
+            val window = view.context.findActivity()?.window ?: return@SideEffect
             val insets = WindowCompat.getInsetsController(window, view)
             insets.isAppearanceLightStatusBars = false
             insets.isAppearanceLightNavigationBars = false
@@ -60,4 +63,11 @@ fun HomerTheme(content: @Composable () -> Unit) {
         typography = HomerTypography,
         content = content,
     )
+}
+
+/** Walks the [ContextWrapper] chain to the hosting [Activity], or null if there isn't one. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

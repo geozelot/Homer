@@ -25,7 +25,9 @@ import com.geozelot.homer.di.Authed
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -80,10 +82,14 @@ class DownloadWorker @AssistedInject constructor(
                 // The storage area streams into place (atomically where the backend supports it),
                 // so a truncated write is never mistaken for a finished download.
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, libraryRoot, file.relativePath)).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
-                    val body = response.body ?: throw IOException("empty body for ${file.relativePath}")
-                    storage.writeStream(file.relativePath) { output -> body.byteStream().use { it.copyTo(output) } }
+                // CoroutineWorker runs on Dispatchers.Default (CPU pool); the blocking OkHttp call
+                // and byte copy belong on the IO dispatcher so a long transfer can't starve it.
+                withContext(Dispatchers.IO) {
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
+                        val body = response.body ?: throw IOException("empty body for ${file.relativePath}")
+                        storage.writeStream(file.relativePath) { output -> body.byteStream().use { it.copyTo(output) } }
+                    }
                 }
                 if (isStopped) return Result.failure()
                 downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, index + 1, files.size, now()))

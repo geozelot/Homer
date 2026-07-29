@@ -25,6 +25,7 @@ import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -96,7 +97,13 @@ class PlaybackConnection @Inject constructor(
     private val homerSync: HomerSyncRepository,
     localMirror: LocalMirror,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
+    // constraint after a concurrent scan pruned the row) is logged, not propagated to the
+    // platform's default handler as a process crash.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "unhandled playback coroutine error", e) },
+    )
 
     /** Serializes book-switching ([connect]/[playBook]) so their shared-state mutations can't
      *  interleave across suspension points, and so the [MediaController] is only ever built once

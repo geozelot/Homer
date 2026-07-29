@@ -62,11 +62,15 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
         var current = rootUri
         val built = StringBuilder()
         for (seg in segs) {
-            var child = findChild(current, seg)
+            // Address the provider by a volume-legal name (same mapping as FileStorageArea), so a
+            // FUSE/vfat-backed tree that rewrites illegal chars doesn't leave a file we can't find
+            // again. Cache keys stay the raw path so callers keep addressing by the original rel.
+            val safe = safeStorageSegment(seg)
+            var child = findChild(current, safe)
             if (child == null) {
                 if (!create) return null
                 child = DocumentsContract.createDocument(
-                    resolver, current, DocumentsContract.Document.MIME_TYPE_DIR, seg,
+                    resolver, current, DocumentsContract.Document.MIME_TYPE_DIR, safe,
                 ) ?: throw IOException("SAF: could not create directory $seg (in $rel)")
             }
             current = child
@@ -83,14 +87,14 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
     /** The existing file document at [rel], or null. */
     private fun resolveFile(rel: String): Uri? {
         val parent = resolveDir(parentRel(rel), create = false) ?: return null
-        return findChild(parent, nameOf(rel))
+        return findChild(parent, safeStorageSegment(nameOf(rel)))
     }
 
     /** Creates the file at [rel] fresh (creating parents, deleting any existing so no `name (1)`). */
     private fun createFile(rel: String): Uri {
         val parent = resolveDir(parentRel(rel), create = true)
             ?: throw IOException("SAF: could not resolve parent of $rel")
-        val name = nameOf(rel)
+        val name = safeStorageSegment(nameOf(rel))
         findChild(parent, name)?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
         return DocumentsContract.createDocument(resolver, parent, mimeFor(name), name)
             ?: throw IOException("SAF: could not create file $rel")

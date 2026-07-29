@@ -12,6 +12,16 @@ import java.io.OutputStream
 private const val ILLEGAL_NAME_CHARS = ":*?\"<>|\\"
 
 /**
+ * Maps a single path segment to a name that's legal on public/FUSE/vfat volumes (illegal and
+ * control chars → `_`, trailing dots/spaces trimmed). Deterministic, so the same input always maps
+ * to the same on-disk name and can be found again. Shared by [FileStorageArea] and the SAF backend.
+ */
+internal fun safeStorageSegment(seg: String): String =
+    buildString {
+        for (c in seg) append(if (c.code < 0x20 || c in ILLEGAL_NAME_CHARS) '_' else c)
+    }.trimEnd(' ', '.').ifBlank { "_" }
+
+/**
  * Backend-agnostic file area rooted at the app's chosen storage location (`Homer/`). Relative
  * paths are POSIX-style, e.g. `downloads/Author/Book/01.mp3`. Two implementations back it: a plain
  * [FileStorageArea] (the app-external default) and a SAF [com.geozelot.homer.data.storage] tree
@@ -55,7 +65,7 @@ class FileStorageArea(private val root: File, private val sanitize: Boolean = fa
         val f = if (!sanitize) {
             File(root, rel)
         } else {
-            val safe = rel.split('/').filter { it.isNotEmpty() }.joinToString("/") { safeSegment(it) }
+            val safe = rel.split('/').filter { it.isNotEmpty() }.joinToString("/") { safeStorageSegment(it) }
             File(root, safe)
         }
         // Containment guard (defense in depth): never resolve outside root, even if a caller
@@ -68,11 +78,6 @@ class FileStorageArea(private val root: File, private val sanitize: Boolean = fa
         }
         return f
     }
-
-    private fun safeSegment(seg: String): String =
-        buildString {
-            for (c in seg) append(if (c.code < 0x20 || c in ILLEGAL_NAME_CHARS) '_' else c)
-        }.trimEnd(' ', '.').ifBlank { "_" }
 
     override suspend fun write(rel: String, bytes: ByteArray): Uri = withContext(Dispatchers.IO) {
         val f = file(rel)
