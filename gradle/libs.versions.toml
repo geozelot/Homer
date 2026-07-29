@@ -21,6 +21,7 @@ securityCrypto = "1.1.0-alpha06"
 datastore = "1.1.1"
 coil = "2.7.0"
 biometric = "1.1.0"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -65,6 +66,7 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

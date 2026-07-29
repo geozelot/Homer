@@ -134,4 +134,6 @@ dependencies {
     implementation(libs.androidx.media3.datasource.okhttp)
 
     implementation(libs.okhttp)
+
+    testImplementation(libs.junit)
 }
