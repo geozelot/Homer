@@ -3,6 +3,7 @@ package com.geozelot.homer.data.webdav
 import android.util.Xml
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.di.Authed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -169,11 +170,17 @@ class WebDavClient @Inject constructor(
         }
     }
 
-    /** Absolute URL for [relativePath], correctly percent-encoded per segment. */
+    /**
+     * Absolute URL for [relativePath], correctly percent-encoded per segment. The dav base depends
+     * on the credential kind: an account mounts at `remote.php/dav/files/<login>`, a public share at
+     * `public.php/dav/files/<token>` (the share root). Both then append the relative path.
+     */
     fun urlFor(credentials: NextcloudCredentials, relativePath: String): HttpUrl {
         val builder = credentials.serverUrl.toHttpUrl().newBuilder()
-            .addPathSegments("remote.php/dav/files")
-            .addPathSegment(credentials.loginName)
+        when (credentials.kind) {
+            WebDavKind.ACCOUNT -> builder.addPathSegments("remote.php/dav/files").addPathSegment(credentials.loginName)
+            WebDavKind.SHARE -> builder.addPathSegments("public.php/dav/files").addPathSegment(credentials.loginName)
+        }
         relativePath.split('/').filter { it.isNotEmpty() }.forEach { builder.addPathSegment(it) }
         return builder.build()
     }
@@ -274,18 +281,20 @@ class WebDavClient @Inject constructor(
 
         private const val TAG = "HomerDav"
         private const val FILES_MARKER = "/remote.php/dav/files/"
+        private const val SHARE_MARKER = "/public.php/dav/files/"
 
         /**
-         * Converts a (percent-encoded, server-absolute) href into a path relative to the
-         * files root. Returns `null` for the marker not being present, or empty string
-         * for the files root itself.
+         * Converts a (percent-encoded, server-absolute) href into a path relative to the files
+         * root. The marker depends on the credential kind (account vs public share). Returns `null`
+         * when the marker isn't present, or empty string for the files root itself.
          */
         fun relativePathFromHref(href: String, credentials: NextcloudCredentials): String? {
             val decoded = runCatching { URI(href).path }.getOrNull() ?: href
-            val idx = decoded.indexOf(FILES_MARKER)
+            val marker = if (credentials.kind == WebDavKind.SHARE) SHARE_MARKER else FILES_MARKER
+            val idx = decoded.indexOf(marker)
             if (idx < 0) return null
-            // Skip the marker and the username segment.
-            val afterFiles = decoded.substring(idx + FILES_MARKER.length)
+            // Skip the marker and the account-login / share-token segment.
+            val afterFiles = decoded.substring(idx + marker.length)
             val rel = afterFiles.substringAfter('/', missingDelimiterValue = "").trim('/')
             // A well-formed Nextcloud href never contains dot segments. Reject any that do so a
             // malicious/compromised server can't smuggle a `..` path that, once used as a download

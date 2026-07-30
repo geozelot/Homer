@@ -100,6 +100,7 @@ class EncryptedCredentialStore @Inject constructor(
                 .putString(KEY_SERVER, credentials.serverUrl)
                 .putString(KEY_LOGIN, credentials.loginName)
                 .putString(KEY_PASSWORD, credentials.appPassword)
+                .putString(KEY_KIND, credentials.kind.name)
                 .apply()
         }
     }
@@ -114,7 +115,11 @@ class EncryptedCredentialStore @Inject constructor(
         val server = prefs.getString(KEY_SERVER, null) ?: return null
         val login = prefs.getString(KEY_LOGIN, null) ?: return null
         val password = prefs.getString(KEY_PASSWORD, null) ?: return null
-        return NextcloudCredentials(server, login, password)
+        // Absent for accounts stored before share support — default to ACCOUNT.
+        val kind = prefs.getString(KEY_KIND, null)
+            ?.let { runCatching { WebDavKind.valueOf(it) }.getOrNull() }
+            ?: WebDavKind.ACCOUNT
+        return NextcloudCredentials(server, login, password, kind)
     }
 
     private companion object {
@@ -122,5 +127,6 @@ class EncryptedCredentialStore @Inject constructor(
         const val KEY_SERVER = "server_url"
         const val KEY_LOGIN = "login_name"
         const val KEY_PASSWORD = "app_password"
+        const val KEY_KIND = "webdav_kind"
     }
 }

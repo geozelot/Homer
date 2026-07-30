@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.webdav
 
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.auth.WebDavKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -56,6 +57,20 @@ class WebDavClientTest {
     @Test
     fun `a current-dir segment is rejected`() {
         val href = "/remote.php/dav/files/alice/Author/./Book/01.mp3"
+        assertNull(WebDavClient.relativePathFromHref(href, creds))
+    }
+
+    @Test
+    fun `a share href is parsed against the public dav endpoint`() {
+        val share = NextcloudCredentials(
+            serverUrl = "https://cloud.example.com",
+            loginName = "AbCdEfToken", // the share token
+            appPassword = "",
+            kind = WebDavKind.SHARE,
+        )
+        val href = "/public.php/dav/files/AbCdEfToken/Author/Book/01.mp3"
+        assertEquals("Author/Book/01.mp3", WebDavClient.relativePathFromHref(href, share))
+        // The account marker must NOT match a share href.
         assertNull(WebDavClient.relativePathFromHref(href, creds))
     }
 }
