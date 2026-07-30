@@ -193,6 +193,21 @@ class WebDavClient @Inject constructor(
     }
 
     /**
+     * The HTTP status of a Depth-0 PROPFIND on [relativePath] using [credentials], or 0 on a
+     * network error. Used to validate a backend before saving it: 207 = reachable, 401 = missing/
+     * wrong password, 404 = no such share/path.
+     */
+    suspend fun statusOf(relativePath: String, credentials: NextcloudCredentials): Int = withContext(Dispatchers.IO) {
+        val body = PROPFIND_BODY.toRequestBody("application/xml; charset=utf-8".toMediaType())
+        val builder = Request.Builder()
+            .url(urlFor(credentials, relativePath))
+            .header("Depth", "0")
+            .method("PROPFIND", body)
+        builder.applyAuth(credentials)
+        runCatching { client.newCall(builder.build()).execute().use { it.code } }.getOrDefault(0)
+    }
+
+    /**
      * Absolute URL for [relativePath], correctly percent-encoded per segment. The dav base depends
      * on the credential kind: an account mounts at `remote.php/dav/files/<login>`, a public share at
      * `public.php/dav/files/<token>` (the share root). Both then append the relative path.
