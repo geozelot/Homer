@@ -52,7 +52,20 @@ class LoginViewModel @Inject constructor(
     private val _openBrowser = Channel<String>(Channel.BUFFERED)
     val openBrowser = _openBrowser.receiveAsFlow()
 
+    /** One-shot "sync account linked" signal (sync mode only) so the screen can navigate back. */
+    private val _linked = Channel<Unit>(Channel.BUFFERED)
+    val linked = _linked.receiveAsFlow()
+
+    /** In sync mode the account is added as a progress-sync account (see [pollSyncAccount]) rather
+     *  than replacing the library — used when the library is a share. */
+    private var syncMode = false
+
     private var loginJob: Job? = null
+
+    fun setSyncMode(enabled: Boolean) {
+        syncMode = enabled
+        if (enabled) _uiState.value = _uiState.value.copy(mode = Mode.ACCOUNT)
+    }
 
     fun setMode(mode: Mode) {
         _uiState.value = _uiState.value.copy(mode = mode, error = null)
@@ -106,7 +119,7 @@ class LoginViewModel @Inject constructor(
                 var elapsed = 0L
                 while (elapsed < POLL_TIMEOUT_MS) {
                     val credentials = try {
-                        authRepository.pollOnce(init)
+                        if (syncMode) authRepository.pollSyncAccount(init) else authRepository.pollOnce(init)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -118,7 +131,10 @@ class LoginViewModel @Inject constructor(
                     }
                     if (credentials != null) {
                         Log.i(TAG, "startLogin: success, credentials saved")
-                        return@launch // AuthRepository state flips app-wide
+                        // Account mode: AuthState flips app-wide. Sync mode: signal the screen to
+                        // navigate back (the library is unchanged; only the sync account was added).
+                        if (syncMode) _linked.send(Unit)
+                        return@launch
                     }
                     delay(POLL_INTERVAL_MS)
                     elapsed += POLL_INTERVAL_MS

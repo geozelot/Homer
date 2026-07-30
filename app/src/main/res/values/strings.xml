@@ -28,6 +28,7 @@
 
     <!-- Login -->
     <string name="login_subtitle">Connect your Nextcloud</string>
+    <string name="login_sync_subtitle">Sign in to sync your progress</string>
     <string name="login_waiting">Waiting for you to finish signing in…</string>
     <string name="login_waiting_detail">After you grant access in the browser, tap Back to return to Homer — you\'ll be signed in automatically.</string>
     <string name="login_server_label">Server address</string>
@@ -165,7 +166,13 @@
     <!-- Settings sheet -->
     <string name="settings_title">Settings</string>
     <string name="settings_account">%1$s · %2$s</string>
+    <string name="settings_library_share">Share · %1$s</string>
+    <string name="settings_library_readonly"> · read-only</string>
     <string name="settings_logout">Log out</string>
+    <string name="settings_sync_device">Progress: this device only</string>
+    <string name="settings_sync_to">Syncing to %1$s</string>
+    <string name="settings_sync_link">Sync to my account</string>
+    <string name="settings_sync_stop">Stop syncing</string>
     <string name="settings_storage_header">STORAGE</string>
     <string name="settings_storage_folder">Folder: %1$s</string>
     <string name="settings_storage_custom_folder">Custom folder: %1$s</string>

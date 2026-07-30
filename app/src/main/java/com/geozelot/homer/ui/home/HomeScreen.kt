@@ -137,6 +137,7 @@ fun HomeScreen(
     onOpenLicenses: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onLinkSyncAccount: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -263,6 +264,10 @@ fun HomeScreen(
             onOpenStorageBrowser = {
                 showAppSettings = false
                 showStorageBrowser = true
+            },
+            onLinkSyncAccount = {
+                showAppSettings = false
+                onLinkSyncAccount()
             },
             onDismiss = { showAppSettings = false },
         )
@@ -1383,9 +1388,13 @@ private fun AppSettingsSheet(
     onOpenPrivacy: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenStorageBrowser: () -> Unit,
+    onLinkSyncAccount: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
+    val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
+    val syncAccount by viewModel.syncAccount.collectAsStateWithLifecycle()
+    val libraryWritable by viewModel.libraryWritable.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
     val customStoragePath by viewModel.customStoragePath.collectAsStateWithLifecycle()
@@ -1427,14 +1436,43 @@ private fun AppSettingsSheet(
                 Column {
                     Text(stringResource(R.string.settings_title), style = SerifTitle, color = Parchment)
                     account?.let {
-                        Text(
-                            stringResource(R.string.settings_account, it.loginName, it.serverUrl.substringAfter("://")),
-                            color = Muted,
-                            fontSize = 12.sp,
-                        )
+                        val host = it.serverUrl.substringAfter("://")
+                        val label = if (libraryIsShare) {
+                            stringResource(R.string.settings_library_share, host) +
+                                if (!libraryWritable) stringResource(R.string.settings_library_readonly) else ""
+                        } else {
+                            stringResource(R.string.settings_account, it.loginName, host)
+                        }
+                        Text(label, color = Muted, fontSize = 12.sp)
                     }
                 }
                 TextButton(onClick = viewModel::logout) { Text(stringResource(R.string.settings_logout)) }
+            }
+
+            // A share library keeps progress on-device unless the user links a personal account.
+            if (libraryIsShare) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val sync = syncAccount
+                    Text(
+                        if (sync != null) {
+                            stringResource(R.string.settings_sync_to, "${sync.loginName}@${sync.serverUrl.substringAfter("://")}")
+                        } else {
+                            stringResource(R.string.settings_sync_device)
+                        },
+                        color = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (syncAccount != null) {
+                        TextButton(onClick = viewModel::unlinkSyncAccount) { Text(stringResource(R.string.settings_sync_stop)) }
+                    } else {
+                        TextButton(onClick = onLinkSyncAccount) { Text(stringResource(R.string.settings_sync_link)) }
+                    }
+                }
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Line)

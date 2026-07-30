@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
@@ -159,6 +160,21 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
+
+    /** True when the library backend is a public share (vs a signed-in account). */
+    val libraryIsShare: StateFlow<Boolean> = account
+        .map { it?.kind == WebDavKind.SHARE }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The account private progress syncs to (null = device-local). */
+    val syncAccount: StateFlow<NextcloudCredentials?> = authRepository.syncAccount
+
+    /** Whether the library backend is writable (a read-write share, or an account). */
+    val libraryWritable: StateFlow<Boolean> = librarySettings.libraryWritable
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    /** Stops syncing progress to a linked account (share libraries → device-local). */
+    fun unlinkSyncAccount() = authRepository.unlinkSyncAccount()
 
     /** Live playback snapshot for the docked mini-player. */
     val playback: StateFlow<PlaybackUiState> = connection.state

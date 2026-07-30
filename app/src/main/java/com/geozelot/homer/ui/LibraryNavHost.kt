@@ -14,12 +14,14 @@ import com.geozelot.homer.ui.about.DiagnosticsScreen
 import com.geozelot.homer.ui.about.LicensesScreen
 import com.geozelot.homer.ui.about.PrivacyScreen
 import com.geozelot.homer.ui.home.HomeScreen
+import com.geozelot.homer.ui.login.LoginScreen
 import com.geozelot.homer.ui.player.PlayerScreen
 
 private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_LICENSES = "licenses"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_DIAGNOSTICS = "diagnostics"
+private const val ROUTE_LINK_SYNC = "link_sync"
 private const val ARG_BOOK_ID = "bookId"
 
 /**
@@ -38,6 +40,7 @@ fun LibraryNavHost() {
                 onOpenLicenses = { navController.navigate(ROUTE_LICENSES) },
                 onOpenPrivacy = { navController.navigate(ROUTE_PRIVACY) },
                 onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) },
+                onLinkSyncAccount = { navController.navigate(ROUTE_LINK_SYNC) },
             )
         }
         composable(
@@ -58,6 +61,10 @@ fun LibraryNavHost() {
         }
         composable(ROUTE_DIAGNOSTICS) {
             DiagnosticsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(ROUTE_LINK_SYNC) {
+            // Reuses the login flow to add a progress-sync account to a share library.
+            LoginScreen(syncMode = true, onLinked = { navController.popBackStack() })
         }
     }
 }

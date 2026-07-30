@@ -22,8 +22,14 @@ class AuthRepository @Inject constructor(
     private val shareResolver: ShareResolver,
     private val librarySettings: LibrarySettings,
 ) {
-    /** Current credentials, or `null` when logged out. */
+    /** Current library backend (account or share), or `null` when logged out. */
     val credentials: StateFlow<NextcloudCredentials?> = credentialStore.credentials
+
+    /** Account used for private progress sync (null = device-local). */
+    val syncAccount: StateFlow<NextcloudCredentials?> = credentialStore.syncAccount
+
+    /** Stops syncing progress to a separately-added account (share libraries → back to device-local). */
+    fun unlinkSyncAccount() = credentialStore.setSyncAccount(null)
 
     /** Begins a browser login flow; returns the handshake to drive the Custom Tab + polling. */
     suspend fun beginLogin(serverUrl: String): LoginV2Init = loginFlowClient.initiate(serverUrl)

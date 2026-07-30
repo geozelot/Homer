@@ -34,10 +34,14 @@ import com.geozelot.homer.R
 @Composable
 fun LoginScreen(
     modifier: Modifier = Modifier,
+    syncMode: Boolean = false,
+    onLinked: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    LaunchedEffect(syncMode) { viewModel.setSyncMode(syncMode) }
 
     // Open the Nextcloud login page in a Custom Tab when the flow is initiated.
     LaunchedEffect(Unit) {
@@ -45,6 +49,9 @@ fun LoginScreen(
             CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
         }
     }
+
+    // Sync mode: navigate back once the sync account is linked (the library is unchanged).
+    LaunchedEffect(Unit) { viewModel.linked.collect { onLinked() } }
 
     Column(
         modifier = modifier
@@ -55,7 +62,7 @@ fun LoginScreen(
     ) {
         Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.displaySmall)
         Text(
-            text = stringResource(R.string.login_subtitle),
+            text = stringResource(if (syncMode) R.string.login_sync_subtitle else R.string.login_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 4.dp, bottom = 32.dp),
         )
@@ -81,23 +88,26 @@ fun LoginScreen(
             }
 
             else -> {
-                // Two entry points: sign in to an account, or open a public share link.
-                Row(
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).padding(bottom = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(
-                        selected = state.mode == LoginViewModel.Mode.ACCOUNT,
-                        onClick = { viewModel.setMode(LoginViewModel.Mode.ACCOUNT) },
-                        label = { Text(stringResource(R.string.login_mode_account)) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    FilterChip(
-                        selected = state.mode == LoginViewModel.Mode.SHARE,
-                        onClick = { viewModel.setMode(LoginViewModel.Mode.SHARE) },
-                        label = { Text(stringResource(R.string.login_mode_share)) },
-                        modifier = Modifier.weight(1f),
-                    )
+                // Two entry points: sign in to an account, or open a public share link. Hidden in
+                // sync mode — linking a progress account is always an account login.
+                if (!syncMode) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).padding(bottom = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = state.mode == LoginViewModel.Mode.ACCOUNT,
+                            onClick = { viewModel.setMode(LoginViewModel.Mode.ACCOUNT) },
+                            label = { Text(stringResource(R.string.login_mode_account)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        FilterChip(
+                            selected = state.mode == LoginViewModel.Mode.SHARE,
+                            onClick = { viewModel.setMode(LoginViewModel.Mode.SHARE) },
+                            label = { Text(stringResource(R.string.login_mode_share)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
 
                 if (state.mode == LoginViewModel.Mode.ACCOUNT) {
