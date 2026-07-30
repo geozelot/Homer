@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,30 +81,83 @@ fun LoginScreen(
             }
 
             else -> {
-                OutlinedTextField(
-                    value = state.serverUrl,
-                    onValueChange = viewModel::onServerUrlChange,
-                    label = { Text(stringResource(R.string.login_server_label)) },
-                    placeholder = { Text(stringResource(R.string.login_server_placeholder)) },
-                    singleLine = true,
-                    enabled = state.status == LoginViewModel.Status.Idle,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 420.dp),
-                )
-                Button(
-                    onClick = viewModel::startLogin,
-                    enabled = state.canSubmit,
-                    modifier = Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth()
-                        .widthIn(max = 420.dp),
+                // Two entry points: sign in to an account, or open a public share link.
+                Row(
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).padding(bottom = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (state.status == LoginViewModel.Status.Connecting) {
-                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                    FilterChip(
+                        selected = state.mode == LoginViewModel.Mode.ACCOUNT,
+                        onClick = { viewModel.setMode(LoginViewModel.Mode.ACCOUNT) },
+                        label = { Text(stringResource(R.string.login_mode_account)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    FilterChip(
+                        selected = state.mode == LoginViewModel.Mode.SHARE,
+                        onClick = { viewModel.setMode(LoginViewModel.Mode.SHARE) },
+                        label = { Text(stringResource(R.string.login_mode_share)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                if (state.mode == LoginViewModel.Mode.ACCOUNT) {
+                    OutlinedTextField(
+                        value = state.serverUrl,
+                        onValueChange = viewModel::onServerUrlChange,
+                        label = { Text(stringResource(R.string.login_server_label)) },
+                        placeholder = { Text(stringResource(R.string.login_server_placeholder)) },
+                        singleLine = true,
+                        enabled = state.status == LoginViewModel.Status.Idle,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+                    )
+                    Button(
+                        onClick = viewModel::startLogin,
+                        enabled = state.canSubmit,
+                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth().widthIn(max = 420.dp),
+                    ) {
+                        if (state.status == LoginViewModel.Status.Connecting) {
+                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                        }
+                        Text(stringResource(R.string.login_button))
                     }
-                    Text(stringResource(R.string.login_button))
+                } else {
+                    OutlinedTextField(
+                        value = state.shareUrl,
+                        onValueChange = viewModel::onShareUrlChange,
+                        label = { Text(stringResource(R.string.login_share_label)) },
+                        placeholder = { Text(stringResource(R.string.login_share_placeholder)) },
+                        singleLine = true,
+                        enabled = state.status == LoginViewModel.Status.Idle,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+                    )
+                    OutlinedTextField(
+                        value = state.sharePassword,
+                        onValueChange = viewModel::onSharePasswordChange,
+                        label = { Text(stringResource(R.string.login_share_password_label)) },
+                        singleLine = true,
+                        enabled = state.status == LoginViewModel.Status.Idle,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth().widthIn(max = 420.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.login_share_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth().widthIn(max = 420.dp),
+                    )
+                    Button(
+                        onClick = viewModel::openShare,
+                        enabled = state.canSubmitShare,
+                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth().widthIn(max = 420.dp),
+                    ) {
+                        if (state.status == LoginViewModel.Status.Connecting) {
+                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                        }
+                        Text(stringResource(R.string.login_share_button))
+                    }
                 }
             }
         }

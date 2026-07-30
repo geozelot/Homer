@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import com.geozelot.homer.data.auth.AuthRepository
+import com.geozelot.homer.data.library.ShareResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -29,12 +30,19 @@ class LoginViewModel @Inject constructor(
 
     enum class Status { Idle, Connecting, WaitingForBrowser }
 
+    /** Which onboarding entry point is active. */
+    enum class Mode { ACCOUNT, SHARE }
+
     data class UiState(
+        val mode: Mode = Mode.ACCOUNT,
         val serverUrl: String = "",
+        val shareUrl: String = "",
+        val sharePassword: String = "",
         val status: Status = Status.Idle,
         val error: String? = null,
     ) {
         val canSubmit: Boolean get() = serverUrl.isNotBlank() && status == Status.Idle
+        val canSubmitShare: Boolean get() = shareUrl.isNotBlank() && status == Status.Idle
     }
 
     private val _uiState = MutableStateFlow(UiState())
@@ -46,8 +54,42 @@ class LoginViewModel @Inject constructor(
 
     private var loginJob: Job? = null
 
+    fun setMode(mode: Mode) {
+        _uiState.value = _uiState.value.copy(mode = mode, error = null)
+    }
+
     fun onServerUrlChange(value: String) {
         _uiState.value = _uiState.value.copy(serverUrl = value, error = null)
+    }
+
+    fun onShareUrlChange(value: String) {
+        _uiState.value = _uiState.value.copy(shareUrl = value, error = null)
+    }
+
+    fun onSharePasswordChange(value: String) {
+        _uiState.value = _uiState.value.copy(sharePassword = value, error = null)
+    }
+
+    /** Opens a public share link as the library. Success flips AuthState app-wide (no nav here). */
+    fun openShare() {
+        if (!_uiState.value.canSubmitShare) return
+        loginJob?.cancel()
+        loginJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(status = Status.Connecting, error = null)
+            try {
+                when (val result = authRepository.useShare(_uiState.value.shareUrl, _uiState.value.sharePassword)) {
+                    is ShareResolver.Result.Ok -> Unit // AuthState flips; app navigates away
+                    ShareResolver.Result.PasswordRequired -> fail("This share needs a password, or the password is wrong.")
+                    ShareResolver.Result.NotFound -> fail("No share found at that link. Check the URL.")
+                    ShareResolver.Result.Unreachable -> fail("Couldn't reach the server. Check your connection and the link.")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "openShare failed", e)
+                fail("Couldn't open the share link. Check the URL and try again.")
+            }
+        }
     }
 
     fun startLogin() {

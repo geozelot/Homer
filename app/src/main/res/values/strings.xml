@@ -33,6 +33,13 @@
     <string name="login_server_label">Server address</string>
     <string name="login_server_placeholder">cloud.example.com</string>
     <string name="login_button">Log in</string>
+    <string name="login_mode_account">Account</string>
+    <string name="login_mode_share">Share link</string>
+    <string name="login_share_label">Share link</string>
+    <string name="login_share_placeholder">https://cloud.example.com/s/…</string>
+    <string name="login_share_password_label">Share password (if any)</string>
+    <string name="login_share_hint">Paste a Nextcloud share link to your audiobook folder. Your listening progress stays on this device unless you also sign in to an account.</string>
+    <string name="login_share_button">Open share</string>
 
     <!-- App lock -->
     <string name="lock_prompt_title">Unlock Homer</string>

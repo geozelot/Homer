@@ -1,5 +1,7 @@
 package com.geozelot.homer.data.auth
 
+import com.geozelot.homer.data.library.ShareResolver
+import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -10,12 +12,15 @@ import javax.inject.Singleton
 
 /**
  * Single source of truth for authentication. Wraps the [CredentialStore] as observable
- * [AuthState] and owns the login lifecycle (initiate → poll → persist, and logout).
+ * [AuthState] and owns the login lifecycle (initiate → poll → persist, and logout), for both an
+ * account (Login Flow v2) and a public share link.
  */
 @Singleton
 class AuthRepository @Inject constructor(
     private val credentialStore: CredentialStore,
     private val loginFlowClient: LoginFlowClient,
+    private val shareResolver: ShareResolver,
+    private val librarySettings: LibrarySettings,
 ) {
     /** Current credentials, or `null` when logged out. */
     val credentials: StateFlow<NextcloudCredentials?> = credentialStore.credentials
@@ -33,6 +38,35 @@ class AuthRepository @Inject constructor(
         )
         credentialStore.save(credentials)
         return credentials
+    }
+
+    /**
+     * Resolves a public share link and, on success, adopts it as the library backend (the share
+     * root becomes the library; writability gates the shared cache). Progress stays device-local
+     * until the user separately adds a sync account. Returns the resolver result for UI feedback.
+     */
+    suspend fun useShare(rawUrl: String, password: String): ShareResolver.Result {
+        val link = ShareLink.parse(rawUrl) ?: return ShareResolver.Result.NotFound
+        val result = shareResolver.resolve(link, password)
+        if (result is ShareResolver.Result.Ok) {
+            librarySettings.setLibraryRoot("") // the share root IS the library
+            librarySettings.setLibraryWritable(result.writable)
+            librarySettings.setSharedCatalogEnabled(true) // consume a prebuilt catalog if present
+            credentialStore.save(result.credentials) // flips AuthState to LoggedIn
+        }
+        return result
+    }
+
+    /** One poll tick for adding a SYNC account to an existing share library (Flow 3). */
+    suspend fun pollSyncAccount(init: LoginV2Init): NextcloudCredentials? {
+        val result = loginFlowClient.poll(init) ?: return null
+        val account = NextcloudCredentials(
+            serverUrl = LoginFlowClient.normalizeServerUrl(result.server),
+            loginName = result.loginName,
+            appPassword = result.appPassword,
+        )
+        credentialStore.setSyncAccount(account)
+        return account
     }
 
     fun logout() = credentialStore.clear()
