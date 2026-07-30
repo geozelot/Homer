@@ -7,6 +7,7 @@ import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.di.Authed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Credentials
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -53,17 +54,22 @@ class WebDavClient @Inject constructor(
             }
         }
 
-    /** Downloads a small text file (e.g. the `.homer` manifest). Null if it doesn't exist. */
-    suspend fun getText(relativePath: String): DavFile? = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
-        val request = Request.Builder()
-            .url(urlFor(credentials, relativePath))
+    /**
+     * Downloads a small text file (e.g. the `.homer` manifest). Null if it doesn't exist.
+     * Pass [credentials] to target a specific backend (e.g. the sync account for private
+     * progress, which may differ from the library backend); null uses the library backend
+     * and the shared auth interceptor.
+     */
+    suspend fun getText(relativePath: String, credentials: NextcloudCredentials? = null): DavFile? = withContext(Dispatchers.IO) {
+        val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
+        val builder = Request.Builder()
+            .url(urlFor(creds, relativePath))
             // Force an uncompressed response: gzip proxies (Apache mod_deflate) mangle the
             // ETag (append "-gzip" / mark it weak), which then fails every If-Match write.
             .header("Accept-Encoding", "identity")
             .get()
-            .build()
-        client.newCall(request).execute().use { response ->
+        builder.applyAuth(credentials)
+        client.newCall(builder.build()).execute().use { response ->
             when {
                 response.code == 404 -> null
                 response.isSuccessful -> DavFile(response.body?.string().orEmpty(), response.header("ETag"))
@@ -77,12 +83,18 @@ class WebDavClient @Inject constructor(
      * the server's ETag still matches (optimistic concurrency) — otherwise [PreconditionFailedException].
      * Returns the new ETag if the server reported one.
      */
-    suspend fun putText(relativePath: String, content: String, ifMatch: String? = null): String? =
+    suspend fun putText(
+        relativePath: String,
+        content: String,
+        ifMatch: String? = null,
+        credentials: NextcloudCredentials? = null,
+    ): String? =
         withContext(Dispatchers.IO) {
-            val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
+            val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
             val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
-            val builder = Request.Builder().url(urlFor(credentials, relativePath)).put(body)
+            val builder = Request.Builder().url(urlFor(creds, relativePath)).put(body)
             ifMatch?.let { builder.header("If-Match", it) }
+            builder.applyAuth(credentials)
             client.newCall(builder.build()).execute().use { response ->
                 when {
                     response.code == 412 -> throw PreconditionFailedException()
@@ -159,15 +171,25 @@ class WebDavClient @Inject constructor(
     }
 
     /** Creates a collection (directory); a no-op if it already exists. */
-    suspend fun mkcol(relativePath: String): Unit = withContext(Dispatchers.IO) {
-        val credentials = credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
-        val request = Request.Builder().url(urlFor(credentials, relativePath)).method("MKCOL", null).build()
-        client.newCall(request).execute().use { response ->
+    suspend fun mkcol(relativePath: String, credentials: NextcloudCredentials? = null): Unit = withContext(Dispatchers.IO) {
+        val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
+        val builder = Request.Builder().url(urlFor(creds, relativePath)).method("MKCOL", null)
+        builder.applyAuth(credentials)
+        client.newCall(builder.build()).execute().use { response ->
             // 201 = created, 405 = already exists; both are fine.
             if (response.code != 201 && response.code != 405) {
                 throw IOException("MKCOL failed: HTTP ${response.code}")
             }
         }
+    }
+
+    /**
+     * When [explicit] credentials are supplied, attach Basic auth inline so the request targets
+     * that backend regardless of the library-scoped [com.geozelot.homer.data.auth.AuthInterceptor]
+     * (which only knows the library host/identity). A null means "use the interceptor".
+     */
+    private fun Request.Builder.applyAuth(explicit: NextcloudCredentials?) {
+        if (explicit != null) header("Authorization", Credentials.basic(explicit.loginName, explicit.appPassword))
     }
 
     /**

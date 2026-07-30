@@ -54,10 +54,15 @@ class HomerSyncRepository @Inject constructor(
     private var ensuredDir: String? = null
     private var legacyMigrationChecked = false
 
-    /** Pull-merge-push in one pass. No-op if no account is configured or sync is off (tier 1). */
+    /**
+     * Pull-merge-push in one pass. Private progress is always keyed to the **sync account**, never
+     * the library backend — so a share-link library with no personal account stays device-local
+     * (this is a no-op). Also a no-op if progress sync is off or the device is offline.
+     */
     suspend fun sync() {
-        if (credentialStore.awaitCredentials() == null) {
-            Log.i(TAG, "sync skipped: no account")
+        val account = credentialStore.awaitSyncAccount()
+        if (account == null) {
+            Log.i(TAG, "sync skipped: no sync account (device-local only)")
             return
         }
         // Progress sync off = on-device only: never touch the .homer manifest.
@@ -73,7 +78,7 @@ class HomerSyncRepository @Inject constructor(
         }
         mutex.withLock {
             try {
-                reconcile()
+                reconcile(account)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -84,7 +89,7 @@ class HomerSyncRepository @Inject constructor(
         }
     }
 
-    private suspend fun reconcile() {
+    private suspend fun reconcile(account: com.geozelot.homer.data.auth.NextcloudCredentials) {
         val dir = DIR
         val path = "$dir/$FILE"
         Log.i(TAG, "sync start: path=$path")
@@ -93,13 +98,13 @@ class HomerSyncRepository @Inject constructor(
         // library folder, so changing that folder moved the manifest and silently broke
         // sync. It's now pinned to the files-root. If the pinned copy is absent but a
         // legacy per-root copy exists, seed the new location from it so nothing is lost.
-        migrateLegacyManifest(dir, path)
+        migrateLegacyManifest(dir, path, account)
 
         // Re-pull, re-merge and retry on each conflict; the last attempt writes
         // unconditionally so a mangled/weak ETag can never block sync forever
         // (single-user last-write-wins is safe — SCOPE D3).
         for (attempt in 0 until MAX_ATTEMPTS) {
-            val remoteFile = webDavClient.getText(path)
+            val remoteFile = webDavClient.getText(path, account)
             val remoteEtag = remoteFile?.etag
             val remoteBody = remoteFile?.content
             val remoteIndex = when {
@@ -215,10 +220,10 @@ class HomerSyncRepository @Inject constructor(
                 return
             }
 
-            ensureDir(dir)
+            ensureDir(dir, account)
             val ifMatch = remoteEtag.takeUnless { attempt == MAX_ATTEMPTS - 1 }
             try {
-                webDavClient.putText(path, json.encodeToString(mergedIndex), ifMatch)
+                webDavClient.putText(path, json.encodeToString(mergedIndex), ifMatch, account)
                 val how = if (ifMatch == null) " [unconditional]" else ""
                 Log.i(TAG, "pushed manifest (${merged.size} books)$how")
                 return
@@ -233,17 +238,21 @@ class HomerSyncRepository @Inject constructor(
      * process. Cheap after the first run: as soon as the pinned copy exists (or there's no
      * legacy to migrate) the flag short-circuits all further checks.
      */
-    private suspend fun migrateLegacyManifest(dir: String, path: String) {
+    private suspend fun migrateLegacyManifest(
+        dir: String,
+        path: String,
+        account: com.geozelot.homer.data.auth.NextcloudCredentials,
+    ) {
         if (legacyMigrationChecked) return
         val root = librarySettings.libraryRoot.first().trim('/')
         // No configurable root, or the root already IS the files-root → nothing to migrate.
         if (root.isEmpty()) { legacyMigrationChecked = true; return }
         try {
-            if (webDavClient.getText(path) != null) { legacyMigrationChecked = true; return }
-            val legacy = webDavClient.getText("$root/$DIR/$FILE")?.content
+            if (webDavClient.getText(path, account) != null) { legacyMigrationChecked = true; return }
+            val legacy = webDavClient.getText("$root/$DIR/$FILE", account)?.content
             if (legacy != null && legacy.isNotBlank()) {
-                ensureDir(dir)
-                webDavClient.putText(path, legacy, null)
+                ensureDir(dir, account)
+                webDavClient.putText(path, legacy, null, account)
                 Log.i(TAG, "migrated legacy manifest ($root/$DIR/$FILE) to pinned $path")
             }
         } catch (e: Exception) {
@@ -252,9 +261,9 @@ class HomerSyncRepository @Inject constructor(
         legacyMigrationChecked = true
     }
 
-    private suspend fun ensureDir(dir: String) {
+    private suspend fun ensureDir(dir: String, account: com.geozelot.homer.data.auth.NextcloudCredentials) {
         if (ensuredDir == dir) return
-        webDavClient.mkcol(dir)
+        webDavClient.mkcol(dir, account)
         ensuredDir = dir
     }
 
