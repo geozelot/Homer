@@ -68,6 +68,18 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SHARED_CATALOG] = value }
     }
 
+    /**
+     * Whether the current library backend can be written to (a read-write share, or an account).
+     * Set from the share write-probe at resolve time; gates publishing the shared library cache.
+     * Defaults true so account libraries (always writable) keep publishing as before.
+     */
+    val libraryWritable: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_LIBRARY_WRITABLE] ?: true }
+
+    suspend fun setLibraryWritable(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_LIBRARY_WRITABLE] = value }
+    }
+
     /** Library grouping: "none" | "author" | "genre". */
     val groupMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_GROUP_MODE] ?: "none" }
@@ -160,6 +172,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
+        val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")

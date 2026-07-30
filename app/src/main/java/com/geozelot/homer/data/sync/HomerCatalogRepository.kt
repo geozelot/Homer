@@ -77,9 +77,19 @@ class HomerCatalogRepository @Inject constructor(
         }
     }
 
-    /** Publishes only if allowed: the catalog already exists (open updates) or we're the owner. */
+    /**
+     * Publishes only if allowed. For a share library the gate is the write-probe result (a
+     * read-only link can't publish); for an account it's the existing rule — the catalog already
+     * exists (open updates) or we're the folder owner.
+     */
     suspend fun publishIfAllowed() {
-        if (exists() || isOwner()) publish()
+        val library = credentialStore.awaitCredentials() ?: return
+        val allowed = if (library.kind == com.geozelot.homer.data.auth.WebDavKind.SHARE) {
+            librarySettings.libraryWritable.first()
+        } else {
+            exists() || isOwner()
+        }
+        if (allowed) publish()
     }
 
     /** Merges the local library into the shared catalog and pushes it. */
