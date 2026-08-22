@@ -57,6 +57,16 @@ class PlaybackService : MediaLibraryService() {
                 /* handleAudioFocus = */ true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // Hold a partial wake lock + a WifiLock while playing. ExoPlayer defaults to
+            // WAKE_MODE_NONE, which takes neither — and a foreground service keeps the SERVICE
+            // alive without keeping the DEVICE awake. So with the screen off or the app in the
+            // background the CPU suspends and the radio powers down, the buffer starves, and
+            // playback stalls; returning to the app wakes both and it picks up again, which reads
+            // exactly like "it stops when I leave and restarts when I come back".
+            // NETWORK rather than LOCAL because a book is streamed unless it has been downloaded.
+            // Both locks are acquired on play and released on pause/stop, so an idle app holds
+            // nothing.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player = exoPlayer
 

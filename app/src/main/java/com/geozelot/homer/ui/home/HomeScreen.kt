@@ -256,6 +256,11 @@ fun HomeScreen(
                 onToggleView = viewModel::setGridView,
                 modifier = Modifier.padding(horizontal = LibraryGridPadding),
             )
+            // The hairline marks where the pinned chrome ends and the scrolling library begins. It
+            // used to sit under the Continue strip, which stopped being that boundary the moment
+            // the controls were pinned below it — it was drawing a line through the middle of the
+            // fixed block instead of along its edge.
+            HorizontalDivider(color = Line)
         }
 
         if (entries.isEmpty()) {
@@ -863,8 +868,6 @@ private fun ContinuePinnedShelf(
                     }
                 }
             }
-            // A hairline separates the pinned strip from the library scrolling beneath it.
-            if (collapsed) HorizontalDivider(color = Line)
         }
     }
 }

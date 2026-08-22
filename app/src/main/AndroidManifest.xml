@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the CPU and the Wi-Fi radio alive WHILE PLAYING, and only while playing: ExoPlayer
+         takes the locks on play and drops them on pause/stop (see setWakeMode in PlaybackService).
+         A foreground service keeps the service alive but does NOT keep the device awake — without
+         this, playback stalls as soon as the screen goes off or the device starts to doze. Normal
+         permission, so it is granted at install with no prompt. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Offline downloads run as a foreground (data-sync) service so they survive the
          app being closed. -->
