@@ -108,7 +108,7 @@ class SleepTimer(
 
     private companion object {
         const val TAG = "HomerPlay"
-        const val TICK_MS = 500L
+        const val TICK_MS = 1_000L
         const val MAX_REMAINING_MS = 2 * 60 * 60 * 1000L
     }
 }

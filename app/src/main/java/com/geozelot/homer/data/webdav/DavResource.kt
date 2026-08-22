@@ -18,6 +18,21 @@ data class DavResource(
 /** A downloaded text resource together with its ETag (for optimistic-concurrency writes). */
 data class DavFile(val content: String, val etag: String?)
 
+/**
+ * Outcome of a *conditional* read. [NotModified] is the point of the exercise: it means the caller
+ * already holds the current content, so the server sent headers only and no body was transferred —
+ * the difference between a few hundred bytes and re-downloading a whole manifest/catalog.
+ */
+sealed interface DavRead {
+    data class Body(val content: String, val etag: String?) : DavRead
+
+    /** The resource is unchanged since the supplied ETag (HTTP 304). No bytes transferred. */
+    data object NotModified : DavRead
+
+    /** The resource does not exist (HTTP 404). */
+    data object Absent : DavRead
+}
+
 /** Thrown when a WebDAV call is attempted with no configured account. */
 class NotAuthenticatedException : IllegalStateException("No Nextcloud account configured")
 

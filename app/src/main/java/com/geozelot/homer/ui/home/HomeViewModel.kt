@@ -332,6 +332,9 @@ class HomeViewModel @Inject constructor(
     private val _discovered = MutableStateFlow<List<DiscoveredLibrary>>(emptyList())
     val discovered: StateFlow<List<DiscoveredLibrary>> = _discovered.asStateFlow()
 
+    /** When the last discovery sweep completed, so opening the sheet doesn't re-sweep every time. */
+    private var lastDiscoveryAtMs = 0L
+
     private val _discovering = MutableStateFlow(false)
     val discovering: StateFlow<Boolean> = _discovering.asStateFlow()
 
@@ -421,8 +424,9 @@ class HomeViewModel @Inject constructor(
         // touch the network at tier 1 (on-device only).
         viewModelScope.launch {
             if (librarySettings.sharedCatalogEnabled.first()) {
-                catalog.consume()
-                _sharedCatalogAvailable.value = catalog.exists()
+                // consume() reports whether a shared catalog exists, so this no longer needs a
+                // second probe — that used to download the whole catalog twice on every open.
+                _sharedCatalogAvailable.value = catalog.consume()
             }
         }
     }
@@ -431,13 +435,21 @@ class HomeViewModel @Inject constructor(
      * Runs the discovery sweep and refreshes the shared-catalog/owner hints for the current root
      * from its result. Called when the Library & Sync sheet opens and by the Rediscover action.
      */
-    fun rediscover() {
+    /**
+     * Sweeps the server for Homer libraries. [force] is for the explicit Rediscover button; the
+     * automatic call when the sheet opens is throttled, because the sweep is dozens of requests
+     * and it used to re-run in full every single time the sheet was opened.
+     */
+    fun rediscover(force: Boolean = false) {
         if (_discovering.value) return
+        val now = System.currentTimeMillis()
+        if (!force && _discovered.value.isNotEmpty() && now - lastDiscoveryAtMs < DISCOVERY_TTL_MS) return
         viewModelScope.launch {
             _discovering.value = true
             try {
                 val libraries = discovery.discover()
                 _discovered.value = libraries
+                lastDiscoveryAtMs = now
                 val current = libraries.firstOrNull { it.isCurrentRoot }
                 _sharedCatalogAvailable.value = current?.hasSharedCatalog == true
                 _libraryOwner.value = current?.owner
@@ -708,6 +720,9 @@ class HomeViewModel @Inject constructor(
 
     private companion object {
         const val CONTINUE_LIMIT = 12
+
+        /** How long a discovery sweep stays fresh enough to reuse (the button always forces). */
+        const val DISCOVERY_TTL_MS = 10 * 60_000L
         const val MIRROR_MARKER = "progress.json"
         const val LEGACY_MIRROR_MARKER = ".homer/index.json"
         const val TAG_STORAGE = "HomerStore"

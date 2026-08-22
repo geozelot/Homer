@@ -11,6 +11,7 @@ import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.webdav.DavRead
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
@@ -40,6 +41,9 @@ class HomerCatalogRepository @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val json: Json,
 ) {
+    /** ETag of the catalog this device last applied, so an unchanged one costs a 304 (no body). */
+    private var cachedCatalogEtag: String? = null
+
     /**
      * True if a shared catalog exists at the library root (⇒ Tier 3 is available here).
      * Best-effort like the rest of the repo: offline or on any network error it returns false
@@ -49,7 +53,9 @@ class HomerCatalogRepository @Inject constructor(
     suspend fun exists(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
-            webDavClient.getText(catalogPath()) != null
+            // PROPFIND Depth 0 — a few hundred bytes. This used to GET the whole catalog (megabytes
+            // for a large library) just to answer a boolean, on every app start and every publish.
+            webDavClient.exists(catalogPath())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -98,6 +104,7 @@ class HomerCatalogRepository @Inject constructor(
         try {
             val local = buildLocalCatalog()
             val path = catalogPath()
+            var coversUploaded = false
             for (attempt in 0 until MAX_ATTEMPTS) {
                 val remoteFile = webDavClient.getText(path)
                 val remote = remoteFile?.content?.takeIf { it.isNotBlank() }?.let { body ->
@@ -107,8 +114,14 @@ class HomerCatalogRepository @Inject constructor(
                     }
                 }
                 // Upload extracted (embedded) covers that aren't in the shared cache yet, so
-                // other devices download them instead of re-extracting from the audio.
-                uploadNewCovers(local, remote)
+                // other devices download them instead of re-extracting from the audio. ONCE per
+                // publish: this sat inside the retry loop, and since a 412 means the remote catalog
+                // did NOT change, its `hasCachedCover` flags still read false — so every conflicted
+                // publish re-uploaded the entire pending cover set (hundreds of MB).
+                if (!coversUploaded) {
+                    uploadNewCovers(local, remote)
+                    coversUploaded = true
+                }
                 val merged = mergeCatalogs(remote, local)
                 if (merged == remote) {
                     Log.i(TAG, "catalog already up to date")
@@ -131,11 +144,25 @@ class HomerCatalogRepository @Inject constructor(
         }
     }
 
-    /** Pulls the shared catalog into Room (books + files), newest-wins per book. */
+    /**
+     * Pulls the shared catalog into Room (books + files), newest-wins per book. Returns whether a
+     * shared catalog exists at all (so callers don't need a second existence probe).
+     *
+     * Conditional: once this device has applied a catalog, an unchanged one answers 304 with no
+     * body. Previously every app open downloaded the whole catalog — and then downloaded it a
+     * second time for the existence check.
+     */
     suspend fun consume(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
-            val body = webDavClient.getText(catalogPath())?.content?.takeIf { it.isNotBlank() } ?: return false
+            val body = when (val read = webDavClient.readText(catalogPath(), cachedCatalogEtag)) {
+                DavRead.NotModified -> return true // already applied exactly this catalog
+                DavRead.Absent -> return false
+                is DavRead.Body -> {
+                    cachedCatalogEtag = read.etag
+                    read.content.takeIf { it.isNotBlank() } ?: return false
+                }
+            }
             val catalog = json.decodeFromString<HomerCatalog>(body)
             var applied = 0
             for ((id, cb) in catalog.books) {

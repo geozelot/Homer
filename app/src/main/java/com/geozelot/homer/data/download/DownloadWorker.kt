@@ -104,8 +104,12 @@ class DownloadWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "download failed for $bookId (attempt ${runAttemptCount + 1})", e)
             if (runAttemptCount + 1 < MAX_ATTEMPTS) return Result.retry()
-            storage.deleteBook(bookId)
-            downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.FAILED, 0, files.size, now()))
+            // KEEP whatever already landed. This used to delete the whole book on final failure,
+            // so losing the connection near the end of a long download threw away hundreds of MB
+            // and re-fetched all of it on the next play tap. The recorded count is exactly where
+            // the worker resumes from, so a retry continues instead of restarting.
+            val completed = downloadDao.findByBookId(bookId)?.downloadedFiles ?: 0
+            downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.FAILED, completed, files.size, now()))
             return Result.failure()
         }
     }

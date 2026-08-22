@@ -15,6 +15,10 @@ interface BookOverrideDao {
     @Query("SELECT * FROM book_overrides")
     suspend fun getAll(): List<BookOverrideEntity>
 
+    /** Newest override change, for cheaply deciding whether anything needs pushing. */
+    @Query("SELECT MAX(updatedAt) FROM book_overrides")
+    suspend fun maxUpdatedAt(): Long?
+
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     suspend fun findById(bookId: String): BookOverrideEntity?
 

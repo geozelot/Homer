@@ -34,7 +34,9 @@ class PositionSyncer(
         scope.launch {
             ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
                 override fun onStop(owner: LifecycleOwner) {
-                    if (snapshot() != null) flush()
+                    // Backgrounding (and app close) is the most important push of all — it's what
+                    // lets another device pick up where this one left off. Always forced.
+                    if (snapshot() != null) flush(force = true)
                 }
             })
         }
@@ -51,15 +53,19 @@ class PositionSyncer(
         scope.launch { saveNow() }
     }
 
-    /** Persists the position immediately, then reconciles with the manifest (debounced). */
-    fun flush() {
+    /**
+     * Persists the position immediately, then reconciles with the manifest (debounced).
+     * [force] bypasses the sync throttle — set it for checkpoints that must not be dropped
+     * (pause, backgrounding, app close, explicit user actions).
+     */
+    fun flush(force: Boolean = false) {
         save()
         syncJob?.cancel()
         syncJob = scope.launch {
             delay(SYNC_DEBOUNCE_MS)
             // Local mirror first (cheap, offline-safe, all tiers), then the server manifest.
             localMirror.export()
-            homerSync.sync()
+            homerSync.sync(force)
         }
     }
 

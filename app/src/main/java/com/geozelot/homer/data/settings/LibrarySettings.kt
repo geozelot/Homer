@@ -80,6 +80,26 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_LIBRARY_WRITABLE] = value }
     }
 
+    /**
+     * Highest local change-timestamp already published to the progress manifest. Local state is
+     * "dirty" only when a newer write exists, which lets a sync skip the network entirely instead
+     * of downloading and re-uploading the whole manifest to discover nothing changed.
+     */
+    val lastPushedRevision: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_LAST_PUSHED_REVISION] ?: 0L }
+
+    suspend fun setLastPushedRevision(value: Long) {
+        context.settingsDataStore.edit { it[KEY_LAST_PUSHED_REVISION] = value }
+    }
+
+    /** Set once the one-time legacy-manifest migration has been checked, so it stops re-probing. */
+    val legacyManifestMigrated: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_LEGACY_MANIFEST_MIGRATED] ?: false }
+
+    suspend fun setLegacyManifestMigrated(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_LEGACY_MANIFEST_MIGRATED] = value }
+    }
+
     /** Library grouping: "none" | "author" | "genre". */
     val groupMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_GROUP_MODE] ?: "none" }
@@ -173,6 +193,8 @@ class LibrarySettings @Inject constructor(
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
+        val KEY_LAST_PUSHED_REVISION = longPreferencesKey("sync_last_pushed_revision")
+        val KEY_LEGACY_MANIFEST_MIGRATED = booleanPreferencesKey("sync_legacy_manifest_migrated")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")

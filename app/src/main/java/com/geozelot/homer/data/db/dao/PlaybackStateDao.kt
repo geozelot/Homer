@@ -45,6 +45,10 @@ interface PlaybackStateDao {
     @Query("SELECT * FROM playback_state")
     suspend fun getAll(): List<PlaybackStateEntity>
 
+    /** Newest position write, for cheaply deciding whether anything needs pushing. */
+    @Query("SELECT MAX(updatedAt) FROM playback_state")
+    suspend fun maxUpdatedAt(): Long?
+
     /**
      * Per-book progress: the saved chapter's index and offset, the whole-book elapsed time
      * (durations of all chapters before the saved one plus the offset), and how much of the book

@@ -60,7 +60,25 @@ class WebDavClient @Inject constructor(
      * progress, which may differ from the library backend); null uses the library backend
      * and the shared auth interceptor.
      */
-    suspend fun getText(relativePath: String, credentials: NextcloudCredentials? = null): DavFile? = withContext(Dispatchers.IO) {
+    suspend fun getText(relativePath: String, credentials: NextcloudCredentials? = null): DavFile? =
+        when (val read = readText(relativePath, ifNoneMatch = null, credentials = credentials)) {
+            is DavRead.Body -> DavFile(read.content, read.etag)
+            DavRead.Absent -> null
+            // Unreachable without an ifNoneMatch, but map it defensively rather than throwing.
+            DavRead.NotModified -> null
+        }
+
+    /**
+     * Conditional read: when [ifNoneMatch] is a previously-returned ETag the server answers `304`
+     * with **no body** if nothing changed, and the caller keeps using the copy it already has.
+     * This is what stops "download the whole document to discover it's identical", which is how a
+     * sync of a few changed bytes used to cost a full manifest transfer every time.
+     */
+    suspend fun readText(
+        relativePath: String,
+        ifNoneMatch: String? = null,
+        credentials: NextcloudCredentials? = null,
+    ): DavRead = withContext(Dispatchers.IO) {
         val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
         val builder = Request.Builder()
             .url(urlFor(creds, relativePath))
@@ -68,14 +86,26 @@ class WebDavClient @Inject constructor(
             // ETag (append "-gzip" / mark it weak), which then fails every If-Match write.
             .header("Accept-Encoding", "identity")
             .get()
+        ifNoneMatch?.let { builder.header("If-None-Match", it) }
         builder.applyAuth(credentials)
         client.newCall(builder.build()).execute().use { response ->
             when {
-                response.code == 404 -> null
-                response.isSuccessful -> DavFile(response.body?.string().orEmpty(), response.header("ETag"))
+                response.code == 304 -> DavRead.NotModified
+                response.code == 404 -> DavRead.Absent
+                response.isSuccessful -> DavRead.Body(response.body?.string().orEmpty(), response.header("ETag"))
                 else -> throw IOException("GET failed: HTTP ${response.code}")
             }
         }
+    }
+
+    /**
+     * Whether [relativePath] exists, using a Depth-0 PROPFIND — a few hundred bytes. Existence used
+     * to be tested by GETting the whole document, which meant a multi-megabyte catalog download to
+     * answer a boolean on every app start.
+     */
+    suspend fun exists(relativePath: String, credentials: NextcloudCredentials? = null): Boolean {
+        val creds = credentials ?: credentialStore.awaitCredentials() ?: return false
+        return statusOf(relativePath, creds) == 207
     }
 
     /**

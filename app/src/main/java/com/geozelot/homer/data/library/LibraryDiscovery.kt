@@ -96,15 +96,25 @@ class LibraryDiscovery @Inject constructor(
         always: Boolean = false,
     ): DiscoveredLibrary? {
         val base = if (relativePath.isEmpty()) HOMER_DIR else "$relativePath/$HOMER_DIR"
-        val catalogText = runCatching { webDavClient.getText("$base/catalog.json") }.getOrNull()?.content
-        val hasCatalog = !catalogText.isNullOrBlank()
+        // Existence via PROPFIND Depth 0 (a few hundred bytes). This used to GET the whole
+        // catalog for every candidate folder — up to 60 of them, each potentially megabytes —
+        // just to decide whether a marker file was there.
+        val hasCatalog = runCatching { webDavClient.exists("$base/catalog.json") }.getOrDefault(false)
         val hasIndex = checkIndex &&
-            runCatching { webDavClient.getText("$base/index.json") }.getOrNull() != null
+            runCatching { webDavClient.exists("$base/index.json") }.getOrDefault(false)
 
         if (!hasCatalog && !hasIndex && !always) return null
 
-        val bookCount = catalogText?.let {
-            runCatching { json.decodeFromString<HomerCatalog>(it).books.size }.getOrNull()
+        // A book count is only worth a full download for the folder actually in use; for the other
+        // candidates the UI just shows that a shared catalog exists.
+        val bookCount = if (hasCatalog && (always || relativePath == libraryRoot)) {
+            runCatching {
+                webDavClient.getText("$base/catalog.json")?.content
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { json.decodeFromString<HomerCatalog>(it).books.size }
+            }.getOrNull()
+        } else {
+            null
         }
         val owner = if (hasCatalog) runCatching { webDavClient.fetchOwnerId(relativePath) }.getOrNull() else null
 

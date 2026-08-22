@@ -184,10 +184,22 @@ class PlaybackConnection @Inject constructor(
             if (loading) return
             // Playback made progress again ⇒ clear any stale error banner.
             if (player.isPlaying) playbackError = false
-            pushState()
-            positionSyncer.save()
-            // Flush to the .homer manifest at natural boundaries (not every tick).
-            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) positionSyncer.flush()
+            // Only react to events that change what the UI shows. onEvents also fires for loading
+            // and timeline churn several times a second, and each pushState() re-derives whole-book
+            // progress and re-emits to flows that fan out across the library — this was the app's
+            // heaviest CPU path. The unconditional positionSyncer.save() that used to sit here is
+            // gone too: the poll loop persists on a timer, and pausing is handled just below.
+            val visible = events.contains(Player.EVENT_IS_PLAYING_CHANGED) ||
+                events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
+                events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) ||
+                events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
+                events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)
+            if (visible) pushState()
+            // Pausing is the natural checkpoint: persist and push it out. Forced, so the sync
+            // throttle can never swallow the one update another device is waiting for.
+            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
+                positionSyncer.flush(force = true)
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -202,8 +214,11 @@ class PlaybackConnection @Inject constructor(
             if (loading) return
             val auto = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
             sleepTimer.onChapterTransition(auto)
-            // Chapter boundary is a good, cheap moment to sync cross-device position.
-            if (auto) positionSyncer.flush()
+            // Persist the boundary LOCALLY only. This used to push to the server on every chapter
+            // change — with 5-minute chapters that was a full manifest round trip every few
+            // minutes, and the radio ramp-up cost more battery than the bytes did. Pausing,
+            // backgrounding and app close still push.
+            if (auto) positionSyncer.save()
         }
     }
 
@@ -523,7 +538,7 @@ class PlaybackConnection @Inject constructor(
                 ),
             )
             bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
-            homerSync.sync()
+            homerSync.sync(force = true)
         }
     }
 
@@ -532,7 +547,7 @@ class PlaybackConnection @Inject constructor(
         scope.launch {
             bookmarkDao.deleteById(id)
             bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, System.currentTimeMillis()))
-            homerSync.sync()
+            homerSync.sync(force = true)
         }
     }
 
@@ -550,7 +565,7 @@ class PlaybackConnection @Inject constructor(
             playbackStateDao.upsert(PlaybackStateEntity(bookId, firstMediaId, 0L, System.currentTimeMillis()))
             if (currentBookId == bookId) pushState()
             localMirror.export()
-            homerSync.sync()
+            homerSync.sync(force = true)
         }
     }
 
@@ -610,18 +625,28 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
+    /**
+     * Drives the scrubber and persists the position while playing.
+     *
+     * Deliberately frugal: it ticks once a second (the UI shows whole seconds), falls back to a
+     * slow heartbeat when nothing is playing — it used to wake twice a second for the entire
+     * process lifetime, including hours of paused or idle time — and only re-derives UI state when
+     * something is actually collecting it, so backgrounded listening with the screen off does no
+     * per-tick work at all. The old ~5-minute manifest push from this loop is gone; the network is
+     * touched on real events (pause, background, app close, user actions) instead of on a timer.
+     */
     private fun startPositionUpdates(c: MediaController) {
         scope.launch {
             var tick = 0
             // Loop only while THIS controller is the active one: if it's replaced by a reconnect,
             // this loop ends instead of running in parallel with the new controller's loop.
             while (controller === c) {
-                if (!loading && c.isPlaying) {
-                    pushState()
-                    if (++tick % 10 == 0) positionSyncer.save() // ~ every 5s while playing
-                    if (tick % 600 == 0) positionSyncer.flush() // ~ every 5 min, bounds staleness
+                val playing = !loading && c.isPlaying
+                if (playing) {
+                    if (_state.subscriptionCount.value > 0) pushState()
+                    if (++tick % SAVE_EVERY_TICKS == 0) positionSyncer.save() // local only
                 }
-                delay(POSITION_POLL_MS)
+                delay(if (playing) POSITION_POLL_MS else IDLE_POLL_MS)
             }
         }
     }
@@ -675,7 +700,15 @@ class PlaybackConnection @Inject constructor(
         const val TAG = "HomerPlay"
         const val RESUME_SYNC_TIMEOUT_MS = 5_000L
         const val CONTROLLER_CONNECT_TIMEOUT_MS = 10_000L
-        const val POSITION_POLL_MS = 500L
+
+        /** Scrubber cadence while playing — the UI only shows whole seconds. */
+        const val POSITION_POLL_MS = 1_000L
+
+        /** Heartbeat while paused/idle: just enough to notice the controller went away. */
+        const val IDLE_POLL_MS = 5_000L
+
+        /** Persist the position locally about every 15s of playback. */
+        const val SAVE_EVERY_TICKS = 15
         const val DEFAULT_EXTEND_MS = 15 * 60_000L
     }
 }

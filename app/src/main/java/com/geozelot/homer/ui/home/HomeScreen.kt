@@ -1698,7 +1698,8 @@ private fun LibrarySyncSheet(viewModel: HomeViewModel, onDismiss: () -> Unit) {
             DiscoveredLibraries(
                 discovered = discovered,
                 discovering = discovering,
-                onRediscover = viewModel::rediscover,
+                // The button is an explicit request: bypass the freshness throttle.
+                onRediscover = { viewModel.rediscover(force = true) },
                 onUse = viewModel::onLibraryRootChange,
             )
 

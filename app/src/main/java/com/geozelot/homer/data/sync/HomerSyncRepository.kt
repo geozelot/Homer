@@ -2,6 +2,7 @@ package com.geozelot.homer.data.sync
 
 import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
+import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
@@ -12,6 +13,7 @@ import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.webdav.DavRead
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
@@ -52,14 +54,26 @@ class HomerSyncRepository @Inject constructor(
 ) {
     private val mutex = Mutex()
     private var ensuredDir: String? = null
-    private var legacyMigrationChecked = false
+
+    /**
+     * The manifest we last saw or wrote, with its ETag. Holding it lets the next sync validate with
+     * a conditional GET (304, no body) and still merge — so a steady-state sync transfers one
+     * document instead of two, and an unchanged one transfers none.
+     */
+    private var cachedBody: String? = null
+    private var cachedEtag: String? = null
+    private var lastSyncAtMs = 0L
 
     /**
      * Pull-merge-push in one pass. Private progress is always keyed to the **sync account**, never
      * the library backend — so a share-link library with no personal account stays device-local
      * (this is a no-op). Also a no-op if progress sync is off or the device is offline.
+     *
+     * [force] bypasses the quiet-period throttle. Use it for the moments that must not be lost —
+     * pausing, backgrounding, and explicit user actions — and leave it off for opportunistic
+     * triggers like opening a book, which would otherwise sync several times a minute.
      */
-    suspend fun sync() {
+    suspend fun sync(force: Boolean = false) {
         val account = credentialStore.awaitSyncAccount()
         if (account == null) {
             Log.i(TAG, "sync skipped: no sync account (device-local only)")
@@ -77,22 +91,45 @@ class HomerSyncRepository @Inject constructor(
             return
         }
         mutex.withLock {
+            val now = System.currentTimeMillis()
+            val localRevision = localRevision()
+            val pushed = librarySettings.lastPushedRevision.first()
+            val dirty = localRevision > pushed
+            // Nothing new locally and we looked recently → don't touch the network at all. This is
+            // the difference between "a sync costs a round trip" and "a sync costs nothing".
+            if (!force && !dirty && now - lastSyncAtMs < QUIET_INTERVAL_MS) {
+                return
+            }
             try {
-                reconcile(account)
+                reconcile(account, localRevision)
+                lastSyncAtMs = now
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "sync failed", e)
-                // The .homer dir may have been removed server-side; re-MKCOL next time.
+                // The .homer dir may have been removed server-side; re-MKCOL next time. Drop the
+                // cached copy too — after a failure we can't assume we know the server's state.
                 ensuredDir = null
+                cachedBody = null
+                cachedEtag = null
             }
         }
     }
 
-    private suspend fun reconcile(account: com.geozelot.homer.data.auth.NextcloudCredentials) {
+    /**
+     * Newest local change across everything the manifest carries. Compared against the last pushed
+     * value this answers "is there anything to send?" with three indexed MAX queries instead of a
+     * full document round trip — and needs no dirty flag threaded through every writer.
+     */
+    private suspend fun localRevision(): Long = maxOf(
+        playbackStateDao.maxUpdatedAt() ?: 0L,
+        bookmarkMetaDao.maxUpdatedAt() ?: 0L,
+        bookOverrideDao.maxUpdatedAt() ?: 0L,
+    )
+
+    private suspend fun reconcile(account: NextcloudCredentials, localRevision: Long) {
         val dir = DIR
         val path = "$dir/$FILE"
-        Log.i(TAG, "sync start: path=$path")
 
         // One-time migration: earlier builds kept the manifest under the (configurable)
         // library folder, so changing that folder moved the manifest and silently broke
@@ -100,19 +137,27 @@ class HomerSyncRepository @Inject constructor(
         // legacy per-root copy exists, seed the new location from it so nothing is lost.
         migrateLegacyManifest(dir, path, account)
 
-        // Re-pull, re-merge and retry on each conflict; the last attempt writes
-        // unconditionally so a mangled/weak ETag can never block sync forever
-        // (single-user last-write-wins is safe — SCOPE D3).
+        // Read the remote state ONCE, conditionally when we still hold the copy we last saw or
+        // wrote: an unchanged manifest answers 304 with no body. The old loop re-downloaded the
+        // whole document on every retry attempt, so a server that rewrites ETags turned one sync
+        // into three full GETs plus three full PUTs.
+        var remoteBody: String
+        var remoteEtag: String?
+        when (val read = webDavClient.readText(path, cachedEtag.takeIf { cachedBody != null }, account)) {
+            is DavRead.Body -> { remoteBody = read.content; remoteEtag = read.etag }
+            DavRead.NotModified -> { remoteBody = cachedBody.orEmpty(); remoteEtag = cachedEtag }
+            DavRead.Absent -> { remoteBody = ""; remoteEtag = null } // safe to create
+        }
+
         for (attempt in 0 until MAX_ATTEMPTS) {
-            val remoteFile = webDavClient.getText(path, account)
-            val remoteEtag = remoteFile?.etag
-            val remoteBody = remoteFile?.content
             val remoteIndex = when {
-                remoteBody == null || remoteBody.isBlank() -> HomerIndex() // absent — safe to create
+                remoteBody.isBlank() -> HomerIndex()
                 else -> runCatching { json.decodeFromString<HomerIndex>(remoteBody) }.getOrElse {
                     // Present but unparseable (proxy/HTML error page, corruption): do NOT treat
                     // it as empty and overwrite it — abort this pass to avoid clobbering.
                     Log.w(TAG, "manifest present but unparseable; skipping sync")
+                    cachedBody = null
+                    cachedEtag = null
                     return
                 }
             }
@@ -213,22 +258,45 @@ class HomerSyncRepository @Inject constructor(
                 Log.i(TAG, "pulled ${positionPulls.size} positions, ${bookmarkPulls.size} bookmark sets, ${overridePulls.size} overrides")
             }
 
+            // Drop entries that carry no information. Without this the manifest only ever grows:
+            // every book ever opened keeps a dead record that costs bytes on every transfer.
+            val pruned = merged.filterValues {
+                it.mediaId != null || it.bookmarks.isNotEmpty() || it.override != null
+            }
+
             // Push only when we'd actually change what the server has.
-            val mergedIndex = HomerIndex(books = merged)
+            val mergedIndex = HomerIndex(books = pruned)
             if (mergedIndex == remoteIndex) {
                 Log.i(TAG, "already in sync, nothing to push")
+                cachedBody = remoteBody
+                cachedEtag = remoteEtag
+                librarySettings.setLastPushedRevision(localRevision)
                 return
             }
 
             ensureDir(dir, account)
+            val payload = json.encodeToString(mergedIndex)
             val ifMatch = remoteEtag.takeUnless { attempt == MAX_ATTEMPTS - 1 }
             try {
-                webDavClient.putText(path, json.encodeToString(mergedIndex), ifMatch, account)
+                val newEtag = webDavClient.putText(path, payload, ifMatch, account)
                 val how = if (ifMatch == null) " [unconditional]" else ""
-                Log.i(TAG, "pushed manifest (${merged.size} books)$how")
+                Log.i(TAG, "pushed manifest (${pruned.size} books)$how")
+                // Remember exactly what we wrote: the next sync validates it with a conditional
+                // GET (304) instead of downloading the document all over again.
+                cachedBody = payload
+                cachedEtag = newEtag
+                librarySettings.setLastPushedRevision(localRevision)
                 return
             } catch (e: PreconditionFailedException) {
                 Log.i(TAG, "manifest changed under us; retry ${attempt + 1}/$MAX_ATTEMPTS")
+                // A real conflict, or a server that rewrites ETags. Re-read once and let the final
+                // attempt write unconditionally — bounded at 2 reads + 2 writes, never 3+3.
+                cachedBody = null
+                cachedEtag = null
+                when (val re = webDavClient.readText(path, null, account)) {
+                    is DavRead.Body -> { remoteBody = re.content; remoteEtag = re.etag }
+                    else -> { remoteBody = ""; remoteEtag = null }
+                }
             }
         }
     }
@@ -241,27 +309,34 @@ class HomerSyncRepository @Inject constructor(
     private suspend fun migrateLegacyManifest(
         dir: String,
         path: String,
-        account: com.geozelot.homer.data.auth.NextcloudCredentials,
+        account: NextcloudCredentials,
     ) {
-        if (legacyMigrationChecked) return
+        // Persisted, not per-process: this used to re-probe on every app launch, paying a full
+        // manifest GET (two, when the pinned copy was absent) purely as an existence test.
+        if (librarySettings.legacyManifestMigrated.first()) return
         val root = librarySettings.libraryRoot.first().trim('/')
         // No configurable root, or the root already IS the files-root → nothing to migrate.
-        if (root.isEmpty()) { legacyMigrationChecked = true; return }
+        if (root.isEmpty()) { librarySettings.setLegacyManifestMigrated(true); return }
         try {
-            if (webDavClient.getText(path, account) != null) { legacyMigrationChecked = true; return }
+            // Existence via PROPFIND Depth 0, not a full download.
+            if (webDavClient.exists(path, account)) {
+                librarySettings.setLegacyManifestMigrated(true)
+                return
+            }
             val legacy = webDavClient.getText("$root/$DIR/$FILE", account)?.content
             if (legacy != null && legacy.isNotBlank()) {
                 ensureDir(dir, account)
                 webDavClient.putText(path, legacy, null, account)
                 Log.i(TAG, "migrated legacy manifest ($root/$DIR/$FILE) to pinned $path")
             }
+            librarySettings.setLegacyManifestMigrated(true)
         } catch (e: Exception) {
+            // Leave the flag unset so a transient failure retries on a later sync.
             Log.w(TAG, "legacy manifest migration skipped", e)
         }
-        legacyMigrationChecked = true
     }
 
-    private suspend fun ensureDir(dir: String, account: com.geozelot.homer.data.auth.NextcloudCredentials) {
+    private suspend fun ensureDir(dir: String, account: NextcloudCredentials) {
         if (ensuredDir == dir) return
         webDavClient.mkcol(dir, account)
         ensuredDir = dir
@@ -271,7 +346,12 @@ class HomerSyncRepository @Inject constructor(
         const val TAG = "HomerSync"
         const val DIR = ".homer"
         const val FILE = "index.json"
-        const val MAX_ATTEMPTS = 3
+
+        /** One read + one write, then one bounded retry. Never the old 3×(GET+PUT). */
+        const val MAX_ATTEMPTS = 2
+
+        /** Skip an opportunistic sync when nothing changed locally and we looked this recently. */
+        const val QUIET_INTERVAL_MS = 60_000L
     }
 }
 

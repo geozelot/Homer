@@ -62,7 +62,7 @@ class BookEditor @Inject constructor(
                 updatedAt = System.currentTimeMillis(),
             ),
         )
-        homerSync.sync()
+        homerSync.sync(force = true)
     }
 
     /**
@@ -72,7 +72,7 @@ class BookEditor @Inject constructor(
      */
     suspend fun clearOverride(bookId: String) {
         bookOverrideDao.upsert(blank(bookId))
-        homerSync.sync()
+        homerSync.sync(force = true)
     }
 
     /**
@@ -90,7 +90,7 @@ class BookEditor @Inject constructor(
                     ?: blank(id).copy(series = s, author = a),
             )
         }
-        homerSync.sync()
+        homerSync.sync(force = true)
     }
 
     /** Quick hide/show, preserving any existing metadata override. */
@@ -100,7 +100,7 @@ class BookEditor @Inject constructor(
             existing?.copy(hidden = hidden, updatedAt = System.currentTimeMillis())
                 ?: blank(bookId).copy(hidden = hidden),
         )
-        homerSync.sync()
+        homerSync.sync(force = true)
     }
 
     /** Copies a user-picked image into the cover cache and sets it as the book's custom cover. */
