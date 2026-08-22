@@ -201,15 +201,21 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * Every migration, in order. Exposed (rather than inlined into the builder) so
+     * `MigrationTest` runs exactly the set the app ships against the schemas in `app/schemas/`.
+     */
+    internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+        MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+        MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+    )
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
-            .addMigrations(
-                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-                MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
-            )
+            .addMigrations(*ALL_MIGRATIONS)
             .apply {
                 // Destructive fallback is a DEBUG-ONLY convenience. In a release build a missing
                 // migration (or an APK downgrade to an older schema) must fail loudly instead of

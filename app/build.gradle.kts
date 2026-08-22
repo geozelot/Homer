@@ -31,6 +31,9 @@ android {
         versionName = (project.findProperty("versionName") as String?) ?: "1.0.0"
 
         vectorDrawables { useSupportLibrary = true }
+
+        // For the Room migration tests in src/androidTest (they need a device/emulator).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -85,6 +88,10 @@ android.testOptions.unitTests.isReturnDefaultValues = true
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// MigrationTestHelper reads the exported schemas off the test APK's assets, so they have to be
+// packaged into it — without this the migration tests fail with "Cannot find the schema file".
+android.sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
 
 // Kotlin compiler settings for AGP built-in Kotlin.
 kotlin {
@@ -142,4 +149,9 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.room.testing)
 }
