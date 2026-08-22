@@ -65,6 +65,24 @@ class CoverEnricher @Inject constructor(
                 // re-stream it every pass; leave it for a future publish to the shared cache.
                 if (book.coverAttempted) continue
             }
+            // A cover image sitting in the book's folder on the server: fetch that one small file
+            // and cache it. This is both the cheapest source (no audio streaming, unlike embedded
+            // extraction) and the fix for it otherwise being re-downloaded on every display and
+            // missing entirely offline.
+            if (book.coverFilePath != null) {
+                val folderArt = runCatching {
+                    webDavClient.getBytes(joinPath(libraryRoot, book.coverFilePath))
+                }.getOrNull()
+                if (folderArt != null && folderArt.isNotEmpty()) {
+                    bookDao.updateLocalCover(book.id, coverCache.write(book.id, folderArt))
+                    found++
+                    continue
+                }
+                // Couldn't fetch it — remember, so a broken path isn't retried every pass. The
+                // remote URL still renders as a fallback via BookCover.
+                bookDao.markCoverAttempted(book.id)
+                continue
+            }
             val firstFile = audioFileDao.findForBook(book.id).firstOrNull()
             val bytes = firstFile?.let {
                 metadataExtractor.extractEmbeddedPicture(
@@ -89,6 +107,10 @@ class CoverEnricher @Inject constructor(
         onProgress(total, total)
         Log.i(TAG, "cover enrichment done: $found/$total got art")
     }
+
+    /** Joins the (possibly empty) library root with a library-relative path for a files-root call. */
+    private fun joinPath(libraryRoot: String, relativePath: String): String =
+        if (libraryRoot.isBlank()) relativePath else "${libraryRoot.trimEnd('/')}/$relativePath"
 
     private companion object {
         const val TAG = "HomerMeta"

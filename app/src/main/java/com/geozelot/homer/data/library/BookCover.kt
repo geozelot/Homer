@@ -16,9 +16,13 @@ object BookCover {
     ): Any? = when {
         // A user-chosen custom cover wins over everything detected.
         book.customCoverPath != null -> cachedCover(book.customCoverPath)
+        // A locally cached copy comes BEFORE the remote folder image: it loads instantly, works
+        // offline, and costs no traffic. The remote URL is only the fallback until the enricher
+        // has cached that book's art (previously it was preferred, so folder covers were fetched
+        // from the server on every single display and were blank with no connection).
+        book.localCoverPath != null -> cachedCover(book.localCoverPath)
         book.coverFilePath != null && credentials != null ->
             webDavClient.urlFor(credentials, libraryRoot, book.coverFilePath).toString()
-        book.localCoverPath != null -> cachedCover(book.localCoverPath)
         else -> null
     }
 

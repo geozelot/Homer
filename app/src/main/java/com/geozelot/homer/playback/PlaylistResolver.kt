@@ -55,13 +55,22 @@ class PlaylistResolver @Inject constructor(
             }
         }
 
-        // Play from local files when the book is fully downloaded; otherwise stream.
-        val offline = downloadDao.findByBookId(bookId)?.status == DownloadStatus.DONE
+        // Per-file source selection. The book used to be streamed in its entirety until the
+        // download reached DONE, so anything partially downloaded — an interrupted, paused or
+        // in-flight book, and every book played while download-on-play fetches it — transferred
+        // its audio twice. Files the worker has already finished are played from disk instead.
+        //
+        // `downloadedFiles` is the worker's completed count and it advances only after a file is
+        // fully written, so this can never pick up a half-written file (which matters on the SAF
+        // backend, where writes aren't atomic).
+        val download = downloadDao.findByBookId(bookId)
+        val allDownloaded = download?.status == DownloadStatus.DONE
+        val completedFiles = if (allDownloaded) files.size else download?.downloadedFiles ?: 0
 
-        val items = files.map { file ->
+        val items = files.mapIndexed { index, file ->
             // Play the downloaded copy when present (file:// or content:// depending on the
             // storage backend); otherwise stream. `map` is inline, so the suspend uri() is fine.
-            val localUri = if (offline) downloadStorage.uri(file.relativePath) else null
+            val localUri = if (index < completedFiles) downloadStorage.uri(file.relativePath) else null
             val url = localUri?.toString()
                 ?: webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
             val chapterTitle = file.fileName.substringBeforeLast('.')
@@ -80,6 +89,6 @@ class PlaylistResolver @Inject constructor(
                 )
                 .build()
         }
-        return Playlist(book.title, coverModel, items, offline)
+        return Playlist(book.title, coverModel, items, allDownloaded)
     }
 }

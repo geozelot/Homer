@@ -27,12 +27,19 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     fun observeById(id: String): Flow<BookEntity?>
 
-    /** Books with no cover yet and not yet tried — enrichment targets. */
-    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL AND coverAttempted = 0")
+    /**
+     * Books with no *locally cached* cover yet and not yet tried — enrichment targets.
+     *
+     * Note this deliberately includes books that have a `coverFilePath` (a cover image sitting in
+     * the book's folder on the server). Those used to be excluded, which meant their art was
+     * streamed from WebDAV every single time it was displayed and was unavailable offline.
+     * Caching them locally is one small GET each and takes them off the hot path for good.
+     */
+    @Query("SELECT * FROM books WHERE localCoverPath IS NULL AND coverAttempted = 0")
     suspend fun booksNeedingCover(): List<BookEntity>
 
-    /** All books still without art (ignores the attempted flag) — Tier-3 shared-cache targets. */
-    @Query("SELECT * FROM books WHERE coverFilePath IS NULL AND localCoverPath IS NULL")
+    /** All books still without cached art (ignores the attempted flag) — shared-cache targets. */
+    @Query("SELECT * FROM books WHERE localCoverPath IS NULL")
     suspend fun booksWithoutArt(): List<BookEntity>
 
     @Query("UPDATE books SET localCoverPath = :path WHERE id = :bookId")
