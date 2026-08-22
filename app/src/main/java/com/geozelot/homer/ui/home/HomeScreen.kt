@@ -102,6 +102,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -187,7 +189,11 @@ fun HomeScreen(
             onSetHidden = viewModel::setHidden,
             onMarkCompleted = viewModel::markCompleted,
             onEditSeries = { editingSeriesKey = it.expandKey },
-            onDownloadSeries = { series -> viewModel.downloadAll(series.books.map { it.id }) },
+            // Already-complete episodes are skipped: re-enqueueing one resets its row to QUEUED and
+            // wakes a worker that has nothing to fetch, for no gain.
+            onDownloadSeries = { series ->
+                viewModel.downloadAll(series.books.filterNot { it.isDownloaded }.map { it.id })
+            },
             onRemoveSeries = { series -> viewModel.deleteDownloads(series.books.map { it.id }) },
             onPause = viewModel::pauseDownload,
             onResume = viewModel::resumeDownload,
@@ -236,9 +242,12 @@ fun HomeScreen(
         // scroll back to the top to reach them was the wrong way round. The Continue strip above
         // collapses to make room for them; these stay put.
         if (entries.isNotEmpty()) {
+            // `searching` alone means the field is open, not that anything is filtered — labelling
+            // the untouched library "309 results" before a character is typed.
+            val filtering = searching && searchQuery.isNotBlank()
             LibraryControlBar(
-                count = if (searching) entries.bookCount() else bookCount,
-                searching = searching,
+                count = if (filtering) entries.bookCount() else bookCount,
+                searching = filtering,
                 sort = sortMode,
                 group = groupMode,
                 gridView = gridView,
@@ -647,7 +656,13 @@ private fun LazyGridScope.libraryContent(
                             ) {
                                 // 2dp on top of the enclosure's own inset keeps each episode at
                                 // exactly the indent it had before the border went round them.
-                                BookListRow(book, startPadding = 2.dp, onOpen = onBookClick, actions = actions)
+                                BookListRow(
+                                    book,
+                                    startPadding = 2.dp,
+                                    onOpen = onBookClick,
+                                    actions = actions,
+                                    bordered = false,
+                                )
                             }
                         }
                     }
@@ -690,27 +705,38 @@ private fun LibraryControlBar(
 ) {
     val context = LocalContext.current
     Column(modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp, start = 2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Both chips can give way (DropdownChip ellipsizes under pressure) so a long sort
-            // label like "Recently played" can't push the toggle off a narrow screen.
-            DropdownChip(
-                label = stringResource(R.string.home_sort_group_label, group.label),
-                options = LibraryGroup.values().toList(),
-                selected = group,
-                labelOf = { it.label },
-                onSelect = onGroupChange,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            // The chips live in their own weighted row, and the toggle is simply the other child of
+            // a SpaceBetween parent. A weighted Spacer between them looked equivalent and was not:
+            // a weighted child's allotment is a hard MAXIMUM, and `fill = false` only relaxes the
+            // minimum — so the spacer's third of the free space was subtracted from what the chips
+            // could ever use, and both labels ellipsized with a third of the row left blank.
+            Row(
                 modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            DropdownChip(
-                label = stringResource(R.string.home_sort_sort_label, sort.label),
-                options = LibrarySort.values().toList(),
-                selected = sort,
-                labelOf = { it.label },
-                onSelect = onSortChange,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(modifier = Modifier.weight(1f))
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DropdownChip(
+                    label = stringResource(R.string.home_sort_group_label, group.label),
+                    options = LibraryGroup.values().toList(),
+                    selected = group,
+                    labelOf = { it.label },
+                    onSelect = onGroupChange,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                DropdownChip(
+                    label = stringResource(R.string.home_sort_sort_label, sort.label),
+                    options = LibrarySort.values().toList(),
+                    selected = sort,
+                    labelOf = { it.label },
+                    onSelect = onSortChange,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -857,14 +883,19 @@ private fun ContinueSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) ->
         modifier = Modifier
             .width(coverWidth)
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onOpen(book.id) },
+            .clickable { onOpen(book.id) }
+            // Nothing inside carries text any more, and the cover art is deliberately decorative,
+            // so without this the strip is a row of unlabelled buttons to a screen reader.
+            .semantics { contentDescription = book.title },
     ) {
         CoverArt(
             model = book.coverModel,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f / 1.5f)
-                .clip(RoundedCornerShape(5.dp)),
+                .clip(RoundedCornerShape(5.dp))
+                // Same hairline the grid cards carry, so a cover reads as a cover everywhere.
+                .border(1.dp, Line, RoundedCornerShape(5.dp)),
         )
         ProgressBar(
             fraction = book.progress ?: 0f,
@@ -893,7 +924,8 @@ private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f / 1.5f)
-                    .clip(RoundedCornerShape(10.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, Line, RoundedCornerShape(10.dp)),
             )
             ProgressBar(
                 fraction = book.progress ?: 0f,
@@ -1273,14 +1305,31 @@ private fun BookListRow(
     startPadding: Dp,
     onOpen: (String) -> Unit,
     actions: BookActions,
+    /**
+     * Whether the row draws its own card. True for a top-level row, so every item in the list
+     * reads the same way a collapsed series shelf always did. False for an episode inside an
+     * opened series, where the enclosure already IS the card and a second border inside it would
+     * just be noise.
+     */
+    bordered: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpen(book.id) }
             .padding(start = startPadding)
-            .padding(vertical = 6.dp)
+            .then(
+                if (bordered) {
+                    Modifier
+                        .clip(RoundedCornerShape(SeriesEnclosureRadius))
+                        .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
+                        .background(Surface1)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable { onOpen(book.id) }
+            .padding(if (bordered) SeriesListEnclosurePad else 6.dp)
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1351,7 +1400,13 @@ private fun listRowMeta(book: BookListItem, context: android.content.Context): S
     book.totalDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatCompactDuration(it)}") }
     when {
         book.finished -> { append(" · "); append(context.getString(R.string.status_finished)) }
-        book.progress != null -> append(context.getString(R.string.home_meta_percent, (book.progress * 100).toInt()))
+        // Gated on `started`, not merely on progress being computable. Marking a book completed
+        // RESETS it (PlaybackConnection.resetProgress writes position 0), which leaves elapsed at
+        // zero — measurable, so progress is 0f rather than null, and the row went on advertising
+        // "0%" for a book the user had just cleared. The grid's ring already hides itself below
+        // 1%, so this was the one place the reset didn't take.
+        book.started && book.progress != null ->
+            append(context.getString(R.string.home_meta_percent, (book.progress * 100).toInt()))
     }
 }
 
@@ -1400,15 +1455,6 @@ private fun SeriesShelfRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The disclosure arrow leads the row so the overflow button can hold the trailing edge,
-        // where every book row already keeps its own — the two line up down the right-hand side
-        // instead of a series putting a chevron where a book puts its menu.
-        Icon(
-            imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
-            tint = Faint,
-            modifier = Modifier.padding(end = 4.dp),
-        )
         // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
         Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
             series.books.take(3).forEachIndexed { i, book ->
@@ -1439,6 +1485,14 @@ private fun SeriesShelfRow(
                 fontSize = 11.5.sp,
             )
         }
+        // Chevron immediately left of the overflow button, so the two sit together at the trailing
+        // edge and the overflow still lines up with the one on every book row. Leading it instead
+        // pushed the covers out of line with the book rows above and below.
+        Icon(
+            imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
+            tint = Faint,
+        )
         Box {
             IconButton(onClick = { menuOpen = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
@@ -1636,6 +1690,17 @@ private fun SeriesMenu(
             },
             onClick = toggle,
         )
+        // Downloading one episode of a series makes the switch above read as on, so without this
+        // the only thing the menu offered a part-downloaded series was "delete what you have" —
+        // which is also what a user reaching for "finish the rest" would have tapped. Covers the
+        // failed-episode case too: BookMenu has an explicit Retry item and this is its equivalent.
+        if (offlineEnabled && !allDownloaded && !downloading) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_offline_series_rest)) },
+                leadingIcon = { Icon(Icons.Filled.Download, null, tint = Muted) },
+                onClick = { actions.onDownloadSeries(series); onDismiss() },
+            )
+        }
     }
 }
 

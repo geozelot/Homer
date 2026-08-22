@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Downloads a book's audio files to app-private storage for offline playback. Runs under
@@ -78,16 +79,13 @@ class DownloadWorker @AssistedInject constructor(
         // and burned the whole budget — and since download-on-play starts a download the moment
         // playback begins, the shed notification was the media one, leaving PlaybackService
         // improperly foregrounded and killed once the app went to the background.
-        var lastNotifyMs = 0L
         try {
             for ((index, file) in files.withIndex()) {
                 if (index < startIndex) continue // completed before a pause/retry
                 // Stop promptly on cancellation (user removed the download / constraint lost)
                 // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
                 if (isStopped) return Result.failure()
-                val nowMs = now()
-                if (nowMs - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
-                    lastNotifyMs = nowMs
+                if (claimNotifySlot(now())) {
                     setForegroundSafely(foregroundInfo(notifId, bookId, title, index, files.size))
                 }
                 // The storage area streams into place (atomically where the backend supports it),
@@ -186,5 +184,32 @@ class DownloadWorker @AssistedInject constructor(
 
         /** Minimum gap between progress notifications (the platform's ~5/s budget is per package). */
         private const val PROGRESS_NOTIFY_INTERVAL_MS = 1_000L
+
+        /**
+         * When any DownloadWorker last posted a progress update, shared across every instance.
+         *
+         * The budget this protects is PER PACKAGE, so the throttle has to be too. It used to be a
+         * local `var` in [doWork] — correct while only one book could be downloading, which was
+         * true until the series menu grew a switch that enqueues one worker per episode. WorkManager
+         * runs several of those at once, each with its own notification id, and N workers each
+         * honouring their own 1/s budget still post N per second between them. Blowing the budget
+         * is not a cosmetic problem: the shed notification can be the media one, which leaves
+         * PlaybackService improperly foregrounded and gets it killed the moment the app goes to
+         * the background.
+         */
+        private val lastProgressNotifyMs = AtomicLong(0L)
+
+        /**
+         * Reserves the package's next notification slot, returning false if one was taken too
+         * recently. Compare-and-set rather than a plain read/write: the callers are concurrent
+         * workers, and two of them reading the same stale timestamp would both post.
+         */
+        private fun claimNotifySlot(nowMs: Long): Boolean {
+            while (true) {
+                val last = lastProgressNotifyMs.get()
+                if (nowMs - last < PROGRESS_NOTIFY_INTERVAL_MS) return false
+                if (lastProgressNotifyMs.compareAndSet(last, nowMs)) return true
+            }
+        }
     }
 }
