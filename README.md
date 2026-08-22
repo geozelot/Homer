@@ -16,11 +16,17 @@ server, and an Audible-class listening experience.
 
 ## Features
 
+- **Any Nextcloud folder — or a share link** — point Homer at your own account, or open a
+  public share link (`…/s/<token>`) as a read-only or read-write library. Where the books
+  come from is independent of where your progress is saved.
 - **Stream or download** — listen on demand, or take books offline (pause / resume /
   abort downloads, Wi-Fi-only option).
-- **Cross-device resume** — your position, bookmarks, finished flags and metadata
-  corrections sync through a `.homer` file in your own storage. Three privacy tiers:
-  on-device only, private per-account, or a shared library cache for a household.
+- **Cross-device resume** — your position, bookmarks and finished flags sync through a
+  `.homer` file in your own storage, controlled by two independent switches: *sync my
+  progress* (private to your account, or off and device-local) and *share the library
+  index* (a shared catalogue of titles, authors, series and cover art so other devices
+  reading the same folder skip scanning — and so a title you correct stays corrected
+  everywhere). Your listening position is never written to a shared folder.
 - **Rich playback** — variable speed, skip-silence, a configurable skip interval,
   optional auto-rewind on resume, a volume boost, a sleep timer with shake-to-extend,
   and bookmarks.
@@ -55,7 +61,8 @@ permission at all:
   audio playback and offline downloads that survive the app being closed, each with a notification.
 - **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
   at install or first run. Homer only sends you to the system grant screen if you explicitly choose
-  to keep downloads in a folder you pick yourself (Library & Sync → *Browse device*). It exists
+  to keep downloads in a folder you pick yourself (Settings → *On this device* → *Browse device*).
+  It exists
   because the Android document picker (SAF) is refused on some ROMs — certain LineageOS builds
   return no folder at all — which otherwise leaves no way to use a user-visible, uninstall-surviving
   library folder. Skip that option and the permission stays ungranted. Because of this permission
@@ -107,9 +114,10 @@ CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` an
 
 ## Status
 
-Homer is at **1.0** — stable for day-to-day listening. It's a personal, self-hosted
-project; a few advanced features (shared-library household sync, M4B chapter text-tracks,
-certificate pinning) are best-effort and still evolving. Issues and patches welcome.
+Homer is at **1.1** — stable for day-to-day listening. It's a personal, self-hosted
+project; a few advanced features (share-link libraries, the shared library index, M4B
+chapter text-tracks, certificate pinning) are best-effort and still evolving. Issues and
+patches welcome.
 
 ## A note on how this was built
 
