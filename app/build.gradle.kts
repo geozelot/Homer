@@ -74,6 +74,12 @@ android {
     }
 }
 
+// android.jar is stubbed for local unit tests, and every stub throws by default — so a single
+// android.util.Log call anywhere in the code under test fails it. Returning defaults instead keeps
+// plain logic (BookDetector's fingerprinting, the scanner's prune rules) unit-testable without
+// threading a logger abstraction through code whose logging is purely diagnostic.
+android.testOptions.unitTests.isReturnDefaultValues = true
+
 // Export Room schemas to a committed directory so migrations have a versioned record and can be
 // covered by MigrationTestHelper tests. Requires exportSchema = true on @Database.
 ksp {

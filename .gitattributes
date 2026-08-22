@@ -1,0 +1,11 @@
+# Kotlin/Java sources are text, always. Asserting this is not cosmetic: a stray NUL byte in a
+# string literal once made BookDetector.kt binary to git AND to grep, so diffs were unreadable
+# and searches over it silently returned nothing — which cost a real debugging session.
+*.kt     text diff=java
+*.java   text diff=java
+*.kts    text
+*.xml    text
+*.md     text
+*.json   text
+*.pro    text
+*.toml   text
