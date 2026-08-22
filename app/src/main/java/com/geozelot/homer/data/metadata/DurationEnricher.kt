@@ -84,6 +84,10 @@ class DurationEnricher @Inject constructor(
                 var firstProbe: DurationExtractor.Probe? = null
                 for (file in missing) {
                     coroutineContext.ensureActive()
+                    // Connectivity can drop part-way through. Every further probe would only wait
+                    // out its 30s timeout and then be discarded, so a 40-file book would spend
+                    // twenty minutes achieving nothing. Stop and let a later open resume.
+                    if (!networkMonitor.isOnline()) break
                     val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
                     val probe = durationExtractor.probe(url)
                     val measured = probe.durationMs

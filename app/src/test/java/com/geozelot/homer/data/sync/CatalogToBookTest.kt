@@ -74,6 +74,29 @@ class CatalogToBookTest {
     }
 
     @Test
+    fun `a catalog with no genre keeps the one this device probed`() {
+        // The publishing device may never have opened the book, so a null genre means "I don't
+        // know", not "this book has none". Taking it would discard an expensive audio probe and
+        // force it to run again.
+        val result = catalogBook().copy(genre = null).toBook("Author/Book", localBook().copy(genre = "Hörbuch"))
+        assertEquals("Hörbuch", result.genre)
+    }
+
+    @Test
+    fun `a catalog genre wins when it has one`() {
+        val result = catalogBook().copy(genre = "Krimi").toBook("Author/Book", localBook().copy(genre = "Hörbuch"))
+        assertEquals("Krimi", result.genre)
+    }
+
+    @Test
+    fun `a catalog with no total duration keeps the measured one`() {
+        // Same reasoning: losing the total drops the book out of "fully measured", which costs it
+        // its time-left, progress ring and auto-finish until every file is re-probed.
+        val result = catalogBook().copy(totalDurationMs = null).toBook("Author/Book", localBook())
+        assertEquals(999L, result.totalDurationMs)
+    }
+
+    @Test
     fun `a book this device has never seen keeps the catalog values and no local state`() {
         val result = catalogBook().toBook("Author/Book", local = null)
 

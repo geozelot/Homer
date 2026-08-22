@@ -14,6 +14,9 @@ import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.DavRead
 import com.geozelot.homer.data.webdav.PreconditionFailedException
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -58,24 +61,56 @@ class HomerCatalogRepository @Inject constructor(
     )
     private var editPublishJob: Job? = null
 
+    /** Set by [publishEdits]; cleared once the corrections have actually been published. */
+    @Volatile
+    private var editsPending = false
+
+    init {
+        // Backgrounding is the natural moment to ship corrections: the user has stopped editing.
+        // addObserver must run on the main thread, hence the explicit dispatcher on an IO scope.
+        scope.launch(Dispatchers.Main) {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    editPublishJob?.cancel()
+                    editPublishJob = scope.launch { publishPendingEdits() }
+                }
+            })
+        }
+    }
+
     /**
-     * Shares the user's metadata corrections by republishing the library index, so a title or author
-     * fixed on this device is what everyone reading that folder sees — not a private note.
+     * Notes that the user corrected a book's metadata, to be shared via the library index so a title
+     * fixed here is what everyone reading that folder sees rather than a private note.
      *
-     * Fire-and-forget and **coalesced**: publishing rewrites the whole index, and one edit dialog can
-     * touch many books at once (a series rename writes every member), so a burst collapses into a
-     * single upload. Requires the shared index to be switched on — that toggle is the user's consent
-     * to write to the shared folder — and [publishIfAllowed] still decides whether this device may
-     * write there at all, so a read-only share simply keeps the correction to itself.
+     * Nothing is uploaded immediately. Publishing rewrites the *whole* index — megabytes on a large
+     * library — so a per-edit upload would reintroduce exactly the amplification this app went to
+     * some trouble to remove. Instead the edits are marked pending and published when the user
+     * backgrounds the app, or after a long idle gap if they keep it open.
      */
     fun publishEdits() {
+        editsPending = true
         editPublishJob?.cancel()
         editPublishJob = scope.launch {
-            delay(EDIT_PUBLISH_DEBOUNCE_MS)
-            if (!librarySettings.sharedCatalogEnabled.first()) return@launch
-            if (!networkMonitor.isOnline()) return@launch
-            publishIfAllowed()
+            delay(EDIT_PUBLISH_IDLE_MS)
+            publishPendingEdits()
         }
+    }
+
+    /**
+     * Publishes coalesced corrections, if any. Requires the shared index to be switched on — that
+     * toggle is the user's consent to write to the shared folder — and [publishIfAllowed] still
+     * decides whether this device may write there, so a read-only share keeps corrections to itself.
+     * Offline, the pending flag is left set so the next trigger retries.
+     */
+    private suspend fun publishPendingEdits() {
+        if (!editsPending) return
+        if (!librarySettings.sharedCatalogEnabled.first()) {
+            editsPending = false // sharing is off; the correction stays local, nothing to retry
+            return
+        }
+        if (!networkMonitor.isOnline()) return
+        editsPending = false
+        publishIfAllowed()
     }
 
     /**
@@ -203,8 +238,25 @@ class HomerCatalogRepository @Inject constructor(
                 val local = bookDao.findById(id)
                 if (local == null || cb.updatedAt > local.updatedAt) {
                     bookDao.upsert(listOf(cb.toBook(id, local)))
+                    // Merge rather than replace. Since an edit now stamps the entry with the edit
+                    // time, a peer's metadata correction reaches this branch — and the publishing
+                    // device may never have played the book, so its files carry null durations.
+                    // Taking those verbatim would wipe this device's measurements, dropping the
+                    // book out of "fully measured" (no time-left, no progress ring, no auto-finish)
+                    // until every file is streamed again to re-probe it.
+                    val measured = audioFileDao.findForBook(id).associateBy { it.relativePath }
                     audioFileDao.deleteForBook(id)
-                    audioFileDao.upsert(cb.files.map { it.toEntity(id) })
+                    audioFileDao.upsert(
+                        cb.files.map { file ->
+                            val entity = file.toEntity(id)
+                            val previous = measured[file.relativePath]
+                            entity.copy(
+                                durationMs = entity.durationMs ?: previous?.durationMs,
+                                // Keep "we already established this one can't be read" too.
+                                durationAttempted = previous?.durationAttempted ?: false,
+                            )
+                        },
+                    )
                     applied++
                     continue
                 }
@@ -221,6 +273,8 @@ class HomerCatalogRepository @Inject constructor(
                     seriesIndex = cb.seriesIndex,
                     // Don't discard a genre this device probed itself when the index has none.
                     genre = cb.genre ?: local.genre,
+                    // A folder cover another device detected should show here too.
+                    coverFilePath = cb.coverFilePath ?: local.coverFilePath,
                 )
                 if (converged != local) {
                     bookDao.upsert(listOf(converged))
@@ -338,8 +392,8 @@ class HomerCatalogRepository @Inject constructor(
     private companion object {
         const val TAG = "HomerCatalog"
 
-        /** Collapses a burst of edits (e.g. a series rename touching every member) into one upload. */
-        const val EDIT_PUBLISH_DEBOUNCE_MS = 4_000L
+        /** Idle gap before corrections are published if the app is never backgrounded. */
+        const val EDIT_PUBLISH_IDLE_MS = 2 * 60_000L
         const val DIR = ".homer"
         const val FILE = "catalog.json"
         const val MAX_ATTEMPTS = 3
@@ -364,7 +418,11 @@ internal fun CatalogBook.toBook(id: String, local: BookEntity?): BookEntity {
         author = author,
         series = series,
         seriesIndex = seriesIndex,
-        genre = genre,
+        // Fall back to the local values: the catalog is the *library's* view, and the device that
+        // published it may never have opened this book, so it can legitimately carry no genre and
+        // no total. Overwriting ours with null strips the book of its time-left and progress and
+        // forces a re-probe that streams every file again.
+        genre = genre ?: local?.genre,
         relativePath = id,
         coverFilePath = coverFilePath,
         localCoverPath = local?.localCoverPath,
@@ -375,7 +433,7 @@ internal fun CatalogBook.toBook(id: String, local: BookEntity?): BookEntity {
         chapterTier = local?.chapterTier ?: ChapterTier.UNDETERMINED,
         isMultiFile = isMultiFile,
         fileCount = files.size,
-        totalDurationMs = totalDurationMs,
+        totalDurationMs = totalDurationMs ?: local?.totalDurationMs,
         addedAt = local?.addedAt ?: now,
         updatedAt = updatedAt.takeIf { it > 0 } ?: now,
     )

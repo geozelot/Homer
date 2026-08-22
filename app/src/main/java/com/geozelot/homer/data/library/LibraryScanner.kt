@@ -154,10 +154,15 @@ class LibraryScanner @Inject constructor(
         val orphanedDownloads = db.withTransaction {
             applyScan(books, root, skippedRoots, sweepOrphans = !incremental)
         }
-        // Outside the transaction: this is storage IO, and it must not hold a write lock.
-        for (bookId in orphanedDownloads) {
-            runCatching { downloadStorage.deleteBook(bookId) }
-                .onFailure { Log.w(TAG, "could not remove downloaded files for pruned book $bookId", it) }
+        // Outside the transaction: this is storage IO, and it must not hold a write lock. Files
+        // first, rows second — dropping the row first would leave the bytes with nothing pointing
+        // at them if the process died in between, which is the leak this is meant to close.
+        if (orphanedDownloads.isNotEmpty()) {
+            for (bookId in orphanedDownloads) {
+                runCatching { downloadStorage.deleteBook(bookId) }
+                    .onFailure { Log.w(TAG, "could not remove downloaded files for pruned book $bookId", it) }
+            }
+            downloadDao.deleteOrphans()
         }
 
         return Result(bookDao.count())
@@ -285,13 +290,13 @@ class LibraryScanner @Inject constructor(
                 // corrections reattach when it comes back. Overrides especially — a title the user
                 // typed is not re-derivable from anything. Bookmarks cascade via their FK.
                 if (sweepOrphans) {
-                    // Read the ids before deleting the rows: afterwards nothing identifies the
-                    // files on disk, and they would sit there forever.
                     orphanedDownloads = downloadDao.orphanBookIds()
                     playbackStateDao.deleteOrphans()
                     bookOverrideDao.deleteOrphans()
                     bookmarkMetaDao.deleteOrphans()
-                    downloadDao.deleteOrphans()
+                    // The `downloads` rows are deliberately NOT deleted here — the caller removes
+                    // the files first and drops the rows afterwards, so a process death in between
+                    // leaves a row still pointing at them for the next scan to retry.
                 }
             }
             currentCount == 0 -> Unit // already empty — nothing to prune
