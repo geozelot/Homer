@@ -16,6 +16,13 @@ import com.geozelot.homer.data.webdav.DavRead
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -44,6 +51,32 @@ class HomerCatalogRepository @Inject constructor(
 ) {
     /** ETag of the catalog this device last applied, so an unchanged one costs a 304 (no body). */
     private var cachedCatalogEtag: String? = null
+
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "unhandled catalog error", e) },
+    )
+    private var editPublishJob: Job? = null
+
+    /**
+     * Shares the user's metadata corrections by republishing the library index, so a title or author
+     * fixed on this device is what everyone reading that folder sees — not a private note.
+     *
+     * Fire-and-forget and **coalesced**: publishing rewrites the whole index, and one edit dialog can
+     * touch many books at once (a series rename writes every member), so a burst collapses into a
+     * single upload. Requires the shared index to be switched on — that toggle is the user's consent
+     * to write to the shared folder — and [publishIfAllowed] still decides whether this device may
+     * write there at all, so a read-only share simply keeps the correction to itself.
+     */
+    fun publishEdits() {
+        editPublishJob?.cancel()
+        editPublishJob = scope.launch {
+            delay(EDIT_PUBLISH_DEBOUNCE_MS)
+            if (!librarySettings.sharedCatalogEnabled.first()) return@launch
+            if (!networkMonitor.isOnline()) return@launch
+            publishIfAllowed()
+        }
+    }
 
     /**
      * True if a shared catalog exists at the library root (⇒ Tier 3 is available here).
@@ -168,11 +201,31 @@ class HomerCatalogRepository @Inject constructor(
             var applied = 0
             for ((id, cb) in catalog.books) {
                 val local = bookDao.findById(id)
-                if (local != null && local.updatedAt >= cb.updatedAt) continue
-                bookDao.upsert(listOf(cb.toBook(id, local)))
-                audioFileDao.deleteForBook(id)
-                audioFileDao.upsert(cb.files.map { it.toEntity(id) })
-                applied++
+                if (local == null || cb.updatedAt > local.updatedAt) {
+                    bookDao.upsert(listOf(cb.toBook(id, local)))
+                    audioFileDao.deleteForBook(id)
+                    audioFileDao.upsert(cb.files.map { it.toEntity(id) })
+                    applied++
+                    continue
+                }
+                // The local row is newer — almost always because THIS device scanned after the
+                // correction was published, and a scan re-derives the title from the folder name.
+                // The file list is settled, but the *agreed* metadata still has to converge, or a
+                // fix made on another device would be silently undone by every local scan and the
+                // shared index would only appear to work. A personal override still wins at read
+                // time (applyOverride), so converging here never overrides someone's own edit.
+                val converged = local.copy(
+                    title = cb.title,
+                    author = cb.author,
+                    series = cb.series,
+                    seriesIndex = cb.seriesIndex,
+                    // Don't discard a genre this device probed itself when the index has none.
+                    genre = cb.genre ?: local.genre,
+                )
+                if (converged != local) {
+                    bookDao.upsert(listOf(converged))
+                    applied++
+                }
             }
             Log.i(TAG, "consumed catalog: ${catalog.books.size} books, $applied applied")
             true
@@ -188,7 +241,8 @@ class HomerCatalogRepository @Inject constructor(
         val overrides = bookOverrideDao.getAll().associateBy { it.bookId }
         val books = LinkedHashMap<String, CatalogBook>()
         for (book in bookDao.getAll()) {
-            val eff = book.applyOverride(overrides[book.id])
+            val override = overrides[book.id]
+            val eff = book.applyOverride(override)
             val files = audioFileDao.findForBook(book.id)
             books[book.id] = CatalogBook(
                 title = eff.title,
@@ -201,7 +255,11 @@ class HomerCatalogRepository @Inject constructor(
                 hasCachedCover = book.localCoverPath != null,
                 totalDurationMs = eff.totalDurationMs,
                 isMultiFile = eff.isMultiFile,
-                updatedAt = book.updatedAt,
+                // The LATER of the scan and the user's edit. `books.updatedAt` only moves when a
+                // scan rewrites the row, so publishing it alone would ship a correction stamped
+                // older than the copy other devices already hold — mergeCatalogs and consume() both
+                // compare timestamps, so the edit would be silently discarded on arrival.
+                updatedAt = maxOf(book.updatedAt, override?.updatedAt ?: 0L),
                 files = files.map {
                     CatalogFile(
                         relativePath = it.relativePath,
@@ -265,41 +323,6 @@ class HomerCatalogRepository @Inject constructor(
         webDavClient.mkcol(catalogDir())
     }
 
-    /**
-     * The shared catalog carries the *library's* view of a book, not this device's. Everything
-     * device-local — where the cover bytes are cached, the user's chosen cover, and what has already
-     * been probed — is therefore carried over from [local] rather than written as null: this row is
-     * upserted straight over the existing one, so blanking those fields drops the cached cover
-     * pointers and re-arms probes that already ran. [contentHash] falls back to the local value for
-     * catalogs written by an older build that didn't publish it; losing it would permanently break
-     * move/rename re-linking for this book.
-     */
-    private fun CatalogBook.toBook(id: String, local: BookEntity?): BookEntity {
-        val now = System.currentTimeMillis()
-        return BookEntity(
-            id = id,
-            contentHash = contentHash ?: local?.contentHash,
-            title = title,
-            author = author,
-            series = series,
-            seriesIndex = seriesIndex,
-            genre = genre,
-            relativePath = id,
-            coverFilePath = coverFilePath,
-            localCoverPath = local?.localCoverPath,
-            customCoverPath = local?.customCoverPath,
-            coverAttempted = local?.coverAttempted ?: false,
-            metadataAttempted = local?.metadataAttempted ?: false,
-            // The consuming device doesn't re-derive chapters, so keep whatever it worked out itself.
-            chapterTier = local?.chapterTier ?: ChapterTier.UNDETERMINED,
-            isMultiFile = isMultiFile,
-            fileCount = files.size,
-            totalDurationMs = totalDurationMs,
-            addedAt = local?.addedAt ?: now,
-            updatedAt = updatedAt.takeIf { it > 0 } ?: now,
-        )
-    }
-
     private fun CatalogFile.toEntity(bookId: String) = AudioFileEntity(
         relativePath = relativePath,
         bookId = bookId,
@@ -314,8 +337,46 @@ class HomerCatalogRepository @Inject constructor(
 
     private companion object {
         const val TAG = "HomerCatalog"
+
+        /** Collapses a burst of edits (e.g. a series rename touching every member) into one upload. */
+        const val EDIT_PUBLISH_DEBOUNCE_MS = 4_000L
         const val DIR = ".homer"
         const val FILE = "catalog.json"
         const val MAX_ATTEMPTS = 3
     }
+}
+
+/**
+ * The shared catalog carries the *library's* view of a book, not this device's. Everything
+ * device-local — where the cover bytes are cached, the user's chosen cover, and what has already
+ * been probed — is therefore carried over from [local] rather than written as null: this row is
+ * upserted straight over the existing one, so blanking those fields drops the cached cover
+ * pointers and re-arms probes that already ran. [contentHash] falls back to the local value for
+ * catalogs written by an older build that didn't publish it; losing it would permanently break
+ * move/rename re-linking for this book.
+ */
+internal fun CatalogBook.toBook(id: String, local: BookEntity?): BookEntity {
+    val now = System.currentTimeMillis()
+    return BookEntity(
+        id = id,
+        contentHash = contentHash ?: local?.contentHash,
+        title = title,
+        author = author,
+        series = series,
+        seriesIndex = seriesIndex,
+        genre = genre,
+        relativePath = id,
+        coverFilePath = coverFilePath,
+        localCoverPath = local?.localCoverPath,
+        customCoverPath = local?.customCoverPath,
+        coverAttempted = local?.coverAttempted ?: false,
+        metadataAttempted = local?.metadataAttempted ?: false,
+        // The consuming device doesn't re-derive chapters, so keep whatever it worked out itself.
+        chapterTier = local?.chapterTier ?: ChapterTier.UNDETERMINED,
+        isMultiFile = isMultiFile,
+        fileCount = files.size,
+        totalDurationMs = totalDurationMs,
+        addedAt = local?.addedAt ?: now,
+        updatedAt = updatedAt.takeIf { it > 0 } ?: now,
+    )
 }

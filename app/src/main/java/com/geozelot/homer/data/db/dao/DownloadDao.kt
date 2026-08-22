@@ -30,4 +30,9 @@ interface DownloadDao {
     /** Drops download state for books that are no longer indexed (no FK here, so a prune orphans it). */
     @Query("DELETE FROM downloads WHERE bookId NOT IN (SELECT id FROM books)")
     suspend fun deleteOrphans()
+
+    /** Book ids with a download record but no book — their files on disk have nothing left to key
+     *  a cleanup on once the row is gone, so callers delete the files before pruning the rows. */
+    @Query("SELECT bookId FROM downloads WHERE bookId NOT IN (SELECT id FROM books)")
+    suspend fun orphanBookIds(): List<String>
 }

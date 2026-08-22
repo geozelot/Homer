@@ -7,6 +7,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
+import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.flow.first
@@ -41,6 +42,7 @@ class DurationEnricher @Inject constructor(
     private val durationExtractor: DurationExtractor,
     private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
+    private val networkMonitor: NetworkMonitor,
 ) {
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
@@ -54,6 +56,12 @@ class DurationEnricher @Inject constructor(
         scope.launch {
             try {
                 val credentials = credentialStore.awaitCredentials() ?: return@launch
+                // Offline, nothing can be measured — and crucially nothing may be RECORDED as
+                // unmeasurable: probe() returns null both for "this file has no duration" and for
+                // "I couldn't reach it", so a single offline open would otherwise mark every file
+                // and the book permanently attempted. A book that never becomes fully measured
+                // loses its time-left, progress ring and auto-finish until a full re-scan.
+                if (!networkMonitor.isOnline()) return@launch
                 val libraryRoot = librarySettings.libraryRoot.first()
                 val files = audioFileDao.findForBook(bookId)
                 val book = bookDao.findById(bookId)
@@ -81,7 +89,9 @@ class DurationEnricher @Inject constructor(
                     val measured = probe.durationMs
                     if (measured != null) {
                         audioFileDao.updateDuration(file.relativePath, measured)
-                    } else {
+                    } else if (networkMonitor.isOnline()) {
+                        // Only a negative answer we can trust: still online, so "no duration" is
+                        // about the file, not the connection.
                         audioFileDao.markDurationAttempted(file.relativePath)
                     }
                     if (genre == null) genre = probe.genre
@@ -102,7 +112,9 @@ class DurationEnricher @Inject constructor(
                 if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
                 // No genre in the tags, or the probe itself failed: settle it so the next open
                 // doesn't stream this book's first file all over again for the same answer.
-                if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
+                if (((needsGenre && genre == null) || (needsChapters && firstProbe == null)) &&
+                    networkMonitor.isOnline()
+                ) {
                     bookDao.markMetadataAttempted(bookId)
                 }
 

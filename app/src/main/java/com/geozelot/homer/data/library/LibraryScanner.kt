@@ -12,6 +12,7 @@ import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
+import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.webdav.DavResource
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.ensureActive
@@ -69,6 +70,7 @@ class LibraryScanner @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val bookmarkMetaDao: BookmarkMetaDao,
     private val downloadDao: DownloadDao,
+    private val downloadStorage: DownloadStorage,
     private val detector: BookDetector,
 ) {
     data class Result(val bookCount: Int)
@@ -146,7 +148,17 @@ class LibraryScanner @Inject constructor(
         // between them could leave books re-linked but not pruned (duplicated) or pruned but not
         // re-linked (progress orphaned). The crawl above deliberately stays outside — it is network
         // work and can take minutes.
-        db.withTransaction { applyScan(books, root, skippedRoots) }
+        // A full crawl saw the whole library, so anything unaccounted for is genuinely gone and
+        // its leftovers can be swept. An incremental scan skips unchanged subtrees and can lose a
+        // subtree to a transient server error, so it must never sweep — see applyScan.
+        val orphanedDownloads = db.withTransaction {
+            applyScan(books, root, skippedRoots, sweepOrphans = !incremental)
+        }
+        // Outside the transaction: this is storage IO, and it must not hold a write lock.
+        for (bookId in orphanedDownloads) {
+            runCatching { downloadStorage.deleteBook(bookId) }
+                .onFailure { Log.w(TAG, "could not remove downloaded files for pruned book $bookId", it) }
+        }
 
         return Result(bookDao.count())
     }
@@ -156,7 +168,8 @@ class LibraryScanner @Inject constructor(
         books: List<BookDetector.Detected>,
         root: String,
         skippedRoots: List<String>,
-    ) {
+        sweepOrphans: Boolean,
+    ): List<String> {
         // Books to keep: the (re-)built ones plus every book under an unchanged, skipped subtree.
         // Anything else is pruned (a vanished book always sits under a visited parent). Skipped
         // roots are files-root paths; book ids are library-root-relative.
@@ -220,7 +233,7 @@ class LibraryScanner @Inject constructor(
                     detected.book.copy(
                         localCoverPath = source?.localCoverPath,
                         customCoverPath = source?.customCoverPath,
-                        coverAttempted = if (uncachedFolderCover) false else source?.coverAttempted ?: false,
+                        coverAttempted = if (uncachedFolderCover) false else (source?.coverAttempted ?: false),
                         metadataAttempted = source?.metadataAttempted ?: false,
                         genre = source?.genre,
                         chapterTier = source?.chapterTier ?: detected.book.chapterTier,
@@ -258,21 +271,28 @@ class LibraryScanner @Inject constructor(
         // connected-but-empty case. A genuinely emptied library just keeps its stale rows until a
         // real crawl finds books again.
         val currentCount = bookDao.count()
+        var orphanedDownloads = emptyList<String>()
         when {
             keepIds.isNotEmpty() -> {
                 idsToPrune(bookDao.allIds(), keepIds)
                     .chunked(PRUNE_CHUNK)
                     .forEach { bookDao.deleteByIds(it) }
-                // Tables keyed by bookId without a foreign key (kept that way so a rescan can't
-                // cascade progress away) don't lose their rows with the book, and a row nothing can
-                // match is a row nothing can read either — the user's progress simply vanishes from
-                // view while still occupying the table. Sweep them here, and ONLY here: this branch
-                // is the one where the prune was judged safe, so an empty or glitchy crawl can never
-                // reach the sweep either. Bookmarks cascade via their FK.
-                playbackStateDao.deleteOrphans()
-                bookOverrideDao.deleteOrphans()
-                bookmarkMetaDao.deleteOrphans()
-                downloadDao.deleteOrphans()
+                // Rows keyed by bookId carry no foreign key on purpose, so a rescan can't cascade
+                // the user's data away — which also means a pruned book leaves them behind.
+                // Sweeping them is only safe after a FULL crawl ([sweepOrphans]): an incremental
+                // scan skips unchanged subtrees, a transient server error can silently drop one,
+                // and these rows are exactly what lets that book's progress and hand-typed
+                // corrections reattach when it comes back. Overrides especially — a title the user
+                // typed is not re-derivable from anything. Bookmarks cascade via their FK.
+                if (sweepOrphans) {
+                    // Read the ids before deleting the rows: afterwards nothing identifies the
+                    // files on disk, and they would sit there forever.
+                    orphanedDownloads = downloadDao.orphanBookIds()
+                    playbackStateDao.deleteOrphans()
+                    bookOverrideDao.deleteOrphans()
+                    bookmarkMetaDao.deleteOrphans()
+                    downloadDao.deleteOrphans()
+                }
             }
             currentCount == 0 -> Unit // already empty — nothing to prune
             else -> Log.w(
@@ -281,6 +301,7 @@ class LibraryScanner @Inject constructor(
                     "wiping the library on an empty or failed crawl",
             )
         }
+        return orphanedDownloads
     }
 
     private companion object {

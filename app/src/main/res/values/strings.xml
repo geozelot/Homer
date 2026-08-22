@@ -248,7 +248,7 @@
     <string name="set_source_other_header">OTHER LIBRARIES FOUND</string>
     <string name="set_detail_shared_index"> · shared index</string>
     <string name="set_shared_index_title">Share the library index</string>
-    <string name="set_shared_index_desc">Lets your other devices (and anyone sharing this folder) skip scanning and re-fetching cover art. Contains only library structure — no personal data, and never your listening position.</string>
+    <string name="set_shared_index_desc">Lets your other devices — and anyone else reading this folder — skip scanning and re-fetching cover art, and shares the titles, authors and series you correct so nobody has to fix them twice. Library details only: never your listening position, bookmarks or hidden books.</string>
     <string name="set_shared_index_state_reading">Reading the index in this folder, so this device doesn\'t have to scan.</string>
     <string name="set_shared_index_state_publishing">Writing the index to this folder, so your other devices don\'t have to scan.</string>
     <string name="set_shared_index_state_off">Every device scans the library and builds its own cover art.</string>
