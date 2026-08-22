@@ -27,6 +27,7 @@
     <string name="time_left">%1$s left</string>
     <string name="chapter_numbered">Chapter %1$d</string>
     <string name="menu_offline">Offline</string>
+    <string name="menu_offline_series">Offline · all episodes</string>
 
     <!-- Login -->
     <string name="login_subtitle">Connect your Nextcloud</string>

@@ -507,6 +507,10 @@ class HomeViewModel @Inject constructor(
 
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
+
+    /** Take a whole series offline (or drop it) — the series menu's one switch. */
+    fun downloadAll(bookIds: List<String>) = bookIds.forEach(downloadManager::download)
+    fun deleteDownloads(bookIds: List<String>) = bookIds.forEach(downloadManager::delete)
     fun pauseDownload(bookId: String) = downloadManager.pause(bookId)
     fun resumeDownload(bookId: String) = downloadManager.resume(bookId)
     fun setWifiOnlyDownloads(value: Boolean) {

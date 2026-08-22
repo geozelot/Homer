@@ -187,6 +187,8 @@ fun HomeScreen(
             onSetHidden = viewModel::setHidden,
             onMarkCompleted = viewModel::markCompleted,
             onEditSeries = { editingSeriesKey = it.expandKey },
+            onDownloadSeries = { series -> viewModel.downloadAll(series.books.map { it.id }) },
+            onRemoveSeries = { series -> viewModel.deleteDownloads(series.books.map { it.id }) },
             onPause = viewModel::pauseDownload,
             onResume = viewModel::resumeDownload,
         )
@@ -390,6 +392,8 @@ private class BookActions(
     val onSetHidden: (String, Boolean) -> Unit,
     val onMarkCompleted: (String) -> Unit,
     val onEditSeries: (LibraryEntry.Series) -> Unit,
+    val onDownloadSeries: (LibraryEntry.Series) -> Unit,
+    val onRemoveSeries: (LibraryEntry.Series) -> Unit,
     val onPause: (String) -> Unit,
     val onResume: (String) -> Unit,
 )
@@ -611,7 +615,7 @@ private fun LazyGridScope.libraryContent(
                             SeriesGridCard(
                                 series = entry,
                                 onOpen = { open(entry) },
-                                onEdit = { actions.onEditSeries(entry) },
+                                actions = actions,
                             )
                         }
                     }
@@ -624,7 +628,7 @@ private fun LazyGridScope.libraryContent(
                             series = entry,
                             expanded = shelfOpen,
                             onToggle = { if (shelfOpen) close(entry) else open(entry) },
-                            onEdit = { actions.onEditSeries(entry) },
+                            actions = actions,
                         )
                     }
                     if (shelfOpen) {
@@ -991,36 +995,66 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                     modifier = Modifier.align(Alignment.BottomStart).padding(7.dp),
                 )
             }
+        }
+        Box {
+            GridCardText(title = book.title, meta = bookCardMeta(book, LocalContext.current)) {
+                menuOpen = true
+            }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
-        GridCardText(title = book.title, meta = bookCardMeta(book, LocalContext.current))
     }
 }
 
-/** Title (2 reserved lines) + meta (2 reserved lines) — a fixed-height block so every grid
- *  card (book or series) is exactly the same total height and their bottoms line up. */
+/**
+ * Title (2 reserved lines) + meta (2 reserved lines) beside an overflow button — a fixed-height
+ * block, so every grid card (book or series) is exactly the same total height and their bottoms
+ * line up.
+ *
+ * The button is 32dp wide rather than the usual 48: a grid cell is only about 100dp across, and a
+ * square target would take half of it away from the title. It is a full 48dp tall, the tap targets
+ * either side of it are other cards 12dp away, and long-pressing the card still opens the same
+ * menu — so the compromise is horizontal only and the affordance is reachable two ways.
+ */
 @Composable
-private fun GridCardText(title: String, meta: String) {
-    Text(
-        title,
-        color = Parchment,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        lineHeight = 13.sp,
-        minLines = 2,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-    Text(
-        meta,
-        color = Muted,
-        fontSize = 10.sp,
-        lineHeight = 13.sp,
-        minLines = 2,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-    )
+private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                color = Parchment,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 13.sp,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(
+                meta,
+                color = Muted,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .sizeIn(minWidth = 32.dp, minHeight = 48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onMenu),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.action_more),
+                tint = Faint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
 }
 
 private fun bookCardMeta(book: BookListItem, context: android.content.Context): String = buildString {
@@ -1036,11 +1070,16 @@ private const val STACK_SPREAD = 0.18f
 /** A series as a grid cell the same size as a book card: a diagonal stack filling the cell. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit, onEdit: () -> Unit) {
+private fun SeriesGridCard(
+    series: LibraryEntry.Series,
+    onOpen: () -> Unit,
+    actions: BookActions,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onOpen, onLongClick = onEdit),
+            .combinedClickable(onClick = onOpen, onLongClick = { menuOpen = true }),
     ) {
         BoxWithConstraints(
             modifier = Modifier
@@ -1075,7 +1114,12 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit, onEd
                 )
             }
         }
-        GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current))
+        Box {
+            GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current)) {
+                menuOpen = true
+            }
+            SeriesMenu(series, menuOpen, actions) { menuOpen = false }
+        }
     }
 }
 
@@ -1319,8 +1363,9 @@ private fun SeriesShelfRow(
     series: LibraryEntry.Series,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onEdit: () -> Unit,
+    actions: BookActions,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1344,7 +1389,7 @@ private fun SeriesShelfRow(
                         .background(Surface1)
                 },
             )
-            .combinedClickable(onClick = onToggle, onLongClick = onEdit)
+            .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true })
             .padding(
                 start = SeriesListEnclosurePad,
                 end = SeriesListEnclosurePad,
@@ -1355,6 +1400,15 @@ private fun SeriesShelfRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The disclosure arrow leads the row so the overflow button can hold the trailing edge,
+        // where every book row already keeps its own — the two line up down the right-hand side
+        // instead of a series putting a chevron where a book puts its menu.
+        Icon(
+            imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
+            tint = Faint,
+            modifier = Modifier.padding(end = 4.dp),
+        )
         // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
         Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
             series.books.take(3).forEachIndexed { i, book ->
@@ -1385,11 +1439,12 @@ private fun SeriesShelfRow(
                 fontSize = 11.5.sp,
             )
         }
-        Icon(
-            imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
-            tint = Faint,
-        )
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
+            }
+            SeriesMenu(series, menuOpen, actions) { menuOpen = false }
+        }
     }
 }
 
@@ -1533,6 +1588,54 @@ private fun BookMenu(
                 onClick = { actions.onResume(book.id); onDismiss() },
             )
         }
+    }
+}
+
+/**
+ * The series counterpart of [BookMenu]: rename the series, or take the whole thing offline.
+ *
+ * The offline switch reads as on once ANY episode is downloading or downloaded, matching how a
+ * book's own switch reads its single download row — a half-downloaded series is "offline, still
+ * working" rather than a third state. Flipping it on downloads every episode that isn't already
+ * queued; flipping it off drops all of them.
+ */
+@Composable
+private fun SeriesMenu(
+    series: LibraryEntry.Series,
+    expanded: Boolean,
+    actions: BookActions,
+    onDismiss: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.action_edit)) },
+            leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
+            onClick = { actions.onEditSeries(series); onDismiss() },
+        )
+
+        HorizontalDivider()
+
+        val offlineEnabled = series.books.any { it.downloadStatus != null }
+        val downloading = series.books.any { DownloadStatus.isActive(it.downloadStatus) }
+        val allDownloaded = series.books.all { it.isDownloaded }
+        val toggle = {
+            if (offlineEnabled) actions.onRemoveSeries(series) else actions.onDownloadSeries(series)
+            onDismiss()
+        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_offline_series)) },
+            leadingIcon = {
+                Icon(Icons.Filled.Download, null, tint = if (allDownloaded) Sage else Muted)
+            },
+            trailingIcon = {
+                if (downloading) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Amber, strokeWidth = 2.dp)
+                } else {
+                    HomerSwitch(checked = offlineEnabled, onCheckedChange = { toggle() })
+                }
+            },
+            onClick = toggle,
+        )
     }
 }
 
