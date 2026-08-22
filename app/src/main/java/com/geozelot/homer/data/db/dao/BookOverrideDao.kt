@@ -29,6 +29,10 @@ interface BookOverrideDao {
     @Query("UPDATE book_overrides SET bookId = :newId WHERE bookId = :oldId")
     suspend fun relink(oldId: String, newId: String)
 
+    /** Drops overrides for books that are no longer indexed (no FK here, so a prune orphans them). */
+    @Query("DELETE FROM book_overrides WHERE bookId NOT IN (SELECT id FROM books)")
+    suspend fun deleteOrphans()
+
     @Upsert
     suspend fun upsert(override: BookOverrideEntity)
 }

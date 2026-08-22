@@ -1,18 +1,41 @@
 package com.geozelot.homer.data.library
 
 import android.util.Log
+import androidx.room.withTransaction
+import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
+import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
+
+/**
+ * Books to remove after a scan: everything indexed that the scan didn't account for. The prune has
+ * to be expressed this way round — a single `DELETE … WHERE id NOT IN (:keepIds)` binds one SQL
+ * host parameter per kept id and blows SQLite's 999-parameter cap on any real library, aborting the
+ * prune entirely. The delete list is then chunked instead.
+ */
+internal fun idsToPrune(allIds: Collection<String>, keepIds: Set<String>): List<String> =
+    allIds.filterNot { it in keepIds }
+
+/**
+ * Rewrites a saved chapter path for a book that moved from [oldId] to [newId]. `currentMediaId` is
+ * `‹bookId›/‹file›`, so re-pointing only the row's `bookId` leaves the path at the old folder and
+ * the saved chapter can no longer be resolved. Unrelated paths are returned unchanged.
+ */
+internal fun relinkMediaId(mediaId: String, oldId: String, newId: String): String = when {
+    mediaId == oldId -> newId
+    mediaId.startsWith("$oldId/") -> newId + mediaId.removePrefix(oldId)
+    else -> mediaId
+}
 
 /** Coarse progress/result of a library scan, surfaced to the UI. */
 sealed interface ScanState {
@@ -35,6 +58,7 @@ sealed interface ScanState {
  * trusted. Cancellable between directories.
  */
 class LibraryScanner @Inject constructor(
+    private val db: HomerDatabase,
     private val webDavClient: WebDavClient,
     private val bookDao: BookDao,
     private val audioFileDao: AudioFileDao,
@@ -43,6 +67,7 @@ class LibraryScanner @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val bookmarkDao: BookmarkDao,
     private val bookmarkMetaDao: BookmarkMetaDao,
+    private val downloadDao: DownloadDao,
     private val detector: BookDetector,
 ) {
     data class Result(val bookCount: Int)
@@ -108,6 +133,22 @@ class LibraryScanner @Inject constructor(
 
         val books = detector.buildBooks(audioFolders, root, now)
 
+        // Everything past this point mutates the index, and it belongs together: the upserts, the
+        // moved-book re-links and the prune used to be independent writes, so a process death
+        // between them could leave books re-linked but not pruned (duplicated) or pruned but not
+        // re-linked (progress orphaned). The crawl above deliberately stays outside — it is network
+        // work and can take minutes.
+        db.withTransaction { applyScan(books, root, skippedRoots) }
+
+        return Result(bookDao.count())
+    }
+
+    /** The database half of a scan: carry-over upserts, moved-book re-links, prune, orphan sweep. */
+    private suspend fun applyScan(
+        books: List<BookDetector.Detected>,
+        root: String,
+        skippedRoots: List<String>,
+    ) {
         // Books to keep: the (re-)built ones plus every book under an unchanged, skipped subtree.
         // Anything else is pruned (a vanished book always sits under a visited parent). Skipped
         // roots are files-root paths; book ids are library-root-relative.
@@ -142,13 +183,19 @@ class LibraryScanner @Inject constructor(
             // the old (pre-move) row, and durations match by file name since the path changed.
             val movedOldId = movedFrom[detected.book.id]
             val source = bookDao.findById(detected.book.id) ?: movedOldId?.let { bookDao.findById(it) }
-            val existingDurations = audioFileDao.findForBook(detected.book.id)
-                .associate { it.relativePath to it.durationMs }
-            val movedDurations = movedOldId
-                ?.let { old -> audioFileDao.findForBook(old).associate { it.fileName to it.durationMs } }
+            val existingFiles = audioFileDao.findForBook(detected.book.id).associateBy { it.relativePath }
+            val movedFiles = movedOldId
+                ?.let { old -> audioFileDao.findForBook(old).associateBy { it.fileName } }
                 ?: emptyMap()
-            val files = detected.files.map {
-                it.copy(durationMs = it.durationMs ?: existingDurations[it.relativePath] ?: movedDurations[it.fileName])
+            val files = detected.files.map { file ->
+                val atPath = existingFiles[file.relativePath]
+                val moved = movedFiles[file.fileName]
+                file.copy(
+                    durationMs = file.durationMs ?: atPath?.durationMs ?: moved?.durationMs,
+                    // Carried like the durations themselves: dropping it would make an ordinary
+                    // rescan re-probe every file that has already proven unmeasurable.
+                    durationAttempted = atPath?.durationAttempted ?: moved?.durationAttempted ?: false,
+                )
             }
             // Recompute the total from the current file set so removed/added files stay correct.
             val total = if (files.isNotEmpty() && files.all { it.durationMs != null }) {
@@ -162,6 +209,7 @@ class LibraryScanner @Inject constructor(
                         localCoverPath = source?.localCoverPath,
                         customCoverPath = source?.customCoverPath,
                         coverAttempted = source?.coverAttempted ?: false,
+                        metadataAttempted = source?.metadataAttempted ?: false,
                         genre = source?.genre,
                         chapterTier = source?.chapterTier ?: detected.book.chapterTier,
                         totalDurationMs = total,
@@ -177,7 +225,14 @@ class LibraryScanner @Inject constructor(
         // otherwise cascade away with them). Downloads are intentionally not re-linked: their bytes
         // on disk are keyed by the old relative path, so a moved book cleanly re-downloads.
         for ((newId, oldId) in movedFrom) {
+            // The saved chapter path has to follow the id, or the resumed position can't be
+            // resolved to a file any more (see [relinkMediaId]). Read it before the row moves.
+            val savedMediaId = playbackStateDao.findByBookId(oldId)?.currentMediaId
             playbackStateDao.relink(oldId, newId)
+            savedMediaId?.let { old ->
+                val rewritten = relinkMediaId(old, oldId, newId)
+                if (rewritten != old) playbackStateDao.updateCurrentMediaId(newId, rewritten)
+            }
             bookOverrideDao.relink(oldId, newId)
             bookmarkMetaDao.relink(oldId, newId)
             bookmarkDao.relink(oldId, newId)
@@ -190,10 +245,23 @@ class LibraryScanner @Inject constructor(
         // is already safe (PROPFIND throws and aborts the scan before this point); this guards the
         // connected-but-empty case. A genuinely emptied library just keeps its stale rows until a
         // real crawl finds books again.
-        val keepList = keepIds.toList()
         val currentCount = bookDao.count()
         when {
-            keepList.isNotEmpty() -> bookDao.deleteMissing(keepList)
+            keepIds.isNotEmpty() -> {
+                idsToPrune(bookDao.allIds(), keepIds)
+                    .chunked(PRUNE_CHUNK)
+                    .forEach { bookDao.deleteByIds(it) }
+                // Tables keyed by bookId without a foreign key (kept that way so a rescan can't
+                // cascade progress away) don't lose their rows with the book, and a row nothing can
+                // match is a row nothing can read either — the user's progress simply vanishes from
+                // view while still occupying the table. Sweep them here, and ONLY here: this branch
+                // is the one where the prune was judged safe, so an empty or glitchy crawl can never
+                // reach the sweep either. Bookmarks cascade via their FK.
+                playbackStateDao.deleteOrphans()
+                bookOverrideDao.deleteOrphans()
+                bookmarkMetaDao.deleteOrphans()
+                downloadDao.deleteOrphans()
+            }
             currentCount == 0 -> Unit // already empty — nothing to prune
             else -> Log.w(
                 TAG,
@@ -201,11 +269,12 @@ class LibraryScanner @Inject constructor(
                     "wiping the library on an empty or failed crawl",
             )
         }
-
-        return Result(bookDao.count())
     }
 
     private companion object {
+        /** Ids per DELETE — one SQL host parameter each, well under SQLite's 999 cap. */
+        const val PRUNE_CHUNK = 500
+
         const val TAG = "HomerScan"
     }
 }

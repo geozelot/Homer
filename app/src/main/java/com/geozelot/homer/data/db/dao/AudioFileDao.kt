@@ -22,6 +22,14 @@ interface AudioFileDao {
     @Query("UPDATE audio_files SET durationMs = :durationMs WHERE relativePath = :relativePath")
     suspend fun updateDuration(relativePath: String, durationMs: Long)
 
+    /** Records a fruitless duration probe, so this file isn't re-streamed on every book open. */
+    @Query("UPDATE audio_files SET durationAttempted = 1 WHERE relativePath = :relativePath")
+    suspend fun markDurationAttempted(relativePath: String)
+
+    /** Re-arms duration probing (a full refresh — the user's way to retry a failed probe). */
+    @Query("UPDATE audio_files SET durationAttempted = 0")
+    suspend fun resetDurationAttempted()
+
     @Upsert
     suspend fun upsert(files: List<AudioFileEntity>)
 

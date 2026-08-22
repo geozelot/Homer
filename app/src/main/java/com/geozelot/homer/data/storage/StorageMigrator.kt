@@ -53,6 +53,15 @@ class StorageMigrator @Inject constructor(
         if (sourceUri == targetUri) return // same location — nothing to move
         val source = storageLocation.areaFor(sourceUri)
         val target = storageLocation.areaFor(targetUri)
+        // Unequal tokens can still address the SAME physical directory (an all-files path and a SAF
+        // tree over it, or two spellings of one path), and migrating a folder onto itself destroys
+        // data: copyThenDeleteSource either skips the copy because `target.exists` is trivially true
+        // and then deletes the source — the only copy — or, with overwrite, truncates the file it is
+        // reading. Nothing to move in that case anyway, so bail out.
+        if (areasAlias(source, target)) {
+            Log.w(TAG, "migration skipped: source and target resolve to the same folder")
+            return
+        }
 
         try {
             // Enumerate the work from Room: existing download files, then covers.
@@ -126,6 +135,32 @@ class StorageMigrator @Inject constructor(
             throw e
         } finally {
             _progress.value = null
+        }
+    }
+
+    /**
+     * Whether [source] and [target] are the same physical directory.
+     *
+     * Declared identities settle the same-backend case cheaply. They can't settle a cross-backend
+     * alias (a canonical path never equals a SAF tree Uri), so that case is decided empirically:
+     * write a uniquely-named marker through [source] and see whether it shows up through [target].
+     * The name is random, so a hit can only mean one directory. If the marker can't be written we
+     * can't tell — treat the areas as distinct and let the copy-verify-delete logic proceed.
+     */
+    private suspend fun areasAlias(source: StorageArea, target: StorageArea): Boolean {
+        val sourceId = source.identity()
+        val targetId = target.identity()
+        if (sourceId != null && sourceId == targetId) return true
+
+        val probe = ".homer-migrate-probe-${java.util.UUID.randomUUID()}"
+        return try {
+            source.write(probe, ByteArray(0))
+            target.exists(probe)
+        } catch (e: Exception) {
+            Log.w(TAG, "could not probe for a source/target alias", e)
+            false
+        } finally {
+            runCatching { source.delete(probe) }
         }
     }
 

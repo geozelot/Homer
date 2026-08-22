@@ -1,8 +1,11 @@
 package com.geozelot.homer.data.settings
 
 import android.content.Context
+import android.util.Log
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -14,7 +17,22 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.settingsDataStore by preferencesDataStore(name = "homer_settings")
+/**
+ * Shared by [LibrarySettings] and [PlaybackSettings] (one file, one instance — DataStore throws if
+ * the same file is opened twice).
+ *
+ * A truncated write (power loss, a kill mid-flush) leaves the preferences file unreadable, and
+ * without a corruption handler every single read throws for good — the app can never start again.
+ * Resetting to defaults loses only preferences (the library, positions and bookmarks live in Room),
+ * so recovering is strictly better than being permanently unlaunchable.
+ */
+private val Context.settingsDataStore by preferencesDataStore(
+    name = "homer_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        Log.w("HomerSettings", "settings file was corrupt; reset to defaults", it)
+        emptyPreferences()
+    },
+)
 
 /**
  * Non-secret app settings, persisted with DataStore. Covers the library root (the WebDAV folder,
@@ -90,6 +108,18 @@ class LibrarySettings @Inject constructor(
 
     suspend fun setLastPushedRevision(value: Long) {
         context.settingsDataStore.edit { it[KEY_LAST_PUSHED_REVISION] = value }
+    }
+
+    /**
+     * ETag of the shared cover folder the last time every art-less book was swept against it.
+     * While it's unchanged, a re-sweep cannot find anything new, so the pass skips ~one request
+     * per art-less book.
+     */
+    val lastCoverSweepEtag: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_LAST_COVER_SWEEP_ETAG] }
+
+    suspend fun setLastCoverSweepEtag(value: String) {
+        context.settingsDataStore.edit { it[KEY_LAST_COVER_SWEEP_ETAG] = value }
     }
 
     /** Set once the one-time legacy-manifest migration has been checked, so it stops re-probing. */
@@ -195,6 +225,7 @@ class LibrarySettings @Inject constructor(
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
         val KEY_LAST_PUSHED_REVISION = longPreferencesKey("sync_last_pushed_revision")
         val KEY_LEGACY_MANIFEST_MIGRATED = booleanPreferencesKey("sync_legacy_manifest_migrated")
+        val KEY_LAST_COVER_SWEEP_ETAG = stringPreferencesKey("last_cover_sweep_etag")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")

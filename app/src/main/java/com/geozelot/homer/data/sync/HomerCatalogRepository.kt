@@ -7,6 +7,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.ChapterTier
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
@@ -168,7 +169,7 @@ class HomerCatalogRepository @Inject constructor(
             for ((id, cb) in catalog.books) {
                 val local = bookDao.findById(id)
                 if (local != null && local.updatedAt >= cb.updatedAt) continue
-                bookDao.upsert(listOf(cb.toBook(id)))
+                bookDao.upsert(listOf(cb.toBook(id, local)))
                 audioFileDao.deleteForBook(id)
                 audioFileDao.upsert(cb.files.map { it.toEntity(id) })
                 applied++
@@ -195,6 +196,7 @@ class HomerCatalogRepository @Inject constructor(
                 series = eff.series,
                 seriesIndex = eff.seriesIndex,
                 genre = eff.genre,
+                contentHash = book.contentHash,
                 coverFilePath = eff.coverFilePath,
                 hasCachedCover = book.localCoverPath != null,
                 totalDurationMs = eff.totalDurationMs,
@@ -263,10 +265,20 @@ class HomerCatalogRepository @Inject constructor(
         webDavClient.mkcol(catalogDir())
     }
 
-    private fun CatalogBook.toBook(id: String): BookEntity {
+    /**
+     * The shared catalog carries the *library's* view of a book, not this device's. Everything
+     * device-local — where the cover bytes are cached, the user's chosen cover, and what has already
+     * been probed — is therefore carried over from [local] rather than written as null: this row is
+     * upserted straight over the existing one, so blanking those fields drops the cached cover
+     * pointers and re-arms probes that already ran. [contentHash] falls back to the local value for
+     * catalogs written by an older build that didn't publish it; losing it would permanently break
+     * move/rename re-linking for this book.
+     */
+    private fun CatalogBook.toBook(id: String, local: BookEntity?): BookEntity {
         val now = System.currentTimeMillis()
         return BookEntity(
             id = id,
+            contentHash = contentHash ?: local?.contentHash,
             title = title,
             author = author,
             series = series,
@@ -274,12 +286,16 @@ class HomerCatalogRepository @Inject constructor(
             genre = genre,
             relativePath = id,
             coverFilePath = coverFilePath,
-            localCoverPath = null,
-            chapterTier = 0, // undetermined; the consuming device doesn't re-derive chapters
+            localCoverPath = local?.localCoverPath,
+            customCoverPath = local?.customCoverPath,
+            coverAttempted = local?.coverAttempted ?: false,
+            metadataAttempted = local?.metadataAttempted ?: false,
+            // The consuming device doesn't re-derive chapters, so keep whatever it worked out itself.
+            chapterTier = local?.chapterTier ?: ChapterTier.UNDETERMINED,
             isMultiFile = isMultiFile,
             fileCount = files.size,
             totalDurationMs = totalDurationMs,
-            addedAt = now,
+            addedAt = local?.addedAt ?: now,
             updatedAt = updatedAt.takeIf { it > 0 } ?: now,
         )
     }

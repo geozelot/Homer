@@ -61,6 +61,14 @@ interface BookDao {
     @Query("UPDATE books SET localCoverPath = NULL, coverAttempted = 0")
     suspend fun resetCoverArt()
 
+    /** Marks a book's tag/chapter probe as tried and fruitless, so it isn't repeated on every open. */
+    @Query("UPDATE books SET metadataAttempted = 1 WHERE id = :bookId")
+    suspend fun markMetadataAttempted(bookId: String)
+
+    /** Re-arms the tag/chapter probe (a full refresh — the user's way to retry a failed probe). */
+    @Query("UPDATE books SET metadataAttempted = 0")
+    suspend fun resetMetadataAttempted()
+
     /** Re-arms cover enrichment for books that still have no art (e.g. after enabling online
      *  lookup), without disturbing books that already have a cover. */
     @Query("UPDATE books SET coverAttempted = 0 WHERE localCoverPath IS NULL AND coverFilePath IS NULL")
@@ -79,10 +87,17 @@ interface BookDao {
     @Query("SELECT id FROM books WHERE id = :path OR id LIKE :path || '/%'")
     suspend fun idsUnder(path: String): List<String>
 
+    @Query("SELECT id FROM books")
+    suspend fun allIds(): List<String>
+
     @Upsert
     suspend fun upsert(books: List<BookEntity>)
 
-    /** Removes books whose folders no longer exist (ids not seen in the latest scan). */
-    @Query("DELETE FROM books WHERE id NOT IN (:keepIds)")
-    suspend fun deleteMissing(keepIds: List<String>)
+    /**
+     * Removes the given books (folders no longer present). Callers must chunk: every id is one SQL
+     * host parameter and SQLite caps those at 999 — which is why the prune can't be expressed as a
+     * single `NOT IN (:keepIds)` over a whole library (see [allIds] and `LibraryScanner`).
+     */
+    @Query("DELETE FROM books WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }

@@ -29,6 +29,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -154,6 +155,9 @@ class PlaybackConnection @Inject constructor(
     /** A play tap that arrived while a book switch was still loading; honoured once the queue is ready. */
     @Volatile
     private var pendingPlay = false
+
+    /** In-flight sleep-timer volume ramp, so a manual play/pause can cancel it. */
+    private var fadeJob: Job? = null
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -383,6 +387,9 @@ class PlaybackConnection @Inject constructor(
 
     fun playPause() {
         val c = controller ?: return
+        // Any manual transport input ends a sleep fade: otherwise the ramp keeps running and
+        // pauses the user again seconds after they pressed play.
+        cancelFade()
         if (c.isPlaying) {
             c.pause()
             return
@@ -483,10 +490,17 @@ class PlaybackConnection @Inject constructor(
 
     fun cancelSleepTimer() = sleepTimer.cancel()
 
-    /** Ramps the volume down over the configured seconds, then pauses (0 = pause abruptly). */
+    /**
+     * Ramps the volume down over the configured seconds, then pauses (0 = pause abruptly).
+     *
+     * Tracked so it can be cancelled: if the user hits play during the fade, an unowned ramp would
+     * keep going and force-pause them a moment later — with the volume left part-way down. The
+     * `finally` restores full volume however the ramp ends.
+     */
     private fun fadeOutAndPause() {
         val c = controller ?: return
-        scope.launch {
+        fadeJob?.cancel()
+        fadeJob = scope.launch {
             val fadeMs = playbackSettings.sleepFadeOutSeconds.first() * 1000L
             if (fadeMs <= 0L) {
                 c.pause()
@@ -494,13 +508,23 @@ class PlaybackConnection @Inject constructor(
             }
             val steps = 20
             val stepMs = (fadeMs / steps).coerceAtLeast(10L)
-            for (i in steps - 1 downTo 0) {
-                c.volume = i / steps.toFloat()
-                delay(stepMs)
+            try {
+                for (i in steps - 1 downTo 0) {
+                    c.volume = i / steps.toFloat()
+                    delay(stepMs)
+                }
+                c.pause()
+            } finally {
+                c.volume = 1f // restore so the next play starts at full volume
             }
-            c.pause()
-            c.volume = 1f // restore so the next play starts at full volume
         }
+    }
+
+    /** Cancels an in-flight sleep fade and restores the volume — any manual transport input. */
+    private fun cancelFade() {
+        fadeJob?.cancel()
+        fadeJob = null
+        controller?.volume = 1f
     }
 
     /** Applies the user's shake-to-extend preference to the running countdown. */
@@ -598,10 +622,13 @@ class PlaybackConnection @Inject constructor(
                 .setListener(object : MediaController.Listener {
                     override fun onDisconnected(controller: MediaController) {
                         // Session/service went away — drop the stale controller so the position
-                        // loop stops and the next playBook reconnects fresh.
+                        // loop stops and the next playBook reconnects fresh. Release it as well:
+                        // dropping the reference alone leaks its binder connection and listener.
                         if (this@PlaybackConnection.controller === controller) {
                             this@PlaybackConnection.controller = null
                         }
+                        controller.removeListener(listener)
+                        runCatching { controller.release() }
                     }
                 })
                 .buildAsync()

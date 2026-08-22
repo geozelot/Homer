@@ -49,6 +49,14 @@ interface StorageArea {
 
     /** Deletes files directly inside [dirRel] whose name starts with [namePrefix]. */
     suspend fun deleteMatching(dirRel: String, namePrefix: String)
+
+    /**
+     * A stable string identifying the *root* this area writes to, or null if it can't be
+     * determined. Only comparable between areas of the same backend (a canonical filesystem path
+     * and a SAF tree Uri never match even when they address the same directory), so a cross-backend
+     * comparison needs the probe in `StorageMigrator`.
+     */
+    suspend fun identity(): String?
 }
 
 /**
@@ -122,4 +130,9 @@ class FileStorageArea(private val root: File, private val sanitize: Boolean = fa
             file(dirRel).listFiles { f -> f.name.startsWith(namePrefix) }?.forEach { it.delete() }
         }
     }
+
+    // Canonical, so two tokens for the same directory (a symlinked /sdcard vs
+    // /storage/emulated/0 prefix, a `.` segment) resolve to one identity.
+    override suspend fun identity(): String? =
+        withContext(Dispatchers.IO) { runCatching { root.canonicalPath }.getOrNull() }
 }

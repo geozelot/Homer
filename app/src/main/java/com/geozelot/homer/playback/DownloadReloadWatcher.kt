@@ -4,6 +4,7 @@ import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 
 /**
@@ -19,8 +20,12 @@ class DownloadReloadWatcher(
 
     /** (Re)starts watching [bookId]; [isOffline] reports the currently-loaded source. */
     fun watch(bookId: String, isOffline: () -> Boolean, onSourceFlip: suspend () -> Unit) {
-        job?.cancel()
+        val previous = job
         job = scope.launch {
+            // Await the previous collector's cancellation before starting: `cancel()` alone only
+            // requests it, so two collectors could briefly overlap and each fire onSourceFlip —
+            // two setMediaItems() calls back to back on a rapid re-watch.
+            previous?.cancelAndJoin()
             downloadDao.observeByBookId(bookId).collect { download ->
                 val nowOffline = download?.status == DownloadStatus.DONE
                 if (nowOffline != isOffline()) onSourceFlip()

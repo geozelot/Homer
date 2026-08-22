@@ -1,5 +1,6 @@
 package com.geozelot.homer.data.library
 
+import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.settings.LibrarySettings
@@ -21,13 +22,22 @@ class LibraryRepository @Inject constructor(
     private val scanner: LibraryScanner,
     private val librarySettings: LibrarySettings,
     private val bookDao: BookDao,
+    private val audioFileDao: AudioFileDao,
 ) {
     val books: Flow<List<BookEntity>> = bookDao.observeAll()
     val bookCount: Flow<Int> = bookDao.observeCount()
     val libraryRoot: Flow<String> = librarySettings.libraryRoot
 
-    /** Clears cached cover art + the attempted flag so a cover pass re-fetches everything. */
-    suspend fun resetCoverArt() = bookDao.resetCoverArt()
+    /**
+     * Clears cached cover art and every "already attempted" probe flag, so a refresh re-fetches
+     * covers and re-measures the files and tags whose earlier probe came up empty. This is the only
+     * way back for those: once a probe is recorded as fruitless it is never retried on its own.
+     */
+    suspend fun resetEnrichment() {
+        bookDao.resetCoverArt()
+        bookDao.resetMetadataAttempted()
+        audioFileDao.resetDurationAttempted()
+    }
 
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()

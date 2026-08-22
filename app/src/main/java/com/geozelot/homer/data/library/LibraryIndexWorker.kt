@@ -43,8 +43,9 @@ class LibraryIndexWorker @AssistedInject constructor(
         ensureChannel()
 
         try {
-            // Full re-scan / refresh: clear cached art + attempted flags so covers re-fetch.
-            if (resetCovers) libraryRepository.resetCoverArt()
+            // Full re-scan / refresh: clear cached art + every attempted flag, so covers re-fetch
+            // and durations/tags that failed to probe once get another chance.
+            if (resetCovers) libraryRepository.resetEnrichment()
 
             if (doScan) {
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
@@ -54,8 +55,17 @@ class LibraryIndexWorker @AssistedInject constructor(
                 return Result.success()
             }
 
+            // Throttle the notification: one update per book overran Android's ~5/s notify budget on
+            // a large library, so the framework shed the updates and flooded the log with
+            // "rate limit exceeded" instead of showing progress. Once a second is plenty for a
+            // progress bar, and the final call always lands so it never ends mid-way.
+            var lastNotifyMs = 0L
             coverEnricher.enrich { done, total ->
-                setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                val now = System.currentTimeMillis()
+                if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
+                    lastNotifyMs = now
+                    setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                }
             }
 
             // Shared catalog: publish the freshly-scanned catalog (owner-gated creation, open updates).
@@ -114,5 +124,8 @@ class LibraryIndexWorker @AssistedInject constructor(
         private const val TAG = "HomerScan"
         private const val CHANNEL_ID = "library"
         private const val NOTIF_ID = 42
+
+        /** Minimum gap between progress notifications (the platform sheds updates above ~5/s). */
+        private const val PROGRESS_NOTIFY_INTERVAL_MS = 1_000L
     }
 }

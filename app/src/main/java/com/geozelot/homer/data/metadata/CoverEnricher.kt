@@ -40,9 +40,24 @@ class CoverEnricher @Inject constructor(
         val libraryRoot = librarySettings.libraryRoot.first()
         val sharedCatalog = librarySettings.sharedCatalogEnabled.first()
         val onlineLookup = librarySettings.onlineCoverLookup.first()
-        // With the shared catalog on, consider every art-less book (even ones a prior local
-        // extraction gave up on) so the shared cache is always tried; otherwise only fresh books.
-        val books = if (sharedCatalog) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
+
+        // With the shared cache on we want to retry books a local extraction gave up on, because
+        // another device may have published their art since. But re-probing every art-less book on
+        // every pass costs one request per book — 330 round trips on a large library, every time.
+        // The shared cover folder's collection ETag changes when anything is added to it, so one
+        // PROPFIND tells us whether a full sweep could possibly find anything new. No folder (or an
+        // unchanged one) means there is nothing to gain, and we fall back to fresh books only.
+        val sweepShared = if (sharedCatalog) {
+            val etag = runCatching {
+                webDavClient.propfind(sharedCoverDir(libraryRoot), depth = 0).firstOrNull()?.etag
+            }.getOrNull()
+            val changed = etag != null && etag != librarySettings.lastCoverSweepEtag.first()
+            if (changed) librarySettings.setLastCoverSweepEtag(etag!!)
+            changed
+        } else {
+            false
+        }
+        val books = if (sweepShared) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
         val total = books.size
         if (total == 0) return
         Log.i(TAG, "enriching covers for $total books")
@@ -54,7 +69,7 @@ class CoverEnricher @Inject constructor(
             // the art by streaming the first file.
             if (sharedCatalog) {
                 val cached = runCatching {
-                    webDavClient.getBytes("$libraryRoot/.homer/covers/${coverCache.coverName(book.id)}")
+                    webDavClient.getBytes("${sharedCoverDir(libraryRoot)}/${coverCache.coverName(book.id)}")
                 }.getOrNull()
                 if (cached != null) {
                     bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
@@ -111,6 +126,9 @@ class CoverEnricher @Inject constructor(
     /** Joins the (possibly empty) library root with a library-relative path for a files-root call. */
     private fun joinPath(libraryRoot: String, relativePath: String): String =
         if (libraryRoot.isBlank()) relativePath else "${libraryRoot.trimEnd('/')}/$relativePath"
+
+    /** The shared cover cache folder at the library root. */
+    private fun sharedCoverDir(libraryRoot: String): String = joinPath(libraryRoot, ".homer/covers")
 
     private companion object {
         const val TAG = "HomerMeta"

@@ -26,4 +26,8 @@ interface DownloadDao {
 
     @Query("DELETE FROM downloads")
     suspend fun deleteAll()
+
+    /** Drops download state for books that are no longer indexed (no FK here, so a prune orphans it). */
+    @Query("DELETE FROM downloads WHERE bookId NOT IN (SELECT id FROM books)")
+    suspend fun deleteOrphans()
 }

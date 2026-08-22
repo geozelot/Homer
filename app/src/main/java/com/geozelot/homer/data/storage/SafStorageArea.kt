@@ -163,6 +163,9 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
         }
     }
 
+    /** The tree's own document Uri — one string per picked folder, regardless of how it was picked. */
+    override suspend fun identity(): String? = rootUri.toString()
+
     private companion object {
         const val TAG = "HomerStore"
     }

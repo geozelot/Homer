@@ -32,4 +32,10 @@ data class AudioFileEntity(
     val lastModified: Long?,
     val contentType: String?,
     val durationMs: Long?,
+    /**
+     * True once a duration probe was tried and yielded nothing (unsupported container, timeout).
+     * Without it such a file is re-probed — headers plus a couple of seconds of audio over the
+     * network — on every open of its book, forever. A full refresh clears it.
+     */
+    val durationAttempted: Boolean = false,
 )

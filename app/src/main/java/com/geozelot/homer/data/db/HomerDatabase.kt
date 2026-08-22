@@ -33,7 +33,7 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         BookOverrideEntity::class,
         ChapterEntity::class,
     ],
-    version = 16,
+    version = 17,
     // Export the schema (to app/schemas/) so migrations have a committed record and can be
     // verified with Room's MigrationTestHelper. See app/build.gradle.kts room.schemaLocation.
     exportSchema = true,

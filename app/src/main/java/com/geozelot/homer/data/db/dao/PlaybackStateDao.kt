@@ -95,6 +95,22 @@ interface PlaybackStateDao {
     @Query("UPDATE OR REPLACE playback_state SET bookId = :newId WHERE bookId = :oldId")
     suspend fun relink(oldId: String, newId: String)
 
+    /**
+     * Rewrites the saved chapter path — needed alongside [relink], because `currentMediaId` is
+     * `‹bookId›/‹file›` and a stale prefix resolves to no row in [observeProgress], losing both the
+     * chapter and the elapsed time the user was at.
+     */
+    @Query("UPDATE playback_state SET currentMediaId = :mediaId WHERE bookId = :bookId")
+    suspend fun updateCurrentMediaId(bookId: String, mediaId: String)
+
+    /**
+     * Drops positions whose book is no longer indexed. There is deliberately no foreign key here
+     * (a rescan must not cascade progress away), so a prune leaves rows that nothing can ever read
+     * or clean up. Expressed as a subquery so there is no host-parameter limit.
+     */
+    @Query("DELETE FROM playback_state WHERE bookId NOT IN (SELECT id FROM books)")
+    suspend fun deleteOrphans()
+
     @Upsert
     suspend fun upsert(state: PlaybackStateEntity)
 }

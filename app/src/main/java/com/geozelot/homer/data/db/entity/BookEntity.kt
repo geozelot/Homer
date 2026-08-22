@@ -37,6 +37,12 @@ data class BookEntity(
     val customCoverPath: String? = null,
     /** True once cover extraction has been tried (so art-less books aren't re-probed forever). */
     val coverAttempted: Boolean = false,
+    /**
+     * True once the tag/chapter probe has been tried and came up empty (no genre, no chapter
+     * marks). Without it a book whose tags simply carry no genre re-streams its first file on
+     * every single open. A full refresh clears it.
+     */
+    val metadataAttempted: Boolean = false,
     val chapterTier: Int,
     val isMultiFile: Boolean,
     val fileCount: Int,

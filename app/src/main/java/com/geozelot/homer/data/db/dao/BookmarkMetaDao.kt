@@ -19,6 +19,10 @@ interface BookmarkMetaDao {
     @Query("UPDATE bookmark_meta SET bookId = :newId WHERE bookId = :oldId")
     suspend fun relink(oldId: String, newId: String)
 
+    /** Drops sync timestamps for books that are no longer indexed (no FK here, so a prune orphans them). */
+    @Query("DELETE FROM bookmark_meta WHERE bookId NOT IN (SELECT id FROM books)")
+    suspend fun deleteOrphans()
+
     @Upsert
     suspend fun upsert(meta: BookmarkMetaEntity)
 }

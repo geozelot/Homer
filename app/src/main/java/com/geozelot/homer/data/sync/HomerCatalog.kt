@@ -28,6 +28,13 @@ data class CatalogBook(
     val series: String? = null,
     val seriesIndex: Int? = null,
     val genre: String? = null,
+    /**
+     * The book's path-independent fingerprint. Shared because it is derived from the files, so it
+     * is identical for every device seeing the same folder — and a device that adopts a book from
+     * the catalog without it can never recognise that book again once its folder is renamed
+     * (re-linking requires a non-null hash), permanently orphaning the position and bookmarks.
+     */
+    val contentHash: String? = null,
     /** Library-relative path to a folder cover image, if any. */
     val coverFilePath: String? = null,
     /** True when extracted cover art is cached under `.homer/covers/<id>` (Tier-3 cover cache). */

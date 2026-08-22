@@ -57,12 +57,17 @@ class DurationEnricher @Inject constructor(
                 val libraryRoot = librarySettings.libraryRoot.first()
                 val files = audioFileDao.findForBook(bookId)
                 val book = bookDao.findById(bookId)
-                val needsGenre = book?.genre == null
+                // A probe that came back empty is recorded, because nothing else ever settles these
+                // questions: a book whose tags simply carry no genre, and a file whose duration
+                // can't be read, would otherwise be re-streamed on every single open of the book,
+                // forever. A full library refresh clears the flags to allow a retry.
+                val metadataTried = book?.metadataAttempted ?: false
+                val needsGenre = book?.genre == null && !metadataTried
                 // Embedded chapters only apply to single-file books (a multi-file book's file list
                 // already is its chapter list). Extract once, when the tier is still undetermined.
-                val needsChapters = files.size == 1 &&
+                val needsChapters = files.size == 1 && !metadataTried &&
                     (book?.chapterTier ?: ChapterTier.UNDETERMINED) == ChapterTier.UNDETERMINED
-                val missing = files.filter { it.durationMs == null }
+                val missing = files.filter { it.durationMs == null && !it.durationAttempted }
                 if (missing.isEmpty() && !needsGenre && !needsChapters) return@launch
                 if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
 
@@ -73,7 +78,12 @@ class DurationEnricher @Inject constructor(
                     coroutineContext.ensureActive()
                     val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
                     val probe = durationExtractor.probe(url)
-                    probe.durationMs?.let { audioFileDao.updateDuration(file.relativePath, it) }
+                    val measured = probe.durationMs
+                    if (measured != null) {
+                        audioFileDao.updateDuration(file.relativePath, measured)
+                    } else {
+                        audioFileDao.markDurationAttempted(file.relativePath)
+                    }
                     if (genre == null) genre = probe.genre
                     if (firstProbe == null) firstProbe = probe
                 }
@@ -90,6 +100,11 @@ class DurationEnricher @Inject constructor(
                     }
                 }
                 if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
+                // No genre in the tags, or the probe itself failed: settle it so the next open
+                // doesn't stream this book's first file all over again for the same answer.
+                if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
+                    bookDao.markMetadataAttempted(bookId)
+                }
 
                 // Persist embedded chapters (empty = none found) and settle the tier so we don't
                 // re-probe on every open.
