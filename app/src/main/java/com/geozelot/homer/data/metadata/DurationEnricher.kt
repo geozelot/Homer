@@ -111,13 +111,16 @@ class DurationEnricher @Inject constructor(
                     if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} embedded chapters")
                 }
 
-                // Best-effort total from whatever is now known; improves on a later open
-                // if some files couldn't be measured this time.
-                val durations = audioFileDao.findForBook(bookId).mapNotNull { it.durationMs }
-                if (durations.isNotEmpty()) {
+                // All-or-nothing, matching LibraryScanner: a PARTIAL sum under-reports the book
+                // length, so whole-book elapsed exceeds it and the book reads as "finished" —
+                // which is what silently emptied the Continue shelf. A later open measures the
+                // rest and the total lands then.
+                val all = audioFileDao.findForBook(bookId)
+                val durations = all.mapNotNull { it.durationMs }
+                if (all.isNotEmpty() && durations.size == all.size) {
                     bookDao.updateTotalDuration(bookId, durations.sum())
                 }
-                Log.i(TAG, "book $bookId: ${durations.size}/${files.size} files measured, genre=${genre ?: "—"}")
+                Log.i(TAG, "book $bookId: ${durations.size}/${all.size} files measured, genre=${genre ?: "—"}")
             } finally {
                 inFlight.remove(bookId)
             }

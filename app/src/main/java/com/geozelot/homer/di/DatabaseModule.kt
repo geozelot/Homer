@@ -174,6 +174,21 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * v15 -> v16: clear the legacy forced `finished` flag (data only, no schema change).
+     *
+     * "Mark as completed" now resets a book's progress instead of setting this flag, so nothing
+     * can set it any more — and nothing can CLEAR it either. Any value left over from an older
+     * build permanently hid that book from the Continue shelf with no way back. Auto-derivation
+     * (position vs. a fully-measured total) re-marks genuinely finished books, so dropping the
+     * stale override is effectively lossless.
+     */
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("UPDATE `book_overrides` SET `finished` = NULL WHERE `finished` IS NOT NULL")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
@@ -181,7 +196,7 @@ object DatabaseModule {
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                 MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-                MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
+                MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
             )
             .apply {
                 // Destructive fallback is a DEBUG-ONLY convenience. In a release build a missing

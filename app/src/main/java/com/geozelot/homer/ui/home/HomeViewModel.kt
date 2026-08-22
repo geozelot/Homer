@@ -81,12 +81,19 @@ data class BookListItem(
     val downloadedFiles: Int,
     val hidden: Boolean,
 ) {
-    /** Finished either because the user marked it, or (unforced) it ran to the end. */
-    val finished: Boolean get() = finishedOverride ?: (timeLeftMs != null && timeLeftMs <= 0L)
+    /**
+     * Finished either because the user marked it (legacy flag), or it ran to the end. `timeLeftMs`
+     * is null unless the book is fully measured, so an unmeasured book is never auto-finished.
+     * The tolerance lets a book that stops a few seconds short still count as done.
+     */
+    val finished: Boolean get() = finishedOverride ?: (timeLeftMs != null && timeLeftMs <= FINISHED_TOLERANCE_MS)
 
     /** Fully downloaded for offline playback. */
     val isDownloaded: Boolean get() = downloadStatus == DownloadStatus.DONE
 }
+
+/** How close to the end still counts as finished (playback often stops a moment short). */
+private const val FINISHED_TOLERANCE_MS = 15_000L
 
 /** Detected book with its override applied, plus the override-only bits (not book fields). */
 private data class EffectiveBook(
@@ -225,8 +232,11 @@ class HomeViewModel @Inject constructor(
                 val elapsed = bookProgress?.elapsedMs
                 val total = book.totalDurationMs
                 val download = downloadByBook[book.id]
-                // Both a total and a saved position are needed for progress/time-left.
-                val measured = total != null && total > 0 && elapsed != null
+                // A trustworthy percentage / time-left needs a total, a saved position AND every
+                // file measured. Without the completeness check a partially-measured book reports
+                // elapsed > total, which reads as "finished" and hides it from Continue.
+                val measured = total != null && total > 0 && elapsed != null &&
+                    bookProgress.fullyMeasured
                 BookListItem(
                     id = book.id,
                     title = book.title,
@@ -243,7 +253,7 @@ class HomeViewModel @Inject constructor(
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
                     lastPlayedAt = bookProgress?.updatedAt,
-                    started = (elapsed ?: 0L) > 0L,
+                    started = bookProgress?.started == true,
                     finishedOverride = eff.finishedOverride,
                     downloadOnPlayOverride = eff.downloadOnPlayOverride,
                     downloadStatus = download?.status,

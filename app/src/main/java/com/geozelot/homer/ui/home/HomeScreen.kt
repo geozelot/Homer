@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -1425,6 +1426,12 @@ private fun AppSettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // MUST scroll: a ModalBottomSheet measures its content against a bounded height,
+                // so without this a Column silently crushes its last children to zero height —
+                // which is exactly how the About rows and version line vanished on shorter
+                // screens / larger font scales. imePadding keeps fields clear of the keyboard.
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
         ) {
@@ -1850,8 +1857,16 @@ private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Parchment, fontSize = 14.sp)
-        HomerSwitch(checked =checked, onCheckedChange = onChange)
+        // The label MUST be the weighted child: a Row measures unweighted children first at the
+        // full available width, so an unweighted label that wraps (long text, large font scale,
+        // narrow screen) left the switch measured at zero width — invisible and untappable.
+        Text(
+            label,
+            color = Parchment,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f, fill = false).padding(end = 12.dp),
+        )
+        HomerSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 
