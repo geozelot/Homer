@@ -285,6 +285,12 @@
     <!-- Settings: playback -->
     <string name="set_playback_skip_desc">How far the player\'s skip buttons jump.</string>
     <string name="set_playback_rewind_desc">Steps back a little when you press play again, so you can pick the thread back up.</string>
+    <string name="set_playback_background_header">PLAYING IN THE BACKGROUND</string>
+    <string name="set_playback_background_label">Keep playing when Homer is closed</string>
+    <string name="set_playback_background_on">Allowed. Playback should continue with the screen off.</string>
+    <string name="set_playback_background_off">Restricted by battery optimisation — playback may stop a minute or two after you leave the app.</string>
+    <string name="set_playback_background_action">Fix</string>
+    <string name="set_playback_background_desc">Homer already runs playback as a foreground service and holds a wake lock while a book is playing. Some phones still pause background apps to save battery, which stops the audio until you reopen the app. Allowing Homer to run unrestricted is the only thing that prevents it.</string>
 
     <!-- Settings: privacy &amp; security -->
     <string name="set_privacy_device_header">THIS DEVICE</string>

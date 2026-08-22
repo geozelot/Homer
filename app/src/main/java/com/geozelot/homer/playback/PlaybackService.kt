@@ -1,6 +1,9 @@
 package com.geozelot.homer.playback
 
+import android.content.pm.PackageManager
 import android.media.audiofx.LoudnessEnhancer
+import android.os.PowerManager
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -80,6 +83,16 @@ class PlaybackService : MediaLibraryService() {
         }
 
         session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback()).build()
+
+        // The two things that decide whether audio survives backgrounding, and neither is visible
+        // from inside the app once it goes wrong. A wake lock the system declines to honour and a
+        // battery-optimised app the OS freezes outright look identical from here: the audio simply
+        // stops and no player callback fires. Logged once per service start so the next report of
+        // "it stopped again" arrives with half the answer already attached.
+        val exempt = getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName)
+        val wakeLockGranted =
+            checkSelfPermission(android.Manifest.permission.WAKE_LOCK) == PackageManager.PERMISSION_GRANTED
+        Log.i(TAG, "player ready: wakeMode=NETWORK wakeLock=$wakeLockGranted batteryExempt=$exempt")
     }
 
     /**
@@ -126,6 +139,10 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         session
+
+    private companion object {
+        const val TAG = "HomerPlay"
+    }
 
     override fun onDestroy() {
         serviceScope.cancel()
