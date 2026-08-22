@@ -15,6 +15,14 @@ interface AudioFileDao {
     @Query("SELECT * FROM audio_files WHERE bookId = :bookId ORDER BY sortIndex")
     suspend fun findForBook(bookId: String): List<AudioFileEntity>
 
+    /**
+     * Files of several books at once, so a scan doesn't run one query per book. Callers must chunk:
+     * every id is one SQL host parameter and SQLite caps those at 999 (same discipline as
+     * [BookDao.deleteByIds]). Ordering is by book then position, since the caller groups by book.
+     */
+    @Query("SELECT * FROM audio_files WHERE bookId IN (:bookIds) ORDER BY bookId, sortIndex")
+    suspend fun findForBooks(bookIds: List<String>): List<AudioFileEntity>
+
     /** The book a given file belongs to — used to recover the current book on an eager reconnect. */
     @Query("SELECT bookId FROM audio_files WHERE relativePath = :relativePath")
     suspend fun findBookIdForFile(relativePath: String): String?
@@ -35,4 +43,8 @@ interface AudioFileDao {
 
     @Query("DELETE FROM audio_files WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+
+    /** Bulk form of [deleteForBook] for a rescan. Chunk the ids — see [findForBooks]. */
+    @Query("DELETE FROM audio_files WHERE bookId IN (:bookIds)")
+    suspend fun deleteForBooks(bookIds: List<String>)
 }

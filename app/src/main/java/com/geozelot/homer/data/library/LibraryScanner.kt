@@ -11,6 +11,8 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.db.entity.AudioFileEntity
+import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.webdav.DavResource
@@ -37,6 +39,96 @@ internal fun relinkMediaId(mediaId: String, oldId: String, newId: String): Strin
     mediaId == oldId -> newId
     mediaId.startsWith("$oldId/") -> newId + mediaId.removePrefix(oldId)
     else -> mediaId
+}
+
+/**
+ * Books that moved or were renamed: a freshly detected book at a previously unknown path whose
+ * content fingerprint matches an indexed book the scan did NOT account for is the same book in a
+ * new place. Returns newId -> oldId, which is what lets progress, bookmarks and hand-typed
+ * overrides follow it instead of being pruned away with the old row.
+ */
+internal fun detectMoves(
+    detected: List<BookDetector.Detected>,
+    existingBooks: List<BookEntity>,
+    keepIds: Set<String>,
+): Map<String, String> {
+    val existingIds = existingBooks.mapTo(HashSet()) { it.id }
+    val lostByHash = existingBooks
+        .filter { it.contentHash != null && it.id !in keepIds }
+        .associate { it.contentHash!! to it.id } // duplicate hashes: last wins (rare)
+    val moved = HashMap<String, String>()
+    for (book in detected) {
+        val hash = book.book.contentHash ?: continue
+        if (book.book.id in existingIds) continue // path already existed → not a move target
+        moved[book.book.id] = lostByHash[hash] ?: continue
+    }
+    return moved
+}
+
+/** The rows a scan will write: book rows and their files, with everything device-local carried. */
+internal data class PlannedWrites(val books: List<BookEntity>, val files: List<AudioFileEntity>)
+
+/**
+ * Merges a scan's findings with what the index already holds.
+ *
+ * This is the carry-over: a crawl only sees names, sizes and ETags, so everything *measured* —
+ * per-file durations, the extracted or user-chosen cover, the probed genre, the chapter tier — is
+ * known only to the existing row and has to be copied onto the replacement. Getting it wrong is
+ * quiet and expensive: dropping a duration re-probes the file (a full stream) and meanwhile costs
+ * the book its time-left, progress ring and auto-finish.
+ *
+ * Pure, and separate from [LibraryScanner], so those rules are testable without a database.
+ */
+internal fun planWrites(
+    detected: List<BookDetector.Detected>,
+    existingById: Map<String, BookEntity>,
+    filesByBook: Map<String, List<AudioFileEntity>>,
+    movedFrom: Map<String, String>,
+): PlannedWrites {
+    val books = ArrayList<BookEntity>(detected.size)
+    val files = ArrayList<AudioFileEntity>()
+    for (book in detected) {
+        // For a moved book the carry-over source is the old (pre-move) row, and its durations match
+        // by file NAME — the relative path changed with the folder.
+        val movedOldId = movedFrom[book.book.id]
+        val source = existingById[book.book.id] ?: movedOldId?.let { existingById[it] }
+        val atPath = filesByBook[book.book.id].orEmpty().associateBy { it.relativePath }
+        val byName = movedOldId?.let { old -> filesByBook[old].orEmpty().associateBy { it.fileName } }.orEmpty()
+
+        val merged = book.files.map { file ->
+            val previous = atPath[file.relativePath]
+            val moved = byName[file.fileName]
+            file.copy(
+                durationMs = file.durationMs ?: previous?.durationMs ?: moved?.durationMs,
+                // Carried like the durations themselves: dropping it would make an ordinary rescan
+                // re-probe every file that has already proven unmeasurable.
+                durationAttempted = previous?.durationAttempted ?: moved?.durationAttempted ?: false,
+            )
+        }
+        // Recomputed from the current file set, so removing or adding a file stays correct — and
+        // left null unless EVERY file is measured, because a partial total reads as "finished" and
+        // hides the book.
+        val total = if (merged.isNotEmpty() && merged.all { it.durationMs != null }) {
+            merged.sumOf { it.durationMs!! }
+        } else {
+            null
+        }
+        // A folder cover we can see but haven't cached yet earns a fresh attempt, even if an
+        // earlier pass gave up on this book: caching it is one cheap GET, and it's what makes the
+        // cover load instantly and work offline instead of being fetched on every display.
+        val uncachedFolderCover = book.book.coverFilePath != null && source?.localCoverPath == null
+        books += book.book.copy(
+            localCoverPath = source?.localCoverPath,
+            customCoverPath = source?.customCoverPath,
+            coverAttempted = if (uncachedFolderCover) false else (source?.coverAttempted ?: false),
+            metadataAttempted = source?.metadataAttempted ?: false,
+            genre = source?.genre,
+            chapterTier = source?.chapterTier ?: book.book.chapterTier,
+            totalDurationMs = total,
+        )
+        files += merged
+    }
+    return PlannedWrites(books, files)
 }
 
 /** Coarse progress/result of a library scan, surfaced to the UI. */
@@ -168,16 +260,46 @@ class LibraryScanner @Inject constructor(
         return Result(bookDao.count())
     }
 
-    /** The database half of a scan: carry-over upserts, moved-book re-links, prune, orphan sweep. */
+    /**
+     * The database half of a scan: carry-over upserts, moved-book re-links, prune, orphan sweep.
+     *
+     * Split into a **read phase** and a **write phase**, both inside the caller's single
+     * transaction. Two things follow from that split.
+     *
+     * It used to interleave reads and writes per book — `findById` plus `findForBook` (each twice
+     * for a moved book), then three writes — so a 300-book library issued something like 1,500
+     * statements where a handful of bulk queries do. Everything the write phase needs is now
+     * gathered up front and the writes themselves are batched.
+     *
+     * And in WAL a Room transaction is DEFERRED: SQLite doesn't take the write lock at
+     * `beginTransaction`, it takes it at the first *write*. Doing every read before that point
+     * means the lock is held only for the writes rather than for the whole apply — which matters
+     * because the writer it blocks is the playback position save, and a scan can run while the
+     * user is listening.
+     *
+     * The reads stay INSIDE the transaction deliberately, though. Moving them out would let
+     * [com.geozelot.homer.data.metadata.DurationEnricher] or
+     * [com.geozelot.homer.data.metadata.CoverEnricher] commit a freshly measured duration or a
+     * newly cached cover in between, and the carry-over upsert would then write the value it read
+     * earlier straight back over it — losing exactly the measurements the carry-over exists to
+     * preserve.
+     */
     private suspend fun applyScan(
         books: List<BookDetector.Detected>,
         root: String,
         skippedRoots: List<String>,
         sweepOrphans: Boolean,
     ): List<String> {
+        // ── Read phase — no write lock held ──────────────────────────────────────────────
+
         // Books to keep: the (re-)built ones plus every book under an unchanged, skipped subtree.
         // Anything else is pruned (a vanished book always sits under a visited parent). Skipped
         // roots are files-root paths; book ids are library-root-relative.
+        //
+        // Still one query per skipped root rather than a filter over `existingBooks`: idsUnder
+        // matches with SQL LIKE, which is ASCII-case-insensitive, and `startsWith` is not. Two
+        // sibling folders differing only in case would drop out of keepIds and be pruned. There
+        // are only a handful of skipped roots, so the queries are not what this is about.
         val keepIds = buildSet {
             books.forEach { add(it.book.id) }
             for (skipped in skippedRoots) {
@@ -185,69 +307,45 @@ class LibraryScanner @Inject constructor(
             }
         }
 
-        // Detect moved/renamed books by content hash: a freshly detected book at a previously
-        // unknown path whose fingerprint matches an existing book that won't be kept = the same
-        // book that moved. Map its new id back to the old one so we can re-link user data.
         val existingBooks = bookDao.getAll()
-        val existingIds = existingBooks.mapTo(HashSet()) { it.id }
-        val lostByHash = existingBooks
-            .filter { it.contentHash != null && it.id !in keepIds }
-            .associate { it.contentHash!! to it.id } // duplicate hashes: last wins (rare)
-        val movedFrom = HashMap<String, String>() // newId -> oldId
-        for (detected in books) {
-            val hash = detected.book.contentHash ?: continue
-            if (detected.book.id in existingIds) continue // path already existed → not a move target
-            val oldId = lostByHash[hash] ?: continue
-            movedFrom[detected.book.id] = oldId
-        }
+        val existingById = existingBooks.associateBy { it.id }
+        val movedFrom = detectMoves(books, existingBooks, keepIds)
         if (movedFrom.isNotEmpty()) Log.i(TAG, "scan: re-linking ${movedFrom.size} moved book(s)")
 
-        for (detected in books) {
-            // Carry cached data across the rescan (upsert replaces the rows): the extracted cover,
-            // genre, and per-file durations — otherwise every rescan would discard all measured
-            // durations and re-probe the whole library on next open. For a moved book the source is
-            // the old (pre-move) row, and durations match by file name since the path changed.
-            val movedOldId = movedFrom[detected.book.id]
-            val source = bookDao.findById(detected.book.id) ?: movedOldId?.let { bookDao.findById(it) }
-            val existingFiles = audioFileDao.findForBook(detected.book.id).associateBy { it.relativePath }
-            val movedFiles = movedOldId
-                ?.let { old -> audioFileDao.findForBook(old).associateBy { it.fileName } }
-                ?: emptyMap()
-            val files = detected.files.map { file ->
-                val atPath = existingFiles[file.relativePath]
-                val moved = movedFiles[file.fileName]
-                file.copy(
-                    durationMs = file.durationMs ?: atPath?.durationMs ?: moved?.durationMs,
-                    // Carried like the durations themselves: dropping it would make an ordinary
-                    // rescan re-probe every file that has already proven unmeasurable.
-                    durationAttempted = atPath?.durationAttempted ?: moved?.durationAttempted ?: false,
-                )
-            }
-            // Recompute the total from the current file set so removed/added files stay correct.
-            val total = if (files.isNotEmpty() && files.all { it.durationMs != null }) {
-                files.sumOf { it.durationMs!! }
-            } else {
-                null
-            }
-            // A folder cover we can see but haven't cached yet earns a fresh attempt, even if an
-            // earlier pass gave up on this book: caching it is one cheap GET, and it's what makes
-            // the cover load instantly and work offline instead of being fetched every display.
-            val uncachedFolderCover = detected.book.coverFilePath != null && source?.localCoverPath == null
-            bookDao.upsert(
-                listOf(
-                    detected.book.copy(
-                        localCoverPath = source?.localCoverPath,
-                        customCoverPath = source?.customCoverPath,
-                        coverAttempted = if (uncachedFolderCover) false else (source?.coverAttempted ?: false),
-                        metadataAttempted = source?.metadataAttempted ?: false,
-                        genre = source?.genre,
-                        chapterTier = source?.chapterTier ?: detected.book.chapterTier,
-                        totalDurationMs = total,
-                    ),
-                ),
-            )
-            audioFileDao.deleteForBook(detected.book.id)
-            audioFileDao.upsert(files)
+        // Existing files for exactly the books being rewritten, plus the old rows of any moved
+        // book. Scoped to those ids rather than the whole table on purpose: an incremental scan
+        // usually rebuilds one book, and loading every file row in the library to service it would
+        // cost more than the per-book queries this replaces.
+        val fileIds = (books.map { it.book.id } + movedFrom.values).distinct()
+        val filesByBook = fileIds
+            .chunked(SQL_PARAM_CHUNK)
+            .flatMap { audioFileDao.findForBooks(it) }
+            .groupBy { it.bookId }
+
+        // Resolve every row to be written. Reading the snapshot here is equivalent to the old
+        // per-book queries: no book's carry-over source is ever a row another book in the same pass
+        // writes (ids are unique per detected book, and a moved book's old id is by definition not
+        // among them).
+        val planned = planWrites(books, existingById, filesByBook, movedFrom)
+
+        // Ids to prune, from the pre-write snapshot. Equivalent to reading them back after the
+        // upserts: everything those insert is in keepIds by construction, so it could never have
+        // been pruned anyway.
+        val pruneIds = idsToPrune(existingBooks.map { it.id }, keepIds)
+        // Likewise the guard's "how many are indexed" count. It is only *used* on the empty-keepIds
+        // branches, and an empty keep-set means no books were detected and the write phase inserts
+        // nothing — so the pre-write count is the post-write count there.
+        val indexedBefore = existingBooks.size
+
+        // ── Write phase — the transaction takes the write lock from here ─────────────────
+
+        // Batched: books first so the audio_files foreign key holds, then the file rows swapped
+        // wholesale. The intermediate state with a book's files deleted but not yet re-inserted is
+        // invisible outside the transaction.
+        if (planned.books.isNotEmpty()) {
+            bookDao.upsert(planned.books)
+            planned.books.map { it.id }.chunked(SQL_PARAM_CHUNK).forEach { audioFileDao.deleteForBooks(it) }
+            audioFileDao.upsert(planned.files)
         }
 
         // Re-link user data onto the moved books' new ids BEFORE pruning — the new book rows now
@@ -256,7 +354,10 @@ class LibraryScanner @Inject constructor(
         // on disk are keyed by the old relative path, so a moved book cleanly re-downloads.
         for ((newId, oldId) in movedFrom) {
             // The saved chapter path has to follow the id, or the resumed position can't be
-            // resolved to a file any more (see [relinkMediaId]). Read it before the row moves.
+            // resolved to a file any more (see [relinkMediaId]). Read it before the row moves —
+            // and read it HERE, not in the read phase: PositionSyncer could otherwise save a new
+            // position for this book in between and we would re-link a stale path over it. One
+            // query per moved book, and moved books are usually none.
             val savedMediaId = playbackStateDao.findByBookId(oldId)?.currentMediaId
             playbackStateDao.relink(oldId, newId)
             savedMediaId?.let { old ->
@@ -275,13 +376,10 @@ class LibraryScanner @Inject constructor(
         // is already safe (PROPFIND throws and aborts the scan before this point); this guards the
         // connected-but-empty case. A genuinely emptied library just keeps its stale rows until a
         // real crawl finds books again.
-        val currentCount = bookDao.count()
         var orphanedDownloads = emptyList<String>()
         when {
             keepIds.isNotEmpty() -> {
-                idsToPrune(bookDao.allIds(), keepIds)
-                    .chunked(PRUNE_CHUNK)
-                    .forEach { bookDao.deleteByIds(it) }
+                pruneIds.chunked(SQL_PARAM_CHUNK).forEach { bookDao.deleteByIds(it) }
                 // Rows keyed by bookId carry no foreign key on purpose, so a rescan can't cascade
                 // the user's data away — which also means a pruned book leaves them behind.
                 // Sweeping them is only safe after a FULL crawl ([sweepOrphans]): an incremental
@@ -299,10 +397,10 @@ class LibraryScanner @Inject constructor(
                     // leaves a row still pointing at them for the next scan to retry.
                 }
             }
-            currentCount == 0 -> Unit // already empty — nothing to prune
+            indexedBefore == 0 -> Unit // already empty — nothing to prune
             else -> Log.w(
                 TAG,
-                "scan found no books but $currentCount are indexed; skipping prune to avoid " +
+                "scan found no books but $indexedBefore are indexed; skipping prune to avoid " +
                     "wiping the library on an empty or failed crawl",
             )
         }
@@ -310,8 +408,11 @@ class LibraryScanner @Inject constructor(
     }
 
     private companion object {
-        /** Ids per DELETE — one SQL host parameter each, well under SQLite's 999 cap. */
-        const val PRUNE_CHUNK = 500
+        /**
+         * Ids per statement for any `IN (:ids)` query — one SQL host parameter each, well under
+         * SQLite's 999 cap.
+         */
+        const val SQL_PARAM_CHUNK = 500
 
         const val TAG = "HomerScan"
     }
