@@ -8,6 +8,12 @@ server, and an Audible-class listening experience.
 > Homer is built to be self-hosted and standalone. It talks to exactly one thing:
 > the Nextcloud you sign in to.
 
+
+### Pre-build APK
+
+[Go to Releases](https://github.com/geozelot/Homer/releases)
+
+
 ## Features
 
 - **Stream or download** — listen on demand, or take books offline (pause / resume /
