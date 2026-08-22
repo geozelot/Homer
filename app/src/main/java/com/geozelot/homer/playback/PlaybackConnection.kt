@@ -181,7 +181,32 @@ class PlaybackConnection @Inject constructor(
     private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, localMirror, ::positionSnapshot)
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
 
+    /** " buffered=12s" — how much audio is in hand, the number that matters during a stall. */
+    private fun bufferSuffix(): String {
+        val c = controller ?: return ""
+        val ahead = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0L)
+        return " buffered=${ahead / 1000}s"
+    }
+
     private val listener = object : Player.Listener {
+        /**
+         * Why playback started or stopped, and how much audio was in hand when it did.
+         *
+         * Log-only, and here because a background stall is otherwise invisible: the platform's
+         * `AudioTrack ... underrun` line says the pipeline ran dry but not why, and a stall that
+         * never raises a PlaybackException leaves [onPlayerError] silent. The reason code
+         * separates the candidates outright — AUDIO_FOCUS_LOSS means something else took the
+         * audio, USER_REQUEST means the pause came from us or the notification, while a drop to
+         * BUFFERING with the buffer at zero means the stream simply starved.
+         */
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            Log.i(TAG, "playWhenReady=$playWhenReady reason=${playWhenReadyReasonName(reason)}${bufferSuffix()}")
+        }
+
+        override fun onPlaybackStateChanged(state: Int) {
+            Log.i(TAG, "state=${playbackStateName(state)}${bufferSuffix()}")
+        }
+
         override fun onEvents(player: Player, events: Player.Events) {
             // During a book switch the controller still holds the outgoing book — ignore its
             // events so they don't clobber the optimistic new-book state.
@@ -725,6 +750,23 @@ class PlaybackConnection @Inject constructor(
 
     private companion object {
         const val TAG = "HomerPlay"
+
+        private fun playbackStateName(state: Int) = when (state) {
+            Player.STATE_IDLE -> "IDLE"
+            Player.STATE_BUFFERING -> "BUFFERING"
+            Player.STATE_READY -> "READY"
+            Player.STATE_ENDED -> "ENDED"
+            else -> "state$state"
+        }
+
+        private fun playWhenReadyReasonName(reason: Int) = when (reason) {
+            Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "USER_REQUEST"
+            Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS -> "AUDIO_FOCUS_LOSS"
+            Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY -> "AUDIO_BECOMING_NOISY"
+            Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE -> "REMOTE"
+            Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM -> "END_OF_MEDIA_ITEM"
+            else -> "reason$reason"
+        }
         const val RESUME_SYNC_TIMEOUT_MS = 5_000L
         const val CONTROLLER_CONNECT_TIMEOUT_MS = 10_000L
 

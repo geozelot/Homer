@@ -72,6 +72,10 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <!-- Without this the platform logs "Couldn't find a unique registered media button
+                     receiver" on every session, headset and Bluetooth transport buttons are not
+                     routed here, and a session resumed from the notification has no button target. -->
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
 

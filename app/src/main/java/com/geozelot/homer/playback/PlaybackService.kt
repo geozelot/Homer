@@ -5,7 +5,9 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -49,6 +51,7 @@ class PlaybackService : MediaLibraryService() {
 
         val exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setLoadControl(audiobookLoadControl())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
@@ -78,6 +81,32 @@ class PlaybackService : MediaLibraryService() {
 
         session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback()).build()
     }
+
+    /**
+     * A load control sized for a spoken-word book streamed over WebDAV, rather than for video.
+     *
+     * ExoPlayer's defaults buffer at most 50 seconds ahead, and cap an audio renderer at ~832 KB.
+     * At an audiobook's ~64 kbps that is about a minute and a half of audio — so a background
+     * network stall lasting longer than that drains the buffer and the audio track underruns,
+     * which is precisely what `AudioTrack: disabled due to previous underrun` in the log is.
+     * Playback resumes the moment bytes arrive again, so it reads as "stops when I leave, starts
+     * when I come back".
+     *
+     * Ten minutes of a low-bitrate mono stream is a few megabytes, so the trade video defaults are
+     * making — keep memory down, accept re-buffering — is the wrong one here. The byte target has
+     * to be raised as well: it binds first otherwise and the duration target never takes effect.
+     */
+    private fun audiobookLoadControl(): LoadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            /* minBufferMs = */ 2 * 60_000,
+            /* maxBufferMs = */ 10 * 60_000,
+            // Unchanged: how little is needed to START, which should stay snappy.
+            /* bufferForPlaybackMs = */ DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+            /* bufferForPlaybackAfterRebufferMs = */ DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+        )
+        .setTargetBufferBytes(8 * 1024 * 1024)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
 
     /** Applies a volume override: player volume for reduced/normal, plus a LoudnessEnhancer for
      *  the "increased" boost (audio effects are flaky per-device, so failures degrade silently). */
