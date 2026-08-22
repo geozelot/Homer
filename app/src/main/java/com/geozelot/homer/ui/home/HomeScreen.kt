@@ -1,7 +1,15 @@
 package com.geozelot.homer.ui.home
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.derivedStateOf
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -82,6 +90,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,10 +168,22 @@ fun HomeScreen(
     var editing by remember { mutableStateOf<BookListItem?>(null) }
     var editingSeries by remember { mutableStateOf<LibraryEntry.Series?>(null) }
     var showAppSettings by remember { mutableStateOf(false) }
-    var showStorageBrowser by remember { mutableStateOf(false) }
+    // rememberSaveable so a rotation doesn't drop the user out of these: `searching` in particular
+    // used to be lost while the query stayed in the ViewModel, leaving the library filtered with no
+    // search field to clear it.
+    var showStorageBrowser by rememberSaveable { mutableStateOf(false) }
     var showLibrarySync by remember { mutableStateOf(false) }
-    var searching by remember { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
+
+    // The storage browser is a full-screen overlay inside this destination, not a nav entry, so
+    // without this back would pop the start destination and exit the app mid-folder-pick.
+    BackHandler(enabled = showStorageBrowser) { showStorageBrowser = false }
+    // Back should leave search rather than leave the app with the library still filtered.
+    BackHandler(enabled = searching && !showStorageBrowser) {
+        searching = false
+        viewModel.setSearchQuery("")
+    }
 
     val actions = remember(viewModel) {
         BookActions(
@@ -177,6 +198,8 @@ fun HomeScreen(
         )
     }
 
+    val gridState = rememberLazyGridState()
+
     Column(modifier = modifier.fillMaxSize()) {
         TopBar(
             searching = searching,
@@ -190,6 +213,28 @@ fun HomeScreen(
             onOpenLibrarySync = { showLibrarySync = true },
             onSettings = { showAppSettings = true },
         )
+
+        // The Continue shelf is pinned here — above the scrolling library rather than being its
+        // first item — and shrinks to a slim strip once the user scrolls into the library. Its
+        // LazyRow state is hoisted so the horizontal scroll position survives collapsing and is
+        // no longer reset by the item being disposed. derivedStateOf keeps the collapse flag from
+        // recomposing on every scroll pixel.
+        val shelfRowState = rememberLazyListState()
+        val shelfCollapsed by remember(gridState) {
+            derivedStateOf {
+                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
+            }
+        }
+        val pinnedShelf = if (searching) emptyList() else continueShelf
+        if (pinnedShelf.isNotEmpty() && entries.isNotEmpty()) {
+            ContinuePinnedShelf(
+                books = pinnedShelf,
+                collapsed = shelfCollapsed,
+                rowState = shelfRowState,
+                onOpen = onBookClick,
+                actions = actions,
+            )
+        }
 
         if (entries.isEmpty()) {
             when {
@@ -209,10 +254,11 @@ fun HomeScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (gridView) 3 else 1),
+                state = gridState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -220,7 +266,6 @@ fun HomeScreen(
             ) {
                 libraryContent(
                     entries = entries,
-                    continueShelf = if (searching) emptyList() else continueShelf,
                     bookCount = bookCount,
                     gridView = gridView,
                     searching = searching,
@@ -516,7 +561,6 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.withAmber(s: String
 
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
-    continueShelf: List<BookListItem>,
     bookCount: Int,
     gridView: Boolean,
     searching: Boolean,
@@ -529,13 +573,8 @@ private fun LazyGridScope.libraryContent(
     onBookClick: (String) -> Unit,
     actions: BookActions,
 ) {
-    if (continueShelf.isNotEmpty()) {
-        item(span = { GridItemSpan(maxLineSpan) }, key = "continue-head") { SectionLabelRow(stringResource(R.string.home_section_continue)) }
-        item(span = { GridItemSpan(maxLineSpan) }, key = "continue-shelf") {
-            ContinueShelf(books = continueShelf, onOpen = onBookClick, actions = actions)
-        }
-    }
-
+    // The Continue shelf is no longer an item here — it's pinned above the grid by HomeScreen so
+    // it can stay put and collapse while the library scrolls under it.
     item(span = { GridItemSpan(maxLineSpan) }, key = "library-head") {
         LibraryHeader(
             label = if (searching) stringResource(R.string.home_section_results) else stringResource(R.string.home_section_library, bookCount),
@@ -753,11 +792,76 @@ private fun <T> DropdownChip(
 
 // ── Continue shelf ─────────────────────────────────────────────────────────
 
+/**
+ * The Continue shelf, pinned above the library list. Shows full cover cards at rest and collapses
+ * to a slim strip of rows once the library is scrolled, so it stays reachable without eating the
+ * screen. [rowState] is hoisted by the caller so the horizontal position survives both the
+ * collapse and scrolling the library.
+ */
 @Composable
-private fun ContinueShelf(books: List<BookListItem>, onOpen: (String) -> Unit, actions: BookActions) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(books, key = { "cont:${it.id}" }) { book ->
-            ContinueCard(book, onOpen, actions)
+private fun ContinuePinnedShelf(
+    books: List<BookListItem>,
+    collapsed: Boolean,
+    rowState: LazyListState,
+    onOpen: (String) -> Unit,
+    actions: BookActions,
+) {
+    Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+        if (!collapsed) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                SectionLabelRow(stringResource(R.string.home_section_continue))
+            }
+        }
+        LazyRow(
+            state = rowState,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // Padding on the row (not the parent) so cards bleed off the edge while scrolling
+            // instead of stopping at a hard margin.
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = if (collapsed) 6.dp else 0.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(books, key = { "cont:${it.id}" }) { book ->
+                if (collapsed) ContinueSlim(book, onOpen) else ContinueCard(book, onOpen, actions)
+            }
+        }
+        // A hairline separates the pinned strip from the library scrolling beneath it.
+        if (collapsed) HorizontalDivider(color = Line)
+    }
+}
+
+/** Collapsed Continue entry: small cover, one-line title, progress hairline. */
+@Composable
+private fun ContinueSlim(book: BookListItem, onOpen: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .widthIn(max = 200.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onOpen(book.id) }
+            .padding(end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverArt(
+            model = book.coverModel,
+            title = book.title,
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(5.dp)),
+        )
+        Column(modifier = Modifier.padding(start = 8.dp)) {
+            Text(
+                book.title,
+                color = Parchment,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ProgressBar(
+                fraction = book.progress ?: 0f,
+                modifier = Modifier
+                    .width(96.dp)
+                    .padding(top = 4.dp),
+            )
         }
     }
 }
@@ -1256,11 +1360,8 @@ private fun BookMenu(
     onDismiss: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.action_play)) },
-            leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = Amber) },
-            onClick = onDismiss, // tapping the card already opens the player
-        )
+        // No "Play" item: it was the first and most prominent entry in every menu and did nothing
+        // but close the menu. Tapping the card itself opens the book.
         if (book.started) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.mark_completed)) },
@@ -1898,7 +1999,9 @@ private fun SeriesEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.home_series_edit_title)) },
         text = {
-            Column {
+            // Scrollable: a dialog resizes for the keyboard, and without this the second field
+            // gets crushed or clipped once the IME is up (EditBookDialog already does this).
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     stringResource(R.string.home_series_edit_desc, series.books.size),
                     color = Muted,

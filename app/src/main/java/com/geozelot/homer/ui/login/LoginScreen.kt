@@ -7,9 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -56,6 +61,12 @@ fun LoginScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            // Edge-to-edge is on and the window doesn't fit system windows, so without these the
+            // share-link form's password field and submit button end up behind the keyboard with
+            // no way to reach them, and content can sit under the status/nav bars.
+            .safeDrawingPadding()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -127,7 +138,12 @@ fun LoginScreen(
                         modifier = Modifier.padding(top = 16.dp).fillMaxWidth().widthIn(max = 420.dp),
                     ) {
                         if (state.status == LoginViewModel.Status.Connecting) {
-                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                            // Sized down: the default indicator is ~40dp and roughly doubled the
+                            // button's height while shoving the label sideways.
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                                strokeWidth = 2.dp,
+                            )
                         }
                         Text(stringResource(R.string.login_button))
                     }
@@ -164,7 +180,12 @@ fun LoginScreen(
                         modifier = Modifier.padding(top = 16.dp).fillMaxWidth().widthIn(max = 420.dp),
                     ) {
                         if (state.status == LoginViewModel.Status.Connecting) {
-                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                            // Sized down: the default indicator is ~40dp and roughly doubled the
+                            // button's height while shoving the label sideways.
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                                strokeWidth = 2.dp,
+                            )
                         }
                         Text(stringResource(R.string.login_share_button))
                     }

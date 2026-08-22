@@ -402,10 +402,18 @@ private fun PlayerTopBar(
                         if (downloading) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Amber, strokeWidth = 2.dp)
                         } else {
-                            HomerSwitch(checked = offline, onCheckedChange = { onToggleOffline() })
+                            HomerSwitch(checked = offline, onCheckedChange = {
+                                onToggleOffline()
+                                overflowOpen = false
+                            })
                         }
                     },
-                    onClick = { onToggleOffline() },
+                    // Dismiss like the other items: leaving the menu open invited repeated taps
+                    // that queued download → delete → download.
+                    onClick = {
+                        onToggleOffline()
+                        overflowOpen = false
+                    },
                 )
             }
         }
