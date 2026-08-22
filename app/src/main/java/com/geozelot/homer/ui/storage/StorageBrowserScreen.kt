@@ -6,11 +6,13 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
@@ -38,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -53,6 +57,7 @@ import kotlinx.coroutines.withContext
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Ground
+import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
@@ -138,7 +143,13 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
 
             Text(dir.absolutePath, color = Amber, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
 
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            // Content padding + spacing: the listing used to read as one solid block of Surface1
+            // with its first row butted right up against the path above it.
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 if (dir.parentFile != null && dir.absolutePath != root.absolutePath) {
                     item {
                         FolderRow(name = "..", onClick = { dir.parentFile?.let { dir = it } })
@@ -178,8 +189,12 @@ private fun FolderRow(name: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            // Each folder is its own rounded card (with the hairline outline the rest of the app
+            // uses for grouped content), so rows read as separate targets.
+            .clip(RoundedCornerShape(10.dp))
             .background(Surface1)
+            .border(1.dp, Line, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),

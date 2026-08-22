@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -65,12 +67,12 @@ fun LibraryNavHost() {
     libraryEntry?.let { StorageDialogsHost(viewModel = hiltViewModel(it)) }
 
     NavHost(navController = navController, startDestination = ROUTE_LIBRARY) {
-        composable(ROUTE_LIBRARY) {
+        composable(ROUTE_LIBRARY) { entry ->
             HomeScreen(
                 onBookClick = { bookId ->
-                    navController.navigate("player/${Uri.encode(bookId)}")
+                    entry.navigateOnce(navController, "player/${Uri.encode(bookId)}")
                 },
-                onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
+                onOpenSettings = { entry.navigateOnce(navController, ROUTE_SETTINGS) },
             )
         }
         composable(
@@ -168,6 +170,16 @@ fun LibraryNavHost() {
             LoginScreen(syncMode = true, onLinked = { navController.popBackStack() })
         }
     }
+}
+
+/**
+ * Navigates from [this] destination, but only while it is still the resumed one. Two quick taps on
+ * two different book cards used to push two `player/{id}` destinations (the first tap starts the
+ * transition, the card underneath is still hittable); once the first navigation is under way this
+ * entry is no longer RESUMED, so the second tap is dropped.
+ */
+private fun NavBackStackEntry.navigateOnce(navController: NavHostController, route: String) {
+    if (lifecycle.currentState == Lifecycle.State.RESUMED) navController.navigate(route)
 }
 
 /**

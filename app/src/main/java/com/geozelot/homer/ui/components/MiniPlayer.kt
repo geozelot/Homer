@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -44,7 +46,8 @@ import com.geozelot.homer.ui.theme.Surface2
 /**
  * Docked mini-player: always one tap from the current book. A live amber hairline across the
  * top shows chapter progress; tapping the row expands to Now Playing. Renders nothing when no
- * book is loaded.
+ * book is loaded — which is why it applies its own bottom window inset instead of taking one from
+ * the caller, and why callers have to reserve that space themselves when the bar is absent.
  */
 @Composable
 fun MiniPlayer(
@@ -67,11 +70,15 @@ fun MiniPlayer(
     }
     val bookLeftMs = (state.bookTotalMs - state.bookElapsedMs).takeIf { state.bookTotalMs > 0 && it > 0 }
 
+    val openLabel = stringResource(R.string.mini_player_cd_open)
     Box(
         modifier = modifier
             .fillMaxWidth()
+            // Background first, inset applied to the content below: the gradient has to bleed
+            // behind the navigation bar, or library content shows through that strip.
             .background(Brush.verticalGradient(listOf(Surface2, Surface1)))
-            .clickable { onOpenPlayer(bookId) }
+            // onClickLabel: the row is clickable but announced nothing about what tapping does.
+            .clickable(onClickLabel = openLabel) { onOpenPlayer(bookId) }
             // Swipe up to expand into Now Playing.
             .pointerInput(bookId) {
                 val threshold = 48.dp.toPx()
@@ -95,6 +102,10 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // The bar's content stays above the navigation bar while its background runs behind
+                // it. The caller must NOT inset the whole bar: this composable emits nothing when no
+                // book is loaded, so a caller-side inset disappears with it.
+                .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -140,28 +151,36 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // 48dp touch target around the 38dp button: the circle keeps its size, only the
+            // tappable area grows (it also has to swallow the row's own click).
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Amber)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clickable { if (state.hasError) onRetry() else onPlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = when {
-                        state.hasError -> Icons.Filled.Refresh
-                        state.isPlaying -> Icons.Filled.Pause
-                        else -> Icons.Filled.PlayArrow
-                    },
-                    contentDescription = when {
-                        state.hasError -> stringResource(R.string.action_retry)
-                        state.isPlaying -> stringResource(R.string.action_pause)
-                        else -> stringResource(R.string.action_play)
-                    },
-                    tint = OnAmber,
-                    modifier = Modifier.size(20.dp),
-                )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Amber),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = when {
+                            state.hasError -> Icons.Filled.Refresh
+                            state.isPlaying -> Icons.Filled.Pause
+                            else -> Icons.Filled.PlayArrow
+                        },
+                        contentDescription = when {
+                            state.hasError -> stringResource(R.string.action_retry)
+                            state.isPlaying -> stringResource(R.string.action_pause)
+                            else -> stringResource(R.string.action_play)
+                        },
+                        tint = OnAmber,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
         // Live progress hairline, drawn last so it sits on top of the separator.

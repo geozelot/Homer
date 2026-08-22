@@ -20,6 +20,8 @@
     <string name="action_share">Share</string>
     <string name="action_collapse">Collapse</string>
     <string name="action_expand">Expand</string>
+    <string name="action_decrease">Decrease</string>
+    <string name="action_increase">Increase</string>
     <string name="unknown_author">Unknown author</string>
     <string name="status_finished">finished</string>
     <string name="time_left">%1$s left</string>
@@ -50,6 +52,7 @@
 
     <!-- Mini player -->
     <string name="player_error_tap_retry">Playback error — tap to retry</string>
+    <string name="mini_player_cd_open">Open now playing</string>
 
     <!-- Edit book dialog -->
     <string name="edit_title">Edit book</string>
@@ -141,7 +144,6 @@
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>
     <string name="home_meta_percent"> · %1$d%%</string>
-    <string name="home_cd_downloaded">Downloaded</string>
 
     <!-- Home: context menu -->
     <string name="home_menu_pause_download">Pause download</string>
@@ -153,7 +155,6 @@
     <string name="home_opening_library">Opening your library…</string>
     <string name="home_no_matches">No matches</string>
     <string name="home_no_matches_hint">Try a different title, author, genre or tag.</string>
-    <string name="home_scanning">Scanning your library…</string>
     <string name="home_empty_title">Your shelf is empty</string>
     <string name="home_empty_hint">Set your library folder and scan to fill it.</string>
     <string name="home_empty_open_settings">Open settings</string>

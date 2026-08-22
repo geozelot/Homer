@@ -8,10 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,17 +45,24 @@ import com.geozelot.homer.ui.theme.Surface2
 /** A small selectable chip for the tri-state "on play" mode in the edit dialog. */
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        color = if (selected) Amber else Parchment,
-        fontSize = 12.sp,
+    // The pill stays compact; the tap area around it is raised to the 48dp minimum.
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, if (selected) Amber else Line, RoundedCornerShape(50))
-            .background(if (selected) AmberSoft else Surface2)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (selected) Amber else Parchment,
+            fontSize = 12.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .border(1.dp, if (selected) Amber else Line, RoundedCornerShape(50))
+                .background(if (selected) AmberSoft else Surface2)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
 }
 
 /**
@@ -91,15 +101,19 @@ fun EditBookDialog(
     val pickCover = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> if (uri != null) onPickCover(uri) }
-    var title by remember { mutableStateOf(book.title) }
-    var author by remember { mutableStateOf(book.author.orEmpty()) }
-    var series by remember { mutableStateOf(book.series.orEmpty()) }
-    var index by remember { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
-    var genre by remember { mutableStateOf(book.genre.orEmpty()) }
-    var tags by remember { mutableStateOf(book.tags.joinToString(", ")) }
-    var hidden by remember { mutableStateOf(book.hidden) }
+    // rememberSaveable throughout: these are drafts the user is typing, and plain remember threw
+    // them away (along with the dialog) on every rotation. They deliberately have no key on [book]
+    // either — the caller re-derives that row from the live library on each recomposition, and a
+    // key would reset the drafts whenever anything about the book changed underneath.
+    var title by rememberSaveable { mutableStateOf(book.title) }
+    var author by rememberSaveable { mutableStateOf(book.author.orEmpty()) }
+    var series by rememberSaveable { mutableStateOf(book.series.orEmpty()) }
+    var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
+    var genre by rememberSaveable { mutableStateOf(book.genre.orEmpty()) }
+    var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
+    var hidden by rememberSaveable { mutableStateOf(book.hidden) }
     // Per-book play mode: null = follow the global setting, true = download on play, false = stream.
-    var playMode by remember { mutableStateOf(book.downloadOnPlay) }
+    var playMode by rememberSaveable { mutableStateOf(book.downloadOnPlay) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

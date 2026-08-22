@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,27 +65,41 @@ fun BiometricGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
 
-    val canAuth = remember(enabled) {
-        enabled && activity != null &&
-            BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
-    }
-
     var unlocked by rememberSaveable { mutableStateOf(false) }
+    // Survives configuration changes on purpose: the prompt itself does too (it's hosted by the
+    // activity), so a rotation used to build and show a SECOND BiometricPrompt on top of the first.
+    var prompting by rememberSaveable { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
-    val locked = canAuth && !unlocked
+    // Re-checked on every resume: capability was remembered once, so enrolling a fingerprint (or
+    // removing the screen lock) while Homer sat in the background left it stale.
+    var resumeTick by remember { mutableIntStateOf(0) }
 
     // Re-lock when the app is backgrounded, so the next resume prompts again.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, enabled) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP && enabled) unlocked = false
+            when (event) {
+                Lifecycle.Event.ON_STOP -> if (enabled) unlocked = false
+                Lifecycle.Event.ON_RESUME -> resumeTick++
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    fun prompt() {
+    val canAuth = remember(enabled, activity, resumeTick) {
+        enabled && activity != null &&
+            BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+    val locked = canAuth && !unlocked
+
+    // [force] is for the Unlock button: if the user can tap it, there is demonstrably no prompt on
+    // screen, so it doubles as the recovery path should the flag ever be left set.
+    fun prompt(force: Boolean) {
         val host = activity ?: return
+        if (prompting && !force) return
+        prompting = true
         authError = null
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle(context.getString(R.string.lock_prompt_title))
@@ -97,10 +112,12 @@ fun BiometricGate(content: @Composable () -> Unit) {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     authError = null
+                    prompting = false
                     unlocked = true
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    prompting = false
                     // A user-dismissed prompt is expected (they can retry with Unlock); anything
                     // else — notably a lockout after too many attempts — needs to be shown, or the
                     // user is stranded on a blank lock screen with no idea why nothing happened.
@@ -116,11 +133,17 @@ fun BiometricGate(content: @Composable () -> Unit) {
         ).authenticate(info)
     }
 
-    // Prompt automatically as soon as we're in a locked state.
-    LaunchedEffect(locked) { if (locked) prompt() }
+    // Prompt automatically as soon as we're in a locked state. This effect restarts after a
+    // configuration change, which is exactly why the un-forced call bails out while a prompt from
+    // before the rotation is still up — it used to stack a second one.
+    LaunchedEffect(locked) { if (locked) prompt(force = false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (locked) LockScreen(icon = Icons.Filled.Lock, error = authError, onUnlock = ::prompt) else content()
+        if (locked) {
+            LockScreen(icon = Icons.Filled.Lock, error = authError, onUnlock = { prompt(force = true) })
+        } else {
+            content()
+        }
     }
 }
 

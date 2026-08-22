@@ -15,14 +15,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -67,6 +71,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,11 +80,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -126,10 +135,11 @@ fun PlayerScreen(
     val editableBook by viewModel.editableBook.collectAsStateWithLifecycle()
     val cover by viewModel.cover.collectAsStateWithLifecycle()
 
-    var showSleepDialog by remember { mutableStateOf(false) }
-    var showBookmarksDialog by remember { mutableStateOf(false) }
-    var showChaptersDialog by remember { mutableStateOf(false) }
-    var showEditDialog by remember { mutableStateOf(false) }
+    // rememberSaveable: a rotation used to close whichever dialog was open.
+    var showSleepDialog by rememberSaveable { mutableStateOf(false) }
+    var showBookmarksDialog by rememberSaveable { mutableStateOf(false) }
+    var showChaptersDialog by rememberSaveable { mutableStateOf(false) }
+    var showEditDialog by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Media notification needs POST_NOTIFICATIONS on Android 13+.
@@ -145,14 +155,10 @@ fun PlayerScreen(
     // Start playback when the screen opens for this book.
     LaunchedEffect(bookId) { viewModel.play(bookId) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 22.dp),
-    ) {
-        val offline = download?.status == DownloadStatus.DONE
+    // The screen's three parts as slots, so the tall and short layouts below can arrange the very
+    // same content without threading every piece of state through two more composables.
+    val offline = download?.status == DownloadStatus.DONE
+    val topBar: @Composable () -> Unit = {
         PlayerTopBar(
             started = state.bookElapsedMs > 0,
             offline = offline,
@@ -163,49 +169,19 @@ fun PlayerScreen(
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
             onEdit = { showEditDialog = true },
         )
-
-        // Artwork centered in the flexible space above the controls, sized to the largest
-        // 1:1.3 cover that fits both the available width and height (so it never overflows
-        // onto the controls on shorter screens).
-        BoxWithConstraints(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
-                // Swipe down anywhere on the artwork to collapse back to the mini-player.
-                .pointerInput(Unit) {
-                    val threshold = 60.dp.toPx()
-                    var dragged = 0f
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (dragged > threshold) onBack()
-                            dragged = 0f
-                        },
-                        onVerticalDrag = { _, delta -> dragged += delta },
-                    )
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f)
-            CoverImage(
-                // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
-                model = cover ?: state.coverModel ?: state.artworkData?.bytes,
-                modifier = Modifier
-                    .width(coverWidth)
-                    .aspectRatio(1f / 1.3f)
-                    .shadow(
-                        elevation = 30.dp,
-                        shape = RoundedCornerShape(14.dp),
-                        ambientColor = Amber,
-                        spotColor = AmberDeep,
-                    )
-                    .clip(RoundedCornerShape(14.dp)),
-            )
-        }
-
-        // Bottom cluster: title, chapter + book-time-left, scrubber, transport, quick-select.
+    }
+    val artwork: @Composable (Modifier) -> Unit = { slotModifier ->
+        PlayerArtwork(
+            // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
+            model = cover ?: state.coverModel ?: state.artworkData?.bytes,
+            onCollapse = onBack,
+            modifier = slotModifier,
+        )
+    }
+    val controls: @Composable (Modifier) -> Unit = { slotModifier ->
+        // Title, chapter + book-time-left, scrubber, transport, quick-select.
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = slotModifier,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val loadingLabel = stringResource(R.string.player_loading)
@@ -231,16 +207,27 @@ fun PlayerScreen(
                 ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 10.dp))
             }
 
-            // Chapter/progress line (info).
-            if (chapterCount > 0) {
+            // Info line. The chapter part is conditional (a single-file book with no embedded
+            // chapters has none), the time-left part is NOT — it used to live inside the chapter
+            // branch, which lost the remaining-time readout for exactly those books.
+            val infoLine = buildString {
+                if (chapterCount > 0) {
+                    append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
+                }
+                timeLeftMs?.let {
+                    if (isNotEmpty()) append(" · ")
+                    append(
+                        if (it <= 0) {
+                            context.getString(R.string.status_finished)
+                        } else {
+                            context.getString(R.string.time_left, formatCompactDuration(it))
+                        },
+                    )
+                }
+            }
+            if (infoLine.isNotEmpty()) {
                 Text(
-                    text = buildString {
-                        append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
-                        timeLeftMs?.let {
-                            append(" · ")
-                            append(if (it <= 0) context.getString(R.string.status_finished) else context.getString(R.string.time_left, formatCompactDuration(it)))
-                        }
-                    },
+                    text = infoLine,
                     color = Faint,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
@@ -285,6 +272,60 @@ fun PlayerScreen(
                 onToggleSkipSilence = { viewModel.setSkipSilence(!skipSilence) },
                 onMark = { showBookmarksDialog = true },
             )
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 22.dp),
+    ) {
+        val viewportHeight = maxHeight
+        if (viewportHeight < SIDE_BY_SIDE_BELOW) {
+            // Short viewport (landscape, split screen): stacking cannot work here — the control
+            // cluster is fixed-height, so it takes what it needs and a weighted cover above it
+            // computes to ~0dp and disappears. Side by side instead: a Row's weights divide the
+            // *width*, so both halves keep the full height and size independently.
+            Column(modifier = Modifier.fillMaxSize()) {
+                topBar()
+                Row(
+                    modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    artwork(Modifier.weight(0.42f).fillMaxHeight().padding(vertical = 8.dp))
+                    controls(
+                        Modifier
+                            .weight(0.58f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 16.dp),
+                    )
+                }
+            }
+        } else {
+            // Tall viewport: the stacked layout, but inside a scroll container whose content is at
+            // least one viewport tall. SpaceBetween keeps the cluster pinned to the bottom while
+            // everything fits; at large font scales the content grows past the viewport and simply
+            // scrolls rather than crushing the cover and clipping the transport row.
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = viewportHeight),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    topBar()
+                    artwork(
+                        Modifier
+                            .fillMaxWidth()
+                            // A fraction of the viewport rather than the leftover space: the cover
+                            // then has a real height no matter how tall the cluster measures.
+                            .height((viewportHeight * 0.48f).coerceAtLeast(MIN_ARTWORK_HEIGHT))
+                            .padding(vertical = 16.dp),
+                    )
+                    controls(Modifier.fillMaxWidth())
+                }
+            }
         }
     }
 
@@ -343,6 +384,55 @@ fun PlayerScreen(
             onSetExtend = viewModel::setSleepExtend,
             onSetFade = viewModel::setSleepFadeOut,
             onDismiss = { showSleepDialog = false },
+        )
+    }
+}
+
+// ── Artwork ──────────────────────────────────────────────────────────────────
+
+/** Below this viewport height the cover and the control cluster sit side by side, not stacked. */
+private val SIDE_BY_SIDE_BELOW = 520.dp
+
+/** Floor for the artwork slot in the stacked layout. */
+private val MIN_ARTWORK_HEIGHT = 150.dp
+
+/** Floor for the cover itself, so it can never compute to a non-positive (invisible) size. */
+private val MIN_COVER_WIDTH = 64.dp
+
+/** The cover, centered in whatever slot it's given and sized to fit it in both dimensions. */
+@Composable
+private fun PlayerArtwork(model: Any?, onCollapse: () -> Unit, modifier: Modifier = Modifier) {
+    BoxWithConstraints(
+        modifier = modifier
+            // Swipe down anywhere on the artwork to collapse back to the mini-player.
+            .pointerInput(Unit) {
+                val threshold = 60.dp.toPx()
+                var dragged = 0f
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (dragged > threshold) onCollapse()
+                        dragged = 0f
+                    },
+                    onVerticalDrag = { _, delta -> dragged += delta },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Largest 1:1.3 cover that fits the slot both ways, floored so a pathological slot can't
+        // reduce it to nothing (an unbounded slot height falls back to the width limit).
+        val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f).coerceAtLeast(MIN_COVER_WIDTH)
+        CoverImage(
+            model = model,
+            modifier = Modifier
+                .width(coverWidth)
+                .aspectRatio(1f / 1.3f)
+                .shadow(
+                    elevation = 30.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    ambientColor = Amber,
+                    spotColor = AmberDeep,
+                )
+                .clip(RoundedCornerShape(14.dp)),
         )
     }
 }
@@ -535,17 +625,25 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
 /** Wide pill opening the chapter picker; sits below the title. */
 @Composable
 private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
+    // The tap area is expanded to the 48dp minimum around the pill rather than by inflating the
+    // pill itself, so the visual stays the compact chip the layout was designed around.
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(Surface2)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
-        Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Surface2)
+                .padding(horizontal = 18.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
+            Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -789,12 +887,39 @@ private fun SleepSettingsDialog(
 
 @Composable
 private fun Stepper(value: String, onDec: () -> Unit, onInc: () -> Unit) {
+    // The buttons are bare glyphs, so they carry an explicit label — TalkBack announces nothing
+    // useful for "−"/"+" on their own. The readout is min-width, not fixed: at a large font scale a
+    // fixed 44dp clipped "30 seconds".
+    val decrease = stringResource(R.string.action_decrease)
+    val increase = stringResource(R.string.action_increase)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onDec) { Text("−", style = MaterialTheme.typography.titleLarge) }
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
-        IconButton(onClick = onInc) { Text("+", style = MaterialTheme.typography.titleLarge) }
+        IconButton(
+            onClick = onDec,
+            modifier = Modifier.semantics { contentDescription = decrease },
+        ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.widthIn(min = 44.dp),
+            textAlign = TextAlign.Center,
+        )
+        IconButton(
+            onClick = onInc,
+            modifier = Modifier.semantics { contentDescription = increase },
+        ) { Text("+", style = MaterialTheme.typography.titleLarge) }
     }
 }
+
+// ── List dialogs (bookmarks, chapters) ───────────────────────────────────────
+
+/**
+ * Height cap for a dialog's scrolling list. Derived from the actual screen rather than hardcoded:
+ * fixed caps (360dp / 280dp) exceeded the whole dialog in landscape and on short screens, which
+ * crushed the surrounding content and pushed the dialog's own buttons off-screen.
+ */
+@Composable
+private fun dialogContentMaxHeight(fraction: Float = 0.45f): Dp =
+    (LocalConfiguration.current.screenHeightDp * fraction).dp
 
 // ── Bookmarks ──────────────────────────────────────────────────────────────
 
@@ -810,44 +935,45 @@ private fun BookmarksDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.player_bookmarks_title)) },
         text = {
-            Column {
-                Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.player_bookmark_add))
+            // One scrolling list with the "Add" button as its first item, capped against the real
+            // screen height: a fixed 280dp cap plus an unscrollable button around it overflowed and
+            // got crushed on a short screen (and in landscape).
+            LazyColumn(modifier = Modifier.heightIn(max = dialogContentMaxHeight())) {
+                item(key = "add") {
+                    Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.player_bookmark_add))
+                    }
                 }
                 if (bookmarks.isEmpty()) {
-                    Text(
-                        stringResource(R.string.player_bookmark_empty),
-                        color = Muted,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                    item(key = "empty") {
+                        Text(
+                            stringResource(R.string.player_bookmark_empty),
+                            color = Muted,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .heightIn(max = 280.dp)
-                            .padding(top = 8.dp),
-                    ) {
-                        items(bookmarks, key = { it.id }) { bookmark ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onJump(bookmark) }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                val chapterFallback = stringResource(R.string.player_chapter_fallback)
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        bookmark.chapterTitle.ifEmpty { chapterFallback },
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(formatTime(bookmark.positionMs), color = Muted, fontSize = 12.sp)
-                                }
-                                TextButton(onClick = { onDelete(bookmark) }) { Text(stringResource(R.string.action_remove)) }
+                    items(bookmarks, key = { it.id }) { bookmark ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onJump(bookmark) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val chapterFallback = stringResource(R.string.player_chapter_fallback)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    bookmark.chapterTitle.ifEmpty { chapterFallback },
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(formatTime(bookmark.positionMs), color = Muted, fontSize = 12.sp)
                             }
+                            TextButton(onClick = { onDelete(bookmark) }) { Text(stringResource(R.string.action_remove)) }
                         }
                     }
                 }
@@ -876,7 +1002,7 @@ private fun ChapterPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.player_chapters)) },
         text = {
-            LazyColumn(state = listState, modifier = Modifier.heightIn(max = 360.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.heightIn(max = dialogContentMaxHeight())) {
                 itemsIndexed(chapters) { index, chapter ->
                     val chapterFallback = stringResource(R.string.chapter_numbered, index + 1)
                     Row(

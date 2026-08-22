@@ -130,7 +130,13 @@ fun LibrarySourceScreen(
                     },
                 )
             }
-            FilledTonalButton(onClick = viewModel::refreshCoverArt, modifier = Modifier.weight(1f)) {
+            // Disabled during a scan like Scan itself: repeated taps enqueued repeated passes over
+            // the whole library.
+            FilledTonalButton(
+                onClick = viewModel::refreshCoverArt,
+                enabled = !scanning,
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(stringResource(R.string.sync_refresh_covers))
             }
         }

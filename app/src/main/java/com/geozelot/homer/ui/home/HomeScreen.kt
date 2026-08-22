@@ -21,16 +21,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -73,11 +76,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -144,13 +149,21 @@ fun HomeScreen(
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
-    var editing by remember { mutableStateOf<BookListItem?>(null) }
-    var editingSeries by remember { mutableStateOf<LibraryEntry.Series?>(null) }
+    // Dialog targets are ids, not row snapshots. A snapshot went stale the moment the dialog wrote
+    // through the ViewModel — picking a cover left the button saying "Choose cover" until the dialog
+    // was reopened — and being a plain `remember` it also closed the dialog on every rotation. The
+    // live row is re-derived from `entries` below on each recomposition.
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
     // rememberSaveable so a rotation doesn't drop the user out of search: `searching` used to be
     // lost while the query stayed in the ViewModel, leaving the library filtered with no search
     // field to clear it.
     var searching by rememberSaveable { mutableStateOf(false) }
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+    // Open series shelves, held as stable keys (see `expandKey`) and saved across configuration
+    // changes — a rotation used to collapse every shelf the user had opened.
+    val expanded = rememberSaveable(
+        saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
+    ) { mutableStateListOf<String>() }
 
     // Back should leave search rather than leave the app with the library still filtered.
     BackHandler(enabled = searching) {
@@ -162,10 +175,10 @@ fun HomeScreen(
         BookActions(
             onDownload = viewModel::download,
             onRemove = viewModel::deleteDownload,
-            onEdit = { editing = it },
+            onEdit = { editingId = it.id },
             onSetHidden = viewModel::setHidden,
             onMarkCompleted = viewModel::markCompleted,
-            onEditSeries = { editingSeries = it },
+            onEditSeries = { editingSeriesKey = it.expandKey },
             onPause = viewModel::pauseDownload,
             onResume = viewModel::resumeDownload,
         )
@@ -218,7 +231,6 @@ fun HomeScreen(
                     EmptyResults(modifier = Modifier.weight(1f))
                 else ->
                     EmptyLibrary(
-                        scanning = false,
                         onOpenSettings = onOpenSettings,
                         modifier = Modifier.weight(1f),
                     )
@@ -253,45 +265,84 @@ fun HomeScreen(
             }
         }
 
-        MiniPlayer(
-            state = playback,
-            onOpenPlayer = onBookClick,
-            onPlayPause = viewModel::playPause,
-            onRetry = viewModel::retry,
-            modifier = Modifier.navigationBarsPadding(),
-            liveCover = miniPlayerBook?.coverModel,
-            liveTitle = miniPlayerBook?.title,
-        )
+        // The mini-player insets itself (its gradient runs behind the navigation bar). When there's
+        // nothing playing it emits nothing at all, so the space has to be reserved here or the last
+        // row of books ends up under the navigation bar.
+        if (playback.bookId != null) {
+            MiniPlayer(
+                state = playback,
+                onOpenPlayer = onBookClick,
+                onPlayPause = viewModel::playPause,
+                onRetry = viewModel::retry,
+                liveCover = miniPlayerBook?.coverModel,
+                liveTitle = miniPlayerBook?.title,
+            )
+        } else {
+            Spacer(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsBottomHeight(WindowInsets.navigationBars),
+            )
+        }
     }
 
-    editing?.let { book ->
+    // Both dialogs re-derive their subject from the live list every recomposition, so edits made
+    // inside them (a cover pick) are reflected at once and a rotation doesn't lose the dialog.
+    entries.findBook(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
             onSave = { title, author, series, index, genre, tags, hidden, downloadOnPlay ->
                 viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, downloadOnPlay)
-                editing = null
+                editingId = null
             },
             onReset = {
                 viewModel.clearOverride(book.id)
-                editing = null
+                editingId = null
             },
             onPickCover = { uri -> viewModel.setCustomCover(book.id, uri) },
             onClearCover = { viewModel.clearCustomCover(book.id) },
-            onDismiss = { editing = null },
+            onDismiss = { editingId = null },
         )
     }
 
-    editingSeries?.let { series ->
+    entries.findSeries(editingSeriesKey)?.let { series ->
         SeriesEditDialog(
             series = series,
             onSave = { name, author ->
                 viewModel.saveSeriesOverride(series.books.map { it.id }, name, author)
-                editingSeries = null
+                editingSeriesKey = null
             },
-            onDismiss = { editingSeries = null },
+            onDismiss = { editingSeriesKey = null },
         )
     }
 
+}
+
+/**
+ * Stable identity of a series shelf, used for expand/collapse state and lazy-item keys.
+ * [LibraryEntry.Series.key] is "author|series", so it changes the instant the user renames the
+ * series — which silently collapsed the shelf and leaked the old entry. Book ids survive metadata
+ * edits, and a series always has at least two books.
+ */
+private val LibraryEntry.Series.expandKey: String
+    get() = "series:${books.minOf { it.id }}"
+
+/** The live row for an open edit dialog, or null when there's no target (or it's gone). */
+private fun List<LibraryEntry>.findBook(id: String?): BookListItem? {
+    if (id == null) return null
+    return firstNotNullOfOrNull { entry ->
+        when (entry) {
+            is LibraryEntry.Header -> null
+            is LibraryEntry.Standalone -> entry.book.takeIf { it.id == id }
+            is LibraryEntry.Series -> entry.books.firstOrNull { it.id == id }
+        }
+    }
+}
+
+/** The live series for an open series-edit dialog, matched on its stable [expandKey]. */
+private fun List<LibraryEntry>.findSeries(key: String?): LibraryEntry.Series? {
+    if (key == null) return null
+    return filterIsInstance<LibraryEntry.Series>().firstOrNull { it.expandKey == key }
 }
 
 /** Maps a library row to the shared edit dialog's minimal model (effective values). */
@@ -437,7 +488,8 @@ private fun LazyGridScope.libraryContent(
     groupMode: LibraryGroup,
     onSortChange: (LibrarySort) -> Unit,
     onGroupChange: (LibraryGroup) -> Unit,
-    expanded: MutableMap<String, Boolean>,
+    /** Keys (see `expandKey`) of the series shelves that are open. */
+    expanded: MutableList<String>,
     onToggleView: (Boolean) -> Unit,
     onBookClick: (String) -> Unit,
     actions: BookActions,
@@ -456,11 +508,14 @@ private fun LazyGridScope.libraryContent(
         SortGroupBar(sortMode, groupMode, onSortChange, onGroupChange)
     }
 
-    entries.forEach { entry ->
+    entries.forEachIndexed { position, entry ->
         when (entry) {
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
-                key = "header:${entry.title}",
+                // The position is part of the key deliberately: two headers can carry the same
+                // title — a book whose author metadata literally reads "Unknown author" gets its own
+                // section beside the fallback one — and duplicate keys make the lazy layout throw.
+                key = "header:$position:${entry.title}",
             ) { SectionLabelRow(entry.title) }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
@@ -474,35 +529,36 @@ private fun LazyGridScope.libraryContent(
                 }
             }
             is LibraryEntry.Series -> {
-                val isOpen = expanded[entry.key] == true
+                val shelfKey = entry.expandKey
+                val isOpen = shelfKey in expanded
                 if (gridView) {
                     if (isOpen) {
                         // Full-span header banner, then each episode as its own grid cell — so a
                         // large series composes lazily instead of all at once in a single item.
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:${entry.key}") {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
                             ExpandedSeriesHeader(
                                 series = entry,
-                                onCollapse = { expanded[entry.key] = false },
+                                onCollapse = { expanded.remove(shelfKey) },
                             )
                         }
                         items(entry.books, key = { "sep:${it.id}" }) { book ->
                             BookGridCard(book, onOpen = onBookClick, actions = actions)
                         }
                     } else {
-                        item(key = "series:${entry.key}") {
+                        item(key = shelfKey) {
                             SeriesGridCard(
                                 series = entry,
-                                onOpen = { expanded[entry.key] = true },
+                                onOpen = { expanded.add(shelfKey) },
                                 onEdit = { actions.onEditSeries(entry) },
                             )
                         }
                     }
                 } else {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "series:${entry.key}") {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = shelfKey) {
                         SeriesShelfRow(
                             series = entry,
                             expanded = isOpen,
-                            onToggle = { expanded[entry.key] = !isOpen },
+                            onToggle = { if (isOpen) expanded.remove(shelfKey) else expanded.add(shelfKey) },
                             onEdit = { actions.onEditSeries(entry) },
                         )
                     }
@@ -566,7 +622,9 @@ private fun ViewToggleButton(
 ) {
     Box(
         modifier = Modifier
-            .size(width = 32.dp, height = 28.dp)
+            // sizeIn, not size: the segment was 32×28dp, well under the 48dp minimum touch target.
+            // The icon keeps its size; only the tappable segment grows.
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .background(if (selected) AmberSoft else Color.Transparent)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -676,7 +734,6 @@ private fun ContinueSlim(book: BookListItem, onOpen: (String) -> Unit) {
     ) {
         CoverArt(
             model = book.coverModel,
-            title = book.title,
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(5.dp)),
@@ -715,7 +772,6 @@ private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
         ) {
             CoverArt(
                 model = book.coverModel,
-                title = book.title,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f / 1.5f)
@@ -797,7 +853,7 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
-            CoverArt(model = book.coverModel, title = book.title, modifier = Modifier.fillMaxSize())
+            CoverArt(model = book.coverModel, modifier = Modifier.fillMaxSize())
             if (book.isDownloaded) {
                 DownloadBadge(modifier = Modifier.align(Alignment.TopEnd).padding(7.dp))
             }
@@ -896,7 +952,6 @@ private fun SeriesGridCard(series: LibraryEntry.Series, onOpen: () -> Unit, onEd
                 val book = covers[depth]
                 CoverArt(
                     model = book.coverModel,
-                    title = book.title,
                     modifier = Modifier
                         .offset(x = pad + dx * depth, y = pad + dy * (steps - depth))
                         .width(coverW)
@@ -975,7 +1030,6 @@ private fun BookListRow(
         Box {
             CoverArt(
                 model = book.coverModel,
-                title = book.title,
                 modifier = Modifier
                     .size(46.dp)
                     .clip(RoundedCornerShape(8.dp)),
@@ -1000,7 +1054,11 @@ private fun BookListRow(
                 color = Parchment,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                lineHeight = 16.sp,
+                // Two reserved lines: at one line, books whose names share a long prefix were
+                // indistinguishable. minLines matches maxLines so every row stays the same height.
+                minLines = 2,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -1065,7 +1123,6 @@ private fun SeriesShelfRow(
             series.books.take(3).forEachIndexed { i, book ->
                 CoverArt(
                     model = book.coverModel,
-                    title = book.title,
                     modifier = Modifier
                         .offset(x = (i * 6).dp)
                         .size(width = 38.dp, height = 52.dp)
@@ -1110,7 +1167,9 @@ private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
             .background(Studio.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.DownloadDone, contentDescription = stringResource(R.string.home_cd_downloaded), tint = Sage, modifier = Modifier.size(iconSize))
+        // Decorative: the badge sits inside a card/row that TalkBack already reads out, and an
+        // extra "Downloaded" node in the middle of it only interrupts the title.
+        Icon(Icons.Filled.DownloadDone, contentDescription = null, tint = Sage, modifier = Modifier.size(iconSize))
     }
 }
 
@@ -1145,7 +1204,7 @@ private fun ProgressRing(progress: Float, modifier: Modifier = Modifier) {
 // ── Cover art (title-forward placeholder) ─────────────────────────────────────
 
 @Composable
-private fun CoverArt(model: Any?, title: String, modifier: Modifier = Modifier) {
+private fun CoverArt(model: Any?, modifier: Modifier = Modifier) {
     Box(modifier) {
         if (model != null) {
             CoverImage(model = model, modifier = Modifier.fillMaxSize())
@@ -1160,7 +1219,9 @@ private fun CoverArt(model: Any?, title: String, modifier: Modifier = Modifier) 
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.MenuBook,
-                    contentDescription = title,
+                    // Decorative, exactly like the real-cover case: announcing the title only when
+                    // art happened to be missing made a row read differently for no reason.
+                    contentDescription = null,
                     tint = Muted,
                     modifier = Modifier.fillMaxSize(0.34f),
                 )
@@ -1274,28 +1335,23 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
     }
 }
 
+/** The shelf really is empty: no scanning branch here — [LibraryLoading] owns that state. */
 @Composable
-private fun EmptyLibrary(scanning: Boolean, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun EmptyLibrary(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (scanning) {
-            CircularProgressIndicator(color = Amber)
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.home_scanning), color = Muted, fontSize = 14.sp)
-        } else {
-            Text(stringResource(R.string.home_empty_title), style = SerifTitle, color = Parchment)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.home_empty_hint),
-                color = Muted,
-                fontSize = 13.sp,
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onOpenSettings) { Text(stringResource(R.string.home_empty_open_settings)) }
-        }
+        Text(stringResource(R.string.home_empty_title), style = SerifTitle, color = Parchment)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.home_empty_hint),
+            color = Muted,
+            fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onOpenSettings) { Text(stringResource(R.string.home_empty_open_settings)) }
     }
 }
 
@@ -1306,8 +1362,9 @@ private fun SeriesEditDialog(
     onSave: (name: String, author: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var name by remember { mutableStateOf(series.name) }
-    var author by remember { mutableStateOf(series.author.orEmpty()) }
+    // rememberSaveable, like the book dialog: a rotation used to throw away what was typed.
+    var name by rememberSaveable { mutableStateOf(series.name) }
+    var author by rememberSaveable { mutableStateOf(series.author.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.home_series_edit_title)) },

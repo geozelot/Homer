@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -213,17 +214,26 @@ fun <T> DropdownChip(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        Row(
+        // The pill is ~26dp tall, well under the 48dp minimum touch target, so the tap area is
+        // expanded around it — inflating the pill itself would break its alignment with the 11sp
+        // label text it sits beside.
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Line, RoundedCornerShape(8.dp))
-                .background(Surface1)
-                .clickable { open = true }
-                .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .sizeIn(minHeight = 48.dp)
+                .clickable { open = true },
+            contentAlignment = Alignment.Center,
         ) {
-            Text(label, color = Muted, fontSize = 11.sp)
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .background(Surface1)
+                    .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, color = Muted, fontSize = 11.sp)
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
+            }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { option ->
