@@ -121,9 +121,8 @@
 
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Search</string>
-    <string name="home_cd_library_sync">Library &amp; Sync</string>
     <string name="home_cd_settings">Settings</string>
-    <string name="home_cd_menu">Library &amp; settings</string>
+    <string name="home_cd_menu">More options</string>
     <string name="home_cd_close_search">Close search</string>
     <string name="home_search_placeholder">Title, author, genre, tag…</string>
 
@@ -163,26 +162,22 @@
     <string name="home_series_edit_title">Edit series</string>
     <string name="home_series_edit_desc">%1$d books — changes apply to all of them.</string>
 
-    <!-- Settings sheet -->
+    <!-- Settings: shared labels reused across the settings screens -->
     <string name="settings_title">Settings</string>
     <string name="settings_account">%1$s · %2$s</string>
     <string name="settings_library_share">Share · %1$s</string>
-    <string name="settings_library_readonly"> · read-only</string>
-    <string name="settings_logout">Log out</string>
     <string name="settings_sync_device">Progress: this device only</string>
     <string name="settings_sync_to">Syncing to %1$s</string>
     <string name="settings_sync_link">Sync to my account</string>
     <string name="settings_sync_stop">Stop syncing</string>
-    <string name="settings_storage_header">STORAGE</string>
     <string name="settings_storage_folder">Folder: %1$s</string>
     <string name="settings_storage_custom_folder">Custom folder: %1$s</string>
     <string name="settings_storage_default">App storage (default)</string>
     <string name="settings_storage_custom_desc">Downloads, covers and progress live in your chosen folder — kept if you reinstall.</string>
     <string name="settings_storage_default_desc">Downloads and covers live in the app\'s storage, which is cleared if you uninstall. Pick a folder to keep them across reinstalls.</string>
-    <string name="settings_storage_system_picker">System picker…</string>
     <string name="settings_storage_browse">Browse device…</string>
     <string name="settings_storage_use_app">Use app storage</string>
-    <string name="settings_storage_picker_desc">“System picker” uses Android\'s folder chooser; “Browse device” uses all-files access (pick any folder) if the picker won\'t cooperate. Changing location moves your downloads and covers to the new place.</string>
+    <string name="settings_storage_picker_desc">“Choose folder” uses Android\'s folder chooser; “Browse device” uses all-files access (pick any folder) if the chooser won\'t cooperate. Changing the location moves your downloads and covers to the new place.</string>
     <string name="settings_online_covers">Look up missing covers online</string>
     <string name="settings_online_covers_desc">Sends only the title and author of art-less books to Open Library (openlibrary.org, run by the Internet Archive) — a third party — to find a cover. Your server, account and library stay private.</string>
     <string name="settings_skip_interval">Skip button interval</string>
@@ -192,16 +187,13 @@
     <string name="settings_download_on_play">Download books when you play them</string>
     <string name="settings_download_on_play_desc">Pressing Play keeps the book for offline listening (it streams right away while it downloads). Turn off to stream only and download manually. A single book can override this from its Edit dialog.</string>
     <string name="settings_wifi_only">Download on Wi‑Fi only</string>
-    <string name="settings_security_header">SECURITY</string>
     <string name="settings_app_lock">Require unlock to open</string>
     <string name="settings_app_lock_desc">Asks for your fingerprint, face, or screen lock when Homer opens or returns from the background.</string>
     <string name="settings_cert_pinning">Pin server certificate</string>
     <string name="settings_cert_pinning_desc">Remembers your server\'s certificate on the next connection and refuses to connect if it ever changes. Turn off and on again after a legitimate certificate renewal.</string>
-    <string name="settings_about_header">ABOUT</string>
     <string name="settings_diagnostics">Diagnostics (logs)</string>
 
-    <!-- Library &amp; Sync sheet -->
-    <string name="sync_title">Library &amp; Sync</string>
+    <!-- Settings: library source (reused wording) -->
     <string name="sync_library_folder">Library folder</string>
     <string name="sync_library_folder_placeholder">e.g. Audiobooks (blank = whole drive)</string>
     <string name="sync_scanning">Scanning…</string>
@@ -210,7 +202,6 @@
     <string name="sync_full_rescan">Full re-scan</string>
     <string name="sync_scan_desc">Scan re-reads changed folders and fetches missing art. Refresh re-fetches all covers. Full re-scan rebuilds the whole library.</string>
     <string name="sync_show_hidden">Show hidden books</string>
-    <string name="sync_discovered_header">DISCOVERED LIBRARIES</string>
     <string name="sync_rediscover">Rediscover</string>
     <string name="sync_discovering">Scanning your server…</string>
     <string name="sync_no_libraries">No libraries found yet — try Rediscover.</string>
@@ -219,24 +210,82 @@
     <string name="sync_kind_files_root">Your account root</string>
     <string name="sync_kind_library_root">Configured library</string>
     <string name="sync_kind_shared_folder">Shared folder</string>
-    <string name="sync_detail_shared_catalog"> · shared catalog</string>
     <string name="sync_detail_book_count"> (%1$d books)</string>
     <string name="sync_detail_private_progress"> · private progress</string>
     <string name="sync_detail_owner"> · owner: %1$s</string>
     <string name="sync_use_as_library">Use as library folder</string>
-    <string name="sync_sync_header">SYNC</string>
     <string name="sync_progress_switch">Sync my progress across my devices</string>
-    <string name="sync_progress_on_desc">Positions, bookmarks and edits are saved privately to your account and follow you across your devices.</string>
-    <string name="sync_progress_off_desc">Progress stays on this device only — nothing is written to your server.</string>
-    <string name="sync_shared_switch">Use a shared library catalog</string>
-    <string name="sync_shared_reads">Reads the shared catalog + covers at the library root, so new devices skip scanning.</string>
-    <string name="sync_shared_publishes">Publishes the library catalog + covers so other devices skip scanning and re-extracting art.</string>
-    <string name="sync_shared_each">Each device scans the library and extracts its own covers.</string>
-    <string name="sync_shared_owner">  Owner: %1$s.</string>
-    <string name="sync_shared_owner_unknown">  Owner: not detected.</string>
+    <string name="sync_progress_on_desc">Your place, bookmarks and edits are saved privately to your account and follow you across your devices.</string>
+    <string name="sync_progress_off_desc">Everything stays on this device only — nothing is written to your server.</string>
     <string name="sync_scan_folders_books">%1$d folders · %2$d books</string>
     <string name="sync_books_indexed">%1$d books indexed</string>
     <string name="sync_books_count">%1$d books</string>
+
+    <!-- Settings: hub -->
+    <string name="set_source_title">Library source</string>
+    <string name="set_source_summary">Where your books come from</string>
+    <string name="set_source_summary_books">%1$s · %2$d books</string>
+    <string name="set_device_title">On this device</string>
+    <string name="set_sync_title">Sync</string>
+    <string name="set_sync_state_account">Your account</string>
+    <string name="set_sync_state_device">This device only</string>
+    <string name="set_playback_title">Playback</string>
+    <string name="set_playback_summary">Skip buttons jump %1$ds</string>
+    <string name="set_privacy_title">Privacy &amp; security</string>
+    <string name="set_privacy_summary">App lock, certificate, online lookups</string>
+    <string name="set_about_title">About</string>
+    <string name="set_about_summary">Version, diagnostics, licenses</string>
+
+    <!-- Settings: library source -->
+    <string name="set_source_current_header">CURRENT SOURCE</string>
+    <string name="set_source_none">Not connected</string>
+    <string name="set_source_readonly">read-only</string>
+    <string name="set_source_account_desc">Your books are read from this account. Homer never moves, renames or deletes them.</string>
+    <string name="set_source_share_desc">Your books are read through this share link. Homer never moves, renames or deletes them.</string>
+    <string name="set_source_share_root_note">A share link points at a single folder, and that folder is the library. To use a different one, open a different share link.</string>
+    <string name="set_source_not_scanned">Not scanned yet</string>
+    <string name="set_source_other_header">OTHER LIBRARIES FOUND</string>
+    <string name="set_detail_shared_index"> · shared index</string>
+    <string name="set_shared_index_title">Share the library index</string>
+    <string name="set_shared_index_desc">Lets your other devices (and anyone sharing this folder) skip scanning and re-fetching cover art. Contains only library structure — no personal data, and never your listening position.</string>
+    <string name="set_shared_index_state_reading">Reading the index in this folder, so this device doesn\'t have to scan.</string>
+    <string name="set_shared_index_state_publishing">Writing the index to this folder, so your other devices don\'t have to scan.</string>
+    <string name="set_shared_index_state_off">Every device scans the library and builds its own cover art.</string>
+    <string name="set_shared_index_owner">  Kept by %1$s.</string>
+    <string name="set_shared_index_readonly_note">This share link is read-only: it can use an index that is already there, but can\'t create or update one.</string>
+    <string name="set_full_rescan_confirm_title">Rebuild the library?</string>
+    <string name="set_full_rescan_confirm_body">Homer will re-read every folder on your server and fetch all cover art again. On a large library this takes a while. Your place, bookmarks and edits are kept.</string>
+    <string name="set_full_rescan_confirm_action">Rebuild</string>
+    <string name="set_sign_out">Sign out</string>
+    <string name="set_sign_out_confirm_title">Sign out of Homer?</string>
+    <string name="set_sign_out_confirm_body">Homer will forget this server and clear the library from this device. Your books stay where they are, and so does anything already saved to your account.</string>
+
+    <!-- Settings: on this device -->
+    <string name="set_device_location_header">WHERE DOWNLOADS ARE KEPT</string>
+    <string name="set_device_choose_folder">Choose folder…</string>
+    <string name="set_device_downloads_header">DOWNLOADING</string>
+    <string name="set_use_app_storage_confirm_title">Move everything back to app storage?</string>
+    <string name="set_use_app_storage_confirm_body">Your downloads and cover art will be moved into Homer\'s own storage, which Android erases if you ever uninstall the app. Nothing is deleted right now.</string>
+    <string name="set_use_app_storage_confirm_action">Move</string>
+
+    <!-- Settings: sync -->
+    <string name="set_sync_lead">One thing follows you between devices: your place in each book, your bookmarks, and any titles or authors you have corrected. It is saved privately in your own account — nowhere else.</string>
+    <string name="set_sync_account_header">WHERE YOUR PLACE IS SAVED</string>
+
+    <!-- Settings: playback -->
+    <string name="set_playback_skip_desc">How far the player\'s skip buttons jump.</string>
+    <string name="set_playback_rewind_desc">Steps back a little when you press play again, so you can pick the thread back up.</string>
+
+    <!-- Settings: privacy &amp; security -->
+    <string name="set_privacy_device_header">THIS DEVICE</string>
+    <string name="set_privacy_server_header">YOUR SERVER</string>
+    <string name="set_privacy_online_header">ONLINE LOOKUPS</string>
+    <string name="set_privacy_statement_summary">What Homer stores, and what it never sends</string>
+
+    <!-- Settings: about -->
+    <string name="set_about_tagline">A self-hosted audiobook player. No accounts but yours, no analytics, no tracking.</string>
+    <string name="set_about_diagnostics_summary">Recent log, for reporting a problem</string>
+    <string name="set_about_licenses_summary">The open-source software Homer is built on</string>
 
     <!-- Player -->
     <string name="player_loading">Loading…</string>
