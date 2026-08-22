@@ -2,6 +2,7 @@ package com.geozelot.homer.data.sync
 
 import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
+import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
@@ -17,6 +18,7 @@ import com.geozelot.homer.data.webdav.PreconditionFailedException
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.room.withTransaction
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -43,6 +45,7 @@ import javax.inject.Singleton
 @Singleton
 class HomerCatalogRepository @Inject constructor(
     private val webDavClient: WebDavClient,
+    private val db: HomerDatabase,
     private val bookDao: BookDao,
     private val audioFileDao: AudioFileDao,
     private val bookOverrideDao: BookOverrideDao,
@@ -237,26 +240,34 @@ class HomerCatalogRepository @Inject constructor(
             for ((id, cb) in catalog.books) {
                 val local = bookDao.findById(id)
                 if (local == null || cb.updatedAt > local.updatedAt) {
-                    bookDao.upsert(listOf(cb.toBook(id, local)))
-                    // Merge rather than replace. Since an edit now stamps the entry with the edit
-                    // time, a peer's metadata correction reaches this branch — and the publishing
-                    // device may never have played the book, so its files carry null durations.
-                    // Taking those verbatim would wipe this device's measurements, dropping the
-                    // book out of "fully measured" (no time-left, no progress ring, no auto-finish)
-                    // until every file is streamed again to re-probe it.
-                    val measured = audioFileDao.findForBook(id).associateBy { it.relativePath }
-                    audioFileDao.deleteForBook(id)
-                    audioFileDao.upsert(
-                        cb.files.map { file ->
-                            val entity = file.toEntity(id)
-                            val previous = measured[file.relativePath]
-                            entity.copy(
-                                durationMs = entity.durationMs ?: previous?.durationMs,
-                                // Keep "we already established this one can't be read" too.
-                                durationAttempted = previous?.durationAttempted ?: false,
-                            )
-                        },
-                    )
+                    // One transaction PER BOOK. Replacing a book's files is a delete followed by an
+                    // insert, and a crash, a cancellation or a disk error in between used to leave
+                    // that book in the library with no files at all — unplayable, and only a full
+                    // re-scan would rebuild it. Per book, not around the whole loop: the scan's own
+                    // long transaction already serialises against position saves during playback,
+                    // and a catalog of several hundred books would hold the write lock far longer.
+                    db.withTransaction {
+                        bookDao.upsert(listOf(cb.toBook(id, local)))
+                        // Merge rather than replace. Since an edit now stamps the entry with the
+                        // edit time, a peer's metadata correction reaches this branch — and the
+                        // publishing device may never have played the book, so its files carry null
+                        // durations. Taking those verbatim would wipe this device's measurements,
+                        // dropping the book out of "fully measured" (no time-left, no progress ring,
+                        // no auto-finish) until every file is streamed again to re-probe it.
+                        val measured = audioFileDao.findForBook(id).associateBy { it.relativePath }
+                        audioFileDao.deleteForBook(id)
+                        audioFileDao.upsert(
+                            cb.files.map { file ->
+                                val entity = file.toEntity(id)
+                                val previous = measured[file.relativePath]
+                                entity.copy(
+                                    durationMs = entity.durationMs ?: previous?.durationMs,
+                                    // Keep "we already established this one can't be read" too.
+                                    durationAttempted = previous?.durationAttempted ?: false,
+                                )
+                            },
+                        )
+                    }
                     applied++
                     continue
                 }

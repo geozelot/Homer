@@ -107,12 +107,59 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
         uri
     }
 
+    /**
+     * Streams to a `.part` sibling and renames it into place, so a write killed part-way through
+     * can never be mistaken for a finished file — matching [FileStorageArea.writeStream]. A
+     * truncated download that answers `exists()` is a genuine hazard: it gets counted as a
+     * migratable file and, but for playback being keyed on the download row's `downloadedFiles`
+     * rather than on the file itself, would be played as though complete.
+     *
+     * Renaming is optional in the SAF contract, so a provider that doesn't advertise
+     * `FLAG_SUPPORTS_RENAME` is written to directly — non-atomic, exactly as this always was.
+     * [block] is invoked exactly once either way: it typically drains a network stream, so a
+     * "write it again the other way" retry would silently produce an empty file.
+     */
     override suspend fun writeStream(rel: String, block: (OutputStream) -> Unit): Uri =
         withContext(Dispatchers.IO) {
-            val uri = createFile(rel)
-            (resolver.openOutputStream(uri, "w") ?: throw IOException("SAF: open output $rel")).use(block)
-            uri
+            val part = createFile("$rel$PART_SUFFIX")
+            if (!supportsRename(part)) {
+                Log.w(TAG, "SAF: provider can't rename; writing $rel in place")
+                runCatching { DocumentsContract.deleteDocument(resolver, part) }
+                val direct = createFile(rel)
+                (resolver.openOutputStream(direct, "w") ?: throw IOException("SAF: open output $rel"))
+                    .use(block)
+                return@withContext direct
+            }
+
+            (resolver.openOutputStream(part, "w") ?: throw IOException("SAF: open output $rel$PART_SUFFIX"))
+                .use(block)
+            // Clear the destination first: renaming onto a name that already exists makes providers
+            // disambiguate with a " (1)" suffix, leaving a file this area could never resolve again.
+            resolveFile(rel)?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+
+            val name = safeStorageSegment(nameOf(rel))
+            // Providers may return null to mean "renamed, same Uri", so re-resolve on null.
+            val renamed = runCatching { DocumentsContract.renameDocument(resolver, part, name) }
+                .onFailure { Log.w(TAG, "SAF: rename of $rel failed despite the flag", it) }
+                .getOrNull() ?: resolveFile(rel)
+            if (renamed != null) return@withContext renamed
+
+            // Flagged as renameable but refused anyway. The bytes are all in the .part file, so
+            // copy them over rather than re-running [block] against a stream already drained.
+            val target = createFile(rel)
+            val input = resolver.openInputStream(part) ?: throw IOException("SAF: lost $rel$PART_SUFFIX")
+            (resolver.openOutputStream(target, "w") ?: throw IOException("SAF: open output $rel"))
+                .use { out -> input.use { it.copyTo(out) } }
+            runCatching { DocumentsContract.deleteDocument(resolver, part) }
+            target
         }
+
+    /** Whether the provider will rename [uri] — optional in the SAF contract. */
+    private fun supportsRename(uri: Uri): Boolean = runCatching {
+        resolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use { c ->
+            c.moveToFirst() && (c.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME) != 0
+        } ?: false
+    }.getOrDefault(false)
 
     override suspend fun uri(rel: String): Uri? = withContext(Dispatchers.IO) { resolveFile(rel) }
 
@@ -168,6 +215,9 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
 
     private companion object {
         const val TAG = "HomerStore"
+
+        /** Extension a streamed write lands under until it is renamed into place. */
+        const val PART_SUFFIX = ".part"
     }
 
     private fun mimeFor(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {

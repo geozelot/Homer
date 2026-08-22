@@ -49,10 +49,6 @@ interface BookDao {
     @Query("UPDATE books SET customCoverPath = :path WHERE id = :bookId")
     suspend fun updateCustomCover(bookId: String, path: String?)
 
-    /** Clears all custom covers (e.g. when the storage location changes and their Uris go stale). */
-    @Query("UPDATE books SET customCoverPath = NULL")
-    suspend fun clearCustomCovers()
-
     /** Marks a book's cover as tried (whether or not art was found) so it isn't re-probed. */
     @Query("UPDATE books SET coverAttempted = 1 WHERE id = :bookId")
     suspend fun markCoverAttempted(bookId: String)

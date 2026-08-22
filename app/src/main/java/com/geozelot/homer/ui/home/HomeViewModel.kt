@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
@@ -46,7 +47,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** A library row: enough to render without touching the DB entity in the UI. */
+/**
+ * A library row: enough to render without touching the DB entity in the UI.
+ *
+ * [Immutable] is load-bearing, not decoration. Every saved playback position rebuilds this whole
+ * list, so each row arrives as a new instance that is `equals` to the old one for every book but
+ * the one playing. Compose skips a card whose arguments are unchanged only if its parameter types
+ * are stable — and `coverModel: Any?` plus `tags: List<String>` are both inferred unstable, which
+ * dropped that guarantee and recomposed the entire visible library on every position save. The
+ * annotation is honest here: all properties are `val`s, and the cover model is only ever an
+ * immutable Uri, File or String.
+ */
+@Immutable
 data class BookListItem(
     val id: String,
     val title: String,
@@ -106,10 +118,20 @@ private data class EffectiveBook(
     val coverModel: Any?,
 )
 
-/** A library row: a section header, a standalone book, or a collapsible series shelf. */
+/**
+ * A library row: a section header, a standalone book, or a collapsible series shelf.
+ *
+ * [Immutable] for the same reason as [BookListItem] — `Series.books` is a `List`, so without it
+ * an unchanged shelf recomposes whenever the list is rebuilt.
+ */
+@Immutable
 sealed interface LibraryEntry {
     data class Header(val title: String) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
+
+    // Annotated on the class as well as the interface: stability is inferred per concrete type,
+    // and this is the one passed to composables (the series banner and card) as itself.
+    @Immutable
     data class Series(
         val key: String,
         val name: String,
@@ -160,7 +182,7 @@ class HomeViewModel @Inject constructor(
     private val discovery: LibraryDiscovery,
     private val storageLocation: StorageLocation,
     private val storageMigrationManager: StorageMigrationManager,
-    storageMigrator: StorageMigrator,
+    private val storageMigrator: StorageMigrator,
     private val localMirror: LocalMirror,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
@@ -638,6 +660,10 @@ class HomeViewModel @Inject constructor(
         val p = _pendingStorageChange.value ?: return
         _pendingStorageChange.value = null
         viewModelScope.launch {
+            // Before commitLocation, which releases the old folder's SAF grant and makes it
+            // unreadable. Hand-picked covers are the one part of the local cache that isn't
+            // re-derivable, so they're carried across rather than dropped.
+            storageMigrator.carryCustomCovers(p.source, p.target)
             commitLocation(p.source, p.target)
             adoptCurrentArea()
         }
@@ -668,10 +694,13 @@ class HomeViewModel @Inject constructor(
      * Adopts whatever the (now active) area already holds: import its progress mirror (LWW),
      * recompute download status against it, and re-fetch covers (their old Uris are stale). Used
      * when the user loads an existing library in the chosen folder rather than moving into it.
+     *
+     * Only *detected* art is discarded here — it costs one enrichment pass to rebuild. Custom
+     * covers are the user's own images and can't be recovered, so `loadPendingStorage` copies them
+     * into the new area first (see [StorageMigrator.carryCustomCovers]).
      */
     private suspend fun adoptCurrentArea() {
         bookDao.resetCoverArt()
-        bookDao.clearCustomCovers()
         localMirror.import()
         localMirror.adoptDownloads()
         libraryIndexManager.fetchMissingCovers()

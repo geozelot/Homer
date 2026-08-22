@@ -139,6 +139,49 @@ class StorageMigrator @Inject constructor(
     }
 
     /**
+     * Copies every hand-picked book cover from [sourceUri]'s area into [targetUri]'s and repoints
+     * the stored Uri, returning how many were carried across.
+     *
+     * For the *adopt* path — the user pointed Homer at a folder that already holds a library and
+     * chose to load it rather than move their data in. That path used to blank every
+     * `customCoverPath`, reasoning that the stored Uris address the old area and would dangle.
+     * True, but the cure threw the data away: a custom cover is an image the user picked by hand,
+     * and the only thing in the local cache the app cannot re-derive — detected and extracted art
+     * are both re-fetched a moment later by `resetCoverArt`.
+     *
+     * Copy, don't move: adopting explicitly means "leave my data where it is", so the old area stays
+     * intact and switching back still works. A cover that genuinely can't be carried has its path
+     * cleared, so nothing is left pointing into a folder the app may no longer be permitted to read.
+     *
+     * Must be called BEFORE the location is committed — committing releases the old folder's SAF
+     * grant, and the source becomes unreadable.
+     */
+    suspend fun carryCustomCovers(sourceUri: String?, targetUri: String?): Int {
+        if (sourceUri == targetUri) return 0
+        val source = storageLocation.areaFor(sourceUri)
+        val target = storageLocation.areaFor(targetUri)
+        // Same folder by two names: the files are already where they need to be, and the stored
+        // Uris still resolve. Touching anything here could only lose data.
+        if (areasAlias(source, target)) return 0
+
+        var carried = 0
+        for (book in bookDao.getAll()) {
+            val path = book.customCoverPath ?: continue
+            val name = Uri.parse(path).lastPathSegment?.substringAfterLast('/')
+            val moved = name != null && runCatching {
+                val rel = "covers/$name"
+                val bytes = source.readBytes(rel) ?: return@runCatching false
+                bookDao.updateCustomCover(book.id, target.write(rel, bytes).toString())
+                true
+            }.onFailure { Log.w(TAG, "could not carry the custom cover for ${book.id}", it) }
+                .getOrDefault(false)
+            if (moved) carried++ else bookDao.updateCustomCover(book.id, null)
+        }
+        Log.i(TAG, "carried $carried custom cover(s) to ${targetUri ?: "default"}")
+        return carried
+    }
+
+    /**
      * Whether [source] and [target] are the same physical directory.
      *
      * Declared identities settle the same-backend case cheaply. They can't settle a cross-backend

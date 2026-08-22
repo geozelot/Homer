@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -87,12 +88,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -159,8 +166,9 @@ fun HomeScreen(
     // lost while the query stayed in the ViewModel, leaving the library filtered with no search
     // field to clear it.
     var searching by rememberSaveable { mutableStateOf(false) }
-    // Open series shelves, held as stable keys (see `expandKey`) and saved across configuration
-    // changes — a rotation used to collapse every shelf the user had opened.
+    // Open series shelves, anchored on the book ids they contain (see `isOpen` in libraryContent)
+    // and saved across configuration changes — a rotation used to collapse every shelf the user
+    // had opened.
     val expanded = rememberSaveable(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf<String>() }
@@ -237,7 +245,7 @@ fun HomeScreen(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(if (gridView) 3 else 1),
+                columns = GridCells.Fixed(if (gridView) LibraryGridColumns else 1),
                 state = gridState,
                 modifier = Modifier
                     .weight(1f)
@@ -245,8 +253,8 @@ fun HomeScreen(
                 contentPadding = PaddingValues(
                     start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp,
                 ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
             ) {
                 libraryContent(
                     entries = entries,
@@ -319,10 +327,14 @@ fun HomeScreen(
 }
 
 /**
- * Stable identity of a series shelf, used for expand/collapse state and lazy-item keys.
- * [LibraryEntry.Series.key] is "author|series", so it changes the instant the user renames the
- * series — which silently collapsed the shelf and leaked the old entry. Book ids survive metadata
- * edits, and a series always has at least two books.
+ * Stable identity of a series shelf, used for lazy-item keys and to address an open series-edit
+ * dialog. [LibraryEntry.Series.key] is "author|series", so it changes the instant the user renames
+ * the series — which made the lazy layout treat the shelf as a brand new item. Book ids survive
+ * metadata edits, and a series always has at least two books.
+ *
+ * Expand/collapse state is NOT keyed on this: it anchors on the shelf's whole membership instead
+ * (see `isOpen` in `libraryContent`), so moving the lowest-id book out of a series can't collapse
+ * it either.
  */
 private val LibraryEntry.Series.expandKey: String
     get() = "series:${books.minOf { it.id }}"
@@ -479,6 +491,12 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.withAmber(s: String
 
 // ── Library content (single scrolling grid) ───────────────────────────────────
 
+/** Columns in grid view. Shared with the expanded-series rows, which lay out their own cells. */
+private const val LibraryGridColumns = 3
+
+/** Gap between grid cells, both axes. The series enclosure paints across half of it. */
+private val LibraryGridSpacing = 12.dp
+
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
     bookCount: Int,
@@ -488,12 +506,35 @@ private fun LazyGridScope.libraryContent(
     groupMode: LibraryGroup,
     onSortChange: (LibrarySort) -> Unit,
     onGroupChange: (LibraryGroup) -> Unit,
-    /** Keys (see `expandKey`) of the series shelves that are open. */
+    /** Book ids anchoring the open series shelves — see [isOpen]. */
     expanded: MutableList<String>,
     onToggleView: (Boolean) -> Unit,
     onBookClick: (String) -> Unit,
     actions: BookActions,
 ) {
+    // Membership test for the open shelves, hoisted out of the per-entry loop: `expanded` holds
+    // one id per book of every open series, so a linear scan per entry would be quadratic on a
+    // large library. Reading the state list here still subscribes the grid content to changes.
+    val openAnchors = expanded.toHashSet()
+
+    /**
+     * A shelf is open while ANY of its books is anchored, and opening one anchors all of them.
+     * Anchoring the whole membership is what makes the state survive an edit: keying on the series
+     * name collapsed the shelf when the user renamed it, and keying on the lowest book id (the fix
+     * for that) collapsed it when precisely that book was moved out of the series.
+     */
+    fun isOpen(entry: LibraryEntry.Series) = entry.books.any { it.id in openAnchors }
+
+    // Tested against the live list, not `openAnchors`: that snapshot is from the last time this
+    // ran, so two taps landing in one frame would anchor the same shelf twice.
+    fun open(entry: LibraryEntry.Series) {
+        entry.books.forEach { if (it.id !in expanded) expanded.add(it.id) }
+    }
+
+    fun close(entry: LibraryEntry.Series) {
+        expanded.removeAll(entry.books.mapTo(HashSet()) { it.id })
+    }
+
     // The Continue shelf is no longer an item here — it's pinned above the grid by HomeScreen so
     // it can stay put and collapse while the library scrolls under it.
     item(span = { GridItemSpan(maxLineSpan) }, key = "library-head") {
@@ -508,14 +549,18 @@ private fun LazyGridScope.libraryContent(
         SortGroupBar(sortMode, groupMode, onSortChange, onGroupChange)
     }
 
-    entries.forEachIndexed { position, entry ->
+    // Two headers really can carry the same title — a book whose author metadata literally reads
+    // "Unknown author" gets its own section beside the fallback one — and duplicate keys make the
+    // lazy layout throw. Disambiguating by list position did the job but tied every header's key to
+    // how many rows happened to precede it, so adding one book above re-created the lot; counting
+    // repeats of the title is just as unique and only changes when the titles themselves do.
+    val headerOrdinals = HashMap<String, Int>()
+
+    entries.forEach { entry ->
         when (entry) {
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
-                // The position is part of the key deliberately: two headers can carry the same
-                // title — a book whose author metadata literally reads "Unknown author" gets its own
-                // section beside the fallback one — and duplicate keys make the lazy layout throw.
-                key = "header:$position:${entry.title}",
+                key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
             ) { SectionLabelRow(entry.title) }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
@@ -530,25 +575,35 @@ private fun LazyGridScope.libraryContent(
             }
             is LibraryEntry.Series -> {
                 val shelfKey = entry.expandKey
-                val isOpen = shelfKey in expanded
+                val shelfOpen = isOpen(entry)
                 if (gridView) {
-                    if (isOpen) {
-                        // Full-span header banner, then each episode as its own grid cell — so a
-                        // large series composes lazily instead of all at once in a single item.
+                    if (shelfOpen) {
+                        // A header banner, then the episodes a row at a time — every one of them a
+                        // separate lazy item drawing its own slice of the enclosure that wraps the
+                        // whole shelf. See `seriesEnclosure`.
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
-                            ExpandedSeriesHeader(
-                                series = entry,
-                                onCollapse = { expanded.remove(shelfKey) },
-                            )
+                            ExpandedSeriesHeader(series = entry, onCollapse = { close(entry) })
                         }
-                        items(entry.books, key = { "sep:${it.id}" }) { book ->
-                            BookGridCard(book, onOpen = onBookClick, actions = actions)
+                        val rows = entry.books.chunked(LibraryGridColumns)
+                        itemsIndexed(
+                            rows,
+                            span = { _, _ -> GridItemSpan(maxLineSpan) },
+                            // First id in the row: unique across the library (a book sits in one
+                            // series) and stable while the row's membership holds.
+                            key = { _, row -> "sep:${row.first().id}" },
+                        ) { index, row ->
+                            ExpandedSeriesRow(
+                                books = row,
+                                last = index == rows.lastIndex,
+                                onOpen = onBookClick,
+                                actions = actions,
+                            )
                         }
                     } else {
                         item(key = shelfKey) {
                             SeriesGridCard(
                                 series = entry,
-                                onOpen = { expanded.add(shelfKey) },
+                                onOpen = { open(entry) },
                                 onEdit = { actions.onEditSeries(entry) },
                             )
                         }
@@ -557,12 +612,12 @@ private fun LazyGridScope.libraryContent(
                     item(span = { GridItemSpan(maxLineSpan) }, key = shelfKey) {
                         SeriesShelfRow(
                             series = entry,
-                            expanded = isOpen,
-                            onToggle = { if (isOpen) expanded.remove(shelfKey) else expanded.add(shelfKey) },
+                            expanded = shelfOpen,
+                            onToggle = { if (shelfOpen) close(entry) else open(entry) },
                             onEdit = { actions.onEditSeries(entry) },
                         )
                     }
-                    if (isOpen) {
+                    if (shelfOpen) {
                         items(
                             entry.books,
                             span = { GridItemSpan(maxLineSpan) },
@@ -974,9 +1029,69 @@ private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content
     }
 }
 
+// ── Expanded series enclosure ─────────────────────────────────────────────────
+//
+// An opened series reads as ONE faint-bordered card with a clear start and end. It used to be
+// exactly that — a single grid item wrapping a header and a 3-up grid of episodes — but that
+// composed every episode at once, so a 100-book series hitched on open. It is now emitted as a
+// run of separate lazy items that each draw their slice of the same enclosure, so the container
+// is back and only what's on screen composes.
+
+/** Corner radius of the enclosure's two caps. */
+private val SeriesEnclosureRadius = 12.dp
+
+/** Inset between the enclosure's border and the header/cards inside it. */
+private val SeriesEnclosurePad = 12.dp
+
 /**
- * Header banner for an expanded series in grid view (tap to collapse). The episodes follow as
- * their own lazy grid cells, so a large series doesn't compose every card in one pass.
+ * Half the grid's `verticalArrangement` spacing. Each slice paints this far into the gaps above
+ * and below it, so the side rails meet across the gap instead of the enclosure looking like a
+ * stack of separate boxes. Keep it at half of [LibraryGridSpacing].
+ */
+private val SeriesEnclosureBleed = LibraryGridSpacing / 2
+
+/**
+ * Draws one slice of the enclosure that wraps an opened series.
+ *
+ * The trick is to draw the WHOLE rounded rectangle oversized — running past this slice's top
+ * and/or bottom edge for any slice that isn't the cap — and then clip back to the slice plus its
+ * half-gap. What survives inside the clip is just the two side rails; the rounded caps and the
+ * horizontal rules fall outside it. Stack the slices and they read as one continuous container.
+ *
+ * Drawn rather than composed because a lazy grid gives no way to paint behind a run of items:
+ * anything spanning them would have to be a single item, which is the composition cost this
+ * replaced.
+ */
+private fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier = this.drawBehind {
+    val radius = SeriesEnclosureRadius.toPx()
+    val stroke = 1.dp.toPx()
+    val bleed = SeriesEnclosureBleed.toPx()
+    // What stays visible: this slice, plus the half-gap on any open side.
+    val clipTop = if (top) 0f else -bleed
+    val clipBottom = if (bottom) size.height else size.height + bleed
+    // Where the rectangle itself runs to: inset by half a stroke on a capped side so the border
+    // lands fully inside, pushed a full corner radius past the clip on an open one so neither the
+    // rounding nor the horizontal rule can show up mid-shelf.
+    val rectTop = if (top) stroke / 2f else clipTop - radius
+    val rectBottom = if (bottom) size.height - stroke / 2f else clipBottom + radius
+    val path = Path().apply {
+        addRoundRect(
+            RoundRect(
+                rect = Rect(stroke / 2f, rectTop, size.width - stroke / 2f, rectBottom),
+                cornerRadius = CornerRadius(radius),
+            ),
+        )
+    }
+    clipRect(top = clipTop, bottom = clipBottom) {
+        drawPath(path, Surface1)
+        drawPath(path, Line, style = Stroke(stroke))
+    }
+}
+
+/**
+ * Top slice of an opened series: the title banner, tapped to collapse. No bottom padding — the
+ * grid's own 12dp item gap separates it from the first row of episodes, and the enclosure paints
+ * straight through that gap.
  */
 @Composable
 private fun ExpandedSeriesHeader(
@@ -986,12 +1101,12 @@ private fun ExpandedSeriesHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .background(Surface1)
+            .seriesEnclosure(top = true, bottom = false)
+            // Clip AFTER the enclosure so the ripple is bounded by the rounded top without also
+            // clipping away the bleed the enclosure draws into the gap below.
+            .clip(RoundedCornerShape(topStart = SeriesEnclosureRadius, topEnd = SeriesEnclosureRadius))
             .clickable(onClick = onCollapse)
-            .padding(12.dp),
+            .padding(start = SeriesEnclosurePad, end = SeriesEnclosurePad, top = SeriesEnclosurePad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -999,6 +1114,39 @@ private fun ExpandedSeriesHeader(
             Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
         }
         Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
+    }
+}
+
+/**
+ * One row of episodes inside the enclosure. Episodes are emitted a row at a time rather than as
+ * individual grid cells because the enclosure has to be drawn by the items themselves — and a row
+ * is still lazy, so at most [LibraryGridColumns] cards compose at once instead of the whole series.
+ */
+@Composable
+private fun ExpandedSeriesRow(
+    books: List<BookListItem>,
+    last: Boolean,
+    onOpen: (String) -> Unit,
+    actions: BookActions,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .seriesEnclosure(top = false, bottom = last)
+            .padding(
+                start = SeriesEnclosurePad,
+                end = SeriesEnclosurePad,
+                bottom = if (last) SeriesEnclosurePad else 0.dp,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+    ) {
+        books.forEach { book ->
+            Box(modifier = Modifier.weight(1f)) {
+                BookGridCard(book, onOpen = onOpen, actions = actions)
+            }
+        }
+        // Hold the last row's cards to the same width as a full row's.
+        repeat(LibraryGridColumns - books.size) { Spacer(modifier = Modifier.weight(1f)) }
     }
 }
 
