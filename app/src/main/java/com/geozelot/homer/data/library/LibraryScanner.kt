@@ -12,6 +12,7 @@ import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
+import com.geozelot.homer.data.webdav.DavResource
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
@@ -87,6 +88,8 @@ class LibraryScanner @Inject constructor(
             emptyMap()
         }
         val audioFolders = mutableListOf<BookDetector.AudioFolder>()
+        /** Every visited folder's image files, so a book-level cover beside part folders is found. */
+        val folderImages = HashMap<String, List<DavResource>>()
         val skippedRoots = mutableListOf<String>()
         var directoriesVisited = 0
 
@@ -111,6 +114,11 @@ class LibraryScanner @Inject constructor(
             if (isBookFolder) {
                 audioFolders += BookDetector.AudioFolder(dir, audioFiles, imageFiles)
             }
+            // Remember images for EVERY folder, not just audio-bearing ones. A very common layout
+            // puts the cover at the book level with the audio in part subfolders
+            // (`Book/cover.jpg` + `Book/CD1/*.mp3`); that book folder holds no audio, so its cover
+            // used to be discarded and the book showed a placeholder.
+            if (imageFiles.isNotEmpty()) folderImages[dir] = imageFiles
 
             for (childDir in childDirs) {
                 val childPath = childDir.path.trim('/')
@@ -131,7 +139,7 @@ class LibraryScanner @Inject constructor(
             onProgress(directoriesVisited, audioFolders.size)
         }
 
-        val books = detector.buildBooks(audioFolders, root, now)
+        val books = detector.buildBooks(audioFolders, folderImages, root, now)
 
         // Everything past this point mutates the index, and it belongs together: the upserts, the
         // moved-book re-links and the prune used to be independent writes, so a process death
@@ -203,12 +211,16 @@ class LibraryScanner @Inject constructor(
             } else {
                 null
             }
+            // A folder cover we can see but haven't cached yet earns a fresh attempt, even if an
+            // earlier pass gave up on this book: caching it is one cheap GET, and it's what makes
+            // the cover load instantly and work offline instead of being fetched every display.
+            val uncachedFolderCover = detected.book.coverFilePath != null && source?.localCoverPath == null
             bookDao.upsert(
                 listOf(
                     detected.book.copy(
                         localCoverPath = source?.localCoverPath,
                         customCoverPath = source?.customCoverPath,
-                        coverAttempted = source?.coverAttempted ?: false,
+                        coverAttempted = if (uncachedFolderCover) false else source?.coverAttempted ?: false,
                         metadataAttempted = source?.metadataAttempted ?: false,
                         genre = source?.genre,
                         chapterTier = source?.chapterTier ?: detected.book.chapterTier,

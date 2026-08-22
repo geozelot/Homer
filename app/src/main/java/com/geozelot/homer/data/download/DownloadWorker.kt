@@ -73,13 +73,23 @@ class DownloadWorker @AssistedInject constructor(
         // count, so already-finished files are skipped rather than re-fetched.
         val startIndex = (downloadDao.findByBookId(bookId)?.downloadedFiles ?: 0).coerceIn(0, files.size)
         downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, startIndex, files.size, now()))
+        // Notification updates are throttled because Android's notify rate limit (~5/s) is
+        // PER PACKAGE, not per notification. A book of many small files posted an update per file
+        // and burned the whole budget — and since download-on-play starts a download the moment
+        // playback begins, the shed notification was the media one, leaving PlaybackService
+        // improperly foregrounded and killed once the app went to the background.
+        var lastNotifyMs = 0L
         try {
             for ((index, file) in files.withIndex()) {
                 if (index < startIndex) continue // completed before a pause/retry
                 // Stop promptly on cancellation (user removed the download / constraint lost)
                 // WITHOUT resurrecting the row DownloadManager.delete just cleaned up.
                 if (isStopped) return Result.failure()
-                setForegroundSafely(foregroundInfo(notifId, bookId, title, index, files.size))
+                val nowMs = now()
+                if (nowMs - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
+                    lastNotifyMs = nowMs
+                    setForegroundSafely(foregroundInfo(notifId, bookId, title, index, files.size))
+                }
                 // The storage area streams into place (atomically where the backend supports it),
                 // so a truncated write is never mistaken for a finished download.
                 val request = Request.Builder().url(webDavClient.urlFor(credentials, libraryRoot, file.relativePath)).build()
@@ -173,5 +183,8 @@ class DownloadWorker @AssistedInject constructor(
         private const val TAG = "HomerDownload"
         private const val CHANNEL_ID = "downloads"
         private const val MAX_ATTEMPTS = 3
+
+        /** Minimum gap between progress notifications (the platform's ~5/s budget is per package). */
+        private const val PROGRESS_NOTIFY_INTERVAL_MS = 1_000L
     }
 }
