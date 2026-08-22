@@ -229,6 +229,25 @@ fun HomeScreen(
             )
         }
 
+        // Sort, group and the grid/list toggle are pinned here rather than scrolled away as the
+        // grid's first two items: they are the controls for what is being scrolled, so having to
+        // scroll back to the top to reach them was the wrong way round. The Continue strip above
+        // collapses to make room for them; these stay put.
+        if (entries.isNotEmpty()) {
+            Column(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
+                LibraryHeader(
+                    label = if (searching) {
+                        stringResource(R.string.home_section_results)
+                    } else {
+                        stringResource(R.string.home_section_library, bookCount)
+                    },
+                    gridView = gridView,
+                    onToggleView = viewModel::setGridView,
+                )
+                SortGroupBar(sortMode, groupMode, viewModel::setSortMode, viewModel::setGroupMode)
+            }
+        }
+
         if (entries.isEmpty()) {
             when {
                 // Room hasn't delivered yet (or a scan is running): show a discovery phase rather
@@ -258,15 +277,8 @@ fun HomeScreen(
             ) {
                 libraryContent(
                     entries = entries,
-                    bookCount = bookCount,
                     gridView = gridView,
-                    searching = searching,
-                    sortMode = sortMode,
-                    groupMode = groupMode,
-                    onSortChange = viewModel::setSortMode,
-                    onGroupChange = viewModel::setGroupMode,
                     expanded = expanded,
-                    onToggleView = viewModel::setGridView,
                     onBookClick = onBookClick,
                     actions = actions,
                 )
@@ -496,6 +508,13 @@ private val LibraryGridSpacing = 12.dp
 private val LibraryGridPadding = 16.dp
 
 /**
+ * The collapsed Continue strip's cover as a fraction of a grid cover's width. The strip is a
+ * recognise-and-tap affordance while the library scrolls under it, so the cover is sized to be
+ * identifiable rather than readable — tune this one number if it wants to be bigger or smaller.
+ */
+private const val ContinueSlimCoverFraction = 2.5f
+
+/**
  * Width of one grid cell at [totalWidth] — the LazyVerticalGrid's own arithmetic, factored out so
  * the collapsed Continue strip can size itself against a real cover instead of guessing at a
  * literal dp that drifts the moment the grid's padding or column count changes.
@@ -506,16 +525,9 @@ private fun gridCellWidth(totalWidth: Dp): Dp =
 
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
-    bookCount: Int,
     gridView: Boolean,
-    searching: Boolean,
-    sortMode: LibrarySort,
-    groupMode: LibraryGroup,
-    onSortChange: (LibrarySort) -> Unit,
-    onGroupChange: (LibraryGroup) -> Unit,
     /** Book ids anchoring the open series shelves — see [isOpen]. */
     expanded: MutableList<String>,
-    onToggleView: (Boolean) -> Unit,
     onBookClick: (String) -> Unit,
     actions: BookActions,
 ) {
@@ -542,19 +554,8 @@ private fun LazyGridScope.libraryContent(
         expanded.removeAll(entry.books.mapTo(HashSet()) { it.id })
     }
 
-    // The Continue shelf is no longer an item here — it's pinned above the grid by HomeScreen so
-    // it can stay put and collapse while the library scrolls under it.
-    item(span = { GridItemSpan(maxLineSpan) }, key = "library-head") {
-        LibraryHeader(
-            label = if (searching) stringResource(R.string.home_section_results) else stringResource(R.string.home_section_library, bookCount),
-            gridView = gridView,
-            onToggleView = onToggleView,
-        )
-    }
-
-    item(span = { GridItemSpan(maxLineSpan) }, key = "sort-group") {
-        SortGroupBar(sortMode, groupMode, onSortChange, onGroupChange)
-    }
+    // Neither the Continue shelf nor the library's own header and sort/group bar are items here:
+    // HomeScreen pins all three above the grid so they stay reachable while it scrolls.
 
     // Two headers really can carry the same title — a book whose author metadata literally reads
     // "Unknown author" gets its own section beside the fallback one — and duplicate keys make the
@@ -777,7 +778,7 @@ private fun ContinuePinnedShelf(
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         // The collapsed strip is sized against a real grid cover rather than a literal dp, so it
         // stays proportional on every screen width: half a cover, same 2:3 proportions.
-        val slimCoverWidth = gridCellWidth(maxWidth) / 2
+        val slimCoverWidth = gridCellWidth(maxWidth) / ContinueSlimCoverFraction
 
         Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
             if (!collapsed) {
@@ -811,60 +812,34 @@ private fun ContinuePinnedShelf(
 }
 
 /**
- * A book in the COLLAPSED Continue strip: cover at half the size of a grid cover, in the same 2:3
- * proportions, with the title, remaining time and progress beside it. Half-size rather than a
- * thumbnail because at a glance the cover is what identifies the book — the strip is there to be
- * recognised and tapped mid-scroll, not merely acknowledged.
+ * A book in the COLLAPSED Continue strip: just the cover, with its progress bar directly beneath.
+ *
+ * No title and no time left. The strip exists to be recognised and tapped mid-scroll, and at this
+ * size a cover does that on its own — a title would only be a truncated echo of the one on the
+ * card the strip collapsed from, and it forced the item into a wide row that fitted three books
+ * across where this fits six.
  */
 @Composable
 private fun ContinueSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) -> Unit) {
-    Row(
+    Column(
         modifier = Modifier
-            // Cover plus a text column of roughly three cover-widths, so the strip keeps its
-            // proportions on a small screen instead of running the titles into each other.
-            .widthIn(max = coverWidth * 4)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onOpen(book.id) }
-            .padding(end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .width(coverWidth)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable { onOpen(book.id) },
     ) {
         CoverArt(
             model = book.coverModel,
             modifier = Modifier
-                .width(coverWidth)
+                .fillMaxWidth()
                 .aspectRatio(1f / 1.5f)
-                .clip(RoundedCornerShape(6.dp)),
+                .clip(RoundedCornerShape(5.dp)),
         )
-        Column(modifier = Modifier.padding(start = 10.dp)) {
-            Text(
-                book.title,
-                color = Parchment,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 15.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // The taller cover leaves room for this, and it is the thing a half-read book is
-            // actually asked about.
-            val timeLeftMs = book.timeLeftMs
-            if (timeLeftMs != null && timeLeftMs > 0) {
-                Text(
-                    stringResource(R.string.time_left, formatCompactDuration(timeLeftMs)),
-                    color = Muted,
-                    fontSize = 10.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            ProgressBar(
-                fraction = book.progress ?: 0f,
-                modifier = Modifier
-                    .width(coverWidth * 2)
-                    .padding(top = 6.dp),
-            )
-        }
+        ProgressBar(
+            fraction = book.progress ?: 0f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+        )
     }
 }
 
