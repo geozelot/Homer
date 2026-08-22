@@ -61,7 +61,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -251,7 +251,7 @@ fun HomeScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp,
+                    start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
                 verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
@@ -415,20 +415,15 @@ private fun TopBar(
                 IconButton(onClick = onOpenSearch) {
                     Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.home_cd_search), tint = Muted)
                 }
-                Box {
-                    var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.home_cd_menu), tint = Muted)
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        // One entry: the library folder, sync and storage all live behind it now,
-                        // as their own settings destinations rather than two competing sheets.
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.home_cd_settings)) },
-                            leadingIcon = { Icon(Icons.Filled.Settings, null, tint = Muted) },
-                            onClick = { menuOpen = false; onSettings() },
-                        )
-                    }
+                // Straight to settings. This was an overflow menu holding exactly one item ever
+                // since the library folder, sync and storage became their own destinations — two
+                // taps and a popup to reach the only thing in it.
+                IconButton(onClick = onSettings) {
+                    Icon(
+                        Icons.Filled.Tune,
+                        contentDescription = stringResource(R.string.home_cd_settings),
+                        tint = Muted,
+                    )
                 }
             }
         }
@@ -496,6 +491,18 @@ private const val LibraryGridColumns = 3
 
 /** Gap between grid cells, both axes. The series enclosure paints across half of it. */
 private val LibraryGridSpacing = 12.dp
+
+/** The grid's horizontal content padding. */
+private val LibraryGridPadding = 16.dp
+
+/**
+ * Width of one grid cell at [totalWidth] — the LazyVerticalGrid's own arithmetic, factored out so
+ * the collapsed Continue strip can size itself against a real cover instead of guessing at a
+ * literal dp that drifts the moment the grid's padding or column count changes.
+ */
+private fun gridCellWidth(totalWidth: Dp): Dp =
+    ((totalWidth - LibraryGridPadding * 2 - LibraryGridSpacing * (LibraryGridColumns - 1)) / LibraryGridColumns)
+        .coerceAtLeast(0.dp)
 
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
@@ -609,6 +616,9 @@ private fun LazyGridScope.libraryContent(
                         }
                     }
                 } else {
+                    // Same enclosure as the grid: the shelf row is its top slice and each episode
+                    // draws a slice below, so an open series reads as one bordered card here too.
+                    // Collapsed, the row stays the self-contained card it has always been.
                     item(span = { GridItemSpan(maxLineSpan) }, key = shelfKey) {
                         SeriesShelfRow(
                             series = entry,
@@ -618,12 +628,23 @@ private fun LazyGridScope.libraryContent(
                         )
                     }
                     if (shelfOpen) {
-                        items(
+                        itemsIndexed(
                             entry.books,
-                            span = { GridItemSpan(maxLineSpan) },
-                            key = { "ep:${it.id}" },
-                        ) { book ->
-                            BookListRow(book, startPadding = 12.dp, onOpen = onBookClick, actions = actions)
+                            span = { _, _ -> GridItemSpan(maxLineSpan) },
+                            key = { _, book -> "ep:${book.id}" },
+                        ) { index, book ->
+                            val last = index == entry.books.lastIndex
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .seriesEnclosure(top = false, bottom = last)
+                                    .padding(horizontal = SeriesListEnclosurePad)
+                                    .padding(bottom = if (last) SeriesListEnclosurePad else 0.dp),
+                            ) {
+                                // 2dp on top of the enclosure's own inset keeps each episode at
+                                // exactly the indent it had before the border went round them.
+                                BookListRow(book, startPadding = 2.dp, onOpen = onBookClick, actions = actions)
+                            }
                         }
                     }
                 }
@@ -753,35 +774,55 @@ private fun ContinuePinnedShelf(
     onOpen: (String) -> Unit,
     actions: BookActions,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
-        if (!collapsed) {
-            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                SectionLabelRow(stringResource(R.string.home_section_continue))
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // The collapsed strip is sized against a real grid cover rather than a literal dp, so it
+        // stays proportional on every screen width: half a cover, same 2:3 proportions.
+        val slimCoverWidth = gridCellWidth(maxWidth) / 2
+
+        Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+            if (!collapsed) {
+                Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
+                    SectionLabelRow(stringResource(R.string.home_section_continue))
+                }
             }
-        }
-        LazyRow(
-            state = rowState,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            // Padding on the row (not the parent) so cards bleed off the edge while scrolling
-            // instead of stopping at a hard margin.
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = if (collapsed) 6.dp else 0.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(books, key = { "cont:${it.id}" }) { book ->
-                if (collapsed) ContinueSlim(book, onOpen) else ContinueCard(book, onOpen, actions)
+            LazyRow(
+                state = rowState,
+                horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                // Padding on the row (not the parent) so cards bleed off the edge while scrolling
+                // instead of stopping at a hard margin.
+                contentPadding = PaddingValues(
+                    horizontal = LibraryGridPadding,
+                    vertical = if (collapsed) 6.dp else 0.dp,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(books, key = { "cont:${it.id}" }) { book ->
+                    if (collapsed) {
+                        ContinueSlim(book, coverWidth = slimCoverWidth, onOpen = onOpen)
+                    } else {
+                        ContinueCard(book, onOpen, actions)
+                    }
+                }
             }
+            // A hairline separates the pinned strip from the library scrolling beneath it.
+            if (collapsed) HorizontalDivider(color = Line)
         }
-        // A hairline separates the pinned strip from the library scrolling beneath it.
-        if (collapsed) HorizontalDivider(color = Line)
     }
 }
 
-/** Collapsed Continue entry: small cover, one-line title, progress hairline. */
+/**
+ * A book in the COLLAPSED Continue strip: cover at half the size of a grid cover, in the same 2:3
+ * proportions, with the title, remaining time and progress beside it. Half-size rather than a
+ * thumbnail because at a glance the cover is what identifies the book — the strip is there to be
+ * recognised and tapped mid-scroll, not merely acknowledged.
+ */
 @Composable
-private fun ContinueSlim(book: BookListItem, onOpen: (String) -> Unit) {
+private fun ContinueSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) -> Unit) {
     Row(
         modifier = Modifier
-            .widthIn(max = 200.dp)
+            // Cover plus a text column of roughly three cover-widths, so the strip keeps its
+            // proportions on a small screen instead of running the titles into each other.
+            .widthIn(max = coverWidth * 4)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onOpen(book.id) }
             .padding(end = 4.dp),
@@ -790,23 +831,38 @@ private fun ContinueSlim(book: BookListItem, onOpen: (String) -> Unit) {
         CoverArt(
             model = book.coverModel,
             modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(5.dp)),
+                .width(coverWidth)
+                .aspectRatio(1f / 1.5f)
+                .clip(RoundedCornerShape(6.dp)),
         )
-        Column(modifier = Modifier.padding(start = 8.dp)) {
+        Column(modifier = Modifier.padding(start = 10.dp)) {
             Text(
                 book.title,
                 color = Parchment,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                lineHeight = 15.sp,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // The taller cover leaves room for this, and it is the thing a half-read book is
+            // actually asked about.
+            val timeLeftMs = book.timeLeftMs
+            if (timeLeftMs != null && timeLeftMs > 0) {
+                Text(
+                    stringResource(R.string.time_left, formatCompactDuration(timeLeftMs)),
+                    color = Muted,
+                    fontSize = 10.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
             ProgressBar(
                 fraction = book.progress ?: 0f,
                 modifier = Modifier
-                    .width(96.dp)
-                    .padding(top = 4.dp),
+                    .width(coverWidth * 2)
+                    .padding(top = 6.dp),
             )
         }
     }
@@ -1040,8 +1096,14 @@ private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content
 /** Corner radius of the enclosure's two caps. */
 private val SeriesEnclosureRadius = 12.dp
 
-/** Inset between the enclosure's border and the header/cards inside it. */
+/** Inset between the enclosure's border and the header/cards inside it, in grid view. */
 private val SeriesEnclosurePad = 12.dp
+
+/**
+ * The same inset in list view. Matches [SeriesShelfRow]'s own padding, so expanding a shelf slips
+ * a border around it without nudging its contents sideways.
+ */
+private val SeriesListEnclosurePad = 10.dp
 
 /**
  * Half the grid's `verticalArrangement` spacing. Each slice paints this far into the gaps above
@@ -1259,11 +1321,35 @@ private fun SeriesShelfRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .background(Surface1)
+            .then(
+                if (expanded) {
+                    // Top slice of the enclosure that carries on down over the episodes. Clipped
+                    // after it, so the ripple is bounded by the rounded top without cutting off the
+                    // bleed the enclosure paints into the gap below.
+                    Modifier
+                        .seriesEnclosure(top = true, bottom = false)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = SeriesEnclosureRadius,
+                                topEnd = SeriesEnclosureRadius,
+                            ),
+                        )
+                } else {
+                    Modifier
+                        .clip(RoundedCornerShape(SeriesEnclosureRadius))
+                        .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
+                        .background(Surface1)
+                },
+            )
             .combinedClickable(onClick = onToggle, onLongClick = onEdit)
-            .padding(10.dp),
+            .padding(
+                start = SeriesListEnclosurePad,
+                end = SeriesListEnclosurePad,
+                top = SeriesListEnclosurePad,
+                // Open, the grid's item gap supplies the separation and the enclosure paints
+                // through it — a bottom inset here would double it.
+                bottom = if (expanded) 0.dp else SeriesListEnclosurePad,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
