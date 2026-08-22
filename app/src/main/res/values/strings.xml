@@ -130,15 +130,23 @@
 
     <!-- Home: library content -->
     <string name="home_section_continue">Continue</string>
-    <string name="home_section_results">RESULTS</string>
-    <string name="home_section_library">LIBRARY · %1$d</string>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
     <string name="home_sort_group_label">Group · %1$s</string>
     <string name="home_sort_sort_label">Sort · %1$s</string>
-    <string name="home_arrange_all">All books, sorted by %1$s</string>
-    <string name="home_arrange_series">Series grouped into shelves · sorted by %1$s</string>
-    <string name="home_arrange_grouped">Grouped by %1$s · sorted by %2$s</string>
+    <!-- The library control bar's summary line. It carries the book count too, since the count
+         no longer has a header row of its own. %1$s is one of the plurals below. -->
+    <string name="home_arrange_all">%1$s · sorted by %2$s</string>
+    <string name="home_arrange_series">%1$s · series shelves · sorted by %2$s</string>
+    <string name="home_arrange_grouped">%1$s · grouped by %2$s · sorted by %3$s</string>
+    <plurals name="home_count_books">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
+    <plurals name="home_count_results">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
     <string name="home_series_episodes">%1$d episodes</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>

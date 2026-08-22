@@ -234,18 +234,17 @@ fun HomeScreen(
         // scroll back to the top to reach them was the wrong way round. The Continue strip above
         // collapses to make room for them; these stay put.
         if (entries.isNotEmpty()) {
-            Column(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
-                LibraryHeader(
-                    label = if (searching) {
-                        stringResource(R.string.home_section_results)
-                    } else {
-                        stringResource(R.string.home_section_library, bookCount)
-                    },
-                    gridView = gridView,
-                    onToggleView = viewModel::setGridView,
-                )
-                SortGroupBar(sortMode, groupMode, viewModel::setSortMode, viewModel::setGroupMode)
-            }
+            LibraryControlBar(
+                count = if (searching) entries.bookCount() else bookCount,
+                searching = searching,
+                sort = sortMode,
+                group = groupMode,
+                gridView = gridView,
+                onSortChange = viewModel::setSortMode,
+                onGroupChange = viewModel::setGroupMode,
+                onToggleView = viewModel::setGridView,
+                modifier = Modifier.padding(horizontal = LibraryGridPadding),
+            )
         }
 
         if (entries.isEmpty()) {
@@ -664,29 +663,72 @@ private fun SectionLabelRow(text: String) {
     )
 }
 
+/**
+ * Sort, group, the count and the grid/list toggle, on one line with the summary beneath.
+ *
+ * These used to be two stacked rows — a "LIBRARY · 309" header with the view toggle, then the
+ * chips — which cost about 70dp of the permanently pinned surface for a label and two buttons.
+ * The toggle joins the chips; the count moves into the summary line that was already there. All
+ * five controls could not share one row at 320dp (two chips and a 96dp toggle already fill it),
+ * and the count is the one of them that reads just as well as prose.
+ */
 @Composable
-private fun LibraryHeader(label: String, gridView: Boolean, onToggleView: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 8.dp, start = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label, style = SectionLabel, color = Muted)
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Line, RoundedCornerShape(8.dp))
-                .background(Surface1),
-        ) {
-            ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
-                onToggleView(true)
-            }
-            ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = stringResource(R.string.home_cd_list_view)) {
-                onToggleView(false)
+private fun LibraryControlBar(
+    count: Int,
+    searching: Boolean,
+    sort: LibrarySort,
+    group: LibraryGroup,
+    gridView: Boolean,
+    onSortChange: (LibrarySort) -> Unit,
+    onGroupChange: (LibraryGroup) -> Unit,
+    onToggleView: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    Column(modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp, start = 2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Both chips can give way (DropdownChip ellipsizes under pressure) so a long sort
+            // label like "Recently played" can't push the toggle off a narrow screen.
+            DropdownChip(
+                label = stringResource(R.string.home_sort_group_label, group.label),
+                options = LibraryGroup.values().toList(),
+                selected = group,
+                labelOf = { it.label },
+                onSelect = onGroupChange,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            DropdownChip(
+                label = stringResource(R.string.home_sort_sort_label, sort.label),
+                options = LibrarySort.values().toList(),
+                selected = sort,
+                labelOf = { it.label },
+                onSelect = onSortChange,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .background(Surface1),
+            ) {
+                ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
+                    onToggleView(true)
+                }
+                ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = stringResource(R.string.home_cd_list_view)) {
+                    onToggleView(false)
+                }
             }
         }
+        Text(
+            text = arrangementSummary(group, sort, count, searching, context),
+            color = Muted,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp, start = 2.dp),
+        )
     }
 }
 
@@ -715,47 +757,33 @@ private fun ViewToggleButton(
     }
 }
 
-@Composable
-private fun SortGroupBar(
-    sort: LibrarySort,
+/** "309 books · grouped by author · sorted by title" — the control bar's one-line explanation. */
+private fun arrangementSummary(
     group: LibraryGroup,
-    onSortChange: (LibrarySort) -> Unit,
-    onGroupChange: (LibraryGroup) -> Unit,
-) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp, start = 2.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DropdownChip(
-                label = stringResource(R.string.home_sort_group_label, group.label),
-                options = LibraryGroup.values().toList(),
-                selected = group,
-                labelOf = { it.label },
-                onSelect = onGroupChange,
-            )
-            DropdownChip(
-                label = stringResource(R.string.home_sort_sort_label, sort.label),
-                options = LibrarySort.values().toList(),
-                selected = sort,
-                labelOf = { it.label },
-                onSelect = onSortChange,
-            )
-        }
-        Text(
-            text = arrangementSummary(group, sort, context),
-            color = Faint,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-        )
+    sort: LibrarySort,
+    count: Int,
+    searching: Boolean,
+    context: android.content.Context,
+): String {
+    val counted = context.resources.getQuantityString(
+        if (searching) R.plurals.home_count_results else R.plurals.home_count_books,
+        count,
+        count,
+    )
+    val sortLabel = sort.label.lowercase()
+    return when (group) {
+        LibraryGroup.NONE -> context.getString(R.string.home_arrange_all, counted, sortLabel)
+        LibraryGroup.SERIES -> context.getString(R.string.home_arrange_series, counted, sortLabel)
+        else -> context.getString(R.string.home_arrange_grouped, counted, group.label.lowercase(), sortLabel)
     }
 }
 
-/** Plain-language description of the active grouping + sort, e.g. "Grouped by author · sorted by title". */
-private fun arrangementSummary(group: LibraryGroup, sort: LibrarySort, context: android.content.Context): String {
-    val sortLabel = sort.label.lowercase()
-    return when (group) {
-        LibraryGroup.NONE -> context.getString(R.string.home_arrange_all, sortLabel)
-        LibraryGroup.SERIES -> context.getString(R.string.home_arrange_series, sortLabel)
-        else -> context.getString(R.string.home_arrange_grouped, group.label.lowercase(), sortLabel)
+/** Books across the visible entries — the count while a search is narrowing the library. */
+private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
+    when (entry) {
+        is LibraryEntry.Header -> 0
+        is LibraryEntry.Standalone -> 1
+        is LibraryEntry.Series -> entry.books.size
     }
 }
 

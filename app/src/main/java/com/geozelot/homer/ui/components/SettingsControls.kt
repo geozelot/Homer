@@ -211,9 +211,10 @@ fun <T> DropdownChip(
     selected: T,
     labelOf: (T) -> String,
     onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
-    Box {
+    Box(modifier) {
         // The pill is ~26dp tall, well under the 48dp minimum touch target, so the tap area is
         // expanded around it — inflating the pill itself would break its alignment with the 11sp
         // label text it sits beside.
@@ -231,7 +232,17 @@ fun <T> DropdownChip(
                     .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(label, color = Muted, fontSize = 11.sp)
+                // Shrinkable, so a chip sharing a row with others (the library control bar) gives
+                // way instead of pushing its neighbours off a narrow screen. fill = false keeps it
+                // at its natural width whenever there is room, which is everywhere else.
+                Text(
+                    label,
+                    color = Muted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
             }
         }
