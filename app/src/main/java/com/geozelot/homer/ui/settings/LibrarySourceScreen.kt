@@ -83,6 +83,7 @@ fun LibrarySourceScreen(
     val scanning = scanState is ScanState.Scanning
 
     var confirmFullScan by remember { mutableStateOf(false) }
+    var confirmMeasure by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     // Sweep for Homer-bearing folders when the page opens; the sweep itself is throttled, and it
@@ -153,6 +154,19 @@ fun LibrarySourceScreen(
                 contentPadding = SettingsActionPadding,
             ) { Text(stringResource(R.string.sync_full_rescan)) }
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.weight(1f))
+            // Asks first, like the full re-scan: this is the one action whose cost is measured in
+            // thousands of requests rather than hundreds.
+            TextButton(
+                onClick = { confirmMeasure = true },
+                enabled = !scanning,
+                contentPadding = SettingsActionPadding,
+            ) { Text(stringResource(R.string.sync_measure_lengths)) }
+        }
         SettingsNote(stringResource(R.string.sync_scan_desc))
 
         SettingsDivider()
@@ -197,6 +211,15 @@ fun LibrarySourceScreen(
             confirmLabel = stringResource(R.string.set_full_rescan_confirm_action),
             onConfirm = viewModel::fullScan,
             onDismiss = { confirmFullScan = false },
+        )
+    }
+    if (confirmMeasure) {
+        ConfirmDialog(
+            title = stringResource(R.string.set_measure_confirm_title),
+            body = stringResource(R.string.set_measure_confirm_body),
+            confirmLabel = stringResource(R.string.set_measure_confirm_action),
+            onConfirm = viewModel::measureBookLengths,
+            onDismiss = { confirmMeasure = false },
         )
     }
     if (confirmSignOut) {

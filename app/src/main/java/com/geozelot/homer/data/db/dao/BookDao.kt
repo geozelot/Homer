@@ -86,6 +86,15 @@ interface BookDao {
     @Query("SELECT id FROM books")
     suspend fun allIds(): List<String>
 
+    /**
+     * Books with no known total length — the work list for a "measure lengths" pass. A book only
+     * gets a total once EVERY one of its files is measured, so this is exactly the set that still
+     * has probing to do (and books whose files all proved unmeasurable are skipped cheaply inside
+     * the enricher, which remembers that).
+     */
+    @Query("SELECT id FROM books WHERE totalDurationMs IS NULL ORDER BY id")
+    suspend fun idsWithoutDuration(): List<String>
+
     @Upsert
     suspend fun upsert(books: List<BookEntity>)
 

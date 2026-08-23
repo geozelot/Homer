@@ -82,10 +82,15 @@ fun PlaybackSettingsScreen(
  *
  * Homer already does everything the platform asks: a mediaPlayback foreground service, a wake lock
  * held while playing, a media session. None of it binds an aggressive power manager, which on many
- * devices freezes a backgrounded app's threads regardless — the audio buffer starves a minute or
- * two later and playback resumes only when the app is reopened. There is no API that fixes this
- * from inside the app; the exemption is the fix, so the app's job is to show the state plainly and
- * open the right screen.
+ * devices freezes a backgrounded app's threads regardless — the audio starves a minute or two
+ * later and resumes only when the app is reopened. There is no API that fixes this from inside the
+ * app; the exemption is the fix, so the app's job is to show the state plainly and open the right
+ * screen.
+ *
+ * This is not hypothetical: it is the confirmed cause of the background-playback stalls chased
+ * through several betas, after the foreground service, the wake lock and the buffer size had each
+ * been ruled out. If a report of playback stopping in the background arrives again, check this
+ * row's state before looking at any code.
  *
  * Re-read on every resume, because the user changes it in Settings and comes back.
  */

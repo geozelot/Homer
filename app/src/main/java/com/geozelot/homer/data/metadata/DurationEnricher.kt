@@ -52,109 +52,136 @@ class DurationEnricher @Inject constructor(
 
     /** Fire-and-forget; no-op if this book is already fully measured or being measured. */
     fun enrich(bookId: String) {
-        if (!inFlight.add(bookId)) return
-        scope.launch {
-            try {
-                val credentials = credentialStore.awaitCredentials() ?: return@launch
-                // Offline, nothing can be measured — and crucially nothing may be RECORDED as
-                // unmeasurable: probe() returns null both for "this file has no duration" and for
-                // "I couldn't reach it", so a single offline open would otherwise mark every file
-                // and the book permanently attempted. A book that never becomes fully measured
-                // loses its time-left, progress ring and auto-finish until a full re-scan.
-                if (!networkMonitor.isOnline()) return@launch
-                val libraryRoot = librarySettings.libraryRoot.first()
-                val files = audioFileDao.findForBook(bookId)
-                val book = bookDao.findById(bookId)
-                // A probe that came back empty is recorded, because nothing else ever settles these
-                // questions: a book whose tags simply carry no genre, and a file whose duration
-                // can't be read, would otherwise be re-streamed on every single open of the book,
-                // forever. A full library refresh clears the flags to allow a retry.
-                val metadataTried = book?.metadataAttempted ?: false
-                val needsGenre = book?.genre == null && !metadataTried
-                // Embedded chapters only apply to single-file books (a multi-file book's file list
-                // already is its chapter list). Extract once, when the tier is still undetermined.
-                val needsChapters = files.size == 1 && !metadataTried &&
-                    (book?.chapterTier ?: ChapterTier.UNDETERMINED) == ChapterTier.UNDETERMINED
-                val missing = files.filter { it.durationMs == null && !it.durationAttempted }
-                if (missing.isEmpty() && !needsGenre && !needsChapters) return@launch
-                if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
+        scope.launch { measure(bookId) }
+    }
 
-                // Genre + embedded chapters live on the (first) file; capture them from its probe.
-                var genre: String? = null
-                var firstProbe: DurationExtractor.Probe? = null
-                for (file in missing) {
+    /**
+     * Measures every book in [bookIds], one at a time, reporting `(done, total)` as it goes.
+     *
+     * Sequential on purpose. [enrich] returns immediately and does its work on an internal scope,
+     * which is right for the one book being opened — but calling it in a loop over a whole library
+     * would put hundreds of probe jobs on the network at once. Each book here is awaited before the
+     * next begins.
+     *
+     * Stops early when the connection drops: [measure] declines to record anything as unmeasurable
+     * while offline, so continuing would just burn a 30-second timeout per file for nothing.
+     */
+    suspend fun measureAll(bookIds: List<String>, onProgress: suspend (Int, Int) -> Unit) {
+        for ((index, bookId) in bookIds.withIndex()) {
+            coroutineContext.ensureActive()
+            if (!networkMonitor.isOnline()) {
+                Log.i(TAG, "measureAll: offline after $index/${bookIds.size}, stopping")
+                return
+            }
+            onProgress(index, bookIds.size)
+            measure(bookId)
+        }
+        onProgress(bookIds.size, bookIds.size)
+    }
+
+    /** The measurement itself. Suspends until this book is done; no-op if it is already in hand. */
+    private suspend fun measure(bookId: String) {
+        if (!inFlight.add(bookId)) return
+        try {
+            val credentials = credentialStore.awaitCredentials() ?: return
+            // Offline, nothing can be measured — and crucially nothing may be RECORDED as
+            // unmeasurable: probe() returns null both for "this file has no duration" and for
+            // "I couldn't reach it", so a single offline open would otherwise mark every file
+            // and the book permanently attempted. A book that never becomes fully measured
+            // loses its time-left, progress ring and auto-finish until a full re-scan.
+            if (!networkMonitor.isOnline()) return
+            val libraryRoot = librarySettings.libraryRoot.first()
+            val files = audioFileDao.findForBook(bookId)
+            val book = bookDao.findById(bookId)
+            // A probe that came back empty is recorded, because nothing else ever settles these
+            // questions: a book whose tags simply carry no genre, and a file whose duration
+            // can't be read, would otherwise be re-streamed on every single open of the book,
+            // forever. A full library refresh clears the flags to allow a retry.
+            val metadataTried = book?.metadataAttempted ?: false
+            val needsGenre = book?.genre == null && !metadataTried
+            // Embedded chapters only apply to single-file books (a multi-file book's file list
+            // already is its chapter list). Extract once, when the tier is still undetermined.
+            val needsChapters = files.size == 1 && !metadataTried &&
+                (book?.chapterTier ?: ChapterTier.UNDETERMINED) == ChapterTier.UNDETERMINED
+            val missing = files.filter { it.durationMs == null && !it.durationAttempted }
+            if (missing.isEmpty() && !needsGenre && !needsChapters) return
+            if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
+
+            // Genre + embedded chapters live on the (first) file; capture them from its probe.
+            var genre: String? = null
+            var firstProbe: DurationExtractor.Probe? = null
+            for (file in missing) {
+                coroutineContext.ensureActive()
+                // Connectivity can drop part-way through. Every further probe would only wait
+                // out its 30s timeout and then be discarded, so a 40-file book would spend
+                // twenty minutes achieving nothing. Stop and let a later open resume.
+                if (!networkMonitor.isOnline()) break
+                val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
+                val probe = durationExtractor.probe(url)
+                val measured = probe.durationMs
+                if (measured != null) {
+                    audioFileDao.updateDuration(file.relativePath, measured)
+                } else if (networkMonitor.isOnline()) {
+                    // Only a negative answer we can trust: still online, so "no duration" is
+                    // about the file, not the connection.
+                    audioFileDao.markDurationAttempted(file.relativePath)
+                }
+                if (genre == null) genre = probe.genre
+                if (firstProbe == null) firstProbe = probe
+            }
+
+            // Nothing was probed above but genre/chapters are still wanted — probe the first
+            // file once just for its tags.
+            if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
+                files.firstOrNull()?.let { first ->
                     coroutineContext.ensureActive()
-                    // Connectivity can drop part-way through. Every further probe would only wait
-                    // out its 30s timeout and then be discarded, so a 40-file book would spend
-                    // twenty minutes achieving nothing. Stop and let a later open resume.
-                    if (!networkMonitor.isOnline()) break
-                    val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
+                    val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
                     val probe = durationExtractor.probe(url)
-                    val measured = probe.durationMs
-                    if (measured != null) {
-                        audioFileDao.updateDuration(file.relativePath, measured)
-                    } else if (networkMonitor.isOnline()) {
-                        // Only a negative answer we can trust: still online, so "no duration" is
-                        // about the file, not the connection.
-                        audioFileDao.markDurationAttempted(file.relativePath)
-                    }
                     if (genre == null) genre = probe.genre
                     if (firstProbe == null) firstProbe = probe
                 }
-
-                // Nothing was probed above but genre/chapters are still wanted — probe the first
-                // file once just for its tags.
-                if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
-                    files.firstOrNull()?.let { first ->
-                        coroutineContext.ensureActive()
-                        val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
-                        val probe = durationExtractor.probe(url)
-                        if (genre == null) genre = probe.genre
-                        if (firstProbe == null) firstProbe = probe
-                    }
-                }
-                if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
-                // No genre in the tags, or the probe itself failed: settle it so the next open
-                // doesn't stream this book's first file all over again for the same answer.
-                if (((needsGenre && genre == null) || (needsChapters && firstProbe == null)) &&
-                    networkMonitor.isOnline()
-                ) {
-                    bookDao.markMetadataAttempted(bookId)
-                }
-
-                // Persist embedded chapters (empty = none found) and settle the tier so we don't
-                // re-probe on every open.
-                if (needsChapters && firstProbe != null) {
-                    var marks = firstProbe!!.chapters
-                    // ID3 CHAP covers MP3; for MP4/M4B (no ID3 chapters) fall back to the Nero
-                    // `chpl` parser over the same authed source.
-                    val first = files.firstOrNull()
-                    if (marks.isEmpty() && first != null && first.relativePath.isMp4Family()) {
-                        val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
-                        marks = mp4ChapterParser.parse(url)
-                        if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} chapters from mp4 chpl")
-                    }
-                    chapterDao.replaceForBook(
-                        bookId,
-                        marks.mapIndexed { i, m -> ChapterEntity(bookId = bookId, sortIndex = i, title = m.title, startMs = m.startMs) },
-                    )
-                    bookDao.updateChapterTier(bookId, if (marks.isNotEmpty()) ChapterTier.EMBEDDED else ChapterTier.NONE)
-                    if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} embedded chapters")
-                }
-
-                // All-or-nothing, matching LibraryScanner: a PARTIAL sum under-reports the book
-                // length, so whole-book elapsed exceeds it and the book reads as "finished" —
-                // which is what silently emptied the Continue shelf. A later open measures the
-                // rest and the total lands then.
-                val all = audioFileDao.findForBook(bookId)
-                val durations = all.mapNotNull { it.durationMs }
-                if (all.isNotEmpty() && durations.size == all.size) {
-                    bookDao.updateTotalDuration(bookId, durations.sum())
-                }
-                Log.i(TAG, "book $bookId: ${durations.size}/${all.size} files measured, genre=${genre ?: "—"}")
-            } finally {
-                inFlight.remove(bookId)
             }
+            if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
+            // No genre in the tags, or the probe itself failed: settle it so the next open
+            // doesn't stream this book's first file all over again for the same answer.
+            if (((needsGenre && genre == null) || (needsChapters && firstProbe == null)) &&
+                networkMonitor.isOnline()
+            ) {
+                bookDao.markMetadataAttempted(bookId)
+            }
+
+            // Persist embedded chapters (empty = none found) and settle the tier so we don't
+            // re-probe on every open.
+            if (needsChapters && firstProbe != null) {
+                var marks = firstProbe!!.chapters
+                // ID3 CHAP covers MP3; for MP4/M4B (no ID3 chapters) fall back to the Nero
+                // `chpl` parser over the same authed source.
+                val first = files.firstOrNull()
+                if (marks.isEmpty() && first != null && first.relativePath.isMp4Family()) {
+                    val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
+                    marks = mp4ChapterParser.parse(url)
+                    if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} chapters from mp4 chpl")
+                }
+                chapterDao.replaceForBook(
+                    bookId,
+                    marks.mapIndexed { i, m -> ChapterEntity(bookId = bookId, sortIndex = i, title = m.title, startMs = m.startMs) },
+                )
+                bookDao.updateChapterTier(bookId, if (marks.isNotEmpty()) ChapterTier.EMBEDDED else ChapterTier.NONE)
+                if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} embedded chapters")
+            }
+
+            // All-or-nothing, matching LibraryScanner: a PARTIAL sum under-reports the book
+            // length, so whole-book elapsed exceeds it and the book reads as "finished" —
+            // which is what silently emptied the Continue shelf. A later open measures the
+            // rest and the total lands then.
+            val all = audioFileDao.findForBook(bookId)
+            val durations = all.mapNotNull { it.durationMs }
+            if (all.isNotEmpty() && durations.size == all.size) {
+                bookDao.updateTotalDuration(bookId, durations.sum())
+            }
+            Log.i(TAG, "book $bookId: ${durations.size}/${all.size} files measured, genre=${genre ?: "—"}")
+        } finally {
+            inFlight.remove(bookId)
         }
     }
 

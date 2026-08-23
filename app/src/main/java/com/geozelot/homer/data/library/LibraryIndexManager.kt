@@ -34,13 +34,32 @@ class LibraryIndexManager @Inject constructor(
     /** Re-fetch cover art for every book (resets attempts + cached art). */
     fun refreshCovers() = enqueue(scan = false, incremental = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
 
-    private fun enqueue(scan: Boolean, incremental: Boolean, resetCovers: Boolean, policy: ExistingWorkPolicy) {
+    /**
+     * Measure every book that still has no total length.
+     *
+     * Deliberately its own action rather than part of [scan] or [fullScan]. A crawl reads names,
+     * sizes and ETags — one cheap request per folder — whereas a length needs a ranged probe of
+     * every audio file, so a library of a few hundred books is thousands of requests. Folding that
+     * into the everyday scan would make the routine action the expensive one; this way the cost is
+     * asked for.
+     */
+    fun measureDurations() =
+        enqueue(scan = false, incremental = false, resetCovers = false, measure = true, policy = ExistingWorkPolicy.REPLACE)
+
+    private fun enqueue(
+        scan: Boolean,
+        incremental: Boolean,
+        resetCovers: Boolean,
+        policy: ExistingWorkPolicy,
+        measure: Boolean = false,
+    ) {
         val request = OneTimeWorkRequestBuilder<LibraryIndexWorker>()
             .setInputData(
                 workDataOf(
                     LibraryIndexWorker.KEY_SCAN to scan,
                     LibraryIndexWorker.KEY_INCREMENTAL to incremental,
                     LibraryIndexWorker.KEY_RESET_COVERS to resetCovers,
+                    LibraryIndexWorker.KEY_MEASURE to measure,
                 ),
             )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

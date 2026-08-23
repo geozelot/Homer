@@ -11,7 +11,9 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverEnricher
+import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.HomerCatalogRepository
 import dagger.assisted.Assisted
@@ -33,6 +35,8 @@ class LibraryIndexWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val libraryRepository: LibraryRepository,
     private val coverEnricher: CoverEnricher,
+    private val durationEnricher: DurationEnricher,
+    private val bookDao: BookDao,
     private val catalog: HomerCatalogRepository,
     private val librarySettings: LibrarySettings,
 ) : CoroutineWorker(appContext, params) {
@@ -50,8 +54,9 @@ class LibraryIndexWorker @AssistedInject constructor(
             if (doScan) {
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
                 libraryRepository.scan(incremental = inputData.getBoolean(KEY_INCREMENTAL, false))
-            } else if (coverEnricher.pendingCount() == 0) {
-                // Nothing to fetch — finish without ever showing a notification.
+            } else if (coverEnricher.pendingCount() == 0 && !inputData.getBoolean(KEY_MEASURE, false)) {
+                // Nothing to fetch — finish without ever showing a notification. A measure-only run
+                // has its own work to do, so it must not be short-circuited here.
                 return Result.success()
             }
 
@@ -65,6 +70,22 @@ class LibraryIndexWorker @AssistedInject constructor(
                 if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                     lastNotifyMs = now
                     setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                }
+            }
+
+            // Lengths, only when explicitly asked for. Sequential (see measureAll) and last, so it
+            // never delays the scan or the covers — and interruptible, since it is the long one:
+            // every book already measured is skipped, so a resumed pass picks up where it stopped.
+            if (inputData.getBoolean(KEY_MEASURE, false)) {
+                val pending = bookDao.idsWithoutDuration()
+                Log.i(TAG, "measuring lengths for ${pending.size} book(s)")
+                var lastMeasureNotifyMs = 0L
+                durationEnricher.measureAll(pending) { done, total ->
+                    val now = System.currentTimeMillis()
+                    if (done >= total || now - lastMeasureNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
+                        lastMeasureNotifyMs = now
+                        setForegroundSafely(foregroundInfo("Measuring book lengths…", done, total))
+                    }
                 }
             }
 
@@ -118,6 +139,7 @@ class LibraryIndexWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_SCAN = "scan"
+        const val KEY_MEASURE = "measure"
         const val KEY_INCREMENTAL = "incremental"
         const val KEY_RESET_COVERS = "reset_covers"
         const val WORK_NAME = "library-index"

@@ -64,14 +64,15 @@ class PlaybackService : MediaLibraryService() {
             )
             .setHandleAudioBecomingNoisy(true)
             // Hold a partial wake lock + a WifiLock while playing. ExoPlayer defaults to
-            // WAKE_MODE_NONE, which takes neither — and a foreground service keeps the SERVICE
-            // alive without keeping the DEVICE awake. So with the screen off or the app in the
-            // background the CPU suspends and the radio powers down, the buffer starves, and
-            // playback stalls; returning to the app wakes both and it picks up again, which reads
-            // exactly like "it stops when I leave and restarts when I come back".
-            // NETWORK rather than LOCAL because a book is streamed unless it has been downloaded.
-            // Both locks are acquired on play and released on pause/stop, so an idle app holds
-            // nothing.
+            // WAKE_MODE_NONE, which takes neither — a foreground service keeps the SERVICE alive
+            // without keeping the DEVICE awake, so with the screen off the CPU can suspend and the
+            // radio power down mid-stream. NETWORK rather than LOCAL because a book is streamed
+            // unless it has been downloaded; both locks are taken on play and dropped on
+            // pause/stop, so an idle app holds nothing.
+            //
+            // This is correct on its own merits, but for the record it was NOT the cause of the
+            // "stops when backgrounded" reports — that turned out to be the OS battery saver
+            // freezing the app, which no wake lock overrides. See the Playback settings row.
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player = exoPlayer
@@ -99,15 +100,17 @@ class PlaybackService : MediaLibraryService() {
      * A load control sized for a spoken-word book streamed over WebDAV, rather than for video.
      *
      * ExoPlayer's defaults buffer at most 50 seconds ahead, and cap an audio renderer at ~832 KB.
-     * At an audiobook's ~64 kbps that is about a minute and a half of audio — so a background
-     * network stall lasting longer than that drains the buffer and the audio track underruns,
-     * which is precisely what `AudioTrack: disabled due to previous underrun` in the log is.
-     * Playback resumes the moment bytes arrive again, so it reads as "stops when I leave, starts
-     * when I come back".
+     * At an audiobook's ~64 kbps that is about a minute and a half of audio, so any network stall
+     * longer than that drains the buffer and the audio underruns. Ten minutes of a low-bitrate
+     * mono stream is a few megabytes, so the trade the video defaults make — keep memory down,
+     * accept re-buffering — is the wrong one here.
      *
-     * Ten minutes of a low-bitrate mono stream is a few megabytes, so the trade video defaults are
-     * making — keep memory down, accept re-buffering — is the wrong one here. The byte target has
-     * to be raised as well: it binds first otherwise and the duration target never takes effect.
+     * The byte target has to be raised as well: it binds first otherwise and the duration target
+     * never takes effect.
+     *
+     * Note this only helps a STREAMED book. It was added while chasing the background-playback
+     * stalls and did not fix them — those were the OS battery saver freezing the app, with a
+     * downloaded book that never touched the network.
      */
     private fun audiobookLoadControl(): LoadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(

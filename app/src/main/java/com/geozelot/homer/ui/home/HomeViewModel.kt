@@ -505,6 +505,9 @@ class HomeViewModel @Inject constructor(
     /** Re-fetch cover art for every book (no library crawl). */
     fun refreshCoverArt() = libraryIndexManager.refreshCovers()
 
+    /** Measure the length of every book that doesn't have one yet — see the manager for the cost. */
+    fun measureBookLengths() = libraryIndexManager.measureDurations()
+
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
 
