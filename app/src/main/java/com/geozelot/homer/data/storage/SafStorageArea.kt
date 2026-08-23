@@ -171,6 +171,9 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
         resolveFile(rel)?.let { uri -> resolver.openInputStream(uri)?.use { it.readBytes() } }
     }
 
+    // Not a leak: handing the open stream to the caller IS this function's contract (see
+    // StorageArea.openInputStream), and every caller wraps it in `use`.
+    @Suppress("Recycle")
     override suspend fun openInputStream(rel: String): InputStream? = withContext(Dispatchers.IO) {
         resolveFile(rel)?.let { resolver.openInputStream(it) }
     }

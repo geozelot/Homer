@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 data class BookProgress(
     val bookId: String,
     val elapsedMs: Long,
-    /** When the position was last saved — used to order the Continue shelf by recency. */
+    /** When the position was last saved — used to order the Currently-listening shelf by recency. */
     val updatedAt: Long,
     /** Raw offset within the saved chapter (independent of any measured durations). */
     val positionMs: Long,
@@ -24,7 +24,7 @@ data class BookProgress(
      * Real listening progress — past the very start of the first chapter. Deliberately derived
      * from the chapter index + raw offset, NOT from [elapsedMs]: elapsed depends on measured
      * durations and collapses to 0 whenever they're missing, which would hide a book the user is
-     * hours into (and did — it emptied the Continue shelf).
+     * hours into (and did — it emptied the Currently-listening shelf).
      */
     val started: Boolean get() = positionMs > 0L || chapterIndex > 0
 

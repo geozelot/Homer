@@ -14,7 +14,7 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * Gives books an artwork cover. Embedded audiobook art usually lives only on the first file,
- * so we extract it once from that file and cache it as the book-level cover (or, at Tier 3,
+ * so we extract it once from that file and cache it as the book-level cover (or, with the shared index on,
  * download it from the shared cover cache instead). Runs only for books with no cover yet.
  *
  * Driven by [com.geozelot.homer.data.library.LibraryIndexWorker] so it survives the app being

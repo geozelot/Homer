@@ -5,6 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,7 +113,11 @@ private fun sourceSummary(
         }
     } ?: return stringResource(R.string.set_source_summary)
     return if (bookCount > 0) {
-        stringResource(R.string.set_source_summary_books, where, bookCount)
+        stringResource(
+            R.string.set_source_summary_books,
+            where,
+            pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount),
+        )
     } else {
         where
     }

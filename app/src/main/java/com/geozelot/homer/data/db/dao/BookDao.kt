@@ -83,9 +83,6 @@ interface BookDao {
     @Query("SELECT id FROM books WHERE id = :path OR id LIKE :path || '/%'")
     suspend fun idsUnder(path: String): List<String>
 
-    @Query("SELECT id FROM books")
-    suspend fun allIds(): List<String>
-
     /**
      * Books with no known total length — the work list for a "measure lengths" pass. A book only
      * gets a total once EVERY one of its files is measured, so this is exactly the set that still
@@ -105,7 +102,7 @@ interface BookDao {
     /**
      * Removes the given books (folders no longer present). Callers must chunk: every id is one SQL
      * host parameter and SQLite caps those at 999 — which is why the prune can't be expressed as a
-     * single `NOT IN (:keepIds)` over a whole library (see [allIds] and `LibraryScanner`).
+     * single `NOT IN (:keepIds)` over a whole library (see `LibraryScanner.idsToPrune`).
      */
     @Query("DELETE FROM books WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)

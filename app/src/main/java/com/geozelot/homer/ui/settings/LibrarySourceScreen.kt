@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -402,7 +403,9 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
             )
             if (lib.hasSharedCatalog) {
                 append(context.getString(R.string.set_detail_shared_index))
-                lib.bookCount?.let { append(context.getString(R.string.sync_detail_book_count, it)) }
+                lib.bookCount?.let {
+                    append(context.resources.getQuantityString(R.plurals.sync_detail_book_count, it, it))
+                }
             }
             if (lib.hasPrivateIndex) append(context.getString(R.string.sync_detail_private_progress))
             lib.owner?.let { append(context.getString(R.string.sync_detail_owner, it)) }
@@ -420,7 +423,7 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
 /** "309 books · scanned 12 minutes ago" — the relative part left to the platform to localise. */
 @Composable
 private fun statusLine(bookCount: Int, lastScannedAt: Long?, now: Long): String {
-    val books = stringResource(R.string.sync_books_count, bookCount)
+    val books = pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount)
     // `now` is ticked by the caller rather than read here: composing it would freeze the phrase at
     // whatever it said when the screen opened, which is a poor showing for the one line whose whole
     // job is saying how stale the index is.

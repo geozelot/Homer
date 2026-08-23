@@ -250,7 +250,7 @@ class PlayerViewModel @Inject constructor(
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
-    /** "Mark as completed": resets the current book's progress so it drops off Continue. */
+    /** "Mark as completed": resets the current book's progress so it drops off the listening shelf. */
     fun markCompleted() {
         val id = bookId.value ?: return
         connection.resetProgress(id)

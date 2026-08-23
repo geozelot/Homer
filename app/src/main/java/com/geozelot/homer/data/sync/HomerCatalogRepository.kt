@@ -36,7 +36,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Publishes and consumes the Tier-3 shared library catalog ([HomerCatalog]) at
+ * Publishes and consumes the shared library index ([HomerCatalog]) at
  * `‹libraryRoot›/.homer/catalog.json`. [publish] merges the local scan into the shared copy
  * (last-write-wins per book, ETag optimistic concurrency); [consume] pulls the shared catalog
  * into Room so a device has the whole library without crawling or probing. Best-effort: all
@@ -117,7 +117,7 @@ class HomerCatalogRepository @Inject constructor(
     }
 
     /**
-     * True if a shared catalog exists at the library root (⇒ Tier 3 is available here).
+     * True if a shared catalog exists at the library root (⇒ this device can read the library without crawling it).
      * Best-effort like the rest of the repo: offline or on any network error it returns false
      * rather than throwing (this is called from a fire-and-forget init coroutine — an escaped
      * exception there crashes the app).

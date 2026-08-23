@@ -86,6 +86,9 @@ class DurationExtractor @Inject constructor(
                                         finish(if (d > 0 && d != C.TIME_UNSET) d else null)
                                     }
                                     Player.STATE_ENDED -> finish(null)
+                                    // IDLE and BUFFERING are the states on the way there; the
+                                    // probe resolves on READY, on ENDED, or on the timeout.
+                                    else -> Unit
                                 }
                             }
 

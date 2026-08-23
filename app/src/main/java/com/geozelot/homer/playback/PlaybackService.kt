@@ -164,12 +164,21 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            // Advertise our custom commands alongside the standard media/library ones.
+            // The standard transport commands go to everyone — that is how the notification,
+            // Bluetooth, a watch and the system media controls drive playback, and refusing them
+            // would break all of it. Homer's OWN commands do not: skip-silence and the volume
+            // boost are this app's settings, and the service is exported (a MediaSessionService
+            // has to be), so without this check any installed app could bind and change them.
+            val ours = controller.packageName == packageName
             val sessionCommands =
                 MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                     .buildUpon()
-                    .add(PlaybackCommands.SET_SKIP_SILENCE)
-                    .add(PlaybackCommands.SET_VOLUME_MODE)
+                    .apply {
+                        if (ours) {
+                            add(PlaybackCommands.SET_SKIP_SILENCE)
+                            add(PlaybackCommands.SET_VOLUME_MODE)
+                        }
+                    }
                     .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)

@@ -114,7 +114,7 @@ object DatabaseModule {
 
     /**
      * v9 -> v10: book/file ids switched from files-root-relative to library-root-relative
-     * (Tier 3 needs ids that match across users mounting the shared folder at different
+     * (the shared index needs ids that match across users mounting the shared folder at different
      * paths). Old rows are keyed by the old scheme, so clear the derived + id-keyed data;
      * the next scan rebuilds it. `.homer` re-syncs under the new ids on next open.
      */
@@ -179,7 +179,7 @@ object DatabaseModule {
      *
      * "Mark as completed" now resets a book's progress instead of setting this flag, so nothing
      * can set it any more — and nothing can CLEAR it either. Any value left over from an older
-     * build permanently hid that book from the Continue shelf with no way back. Auto-derivation
+     * build permanently hid that book from the Currently-listening shelf with no way back. Auto-derivation
      * (position vs. a fully-measured total) re-marks genuinely finished books, so dropping the
      * stale override is effectively lossless.
      */

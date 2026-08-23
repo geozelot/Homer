@@ -175,7 +175,7 @@ class DurationEnricher @Inject constructor(
 
             // All-or-nothing, matching LibraryScanner: a PARTIAL sum under-reports the book
             // length, so whole-book elapsed exceeds it and the book reads as "finished" —
-            // which is what silently emptied the Continue shelf. A later open measures the
+            // which is what silently emptied the Currently-listening shelf. A later open measures the
             // rest and the total lands then.
             val all = audioFileDao.findForBook(bookId)
             val durations = all.mapNotNull { it.durationMs }

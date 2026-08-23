@@ -30,7 +30,7 @@ class CoverCache @Inject constructor(
     }
 
     /** Reads a book's cached (auto-extracted) cover bytes, or null if absent — used to publish it
-     *  to the Tier-3 shared cover cache. */
+     *  to the shared cover cache. */
     suspend fun readBytes(bookId: String): ByteArray? =
         storageLocation.area().readBytes("covers/${coverName(bookId)}")
 

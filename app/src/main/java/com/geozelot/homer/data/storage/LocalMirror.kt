@@ -20,7 +20,7 @@ import javax.inject.Singleton
 /**
  * Keeps a local `.homer/index.json` progress mirror inside the active [StorageLocation] area, so
  * resume positions survive an app reinstall (they otherwise live only in the internal Room DB) —
- * especially for on-device-only (Tier 1) users, whose progress never reaches the server manifest.
+ * especially for users with progress sync off, whose positions never reach the server manifest.
  * Uses the same [HomerIndex] format as the server manifest (positions only here).
  *
  * On reconnecting a custom folder that already holds Homer data, [import] merges its progress into

@@ -33,12 +33,14 @@ server, and an Audible-class listening experience.
 - **Chapters** — multi-file books, embedded MP3 (ID3 CHAP) and MP4/M4B (`chpl`)
   chapters, with a chapter picker.
 - **A real library** — cover art (embedded, folder, or opt-in Open Library lookup),
-  durations and time-left, series grouping, search, sort and group-by, custom covers,
-  and per-book metadata overrides.
+  durations and time-left, search, custom covers, and per-book metadata overrides.
+  Three independent controls arrange it: **shelve** by author or genre, show a **series**
+  stacked or flat, and **sort** within that.
 - **Candlelit UI** — a warm dark theme, a docked mini-player, and a focused Now Playing
   screen.
-- **Private by design** — a scoped Nextcloud app password stored in the Keystore,
-  optional biometric app lock, and optional trust-on-first-use certificate pinning.
+- **Private by design** — a scoped Nextcloud app password stored in the Keystore, backups
+  disabled, optional biometric app lock, and optional trust-on-first-use certificate
+  pinning.
 
 ## How it works
 
@@ -47,6 +49,17 @@ password (never your real password), stored only in Keystore-backed encrypted st
 It crawls your library folder over **WebDAV** into a local **Room** index, streams audio
 with **Media3/ExoPlayer** over an authenticated OkHttp data source, and keeps cross-device
 state in a small `.homer` JSON file in your own Nextcloud storage.
+
+A crawl reads names, sizes and ETags — one cheap request per folder. A book's *length* is
+different: it needs a ranged read of every audio file, so Homer measures a book the first
+time you open it rather than doing the whole library up front. If you want them all at
+once, *Library source → Measure lengths* does that deliberately, on request.
+
+**Playback in the background is up to your phone, not to Homer.** Homer runs playback as a
+foreground service and holds a wake lock while a book is playing, which is everything
+Android asks for — but many devices still freeze backgrounded apps to save battery, which
+stops the audio until you reopen it. *Settings → Playback → Playing in the background*
+shows whether yours is doing that, and opens the system screen to allow it.
 
 Tech: Kotlin, Jetpack Compose, Hilt, Room, Media3, OkHttp, DataStore, WorkManager.
 `minSdk 26`.

@@ -602,7 +602,7 @@ class PlaybackConnection @Inject constructor(
 
     /**
      * "Mark as completed": resets a book's saved progress to the very start so it drops off the
-     * Continue shelf and reopens fresh. Writes position 0 at the first chapter with a fresh
+     * Currently-listening shelf and reopens fresh. Writes position 0 at the first chapter with a fresh
      * timestamp (so the reset wins cross-device via last-write-wins) and syncs. If it's the
      * currently-loaded book, the controller is paused and rewound first so the position poll can't
      * immediately re-save the old spot.
@@ -638,6 +638,9 @@ class PlaybackConnection @Inject constructor(
      * suspending the caller forever (which would leave transport controls dead). The pending
      * connect future is cancelled on timeout via [suspendCancellableCoroutine]'s cancellation.
      */
+    // SessionToken(Context, ComponentName) is @UnstableApi in Media3 — accepted deliberately, as
+    // it is the documented way to reach a MediaSessionService that is not yet running.
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private suspend fun awaitController(): MediaController? {
         controller?.let { return it }
         return withTimeoutOrNull(CONTROLLER_CONNECT_TIMEOUT_MS) {

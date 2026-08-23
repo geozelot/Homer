@@ -133,7 +133,7 @@
     <!-- Home: library content -->
     <!-- Section headers. Both carry their own count, and both stay put while the library
          scrolls, so the counts are where the eye already is. -->
-    <string name="home_section_continue">Currently listening · %1$d</string>
+    <string name="home_section_listening">Currently listening · %1$d</string>
     <string name="home_section_library">Library · %1$d</string>
     <string name="home_section_results">Results · %1$d</string>
     <string name="home_cd_grid_view">Grid view</string>
@@ -142,6 +142,8 @@
     <string name="home_chip_series">Series · %1$s</string>
     <string name="home_chip_sort">Sort · %1$s</string>
     <string name="home_meta_episode">Episode %1$d</string>
+    <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
+         unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
     <string name="home_series_episodes">%1$d episodes</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>
@@ -201,7 +203,6 @@
     <string name="sync_library_folder_placeholder">e.g. Audiobooks (blank = whole drive)</string>
     <string name="sync_scanning">Scanning…</string>
     <string name="sync_scan_library">Scan library</string>
-    <string name="sync_refresh_covers">Refresh covers</string>
     <!-- The three recovery actions under the primary Scan button. Each is named for the problem
          it solves, and carries its own cost, so no separate paragraph is needed. -->
     <string name="sync_fix_header">IF SOMETHING LOOKS WRONG</string>
@@ -228,7 +229,10 @@
     <string name="sync_kind_files_root">Your account root</string>
     <string name="sync_kind_library_root">Configured library</string>
     <string name="sync_kind_shared_folder">Shared folder</string>
-    <string name="sync_detail_book_count"> (%1$d books)</string>
+    <plurals name="sync_detail_book_count">
+        <item quantity="one"> (%1$d book)</item>
+        <item quantity="other"> (%1$d books)</item>
+    </plurals>
     <string name="sync_detail_private_progress"> · private progress</string>
     <string name="sync_detail_owner"> · owner: %1$s</string>
     <string name="sync_use_as_library">Use as library folder</string>
@@ -236,12 +240,16 @@
     <string name="sync_progress_on_desc">Your place, bookmarks and edits are saved privately to your account and follow you across your devices.</string>
     <string name="sync_progress_off_desc">Everything stays on this device only — nothing is written to your server.</string>
     <string name="sync_scan_folders_books">%1$d folders · %2$d books</string>
-    <string name="sync_books_count">%1$d books</string>
+    <plurals name="sync_books_count">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
 
     <!-- Settings: hub -->
     <string name="set_source_title">Library source</string>
     <string name="set_source_summary">Where your books come from</string>
-    <string name="set_source_summary_books">%1$s · %2$d books</string>
+    <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
+    <string name="set_source_summary_books">%1$s · %2$s</string>
     <string name="set_device_title">On this device</string>
     <string name="set_sync_title">Sync</string>
     <string name="set_sync_state_account">Your account</string>

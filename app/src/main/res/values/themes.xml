@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
       Launch theme applied before Compose takes over. Kept intentionally minimal:
       no action bar, platform Material base (no AppCompat/Material XML dependency).
@@ -14,6 +14,7 @@
         <item name="android:windowBackground">@color/ground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:forceDarkAllowed">false</item>
+        <!-- API 29+; simply ignored below that, where no force-dark exists to opt out of. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
     </style>
 </resources>

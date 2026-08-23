@@ -3,7 +3,7 @@ package com.geozelot.homer.data.sync
 import kotlinx.serialization.Serializable
 
 /**
- * The Tier-3 shared library cache — `‹libraryRoot›/.homer/catalog.json`, inside the shared
+ * The shared library index — `‹libraryRoot›/.homer/catalog.json`, inside the shared
  * folder so every user sees it. It holds the full scanned catalog (books, files, durations,
  * effective structural metadata) so a new device can discover and play the whole library
  * without crawling or re-probing. Keyed by book id (library-root-relative, so it matches
@@ -37,7 +37,7 @@ data class CatalogBook(
     val contentHash: String? = null,
     /** Library-relative path to a folder cover image, if any. */
     val coverFilePath: String? = null,
-    /** True when extracted cover art is cached under `.homer/covers/<id>` (Tier-3 cover cache). */
+    /** True when extracted cover art is cached under `.homer/covers/<id>` (the shared cover cache). */
     val hasCachedCover: Boolean = false,
     val totalDurationMs: Long? = null,
     val isMultiFile: Boolean = false,

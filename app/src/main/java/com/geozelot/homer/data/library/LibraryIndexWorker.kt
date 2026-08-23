@@ -28,7 +28,8 @@ import kotlinx.coroutines.flow.first
  * notification. Modelled on the download worker; it reuses WorkManager's SystemForegroundService
  * (data-sync type already declared in the manifest).
  *
- * At Tier 3 it also publishes the shared catalog after a scan (owner-gated creation, open updates).
+ * With the shared index on it also publishes the catalog after a scan (owner-gated creation,
+ * open updates).
  */
 @HiltWorker
 class LibraryIndexWorker @AssistedInject constructor(

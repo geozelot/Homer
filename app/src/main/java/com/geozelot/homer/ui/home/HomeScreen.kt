@@ -153,7 +153,7 @@ fun HomeScreen(
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val libraryLoaded by viewModel.libraryLoaded.collectAsStateWithLifecycle()
-    val continueShelf by viewModel.continueShelf.collectAsStateWithLifecycle()
+    val listeningShelf by viewModel.listeningShelf.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
@@ -221,7 +221,7 @@ fun HomeScreen(
             onSettings = onOpenSettings,
         )
 
-        // The Continue shelf is pinned here — above the scrolling library rather than being its
+        // The Currently-listening shelf is pinned here — above the scrolling library rather than being its
         // first item — and shrinks to a slim strip once the user scrolls into the library. Its
         // LazyRow state is hoisted so the horizontal scroll position survives collapsing and is
         // no longer reset by the item being disposed. derivedStateOf keeps the collapse flag from
@@ -232,12 +232,12 @@ fun HomeScreen(
                 gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
             }
         }
-        val pinnedShelf = if (searching) emptyList() else continueShelf
+        val pinnedShelf = if (searching) emptyList() else listeningShelf
         if (pinnedShelf.isNotEmpty() && entries.isNotEmpty()) {
             // Closes the top bar off from the panel below it — without it the wordmark row and the
             // listening shelf ran together as one undifferentiated block.
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
-            ContinuePinnedShelf(
+            ListeningShelf(
                 books = pinnedShelf,
                 collapsed = shelfCollapsed,
                 rowState = shelfRowState,
@@ -248,7 +248,7 @@ fun HomeScreen(
 
         // Sort, group and the grid/list toggle are pinned here rather than scrolled away as the
         // grid's first two items: they are the controls for what is being scrolled, so having to
-        // scroll back to the top to reach them was the wrong way round. The Continue strip above
+        // scroll back to the top to reach them was the wrong way round. The listening strip above
         // collapses to make room for them; these stay put.
         if (entries.isNotEmpty()) {
             // `searching` alone means the field is open, not that anything is filtered — labelling
@@ -545,15 +545,15 @@ private val LibraryGridSpacing = 12.dp
 private val LibraryGridPadding = 16.dp
 
 /**
- * The collapsed Continue strip's cover as a fraction of a grid cover's width. The strip is a
+ * The collapsed listening strip's cover as a fraction of a grid cover's width. The strip is a
  * recognise-and-tap affordance while the library scrolls under it, so the cover is sized to be
  * identifiable rather than readable — tune this one number if it wants to be bigger or smaller.
  */
-private const val ContinueSlimCoverFraction = 2.5f
+private const val ListeningSlimCoverFraction = 2.5f
 
 /**
  * Width of one grid cell at [totalWidth] — the LazyVerticalGrid's own arithmetic, factored out so
- * the collapsed Continue strip can size itself against a real cover instead of guessing at a
+ * the collapsed listening strip can size itself against a real cover instead of guessing at a
  * literal dp that drifts the moment the grid's padding or column count changes.
  */
 private fun gridCellWidth(totalWidth: Dp): Dp =
@@ -592,7 +592,7 @@ private fun LazyGridScope.libraryContent(
         expanded.removeAll(entry.books.mapTo(HashSet()) { it.id })
     }
 
-    // Neither the Continue shelf nor the library's own header and sort/group bar are items here:
+    // Neither the Currently-listening shelf nor the library's own header and sort/group bar are items here:
     // HomeScreen pins all three above the grid so they stay reachable while it scrolls.
 
     // Two headers really can carry the same title — a book whose author metadata literally reads
@@ -890,16 +890,16 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
     }
 }
 
-// ── Continue shelf ─────────────────────────────────────────────────────────
+// ── Currently-listening shelf ─────────────────────────────────────────────────────────
 
 /**
- * The Continue shelf, pinned above the library list. Shows full cover cards at rest and collapses
+ * The Currently-listening shelf, pinned above the library list. Shows full cover cards at rest and collapses
  * to a slim strip of rows once the library is scrolled, so it stays reachable without eating the
  * screen. [rowState] is hoisted by the caller so the horizontal position survives both the
  * collapse and scrolling the library.
  */
 @Composable
-private fun ContinuePinnedShelf(
+private fun ListeningShelf(
     books: List<BookListItem>,
     collapsed: Boolean,
     rowState: LazyListState,
@@ -909,7 +909,7 @@ private fun ContinuePinnedShelf(
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         // The collapsed strip is sized against a real grid cover rather than a literal dp, so it
         // stays proportional on every screen width: half a cover, same 2:3 proportions.
-        val slimCoverWidth = gridCellWidth(maxWidth) / ContinueSlimCoverFraction
+        val slimCoverWidth = gridCellWidth(maxWidth) / ListeningSlimCoverFraction
 
         Column(
             modifier = Modifier
@@ -924,7 +924,7 @@ private fun ContinuePinnedShelf(
             // covers under the top bar with nothing saying what they were.
             Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
                 SectionLabelRow(
-                    stringResource(R.string.home_section_continue, books.size),
+                    stringResource(R.string.home_section_listening, books.size),
                     topPadding = if (collapsed) 8.dp else 12.dp,
                     bottomPadding = if (collapsed) 2.dp else 8.dp,
                     large = !collapsed,
@@ -943,9 +943,9 @@ private fun ContinuePinnedShelf(
             ) {
                 items(books, key = { "cont:${it.id}" }) { book ->
                     if (collapsed) {
-                        ContinueSlim(book, coverWidth = slimCoverWidth, onOpen = onOpen)
+                        ListeningSlim(book, coverWidth = slimCoverWidth, onOpen = onOpen)
                     } else {
-                        ContinueCard(book, onOpen, actions)
+                        ListeningCard(book, onOpen, actions)
                     }
                 }
             }
@@ -954,7 +954,7 @@ private fun ContinuePinnedShelf(
 }
 
 /**
- * A book in the COLLAPSED Continue strip: just the cover, with its progress bar directly beneath.
+ * A book in the COLLAPSED listening strip: just the cover, with its progress bar directly beneath.
  *
  * No title and no time left. The strip exists to be recognised and tapped mid-scroll, and at this
  * size a cover does that on its own — a title would only be a truncated echo of the one on the
@@ -962,7 +962,7 @@ private fun ContinuePinnedShelf(
  * across where this fits six.
  */
 @Composable
-private fun ContinueSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) -> Unit) {
+private fun ListeningSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) -> Unit) {
     Column(
         modifier = Modifier
             .width(coverWidth)
@@ -992,7 +992,7 @@ private fun ContinueSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) ->
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinueCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
+private fun ListeningCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         Column(

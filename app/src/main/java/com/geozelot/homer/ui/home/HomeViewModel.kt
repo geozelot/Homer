@@ -79,10 +79,10 @@ data class BookListItem(
     val timeLeftMs: Long?,
     /** Fraction of the book listened (0f–1f); null if not started or duration unmeasured. */
     val progress: Float?,
-    /** When this book was last played, for Continue-shelf recency; null if never. */
+    /** When this book was last played, for currently-listening recency; null if never. */
     val lastPlayedAt: Long?,
     /** Whether the book has real listening progress (a saved position past the very start), so
-     *  merely opening a book doesn't put it on the Continue shelf. */
+     *  merely opening a book doesn't put it on the Currently-listening shelf. */
     val started: Boolean,
     /** Forced finished flag: null = auto-derive, true/false = user override (legacy; kept for
      *  cross-device compat and to hide already-marked books, but no longer set from the UI). */
@@ -243,7 +243,7 @@ class HomeViewModel @Inject constructor(
     // Detection with user overrides applied (D2), hidden books filtered unless shown, plus the
     // resolved cover model. All the inputs here change rarely, so the per-book cover resolution
     // does NOT re-run on the ~5s playback-position ticks that drive `books` below. Ordering is
-    // left to `buildEntries` / `continueShelf`, which always sort, so no sort is needed here.
+    // left to `buildEntries` / `listeningShelf`, which always sort, so no sort is needed here.
     private val effectiveBooks: Flow<List<EffectiveBook>> =
         combine(
             libraryRepository.books,
@@ -285,7 +285,7 @@ class HomeViewModel @Inject constructor(
                 val download = downloadByBook[book.id]
                 // A trustworthy percentage / time-left needs a total, a saved position AND every
                 // file measured. Without the completeness check a partially-measured book reports
-                // elapsed > total, which reads as "finished" and hides it from Continue.
+                // elapsed > total, which reads as "finished" and hides it from the listening shelf.
                 val measured = total != null && total > 0 && elapsed != null &&
                     bookProgress.fullyMeasured
                 BookListItem(
@@ -365,12 +365,12 @@ class HomeViewModel @Inject constructor(
 
     /** In-progress books: actually started (real progress), not finished/at-end, not hidden;
      *  most-recently-played first. Merely opening a book (position 0) does NOT qualify. */
-    val continueShelf: StateFlow<List<BookListItem>> = books
+    val listeningShelf: StateFlow<List<BookListItem>> = books
         .map { list ->
             list.asSequence()
                 .filter { it.started && !it.finished && !it.hidden }
                 .sortedByDescending { it.lastPlayedAt }
-                .take(CONTINUE_LIMIT)
+                .take(LISTENING_LIMIT)
                 .toList()
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -487,7 +487,7 @@ class HomeViewModel @Inject constructor(
         libraryIndexManager.fetchMissingCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
-        // Tier 3: pull the shared catalog so the library is present without scanning. Never
+        // Shared index on: pull the catalog so the library is present without scanning. Never
         // touch the network at tier 1 (on-device only).
         viewModelScope.launch {
             if (librarySettings.sharedCatalogEnabled.first()) {
@@ -532,7 +532,7 @@ class HomeViewModel @Inject constructor(
 
     fun scan() {
         viewModelScope.launch {
-            // Persist the root first; the worker reads it. Scan + covers (+ Tier-3 publish)
+            // Persist the root first; the worker reads it. Scan + covers (+ shared-index publish)
             // then run in the foreground worker so they survive the app being backgrounded.
             libraryRepository.setLibraryRoot(_libraryRoot.value)
             libraryIndexManager.scan()
@@ -816,7 +816,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { bookEditor.setHidden(bookId, hidden) }
     }
 
-    /** "Mark as completed": resets the book's progress so it drops off Continue and reopens fresh. */
+    /** "Mark as completed": resets the book's progress so it drops off the listening shelf and reopens fresh. */
     fun markCompleted(bookId: String) = connection.resetProgress(bookId)
 
     /** Toggle play/pause on the currently-loaded book (docked mini-player). */
@@ -828,7 +828,7 @@ class HomeViewModel @Inject constructor(
     fun logout() = authRepository.logout()
 
     private companion object {
-        const val CONTINUE_LIMIT = 12
+        const val LISTENING_LIMIT = 12
 
         /** How long a discovery sweep stays fresh enough to reuse (the button always forces). */
         const val DISCOVERY_TTL_MS = 10 * 60_000L

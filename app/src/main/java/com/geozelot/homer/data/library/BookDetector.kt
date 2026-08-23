@@ -95,7 +95,7 @@ class BookDetector @Inject constructor() {
         }
 
         // Ids and stored paths are LIBRARY-ROOT-RELATIVE (not files-root), so they're stable
-        // across users who mount the same shared folder at different paths (Tier 3). The
+        // across users who mount the same shared folder at different paths (the shared index). The
         // library-root prefix is re-attached when building fetch URLs (see WebDavClient.urlFor).
         fun strip(path: String) = path.removePrefix(root).trim('/')
 

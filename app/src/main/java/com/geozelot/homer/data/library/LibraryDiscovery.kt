@@ -56,7 +56,7 @@ class LibraryDiscovery @Inject constructor(
         // Keyed by path so the library-root / files-root / shared passes don't duplicate an entry.
         val found = LinkedHashMap<String, DiscoveredLibrary>()
 
-        // The account's own files root — carries the private progress index (Tier 2).
+        // The account's own files root — carries the private progress index.
         probe("", DiscoveredLibrary.Kind.FILES_ROOT, libraryRoot, checkIndex = true)?.let { found[""] = it }
 
         // The configured library root — always surfaced (even with no catalog yet), since it's the
