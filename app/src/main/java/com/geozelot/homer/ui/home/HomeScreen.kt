@@ -250,9 +250,14 @@ fun HomeScreen(
             // the untouched library "309 results" before a character is typed.
             val filtering = searching && searchQuery.isNotBlank()
             // The library's header and controls are pinned chrome, not part of the list they act
-            // on, so they sit on a slightly raised surface. Barely a shade — enough for the eye to
-            // read the boundary without the block announcing itself as a toolbar.
-            Column(modifier = Modifier.fillMaxWidth().background(Surface1.copy(alpha = 0.5f))) {
+            // on. The wash fades from a raised surface at the header down to the page colour by
+            // the time it meets the list, so the band hands off to what it scrolls rather than
+            // stopping at a hard edge.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Surface1, Ground))),
+            ) {
                 // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
                 // is what these controls are pointed at.
                 HorizontalDivider(color = Line.copy(alpha = 0.45f))
@@ -263,6 +268,7 @@ fun HomeScreen(
                     shelving = shelfMode,
                     series = seriesMode,
                     gridView = gridView,
+                    collapsed = shelfCollapsed,
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
@@ -691,15 +697,32 @@ private fun LazyGridScope.libraryContent(
     }
 }
 
+/**
+ * Both pinned headers, and the in-list section labels.
+ *
+ * [large] is the resting size for the two pinned ones: they title whole regions rather than
+ * separating rows inside a list, so they carry a little more weight. Scrolling into the library
+ * drops them back to the in-list size along with the listening panel, since every pixel the pinned
+ * block holds on to is a pixel of library the user can't see.
+ */
 @Composable
-private fun SectionLabelRow(text: String, topPadding: Dp = 12.dp, bottomPadding: Dp = 8.dp) {
+private fun SectionLabelRow(
+    text: String,
+    topPadding: Dp = 12.dp,
+    bottomPadding: Dp = 8.dp,
+    large: Boolean = false,
+) {
     Text(
         text = text.uppercase(),
         style = SectionLabel,
+        fontSize = if (large) SectionLabelLargeSize else SectionLabel.fontSize,
         color = Muted,
         modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
     )
 }
+
+/** Resting size of the two pinned headers; they fall back to [SectionLabel]'s 12sp on scroll. */
+private val SectionLabelLargeSize = 14.sp
 
 /**
  * The library's header and its three controls — shelve, series, sort — plus the view toggle.
@@ -716,6 +739,8 @@ private fun LibraryControlBar(
     shelving: LibraryShelving,
     series: LibrarySeriesMode,
     gridView: Boolean,
+    /** Scrolled into the library: the header gives its extra size back. */
+    collapsed: Boolean,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibrarySeriesMode) -> Unit,
@@ -731,6 +756,7 @@ private fun LibraryControlBar(
             },
             topPadding = 8.dp,
             bottomPadding = 4.dp,
+            large = !collapsed,
         )
         // FlowRow, not a weighted Row. Equal weights cap every chip at a third of the width, so a
         // short one strands allowance a long one is truncating for. Here each takes the width it
@@ -876,9 +902,10 @@ private fun ContinuePinnedShelf(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // The same wash the mini-player carries at the other end of the screen, fading
-                // down into the page so the panel reads as a shelf rather than a boxed-in card.
-                .background(Brush.verticalGradient(listOf(Surface1, Ground)))
+                // A flat, quiet surface. The wash moved down to the chrome band, where fading
+                // into the page actually marks a boundary — here it was a gradient with nothing
+                // underneath it to hand off to.
+                .background(Surface1.copy(alpha = 0.5f))
                 .animateContentSize(),
         ) {
             // Stays put when the strip collapses. It used to disappear, which left a row of bare
@@ -888,6 +915,7 @@ private fun ContinuePinnedShelf(
                     stringResource(R.string.home_section_continue, books.size),
                     topPadding = if (collapsed) 8.dp else 12.dp,
                     bottomPadding = if (collapsed) 2.dp else 8.dp,
+                    large = !collapsed,
                 )
             }
             LazyRow(
