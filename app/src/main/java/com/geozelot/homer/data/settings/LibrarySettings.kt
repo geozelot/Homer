@@ -139,6 +139,14 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SHELF_MODE] = value }
     }
 
+    /** Whether series are drawn stacked or flat: "stacked" | "flat". Independent of shelving. */
+    val seriesMode: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_SERIES_MODE] ?: "stacked" }
+
+    suspend fun setSeriesMode(value: String) {
+        context.settingsDataStore.edit { it[KEY_SERIES_MODE] = value }
+    }
+
     /**
      * Opt-in online cover lookup: when a book has no embedded/folder art, query Open Library by
      * title/author for one. Off by default — it reaches a third-party server (title + author only,
@@ -220,6 +228,7 @@ class LibrarySettings @Inject constructor(
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
+        val KEY_SERIES_MODE = stringPreferencesKey("library_series_mode")
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")

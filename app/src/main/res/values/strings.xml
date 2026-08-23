@@ -134,12 +134,13 @@
     <string name="home_section_continue">Continue</string>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
-    <string name="home_sort_shelf_label">Shelved · %1$s</string>
-    <string name="home_sort_sort_label">Sorted · %1$s</string>
+    <string name="home_chip_shelve">Shelve · %1$s</string>
+    <string name="home_chip_series">Series · %1$s</string>
+    <string name="home_chip_sort">Sort · %1$s</string>
+    <string name="home_meta_episode">Episode %1$d</string>
     <!-- The library control bar's summary line. It carries the book count too, since the count
          no longer has a header row of its own. %1$s is one of the plurals below. -->
     <string name="home_arrange_all">%1$s · sorted by %2$s</string>
-    <string name="home_arrange_series">%1$s · series shelves · sorted by %2$s</string>
     <string name="home_arrange_shelved">%1$s · shelved by %2$s · sorted by %3$s</string>
     <plurals name="home_count_books">
         <item quantity="one">%1$d book</item>
@@ -152,7 +153,7 @@
     <string name="home_series_episodes">%1$d episodes</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>
-    <string name="home_meta_percent"> · %1$d%%</string>
+    <string name="home_meta_percent_bare">%1$d%%</string>
 
     <!-- Home: context menu -->
     <string name="home_menu_pause_download">Pause download</string>

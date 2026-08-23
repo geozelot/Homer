@@ -141,7 +141,7 @@ sealed interface LibraryEntry {
     ) : LibraryEntry
 }
 
-/** How the library list is ordered (within each group). */
+/** How the library list is ordered (within each shelf). */
 enum class LibrarySort(val key: String, val label: String) {
     RECENT("recent", "Recently played"),
     TITLE("title", "Title"),
@@ -150,18 +150,45 @@ enum class LibrarySort(val key: String, val label: String) {
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: AUTHOR
+
+        /**
+         * The sorts worth offering for a given shelving. Sorting by the very thing the list is
+         * already sectioned by orders the shelves and does nothing inside them, so it is dropped
+         * rather than left as an option that appears to do nothing.
+         */
+        fun offeredFor(shelving: LibraryShelving): List<LibrarySort> =
+            values().filterNot { it == AUTHOR && shelving == LibraryShelving.AUTHOR }
     }
 }
 
-/** How the library list is sectioned into shelves/headers. */
+/**
+ * How the library list is sectioned into shelves.
+ *
+ * SERIES used to live here and no longer does: collapsing a series into one card is a way of
+ * DRAWING the list, not an axis to section it by, and it was the only value here that produced no
+ * headers at all — which is why it read as doing nothing. It is [LibrarySeriesMode] now, an
+ * independent control, so a series stays stacked (or doesn't) whichever way the list is shelved.
+ *
+ * ITEM keeps the stored key "none" so nobody's saved preference resets; a stored "series" from
+ * before the split falls through [from] to ITEM.
+ */
 enum class LibraryShelving(val key: String, val label: String) {
-    NONE("none", "None"),
+    ITEM("none", "Item"),
     AUTHOR("author", "Author"),
-    SERIES("series", "Series"),
     GENRE("genre", "Genre");
 
     companion object {
-        fun from(key: String?) = values().firstOrNull { it.key == key } ?: NONE
+        fun from(key: String?) = values().firstOrNull { it.key == key } ?: ITEM
+    }
+}
+
+/** Whether a multi-book series is drawn as one stacked shelf or as its books, loose in the list. */
+enum class LibrarySeriesMode(val key: String, val label: String) {
+    STACKED("stacked", "Stacked"),
+    FLAT("flat", "Flat");
+
+    companion object {
+        fun from(key: String?) = values().firstOrNull { it.key == key } ?: STACKED
     }
 }
 
@@ -296,18 +323,22 @@ class HomeViewModel @Inject constructor(
 
     val shelfMode: StateFlow<LibraryShelving> = librarySettings.shelfMode
         .map(LibraryShelving::from)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryShelving.NONE)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryShelving.ITEM)
+
+    val seriesMode: StateFlow<LibrarySeriesMode> = librarySettings.seriesMode
+        .map(LibrarySeriesMode::from)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySeriesMode.STACKED)
 
     /** Library list, filtered by the query, ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, _searchQuery, sortMode, shelfMode) { list, query, sort, group ->
+        combine(books, _searchQuery, sortMode, shelfMode, seriesMode) { list, query, sort, shelving, series ->
             val filtered = if (query.isBlank()) {
                 list
             } else {
                 val needle = query.trim().lowercase()
                 list.filter { it.matchesQuery(needle) }
             }
-            buildEntries(filtered, sort, group)
+            buildEntries(filtered, sort, shelving, series)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -748,8 +779,20 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setSortMode(sort.key) }
     }
 
-    fun setShelfMode(group: LibraryShelving) {
-        viewModelScope.launch { librarySettings.setShelfMode(group.key) }
+    fun setShelfMode(shelving: LibraryShelving) {
+        viewModelScope.launch {
+            librarySettings.setShelfMode(shelving.key)
+            // Shelving by the same field the list is sorted by leaves the sort with nothing to do
+            // inside a shelf, so the option disappears — and the stored sort has to move with it,
+            // or the control would show a value it no longer offers.
+            if (LibrarySort.from(librarySettings.sortMode.first()) !in LibrarySort.offeredFor(shelving)) {
+                librarySettings.setSortMode(LibrarySort.TITLE.key)
+            }
+        }
+    }
+
+    fun setSeriesMode(mode: LibrarySeriesMode) {
+        viewModelScope.launch { librarySettings.setSeriesMode(mode.key) }
     }
 
     /** Quick hide/show from the context menu, preserving any existing metadata override. */
@@ -791,15 +834,23 @@ data class PendingStorageChange(val source: String?, val target: String?)
 private fun buildEntries(
     books: List<BookListItem>,
     sort: LibrarySort,
-    group: LibraryShelving,
+    shelving: LibraryShelving,
+    series: LibrarySeriesMode,
 ): List<LibraryEntry> {
-    val collapse = group == LibraryShelving.AUTHOR || group == LibraryShelving.SERIES
-    val units = if (collapse) collapseIntoUnits(books) else books.map { SortUnit.Solo(it) }
+    // Collapsing follows the series control alone now. It used to be decided by the shelving, so
+    // "by genre" silently flattened every series while "by author" kept them stacked — nobody
+    // chose that, it fell out of one expression.
+    val units = if (series == LibrarySeriesMode.STACKED) {
+        collapseIntoUnits(books)
+    } else {
+        books.map { SortUnit.Solo(it) }
+    }
     val ordered = units.sortedWith(unitComparator(sort))
 
-    return when (group) {
-        LibraryShelving.NONE, LibraryShelving.SERIES -> ordered.map { it.toEntry() }
+    return when (shelving) {
+        LibraryShelving.ITEM -> ordered.map { it.toEntry() }
         LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
+        // A stacked series spans genres, so it can't sit under one; it keeps its own section.
         LibraryShelving.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
     }
 }

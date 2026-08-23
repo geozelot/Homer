@@ -75,6 +75,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -121,7 +122,6 @@ import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.MiniPlayer
-import com.geozelot.homer.ui.components.TagChip
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
@@ -153,6 +153,7 @@ fun HomeScreen(
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
+    val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
@@ -249,10 +250,12 @@ fun HomeScreen(
                 count = if (filtering) entries.bookCount() else bookCount,
                 searching = filtering,
                 sort = sortMode,
-                group = shelfMode,
+                shelving = shelfMode,
+                series = seriesMode,
                 gridView = gridView,
                 onSortChange = viewModel::setSortMode,
                 onShelfChange = viewModel::setShelfMode,
+                onSeriesChange = viewModel::setSeriesMode,
                 onToggleView = viewModel::setGridView,
                 modifier = Modifier.padding(horizontal = LibraryGridPadding),
             )
@@ -293,6 +296,7 @@ fun HomeScreen(
                 libraryContent(
                     entries = entries,
                     gridView = gridView,
+                    ctx = RowContext(shelfMode, seriesMode),
                     expanded = expanded,
                     onBookClick = onBookClick,
                     actions = actions,
@@ -543,6 +547,7 @@ private fun gridCellWidth(totalWidth: Dp): Dp =
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
     gridView: Boolean,
+    ctx: RowContext,
     /** Book ids anchoring the open series shelves — see [isOpen]. */
     expanded: MutableList<String>,
     onBookClick: (String) -> Unit,
@@ -590,11 +595,11 @@ private fun LazyGridScope.libraryContent(
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
-                        BookGridCard(entry.book, onOpen = onBookClick, actions = actions)
+                        BookGridCard(entry.book, ctx, onOpen = onBookClick, actions = actions)
                     }
                 } else {
                     item(span = { GridItemSpan(maxLineSpan) }, key = entry.book.id) {
-                        BookListRow(entry.book, startPadding = 0.dp, onOpen = onBookClick, actions = actions)
+                        BookListRow(entry.book, startPadding = 0.dp, ctx = ctx, onOpen = onBookClick, actions = actions)
                     }
                 }
             }
@@ -620,6 +625,7 @@ private fun LazyGridScope.libraryContent(
                             ExpandedSeriesRow(
                                 books = row,
                                 last = index == rows.lastIndex,
+                                ctx = ctx,
                                 onOpen = onBookClick,
                                 actions = actions,
                             )
@@ -664,6 +670,7 @@ private fun LazyGridScope.libraryContent(
                                 BookListRow(
                                     book,
                                     startPadding = 2.dp,
+                                    ctx = ctx,
                                     onOpen = onBookClick,
                                     actions = actions,
                                     bordered = false,
@@ -688,23 +695,25 @@ private fun SectionLabelRow(text: String) {
 }
 
 /**
- * Sort, group, the count and the grid/list toggle, on one line with the summary beneath.
+ * The library's three independent controls — shelve, series, sort — with the summary and the
+ * grid/list toggle beneath them.
  *
- * These used to be two stacked rows — a "LIBRARY · 309" header with the view toggle, then the
- * chips — which cost about 70dp of the permanently pinned surface for a label and two buttons.
- * The toggle joins the chips; the count moves into the summary line that was already there. All
- * five controls could not share one row at 320dp (two chips and a 96dp toggle already fill it),
- * and the count is the one of them that reads just as well as prose.
+ * Three chips rather than two because collapsing a series is not a way of shelving the list. It
+ * used to be a value of the shelve control, which is why it produced no headings and looked like
+ * it did nothing. The chips stay terse ("Shelve · Item") since the line below spells the whole
+ * arrangement out, and they ellipsize before they will push the toggle off a narrow screen.
  */
 @Composable
 private fun LibraryControlBar(
     count: Int,
     searching: Boolean,
     sort: LibrarySort,
-    group: LibraryShelving,
+    shelving: LibraryShelving,
+    series: LibrarySeriesMode,
     gridView: Boolean,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
+    onSeriesChange: (LibrarySeriesMode) -> Unit,
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -713,35 +722,47 @@ private fun LibraryControlBar(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // The chips live in their own weighted row, and the toggle is simply the other child of
-            // a SpaceBetween parent. A weighted Spacer between them looked equivalent and was not:
-            // a weighted child's allotment is a hard MAXIMUM, and `fill = false` only relaxes the
-            // minimum — so the spacer's third of the free space was subtracted from what the chips
-            // could ever use, and both labels ellipsized with a third of the row left blank.
-            Row(
+            DropdownChip(
+                label = stringResource(R.string.home_chip_shelve, shelving.label),
+                options = LibraryShelving.values().toList(),
+                selected = shelving,
+                labelOf = { it.label },
+                onSelect = onShelfChange,
                 modifier = Modifier.weight(1f, fill = false),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DropdownChip(
-                    label = stringResource(R.string.home_sort_shelf_label, group.label),
-                    options = LibraryShelving.values().toList(),
-                    selected = group,
-                    labelOf = { it.label },
-                    onSelect = onShelfChange,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                DropdownChip(
-                    label = stringResource(R.string.home_sort_sort_label, sort.label),
-                    options = LibrarySort.values().toList(),
-                    selected = sort,
-                    labelOf = { it.label },
-                    onSelect = onSortChange,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
+            )
+            DropdownChip(
+                label = stringResource(R.string.home_chip_series, series.label),
+                options = LibrarySeriesMode.values().toList(),
+                selected = series,
+                labelOf = { it.label },
+                onSelect = onSeriesChange,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            // Only the sorts that still do something — see LibrarySort.offeredFor.
+            DropdownChip(
+                label = stringResource(R.string.home_chip_sort, sort.label),
+                options = LibrarySort.offeredFor(shelving),
+                selected = sort,
+                labelOf = { it.label },
+                onSelect = onSortChange,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = arrangementSummary(shelving, sort, count, searching, context),
+                color = Muted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).padding(start = 2.dp, end = 8.dp),
+            )
+            Spacer(modifier = Modifier.weight(1f))
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -756,14 +777,6 @@ private fun LibraryControlBar(
                 }
             }
         }
-        Text(
-            text = arrangementSummary(group, sort, count, searching, context),
-            color = Muted,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp, start = 2.dp),
-        )
     }
 }
 
@@ -794,7 +807,7 @@ private fun ViewToggleButton(
 
 /** "309 books · grouped by author · sorted by title" — the control bar's one-line explanation. */
 private fun arrangementSummary(
-    group: LibraryShelving,
+    shelving: LibraryShelving,
     sort: LibrarySort,
     count: Int,
     searching: Boolean,
@@ -806,10 +819,12 @@ private fun arrangementSummary(
         count,
     )
     val sortLabel = sort.label.lowercase()
-    return when (group) {
-        LibraryShelving.NONE -> context.getString(R.string.home_arrange_all, counted, sortLabel)
-        LibraryShelving.SERIES -> context.getString(R.string.home_arrange_series, counted, sortLabel)
-        else -> context.getString(R.string.home_arrange_shelved, counted, group.label.lowercase(), sortLabel)
+    // The series control speaks for itself in its own chip and stays out of the sentence — four
+    // clauses read as a specification rather than an explanation.
+    return if (shelving == LibraryShelving.ITEM) {
+        context.getString(R.string.home_arrange_all, counted, sortLabel)
+    } else {
+        context.getString(R.string.home_arrange_shelved, counted, shelving.label.lowercase(), sortLabel)
     }
 }
 
@@ -986,7 +1001,12 @@ private fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
+private fun BookGridCard(
+    book: BookListItem,
+    ctx: RowContext,
+    onOpen: (String) -> Unit,
+    actions: BookActions,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     val showRing = book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished
 
@@ -1019,20 +1039,9 @@ private fun BookGridCard(book: BookListItem, onOpen: (String) -> Unit, actions: 
                         .size(24.dp),
                 )
             }
-            // Genre pill overlaid bottom-start (clear of the TopEnd badge and BottomEnd ring), so
-            // it surfaces on grid cards without disturbing their fixed-height text block. Tags stay
-            // a list-row feature (too many to read as overlays).
-            book.genre?.let {
-                TagChip(
-                    it,
-                    Amber,
-                    AmberSoft,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(7.dp),
-                )
-            }
         }
         Box {
-            GridCardText(title = book.title, meta = bookCardMeta(book, LocalContext.current)) {
+            GridCardText(title = book.title, meta = bookMeta(book, ctx, LocalContext.current)) {
                 menuOpen = true
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
@@ -1092,10 +1101,47 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
     }
 }
 
-private fun bookCardMeta(book: BookListItem, context: android.content.Context): String = buildString {
-    append(book.author ?: context.getString(R.string.unknown_author))
-    book.totalDurationMs?.takeIf { it > 0 }?.let { append('\n'); append(formatCompactDuration(it)) }
-}
+/** What the arrangement already tells the reader, so a row can say something else instead. */
+@Immutable
+private data class RowContext(val shelving: LibraryShelving, val series: LibrarySeriesMode)
+
+/**
+ * The line under a book's title: the facts the current arrangement is NOT already showing.
+ *
+ * Shelved by author, the author is the section heading — repeating it on every row beneath is
+ * noise, so the line carries the genre instead. Shelved by genre, the reverse. Shelved by item,
+ * both. A series book loose in the list adds its episode number, which a stacked shelf conveys by
+ * position and therefore omits. Length last, whenever it is known.
+ *
+ * Plain text rather than chips: the genre pill and the tag bubbles gave every row a different
+ * height depending on whether that book happened to have either.
+ */
+private fun bookMeta(
+    book: BookListItem,
+    ctx: RowContext,
+    context: android.content.Context,
+    withStatus: Boolean = false,
+): String = buildList {
+    if (ctx.shelving != LibraryShelving.AUTHOR) {
+        add(book.author ?: context.getString(R.string.unknown_author))
+    }
+    if (ctx.shelving != LibraryShelving.GENRE) book.genre?.let { add(it) }
+    if (ctx.series == LibrarySeriesMode.FLAT && book.series != null && book.seriesIndex != null) {
+        add(context.getString(R.string.home_meta_episode, book.seriesIndex))
+    }
+    book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
+    addAll(book.tags)
+    if (withStatus) {
+        when {
+            book.finished -> add(context.getString(R.string.status_finished))
+            // Gated on `started`, not merely on progress being computable: marking a book
+            // completed RESETS it to position 0, which is measurable, so progress comes out 0f
+            // rather than null and the row went on advertising "0%" for a book just cleared.
+            book.started && book.progress != null ->
+                add(context.getString(R.string.home_meta_percent_bare, (book.progress * 100).toInt()))
+        }
+    }
+}.joinToString(" · ")
 
 // The stack fans diagonally up-right and is scaled so the whole stack fills the cell — the
 // same footprint as a single book card. STACK_SPREAD is the fraction of the cell the fan
@@ -1158,14 +1204,15 @@ private fun SeriesGridCard(
     }
 }
 
-private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
-    append(seriesMeta(series, context))
-    // Whole-series length as a second line, once every episode is measured.
-    val measured = series.books.mapNotNull { it.totalDurationMs?.takeIf { d -> d > 0 } }
-    if (measured.size == series.books.size && measured.isNotEmpty()) {
-        append('\n'); append(formatCompactDuration(measured.sum()))
+private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String =
+    // The grid card reserves two lines, so the length gets one of its own rather than trailing the
+    // episode count as it does on the narrower shelf row.
+    buildString {
+        append(context.getString(R.string.home_series_episodes, series.books.size))
+        val downloaded = series.books.count { it.isDownloaded }
+        if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
+        seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
     }
-}
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -1270,6 +1317,7 @@ private fun ExpandedSeriesHeader(
 private fun ExpandedSeriesRow(
     books: List<BookListItem>,
     last: Boolean,
+    ctx: RowContext,
     onOpen: (String) -> Unit,
     actions: BookActions,
 ) {
@@ -1286,7 +1334,7 @@ private fun ExpandedSeriesRow(
     ) {
         books.forEach { book ->
             Box(modifier = Modifier.weight(1f)) {
-                BookGridCard(book, onOpen = onOpen, actions = actions)
+                BookGridCard(book, ctx, onOpen = onOpen, actions = actions)
             }
         }
         // Hold the last row's cards to the same width as a full row's.
@@ -1296,8 +1344,17 @@ private fun ExpandedSeriesRow(
 
 private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
     append(context.getString(R.string.home_series_episodes, series.books.size))
+    // Whole-series length, on the shelf row as well as the grid card — a book row shows its own
+    // length, so a shelf that hid the sum was the one place the number went missing.
+    seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
     val downloaded = series.books.count { it.isDownloaded }
     if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
+}
+
+/** A series' length, but only once EVERY episode is measured — a partial sum understates it. */
+private fun seriesTotalMs(series: LibraryEntry.Series): Long? {
+    val measured = series.books.mapNotNull { it.totalDurationMs?.takeIf { d -> d > 0 } }
+    return if (measured.size == series.books.size && measured.isNotEmpty()) measured.sum() else null
 }
 
 // ── List row ─────────────────────────────────────────────────────────────────
@@ -1306,6 +1363,7 @@ private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Con
 private fun BookListRow(
     book: BookListItem,
     startPadding: Dp,
+    ctx: RowContext,
     onOpen: (String) -> Unit,
     actions: BookActions,
     /**
@@ -1371,23 +1429,13 @@ private fun BookListRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = listRowMeta(book, LocalContext.current),
+                text = bookMeta(book, ctx, LocalContext.current, withStatus = true),
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 1.dp),
             )
-            // Offline is shown by the DownloadBadge on the cover; the chips carry genre + tags only.
-            if (book.genre != null || book.tags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.padding(top = 5.dp),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    book.genre?.let { TagChip(it, Amber, AmberSoft) }
-                    book.tags.take(3).forEach { TagChip(it, Muted, Surface2) }
-                }
-            }
         }
         Box {
             IconButton(onClick = { menuOpen = true }) {
@@ -1398,20 +1446,6 @@ private fun BookListRow(
     }
 }
 
-private fun listRowMeta(book: BookListItem, context: android.content.Context): String = buildString {
-    append(book.author ?: context.getString(R.string.unknown_author))
-    book.totalDurationMs?.takeIf { it > 0 }?.let { append(" · ${formatCompactDuration(it)}") }
-    when {
-        book.finished -> { append(" · "); append(context.getString(R.string.status_finished)) }
-        // Gated on `started`, not merely on progress being computable. Marking a book completed
-        // RESETS it (PlaybackConnection.resetProgress writes position 0), which leaves elapsed at
-        // zero — measurable, so progress is 0f rather than null, and the row went on advertising
-        // "0%" for a book the user had just cleared. The grid's ring already hides itself below
-        // 1%, so this was the one place the reset didn't take.
-        book.started && book.progress != null ->
-            append(context.getString(R.string.home_meta_percent, (book.progress * 100).toInt()))
-    }
-}
 
 // ── Series shelf row ───────────────────────────────────────────────────────
 
