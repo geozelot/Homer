@@ -152,7 +152,7 @@ fun HomeScreen(
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
-    val groupMode by viewModel.groupMode.collectAsStateWithLifecycle()
+    val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
@@ -249,10 +249,10 @@ fun HomeScreen(
                 count = if (filtering) entries.bookCount() else bookCount,
                 searching = filtering,
                 sort = sortMode,
-                group = groupMode,
+                group = shelfMode,
                 gridView = gridView,
                 onSortChange = viewModel::setSortMode,
-                onGroupChange = viewModel::setGroupMode,
+                onShelfChange = viewModel::setShelfMode,
                 onToggleView = viewModel::setGridView,
                 modifier = Modifier.padding(horizontal = LibraryGridPadding),
             )
@@ -701,10 +701,10 @@ private fun LibraryControlBar(
     count: Int,
     searching: Boolean,
     sort: LibrarySort,
-    group: LibraryGroup,
+    group: LibraryShelving,
     gridView: Boolean,
     onSortChange: (LibrarySort) -> Unit,
-    onGroupChange: (LibraryGroup) -> Unit,
+    onShelfChange: (LibraryShelving) -> Unit,
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -726,11 +726,11 @@ private fun LibraryControlBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 DropdownChip(
-                    label = stringResource(R.string.home_sort_group_label, group.label),
-                    options = LibraryGroup.values().toList(),
+                    label = stringResource(R.string.home_sort_shelf_label, group.label),
+                    options = LibraryShelving.values().toList(),
                     selected = group,
                     labelOf = { it.label },
-                    onSelect = onGroupChange,
+                    onSelect = onShelfChange,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 DropdownChip(
@@ -794,7 +794,7 @@ private fun ViewToggleButton(
 
 /** "309 books · grouped by author · sorted by title" — the control bar's one-line explanation. */
 private fun arrangementSummary(
-    group: LibraryGroup,
+    group: LibraryShelving,
     sort: LibrarySort,
     count: Int,
     searching: Boolean,
@@ -807,9 +807,9 @@ private fun arrangementSummary(
     )
     val sortLabel = sort.label.lowercase()
     return when (group) {
-        LibraryGroup.NONE -> context.getString(R.string.home_arrange_all, counted, sortLabel)
-        LibraryGroup.SERIES -> context.getString(R.string.home_arrange_series, counted, sortLabel)
-        else -> context.getString(R.string.home_arrange_grouped, counted, group.label.lowercase(), sortLabel)
+        LibraryShelving.NONE -> context.getString(R.string.home_arrange_all, counted, sortLabel)
+        LibraryShelving.SERIES -> context.getString(R.string.home_arrange_series, counted, sortLabel)
+        else -> context.getString(R.string.home_arrange_shelved, counted, group.label.lowercase(), sortLabel)
     }
 }
 

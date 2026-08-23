@@ -130,12 +130,13 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_LEGACY_MANIFEST_MIGRATED] = value }
     }
 
-    /** Library grouping: "none" | "author" | "genre". */
-    val groupMode: Flow<String> =
-        context.settingsDataStore.data.map { it[KEY_GROUP_MODE] ?: "none" }
+    /** How the library is shelved: "none" | "author" | "series" | "genre". The stored key and
+     *  values keep their original "group" spelling — renaming them would reset the preference. */
+    val shelfMode: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_SHELF_MODE] ?: "none" }
 
-    suspend fun setGroupMode(value: String) {
-        context.settingsDataStore.edit { it[KEY_GROUP_MODE] = value }
+    suspend fun setShelfMode(value: String) {
+        context.settingsDataStore.edit { it[KEY_SHELF_MODE] = value }
     }
 
     /**
@@ -218,7 +219,7 @@ class LibrarySettings @Inject constructor(
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
-        val KEY_GROUP_MODE = stringPreferencesKey("library_group_mode")
+        val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")

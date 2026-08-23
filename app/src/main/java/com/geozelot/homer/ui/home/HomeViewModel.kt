@@ -154,7 +154,7 @@ enum class LibrarySort(val key: String, val label: String) {
 }
 
 /** How the library list is sectioned into shelves/headers. */
-enum class LibraryGroup(val key: String, val label: String) {
+enum class LibraryShelving(val key: String, val label: String) {
     NONE("none", "None"),
     AUTHOR("author", "Author"),
     SERIES("series", "Series"),
@@ -294,13 +294,13 @@ class HomeViewModel @Inject constructor(
         .map(LibrarySort::from)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySort.AUTHOR)
 
-    val groupMode: StateFlow<LibraryGroup> = librarySettings.groupMode
-        .map(LibraryGroup::from)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryGroup.NONE)
+    val shelfMode: StateFlow<LibraryShelving> = librarySettings.shelfMode
+        .map(LibraryShelving::from)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryShelving.NONE)
 
-    /** Library list, filtered by the query, ordered by [sortMode], sectioned by [groupMode]. */
+    /** Library list, filtered by the query, ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, _searchQuery, sortMode, groupMode) { list, query, sort, group ->
+        combine(books, _searchQuery, sortMode, shelfMode) { list, query, sort, group ->
             val filtered = if (query.isBlank()) {
                 list
             } else {
@@ -748,8 +748,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setSortMode(sort.key) }
     }
 
-    fun setGroupMode(group: LibraryGroup) {
-        viewModelScope.launch { librarySettings.setGroupMode(group.key) }
+    fun setShelfMode(group: LibraryShelving) {
+        viewModelScope.launch { librarySettings.setShelfMode(group.key) }
     }
 
     /** Quick hide/show from the context menu, preserving any existing metadata override. */
@@ -791,16 +791,16 @@ data class PendingStorageChange(val source: String?, val target: String?)
 private fun buildEntries(
     books: List<BookListItem>,
     sort: LibrarySort,
-    group: LibraryGroup,
+    group: LibraryShelving,
 ): List<LibraryEntry> {
-    val collapse = group == LibraryGroup.AUTHOR || group == LibraryGroup.SERIES
+    val collapse = group == LibraryShelving.AUTHOR || group == LibraryShelving.SERIES
     val units = if (collapse) collapseIntoUnits(books) else books.map { SortUnit.Solo(it) }
     val ordered = units.sortedWith(unitComparator(sort))
 
     return when (group) {
-        LibraryGroup.NONE, LibraryGroup.SERIES -> ordered.map { it.toEntry() }
-        LibraryGroup.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
-        LibraryGroup.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
+        LibraryShelving.NONE, LibraryShelving.SERIES -> ordered.map { it.toEntry() }
+        LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
+        LibraryShelving.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
     }
 }
 
