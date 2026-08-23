@@ -99,6 +99,19 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- Media3's own receiver, routing hardware / Bluetooth transport buttons to the session.
+             The MEDIA_BUTTON action on the service above is not enough on its own: the platform's
+             compat layer resolves media buttons against BROADCAST RECEIVERS, and without one it
+             logs "Couldn't find a unique registered media button receiver" on every session and
+             headset buttons go nowhere. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- Handles Pause / Cancel taps on the download notification. -->
         <receiver
             android:name=".data.download.DownloadActionReceiver"

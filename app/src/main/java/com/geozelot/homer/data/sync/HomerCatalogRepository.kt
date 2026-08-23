@@ -29,6 +29,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -179,11 +180,25 @@ class HomerCatalogRepository @Inject constructor(
             var coversUploaded = false
             for (attempt in 0 until MAX_ATTEMPTS) {
                 val remoteFile = webDavClient.getText(path)
+                var damaged = false
                 val remote = remoteFile?.content?.takeIf { it.isNotBlank() }?.let { body ->
                     runCatching { json.decodeFromString<HomerCatalog>(body) }.getOrElse {
-                        Log.w(TAG, "remote catalog unparseable; skipping publish")
-                        return
+                        // The parser is lenient and ignores unknown keys, so a catalog written by a
+                        // NEWER Homer still reads here; one that doesn't is damaged. Refusing to
+                        // write left it that way for good — consume() can't read it and publish()
+                        // wouldn't replace it, so the shared index stayed dead for every device
+                        // pointed at the folder. Rebuild it from this device instead: same data,
+                        // and nothing is lost that was still readable.
+                        Log.w(TAG, "remote catalog is damaged (${body.length} chars); replacing it")
+                        damaged = true
+                        null
                     }
+                }
+                // Except when there is nothing to replace it with — an empty local catalog would
+                // turn a damaged file into an empty one, which is worse for the next device along.
+                if (damaged && local.books.isEmpty()) {
+                    Log.w(TAG, "not replacing the damaged catalog: this device has no books yet")
+                    return
                 }
                 // Upload extracted (embedded) covers that aren't in the shared cache yet, so
                 // other devices download them instead of re-extracting from the audio. ONCE per
@@ -227,15 +242,26 @@ class HomerCatalogRepository @Inject constructor(
     suspend fun consume(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
-            val body = when (val read = webDavClient.readText(catalogPath(), cachedCatalogEtag)) {
+            val read = when (val r = webDavClient.readText(catalogPath(), cachedCatalogEtag)) {
                 DavRead.NotModified -> return true // already applied exactly this catalog
                 DavRead.Absent -> return false
-                is DavRead.Body -> {
-                    cachedCatalogEtag = read.etag
-                    read.content.takeIf { it.isNotBlank() } ?: return false
-                }
+                is DavRead.Body -> r
             }
-            val catalog = json.decodeFromString<HomerCatalog>(body)
+            val body = read.content.takeIf { it.isNotBlank() } ?: return false
+            val catalog = try {
+                json.decodeFromString<HomerCatalog>(body)
+            } catch (e: SerializationException) {
+                // Do NOT remember this ETag. It used to be stored before the parse, so one damaged
+                // catalog poisoned the conditional read for the rest of the process: every later
+                // consume() sent If-None-Match, got a 304, and returned TRUE — reporting the shared
+                // index as applied when not one book had been. Leaving the ETag unset means the
+                // next attempt re-reads in full and picks up a repaired copy.
+                Log.w(TAG, "shared catalog is unreadable (${body.length} chars); will re-read", e)
+                // A publish can rebuild it from this device's own catalog — see publish().
+                publishIfAllowed()
+                return false
+            }
+            cachedCatalogEtag = read.etag
             var applied = 0
             for ((id, cb) in catalog.books) {
                 val local = bookDao.findById(id)
