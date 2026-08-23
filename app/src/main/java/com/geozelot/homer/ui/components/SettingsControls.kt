@@ -37,6 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -213,6 +217,12 @@ fun <T> DropdownChip(
     labelOf: (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The current setting, rendered after [label] in bold. Split from the label so the chip can
+     * emphasise the part that changes, the same way the open menu bolds the selected row — with
+     * both baked into one string there was nothing to weight differently.
+     */
+    value: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -237,7 +247,16 @@ fun <T> DropdownChip(
                 // way instead of pushing its neighbours off a narrow screen. fill = false keeps it
                 // at its natural width whenever there is room, which is everywhere else.
                 Text(
-                    label,
+                    text = if (value == null) {
+                        AnnotatedString(label)
+                    } else {
+                        buildAnnotatedString {
+                            append("$label · ")
+                            withStyle(SpanStyle(color = Parchment, fontWeight = FontWeight.SemiBold)) {
+                                append(value)
+                            }
+                        }
+                    },
                     color = Muted,
                     fontSize = 11.sp,
                     maxLines = 1,

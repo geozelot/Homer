@@ -138,9 +138,9 @@
     <string name="home_section_results">Results · %1$d</string>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
-    <string name="home_chip_shelve">Shelve · %1$s</string>
-    <string name="home_chip_series">Series · %1$s</string>
-    <string name="home_chip_sort">Sort · %1$s</string>
+    <string name="home_chip_shelve">Shelve</string>
+    <string name="home_chip_series">Series</string>
+    <string name="home_chip_sort">Sort</string>
     <string name="home_meta_episode">Episode %1$d</string>
     <string name="home_series_episodes">%1$d episodes</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>

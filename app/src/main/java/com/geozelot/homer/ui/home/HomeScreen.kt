@@ -105,6 +105,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -232,6 +233,9 @@ fun HomeScreen(
         }
         val pinnedShelf = if (searching) emptyList() else continueShelf
         if (pinnedShelf.isNotEmpty() && entries.isNotEmpty()) {
+            // Closes the top bar off from the panel below it — without it the wordmark row and the
+            // listening shelf ran together as one undifferentiated block.
+            HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ContinuePinnedShelf(
                 books = pinnedShelf,
                 collapsed = shelfCollapsed,
@@ -250,13 +254,12 @@ fun HomeScreen(
             // the untouched library "309 results" before a character is typed.
             val filtering = searching && searchQuery.isNotBlank()
             // The library's header and controls are pinned chrome, not part of the list they act
-            // on. The wash fades from a raised surface at the header down to the page colour by
-            // the time it meets the list, so the band hands off to what it scrolls rather than
-            // stopping at a hard edge.
+            // on. The wash runs dark to light down the band, so it lifts away from the listening
+            // panel above and is at its brightest along the edge where the list begins.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Surface1, Ground))),
+                    .background(Brush.verticalGradient(listOf(Ground, Surface1))),
             ) {
                 // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
                 // is what these controls are pointed at.
@@ -771,14 +774,16 @@ private fun LibraryControlBar(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_shelve, shelving.label),
+                    label = stringResource(R.string.home_chip_shelve),
+                    value = shelving.label,
                     options = LibraryShelving.values().toList(),
                     selected = shelving,
                     labelOf = { it.label },
                     onSelect = onShelfChange,
                 )
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_series, series.label),
+                    label = stringResource(R.string.home_chip_series),
+                    value = series.label,
                     options = LibrarySeriesMode.values().toList(),
                     selected = series,
                     labelOf = { it.label },
@@ -786,7 +791,8 @@ private fun LibraryControlBar(
                 )
                 // Only the sorts that still do something — see LibrarySort.offeredFor.
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_sort, sort.label),
+                    label = stringResource(R.string.home_chip_sort),
+                    value = sort.label,
                     options = LibrarySort.offeredFor(shelving),
                     selected = sort,
                     labelOf = { it.label },
@@ -1348,22 +1354,33 @@ private fun ExpandedSeriesHeader(
     series: LibraryEntry.Series,
     onCollapse: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .seriesEnclosure(top = true, bottom = false)
             // Clip AFTER the enclosure so the ripple is bounded by the rounded top without also
             // clipping away the bleed the enclosure draws into the gap below.
             .clip(RoundedCornerShape(topStart = SeriesEnclosureRadius, topEnd = SeriesEnclosureRadius))
-            .clickable(onClick = onCollapse)
-            .padding(start = SeriesEnclosurePad, end = SeriesEnclosurePad, top = SeriesEnclosurePad),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(onClick = onCollapse),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
+        Row(
+            modifier = Modifier.padding(
+                start = SeriesEnclosurePad,
+                end = SeriesEnclosurePad,
+                top = SeriesEnclosurePad,
+                bottom = SeriesEnclosurePad,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
+            }
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
         }
-        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
+        // Separates the shelf's own title from its episodes. Inset from the enclosure's side rails
+        // so it reads as a rule inside the card rather than a second edge of it.
+        HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = SeriesEnclosurePad))
     }
 }
 
@@ -1475,18 +1492,27 @@ private fun BookListRow(
                 .weight(1f)
                 .padding(start = 12.dp),
         ) {
-            Text(
-                book.title,
-                color = Parchment,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 16.sp,
-                // Two reserved lines: at one line, books whose names share a long prefix were
-                // indistinguishable. minLines matches maxLines so every row stays the same height.
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // Two reserved lines, because at one line books whose names share a long prefix were
+            // indistinguishable — but a fixed-height box rather than minLines, so a title that
+            // needs only one line sits in the MIDDLE of the reserved space instead of clinging to
+            // its top edge with a gap beneath. The meta line below is unaffected and stays put, so
+            // rows are still all the same height.
+            Box(
+                modifier = Modifier.height(
+                    with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
+                ),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    book.title,
+                    color = Parchment,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = ListRowTitleLineHeight,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = bookMeta(book, ctx, LocalContext.current, withStatus = true),
                 color = Muted,
@@ -1506,6 +1532,9 @@ private fun BookListRow(
 }
 
 
+/** Line height of a list row's title; the reserved block is two of these. */
+private val ListRowTitleLineHeight = 16.sp
+
 // ── Series shelf row ───────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1517,7 +1546,7 @@ private fun SeriesShelfRow(
     actions: BookActions,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .then(
@@ -1540,17 +1569,12 @@ private fun SeriesShelfRow(
                         .background(Surface1)
                 },
             )
-            .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true })
-            .padding(
-                start = SeriesListEnclosurePad,
-                end = SeriesListEnclosurePad,
-                top = SeriesListEnclosurePad,
-                // Open, the grid's item gap supplies the separation and the enclosure paints
-                // through it — a bottom inset here would double it.
-                bottom = if (expanded) 0.dp else SeriesListEnclosurePad,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
+            .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true }),
     ) {
+        Row(
+            modifier = Modifier.padding(SeriesListEnclosurePad),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
         Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
             series.books.take(3).forEachIndexed { i, book ->
@@ -1589,11 +1613,17 @@ private fun SeriesShelfRow(
             contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
             tint = Faint,
         )
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
+                }
+                SeriesMenu(series, menuOpen, actions) { menuOpen = false }
             }
-            SeriesMenu(series, menuOpen, actions) { menuOpen = false }
+        }
+        // Open, a rule separates the shelf's title from its episodes — inset from the enclosure's
+        // side rails so it reads as a line inside the card, not another edge of it.
+        if (expanded) {
+            HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = SeriesListEnclosurePad))
         }
     }
 }
