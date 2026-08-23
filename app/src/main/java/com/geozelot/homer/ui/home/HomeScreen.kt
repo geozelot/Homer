@@ -95,10 +95,11 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -248,24 +249,28 @@ fun HomeScreen(
             // `searching` alone means the field is open, not that anything is filtered — labelling
             // the untouched library "309 results" before a character is typed.
             val filtering = searching && searchQuery.isNotBlank()
-            LibraryControlBar(
-                count = if (filtering) entries.bookCount() else bookCount,
-                searching = filtering,
-                sort = sortMode,
-                shelving = shelfMode,
-                series = seriesMode,
-                gridView = gridView,
-                onSortChange = viewModel::setSortMode,
-                onShelfChange = viewModel::setShelfMode,
-                onSeriesChange = viewModel::setSeriesMode,
-                onToggleView = viewModel::setGridView,
-                modifier = Modifier.padding(horizontal = LibraryGridPadding),
-            )
-            // The hairline marks where the pinned chrome ends and the scrolling library begins. It
-            // used to sit under the Continue strip, which stopped being that boundary the moment
-            // the controls were pinned below it — it was drawing a line through the middle of the
-            // fixed block instead of along its edge.
-            HorizontalDivider(color = Line)
+            // The library's header and controls are pinned chrome, not part of the list they act
+            // on, so they sit on a slightly raised surface. Barely a shade — enough for the eye to
+            // read the boundary without the block announcing itself as a toolbar.
+            Column(modifier = Modifier.fillMaxWidth().background(Surface1.copy(alpha = 0.5f))) {
+                // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
+                // is what these controls are pointed at.
+                HorizontalDivider(color = Line.copy(alpha = 0.45f))
+                LibraryControlBar(
+                    count = if (filtering) entries.bookCount() else bookCount,
+                    searching = filtering,
+                    sort = sortMode,
+                    shelving = shelfMode,
+                    series = seriesMode,
+                    gridView = gridView,
+                    onSortChange = viewModel::setSortMode,
+                    onShelfChange = viewModel::setShelfMode,
+                    onSeriesChange = viewModel::setSeriesMode,
+                    onToggleView = viewModel::setGridView,
+                    modifier = Modifier.padding(horizontal = LibraryGridPadding),
+                )
+                HorizontalDivider(color = Line)
+            }
         }
 
         if (entries.isEmpty()) {
@@ -687,23 +692,20 @@ private fun LazyGridScope.libraryContent(
 }
 
 @Composable
-private fun SectionLabelRow(text: String) {
+private fun SectionLabelRow(text: String, topPadding: Dp = 12.dp, bottomPadding: Dp = 8.dp) {
     Text(
         text = text.uppercase(),
         style = SectionLabel,
         color = Muted,
-        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp, start = 2.dp),
+        modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
     )
 }
 
 /**
- * The library's three independent controls — shelve, series, sort — with the summary and the
- * grid/list toggle beneath them.
+ * The library's header and its three controls — shelve, series, sort — plus the view toggle.
  *
- * Three chips rather than two because collapsing a series is not a way of shelving the list. It
- * used to be a value of the shelve control, which is why it produced no headings and looked like
- * it did nothing. The chips stay terse ("Shelve · Item") since the line below spells the whole
- * arrangement out, and they ellipsize before they will push the toggle off a narrow screen.
+ * The prose summary that used to sit beneath is gone: the header carries the count, and the chips
+ * already say what they are set to, so it was restating both in a full sentence.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -720,12 +722,19 @@ private fun LibraryControlBar(
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    Column(modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp, start = 2.dp)) {
+    Column(modifier = modifier.fillMaxWidth().padding(start = 2.dp, bottom = 6.dp)) {
+        SectionLabelRow(
+            if (searching) {
+                stringResource(R.string.home_section_results, count)
+            } else {
+                stringResource(R.string.home_section_library, count)
+            },
+            topPadding = 8.dp,
+            bottomPadding = 4.dp,
+        )
         // FlowRow, not a weighted Row. Equal weights cap every chip at a third of the width, so a
-        // short one strands allowance a long one is truncating for — "Shelve · Item" fitting with
-        // room to spare while "Series · Stacked" ellipsized. Here each takes the width it needs and
-        // the row wraps only when they genuinely do not fit, which on a 360dp screen they do.
+        // short one strands allowance a long one is truncating for. Here each takes the width it
+        // needs and the row wraps only when they genuinely do not fit.
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -753,33 +762,46 @@ private fun LibraryControlBar(
                 labelOf = { it.label },
                 onSelect = onSortChange,
             )
+            ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = arrangementSummary(shelving, sort, count, searching, context),
-                color = Muted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false).padding(start = 2.dp, end = 8.dp),
+    }
+}
+
+/** Height of the toggle's visible pill — the same as a [DropdownChip]'s, which it sits beside. */
+private val ViewTogglePillHeight = 28.dp
+
+/**
+ * Grid / list, drawn to the same height as the chips next to it.
+ *
+ * The outline is painted behind rather than applied with `Modifier.border`, because a real border
+ * wraps the layout — and the layout has to stay 48dp tall to keep both halves tappable. Drawing it
+ * lets the pill be chip-height while the tap targets stay full size, which is the same split
+ * DropdownChip makes with its own 26dp pill inside a 48dp box.
+ */
+@Composable
+private fun ViewToggleGroup(gridView: Boolean, onToggleView: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.drawBehind {
+            val h = ViewTogglePillHeight.toPx()
+            val top = (size.height - h) / 2f
+            val stroke = 1.dp.toPx()
+            val radius = CornerRadius(8.dp.toPx())
+            drawRoundRect(Surface1, Offset(0f, top), Size(size.width, h), radius)
+            drawRoundRect(
+                color = Line,
+                topLeft = Offset(stroke / 2f, top + stroke / 2f),
+                size = Size(size.width - stroke, h - stroke),
+                cornerRadius = radius,
+                style = Stroke(stroke),
             )
-            Spacer(modifier = Modifier.weight(1f))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, Line, RoundedCornerShape(8.dp))
-                    .background(Surface1),
-            ) {
-                ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
-                    onToggleView(true)
-                }
-                ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = stringResource(R.string.home_cd_list_view)) {
-                    onToggleView(false)
-                }
-            }
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
+            onToggleView(true)
+        }
+        ViewToggleButton(Icons.AutoMirrored.Filled.ViewList, selected = !gridView, desc = stringResource(R.string.home_cd_list_view)) {
+            onToggleView(false)
         }
     }
 }
@@ -795,9 +817,20 @@ private fun ViewToggleButton(
         modifier = Modifier
             // sizeIn, not size: the segment was 32×28dp, well under the 48dp minimum touch target.
             // The icon keeps its size; only the tappable segment grows.
-            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .background(if (selected) AmberSoft else Color.Transparent)
-            .clickable(onClick = onClick),
+            .sizeIn(minWidth = 44.dp, minHeight = 48.dp)
+            .clickable(onClick = onClick)
+            // Confined to the pill, like the outline around it — filling the whole tap target
+            // would put an amber block a head taller than the chips beside it.
+            .drawBehind {
+                if (!selected) return@drawBehind
+                val h = ViewTogglePillHeight.toPx() - 2.dp.toPx()
+                drawRoundRect(
+                    color = AmberSoft,
+                    topLeft = Offset(1.dp.toPx(), (size.height - h) / 2f),
+                    size = Size(size.width - 2.dp.toPx(), h),
+                    cornerRadius = CornerRadius(7.dp.toPx()),
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -809,28 +842,6 @@ private fun ViewToggleButton(
     }
 }
 
-/** "309 books · grouped by author · sorted by title" — the control bar's one-line explanation. */
-private fun arrangementSummary(
-    shelving: LibraryShelving,
-    sort: LibrarySort,
-    count: Int,
-    searching: Boolean,
-    context: android.content.Context,
-): String {
-    val counted = context.resources.getQuantityString(
-        if (searching) R.plurals.home_count_results else R.plurals.home_count_books,
-        count,
-        count,
-    )
-    val sortLabel = sort.label.lowercase()
-    // The series control speaks for itself in its own chip and stays out of the sentence — four
-    // clauses read as a specification rather than an explanation.
-    return if (shelving == LibraryShelving.ITEM) {
-        context.getString(R.string.home_arrange_all, counted, sortLabel)
-    } else {
-        context.getString(R.string.home_arrange_shelved, counted, shelving.label.lowercase(), sortLabel)
-    }
-}
 
 /** Books across the visible entries — the count while a search is narrowing the library. */
 private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
@@ -862,11 +873,22 @@ private fun ContinuePinnedShelf(
         // stays proportional on every screen width: half a cover, same 2:3 proportions.
         val slimCoverWidth = gridCellWidth(maxWidth) / ContinueSlimCoverFraction
 
-        Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
-            if (!collapsed) {
-                Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
-                    SectionLabelRow(stringResource(R.string.home_section_continue))
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // The same wash the mini-player carries at the other end of the screen, fading
+                // down into the page so the panel reads as a shelf rather than a boxed-in card.
+                .background(Brush.verticalGradient(listOf(Surface1, Ground)))
+                .animateContentSize(),
+        ) {
+            // Stays put when the strip collapses. It used to disappear, which left a row of bare
+            // covers under the top bar with nothing saying what they were.
+            Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
+                SectionLabelRow(
+                    stringResource(R.string.home_section_continue, books.size),
+                    topPadding = if (collapsed) 8.dp else 12.dp,
+                    bottomPadding = if (collapsed) 2.dp else 8.dp,
+                )
             }
             LazyRow(
                 state = rowState,

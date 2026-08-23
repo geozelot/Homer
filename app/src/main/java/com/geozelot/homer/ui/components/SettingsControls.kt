@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -250,7 +251,13 @@ fun <T> DropdownChip(
             options.forEach { option ->
                 DropdownMenuItem(
                     text = {
-                        Text(labelOf(option), color = if (option == selected) Amber else Parchment)
+                        // Bold as well as amber: on a dark menu the colour shift alone is easy to
+                        // miss, and this is the one row that says what the control is set to.
+                        Text(
+                            labelOf(option),
+                            color = if (option == selected) Amber else Parchment,
+                            fontWeight = if (option == selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
                     },
                     onClick = { onSelect(option); open = false },
                 )
