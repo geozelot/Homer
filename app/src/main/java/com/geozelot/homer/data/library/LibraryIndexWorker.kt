@@ -11,6 +11,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverEnricher
 import com.geozelot.homer.data.metadata.DurationEnricher
@@ -70,6 +71,7 @@ class LibraryIndexWorker @AssistedInject constructor(
                 if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                     lastNotifyMs = now
                     setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                    report(PHASE_COVERS, done, total)
                 }
             }
 
@@ -85,6 +87,7 @@ class LibraryIndexWorker @AssistedInject constructor(
                     if (done >= total || now - lastMeasureNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                         lastMeasureNotifyMs = now
                         setForegroundSafely(foregroundInfo("Measuring book lengths…", done, total))
+                        report(PHASE_LENGTHS, done, total)
                     }
                 }
             }
@@ -101,6 +104,15 @@ class LibraryIndexWorker @AssistedInject constructor(
             Log.w(TAG, "library index failed", e)
             return Result.failure()
         }
+    }
+
+    /**
+     * Mirrors the notification's progress into WorkManager, so the settings screen can show the
+     * same thing inline. A long measure pass is otherwise invisible unless the user pulls down the
+     * notification shade — and it is the one action here that can run for many minutes.
+     */
+    private suspend fun report(phase: String, done: Int, total: Int) {
+        setProgress(workDataOf(KEY_PHASE to phase, KEY_DONE to done, KEY_TOTAL to total))
     }
 
     private suspend fun setForegroundSafely(info: ForegroundInfo) {
@@ -140,6 +152,13 @@ class LibraryIndexWorker @AssistedInject constructor(
     companion object {
         const val KEY_SCAN = "scan"
         const val KEY_MEASURE = "measure"
+
+        /** Progress reported back to the UI while the worker runs. */
+        const val KEY_PHASE = "phase"
+        const val KEY_DONE = "done"
+        const val KEY_TOTAL = "total"
+        const val PHASE_COVERS = "covers"
+        const val PHASE_LENGTHS = "lengths"
         const val KEY_INCREMENTAL = "incremental"
         const val KEY_RESET_COVERS = "reset_covers"
         const val WORK_NAME = "library-index"

@@ -3,6 +3,7 @@ package com.geozelot.homer.ui.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.text.format.DateUtils
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.SettingsActionPadding
@@ -44,6 +47,7 @@ import com.geozelot.homer.ui.components.SettingsCard
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsNote
+import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.components.TagChip
@@ -81,6 +85,9 @@ fun LibrarySourceScreen(
     val discovered by viewModel.discovered.collectAsStateWithLifecycle()
     val discovering by viewModel.discovering.collectAsStateWithLifecycle()
     val scanning = scanState is ScanState.Scanning
+    val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
+    val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
+    val indexProgress by viewModel.indexProgress.collectAsStateWithLifecycle()
 
     var confirmFullScan by remember { mutableStateOf(false) }
     var confirmMeasure by remember { mutableStateOf(false) }
@@ -118,56 +125,58 @@ fun LibrarySourceScreen(
             )
         }
 
-        Row(
+        // One primary action, because it is the right answer nearly every time; the three
+        // recovery actions step down to rows beneath it. This used to be four buttons of four
+        // different weights across three rows, which made none of them read as the obvious one,
+        // plus a paragraph explaining all four — each row now carries its own explanation instead.
+        Button(
+            onClick = viewModel::scan,
+            enabled = !scanning,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Button(onClick = viewModel::scan, enabled = !scanning, modifier = Modifier.weight(1f)) {
-                Text(
-                    if (scanning) {
-                        stringResource(R.string.sync_scanning)
-                    } else {
-                        stringResource(R.string.sync_scan_library)
-                    },
-                )
-            }
-            // Disabled during a scan like Scan itself: repeated taps enqueued repeated passes over
-            // the whole library.
-            FilledTonalButton(
-                onClick = viewModel::refreshCoverArt,
-                enabled = !scanning,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.sync_refresh_covers))
-            }
+            Text(
+                if (scanning) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library),
+            )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ScanStatus(scanState = scanState, bookCount = bookCount)
-            Spacer(Modifier.weight(1f))
-            // Rebuilding the whole library is slow and re-fetches every cover, so it asks first.
-            TextButton(
-                onClick = { confirmFullScan = true },
-                enabled = !scanning,
-                contentPadding = SettingsActionPadding,
-            ) { Text(stringResource(R.string.sync_full_rescan)) }
+        Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+            ScanStatus(scanState = scanState, bookCount = bookCount, lastScannedAt = lastScannedAt)
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Spacer(Modifier.weight(1f))
-            // Asks first, like the full re-scan: this is the one action whose cost is measured in
-            // thousands of requests rather than hundreds.
-            TextButton(
-                onClick = { confirmMeasure = true },
-                enabled = !scanning,
-                contentPadding = SettingsActionPadding,
-            ) { Text(stringResource(R.string.sync_measure_lengths)) }
-        }
-        SettingsNote(stringResource(R.string.sync_scan_desc))
+
+        Spacer(Modifier.height(18.dp))
+        SettingsSectionHeader(stringResource(R.string.sync_fix_header))
+
+        val covers = indexProgress?.takeIf { it.phase == LibraryIndexManager.IndexPhase.COVERS }
+        SettingsRow(
+            label = stringResource(R.string.sync_fix_covers),
+            summary = covers?.let { stringResource(R.string.sync_fetching_covers, it.done, it.total) }
+                ?: stringResource(R.string.sync_fix_covers_desc),
+            enabled = !scanning,
+            onClick = viewModel::refreshCoverArt,
+            trailing = { if (covers != null) RowSpinner() },
+        )
+        SettingsDivider()
+
+        val lengths = indexProgress?.takeIf { it.phase == LibraryIndexManager.IndexPhase.LENGTHS }
+        SettingsRow(
+            label = stringResource(R.string.sync_fix_lengths),
+            summary = when {
+                lengths != null -> stringResource(R.string.sync_measuring, lengths.done, lengths.total)
+                unmeasured == 0 -> stringResource(R.string.sync_fix_lengths_none)
+                else -> stringResource(R.string.sync_fix_lengths_desc, unmeasured)
+            },
+            // Nothing to do when every book already has a length, and the summary says so.
+            enabled = !scanning && unmeasured > 0,
+            onClick = { confirmMeasure = true },
+            trailing = { if (lengths != null) RowSpinner() },
+        )
+        SettingsDivider()
+
+        SettingsRow(
+            label = stringResource(R.string.sync_fix_rebuild),
+            summary = stringResource(R.string.sync_fix_rebuild_desc),
+            enabled = !scanning,
+            onClick = { confirmFullScan = true },
+        )
 
         SettingsDivider()
 
@@ -394,9 +403,29 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
     }
 }
 
-/** How much is in the library, and whether a crawl is running right now. */
+/** "309 books · scanned 12 minutes ago" — the relative part left to the platform to localise. */
 @Composable
-private fun ScanStatus(scanState: ScanState, bookCount: Int) {
+private fun statusLine(bookCount: Int, lastScannedAt: Long?): String {
+    val books = stringResource(R.string.sync_books_count, bookCount)
+    val when_ = lastScannedAt?.takeIf { it > 0 }?.let {
+        DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+    } ?: stringResource(R.string.sync_scanned_never)
+    return stringResource(R.string.sync_status_line, books, when_)
+}
+
+@Composable
+private fun RowSpinner() {
+    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Amber, strokeWidth = 2.dp)
+}
+
+/**
+ * The line under the Scan button: what is in the library, and when it was last read.
+ *
+ * "when" is the question that actually brings people to this screen — without it the only way to
+ * tell whether a scan is overdue is to run one.
+ */
+@Composable
+private fun ScanStatus(scanState: ScanState, bookCount: Int, lastScannedAt: Long?) {
     when (val state = scanState) {
         is ScanState.Scanning -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Amber, strokeWidth = 2.dp)
@@ -407,10 +436,10 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int) {
                 fontSize = 12.sp,
             )
         }
-        is ScanState.Done -> Text(stringResource(R.string.sync_books_indexed, bookCount), color = Muted, fontSize = 12.sp)
+        is ScanState.Done -> Text(statusLine(bookCount, lastScannedAt), color = Muted, fontSize = 12.sp)
         is ScanState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         ScanState.Idle -> if (bookCount > 0) {
-            Text(stringResource(R.string.sync_books_count, bookCount), color = Muted, fontSize = 12.sp)
+            Text(statusLine(bookCount, lastScannedAt), color = Muted, fontSize = 12.sp)
         } else {
             Text(stringResource(R.string.set_source_not_scanned), color = Faint, fontSize = 12.sp)
         }

@@ -10,6 +10,7 @@ import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookEntity
@@ -176,6 +177,7 @@ class HomeViewModel @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
     private val bookDao: BookDao,
+    private val crawlDirDao: CrawlDirDao,
     private val bookEditor: BookEditor,
     private val connection: PlaybackConnection,
     private val catalog: HomerCatalogRepository,
@@ -507,6 +509,18 @@ class HomeViewModel @Inject constructor(
 
     /** Measure the length of every book that doesn't have one yet — see the manager for the cost. */
     fun measureBookLengths() = libraryIndexManager.measureDurations()
+
+    /** How many books still have no length, so the settings row can say whether it is worth a tap. */
+    val unmeasuredCount: StateFlow<Int> = bookDao.observeCountWithoutDuration()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** When the library was last crawled; null before the first scan. */
+    val lastScannedAt: StateFlow<Long?> = crawlDirDao.observeLastScanned()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Live progress of the cover / length passes, for the rows that trigger them. */
+    val indexProgress: StateFlow<LibraryIndexManager.IndexProgress?> = libraryIndexManager.progress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)

@@ -209,9 +209,20 @@
     <string name="sync_scanning">Scanning…</string>
     <string name="sync_scan_library">Scan library</string>
     <string name="sync_refresh_covers">Refresh covers</string>
-    <string name="sync_full_rescan">Full re-scan</string>
-    <string name="sync_measure_lengths">Measure lengths</string>
-    <string name="sync_scan_desc">Scan re-reads changed folders and fetches missing art. Refresh re-fetches all covers. Full re-scan rebuilds the whole library. None of them read book lengths — that is “Measure lengths”, below.</string>
+    <!-- The three recovery actions under the primary Scan button. Each is named for the problem
+         it solves, and carries its own cost, so no separate paragraph is needed. -->
+    <string name="sync_fix_header">IF SOMETHING LOOKS WRONG</string>
+    <string name="sync_fix_covers">Re-fetch all cover art</string>
+    <string name="sync_fix_covers_desc">For books showing no art, or the wrong art</string>
+    <string name="sync_fix_lengths">Measure all book lengths</string>
+    <string name="sync_fix_lengths_desc">Homer learns a length when you open a book. %1$d still unmeasured — thousands of small requests, best on Wi\u2011Fi</string>
+    <string name="sync_fix_lengths_none">Every book has a length.</string>
+    <string name="sync_fix_rebuild">Rebuild the library</string>
+    <string name="sync_fix_rebuild_desc">Re-reads every folder from scratch. The slowest option</string>
+    <string name="sync_scanned_never">never scanned</string>
+    <string name="sync_status_line">%1$s · %2$s</string>
+    <string name="sync_measuring">Measuring %1$d of %2$d…</string>
+    <string name="sync_fetching_covers">Fetching art %1$d of %2$d…</string>
     <string name="set_measure_confirm_title">Measure every book?</string>
     <string name="set_measure_confirm_body">Homer normally learns a book\u2019s length the first time you open it, because reading it means fetching a piece of every audio file. Doing the whole library at once is thousands of small requests and can take a while — best on Wi\u2011Fi. Books already measured are skipped, and you can stop it at any time; whatever finished is kept.</string>
     <string name="set_measure_confirm_action">Measure</string>
@@ -232,7 +243,6 @@
     <string name="sync_progress_on_desc">Your place, bookmarks and edits are saved privately to your account and follow you across your devices.</string>
     <string name="sync_progress_off_desc">Everything stays on this device only — nothing is written to your server.</string>
     <string name="sync_scan_folders_books">%1$d folders · %2$d books</string>
-    <string name="sync_books_indexed">%1$d books indexed</string>
     <string name="sync_books_count">%1$d books</string>
 
     <!-- Settings: hub -->

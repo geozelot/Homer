@@ -95,6 +95,10 @@ interface BookDao {
     @Query("SELECT id FROM books WHERE totalDurationMs IS NULL ORDER BY id")
     suspend fun idsWithoutDuration(): List<String>
 
+    /** How many of those there are, so the settings row can say whether it is worth tapping. */
+    @Query("SELECT COUNT(*) FROM books WHERE totalDurationMs IS NULL")
+    fun observeCountWithoutDuration(): Flow<Int>
+
     @Upsert
     suspend fun upsert(books: List<BookEntity>)
 

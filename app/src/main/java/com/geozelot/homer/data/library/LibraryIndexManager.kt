@@ -5,9 +5,12 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +24,31 @@ class LibraryIndexManager @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val workManager = WorkManager.getInstance(context)
+
+    /** Which long pass the worker is in the middle of, and how far through. */
+    enum class IndexPhase { COVERS, LENGTHS }
+
+    data class IndexProgress(val phase: IndexPhase, val done: Int, val total: Int)
+
+    /**
+     * Progress of the running index job, or null when nothing is running. Read off WorkManager
+     * rather than held in memory so it survives the settings screen being closed and reopened —
+     * the work outlives the UI, and a measure pass over a whole library outlives it by a lot.
+     */
+    val progress: Flow<IndexProgress?> =
+        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME).map { infos ->
+            val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING } ?: return@map null
+            val phase = when (running.progress.getString(LibraryIndexWorker.KEY_PHASE)) {
+                LibraryIndexWorker.PHASE_LENGTHS -> IndexPhase.LENGTHS
+                LibraryIndexWorker.PHASE_COVERS -> IndexPhase.COVERS
+                else -> return@map null // running, but not yet in a phase that reports
+            }
+            IndexProgress(
+                phase = phase,
+                done = running.progress.getInt(LibraryIndexWorker.KEY_DONE, 0),
+                total = running.progress.getInt(LibraryIndexWorker.KEY_TOTAL, 0),
+            )
+        }
 
     /** Everyday scan: incremental (skips unchanged subtrees) + fetch missing covers. */
     fun scan() = enqueue(scan = true, incremental = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
