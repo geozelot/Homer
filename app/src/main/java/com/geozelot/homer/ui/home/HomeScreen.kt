@@ -268,7 +268,6 @@ fun HomeScreen(
                     shelving = shelfMode,
                     series = seriesMode,
                     gridView = gridView,
-                    collapsed = shelfCollapsed,
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
@@ -739,8 +738,6 @@ private fun LibraryControlBar(
     shelving: LibraryShelving,
     series: LibrarySeriesMode,
     gridView: Boolean,
-    /** Scrolled into the library: the header gives its extra size back. */
-    collapsed: Boolean,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibrarySeriesMode) -> Unit,
@@ -756,38 +753,46 @@ private fun LibraryControlBar(
             },
             topPadding = 8.dp,
             bottomPadding = 4.dp,
-            large = !collapsed,
+            // Stays large while scrolling. Unlike the listening panel, this header is not inside
+            // anything that collapses — it titles the list being scrolled, so it holds its size.
+            large = true,
         )
-        // FlowRow, not a weighted Row. Equal weights cap every chip at a third of the width, so a
-        // short one strands allowance a long one is truncating for. Here each takes the width it
-        // needs and the row wraps only when they genuinely do not fit.
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            DropdownChip(
-                label = stringResource(R.string.home_chip_shelve, shelving.label),
-                options = LibraryShelving.values().toList(),
-                selected = shelving,
-                labelOf = { it.label },
-                onSelect = onShelfChange,
-            )
-            DropdownChip(
-                label = stringResource(R.string.home_chip_series, series.label),
-                options = LibrarySeriesMode.values().toList(),
-                selected = series,
-                labelOf = { it.label },
-                onSelect = onSeriesChange,
-            )
-            // Only the sorts that still do something — see LibrarySort.offeredFor.
-            DropdownChip(
-                label = stringResource(R.string.home_chip_sort, sort.label),
-                options = LibrarySort.offeredFor(shelving),
-                selected = sort,
-                labelOf = { it.label },
-                onSelect = onSortChange,
-            )
+            // FlowRow for the chips, not a weighted Row: equal weights cap every chip at a third
+            // of the width, so a short one strands allowance a long one is truncating for. Here
+            // each takes the width it needs and they wrap only when they genuinely do not fit —
+            // into whatever the toggle leaves, since the toggle holds the trailing edge.
+            FlowRow(
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                DropdownChip(
+                    label = stringResource(R.string.home_chip_shelve, shelving.label),
+                    options = LibraryShelving.values().toList(),
+                    selected = shelving,
+                    labelOf = { it.label },
+                    onSelect = onShelfChange,
+                )
+                DropdownChip(
+                    label = stringResource(R.string.home_chip_series, series.label),
+                    options = LibrarySeriesMode.values().toList(),
+                    selected = series,
+                    labelOf = { it.label },
+                    onSelect = onSeriesChange,
+                )
+                // Only the sorts that still do something — see LibrarySort.offeredFor.
+                DropdownChip(
+                    label = stringResource(R.string.home_chip_sort, sort.label),
+                    options = LibrarySort.offeredFor(shelving),
+                    selected = sort,
+                    labelOf = { it.label },
+                    onSelect = onSortChange,
+                )
+            }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
     }
