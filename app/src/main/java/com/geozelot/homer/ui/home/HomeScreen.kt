@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -703,6 +705,7 @@ private fun SectionLabelRow(text: String) {
  * it did nothing. The chips stay terse ("Shelve · Item") since the line below spells the whole
  * arrangement out, and they ellipsize before they will push the toggle off a narrow screen.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LibraryControlBar(
     count: Int,
@@ -719,10 +722,14 @@ private fun LibraryControlBar(
 ) {
     val context = LocalContext.current
     Column(modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp, start = 2.dp)) {
-        Row(
+        // FlowRow, not a weighted Row. Equal weights cap every chip at a third of the width, so a
+        // short one strands allowance a long one is truncating for — "Shelve · Item" fitting with
+        // room to spare while "Series · Stacked" ellipsized. Here each takes the width it needs and
+        // the row wraps only when they genuinely do not fit, which on a 360dp screen they do.
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             DropdownChip(
                 label = stringResource(R.string.home_chip_shelve, shelving.label),
@@ -730,7 +737,6 @@ private fun LibraryControlBar(
                 selected = shelving,
                 labelOf = { it.label },
                 onSelect = onShelfChange,
-                modifier = Modifier.weight(1f, fill = false),
             )
             DropdownChip(
                 label = stringResource(R.string.home_chip_series, series.label),
@@ -738,7 +744,6 @@ private fun LibraryControlBar(
                 selected = series,
                 labelOf = { it.label },
                 onSelect = onSeriesChange,
-                modifier = Modifier.weight(1f, fill = false),
             )
             // Only the sorts that still do something — see LibrarySort.offeredFor.
             DropdownChip(
@@ -747,7 +752,6 @@ private fun LibraryControlBar(
                 selected = sort,
                 labelOf = { it.label },
                 onSelect = onSortChange,
-                modifier = Modifier.weight(1f, fill = false),
             )
         }
         Row(

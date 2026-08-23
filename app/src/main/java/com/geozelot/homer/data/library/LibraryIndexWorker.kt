@@ -45,6 +45,7 @@ class LibraryIndexWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val doScan = inputData.getBoolean(KEY_SCAN, false)
         val resetCovers = inputData.getBoolean(KEY_RESET_COVERS, false)
+        val doMeasure = inputData.getBoolean(KEY_MEASURE, false)
         ensureChannel()
 
         try {
@@ -55,7 +56,7 @@ class LibraryIndexWorker @AssistedInject constructor(
             if (doScan) {
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
                 libraryRepository.scan(incremental = inputData.getBoolean(KEY_INCREMENTAL, false))
-            } else if (coverEnricher.pendingCount() == 0 && !inputData.getBoolean(KEY_MEASURE, false)) {
+            } else if (coverEnricher.pendingCount() == 0 && !doMeasure) {
                 // Nothing to fetch — finish without ever showing a notification. A measure-only run
                 // has its own work to do, so it must not be short-circuited here.
                 return Result.success()
@@ -65,20 +66,25 @@ class LibraryIndexWorker @AssistedInject constructor(
             // a large library, so the framework shed the updates and flooded the log with
             // "rate limit exceeded" instead of showing progress. Once a second is plenty for a
             // progress bar, and the final call always lands so it never ends mid-way.
-            var lastNotifyMs = 0L
-            coverEnricher.enrich { done, total ->
-                val now = System.currentTimeMillis()
-                if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
-                    lastNotifyMs = now
-                    setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
-                    report(PHASE_COVERS, done, total)
+            // Skipped entirely for a measure-only run. "Measure lengths" asked for one expensive
+            // pass; with hundreds of art-less books outstanding this would quietly run a second
+            // one first, and report "Fetching covers…" while doing it.
+            if (!doMeasure) {
+                var lastNotifyMs = 0L
+                coverEnricher.enrich { done, total ->
+                    val now = System.currentTimeMillis()
+                    if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
+                        lastNotifyMs = now
+                        setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                        report(PHASE_COVERS, done, total)
+                    }
                 }
             }
 
             // Lengths, only when explicitly asked for. Sequential (see measureAll) and last, so it
             // never delays the scan or the covers — and interruptible, since it is the long one:
             // every book already measured is skipped, so a resumed pass picks up where it stopped.
-            if (inputData.getBoolean(KEY_MEASURE, false)) {
+            if (doMeasure) {
                 val pending = bookDao.idsWithoutDuration()
                 Log.i(TAG, "measuring lengths for ${pending.size} book(s)")
                 var lastMeasureNotifyMs = 0L

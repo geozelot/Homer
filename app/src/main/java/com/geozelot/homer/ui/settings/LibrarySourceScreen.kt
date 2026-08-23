@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import android.text.format.DateUtils
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,7 +85,11 @@ fun LibrarySourceScreen(
     val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
     val discovered by viewModel.discovered.collectAsStateWithLifecycle()
     val discovering by viewModel.discovering.collectAsStateWithLifecycle()
-    val scanning = scanState is ScanState.Scanning
+    // A crawl is only one of the passes this worker runs; a cover or length pass leaves scanState
+    // Idle for many minutes. Every action enqueues with REPLACE, so accepting a tap during one
+    // cancels it — `busy` covers all of them, from the moment the job is queued.
+    val indexBusy by viewModel.indexBusy.collectAsStateWithLifecycle()
+    val busy = scanState is ScanState.Scanning || indexBusy
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val indexProgress by viewModel.indexProgress.collectAsStateWithLifecycle()
@@ -96,6 +101,15 @@ fun LibrarySourceScreen(
     // Sweep for Homer-bearing folders when the page opens; the sweep itself is throttled, and it
     // also refreshes the shared-index / owner hints shown below.
     LaunchedEffect(Unit) { viewModel.rediscover() }
+
+    // Re-reads the clock so "scanned 12 minutes ago" keeps counting while the screen stays open.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
 
     SettingsScaffold(stringResource(R.string.set_source_title), onBack, modifier) {
         CurrentSourceCard(
@@ -115,7 +129,7 @@ fun LibrarySourceScreen(
             label = { Text(stringResource(R.string.sync_library_folder)) },
             placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
             singleLine = true,
-            enabled = !scanning && !libraryIsShare,
+            enabled = !busy && !libraryIsShare,
             modifier = Modifier.fillMaxWidth(),
         )
         if (libraryIsShare) {
@@ -131,15 +145,15 @@ fun LibrarySourceScreen(
         // plus a paragraph explaining all four — each row now carries its own explanation instead.
         Button(
             onClick = viewModel::scan,
-            enabled = !scanning,
+            enabled = !busy,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             Text(
-                if (scanning) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library),
+                if (busy) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library),
             )
         }
         Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-            ScanStatus(scanState = scanState, bookCount = bookCount, lastScannedAt = lastScannedAt)
+            ScanStatus(scanState = scanState, bookCount = bookCount, lastScannedAt = lastScannedAt, now = now)
         }
 
         Spacer(Modifier.height(18.dp))
@@ -150,7 +164,7 @@ fun LibrarySourceScreen(
             label = stringResource(R.string.sync_fix_covers),
             summary = covers?.let { stringResource(R.string.sync_fetching_covers, it.done, it.total) }
                 ?: stringResource(R.string.sync_fix_covers_desc),
-            enabled = !scanning,
+            enabled = !busy,
             onClick = viewModel::refreshCoverArt,
             trailing = { if (covers != null) RowSpinner() },
         )
@@ -165,7 +179,7 @@ fun LibrarySourceScreen(
                 else -> stringResource(R.string.sync_fix_lengths_desc, unmeasured)
             },
             // Nothing to do when every book already has a length, and the summary says so.
-            enabled = !scanning && unmeasured > 0,
+            enabled = !busy && unmeasured > 0,
             onClick = { confirmMeasure = true },
             trailing = { if (lengths != null) RowSpinner() },
         )
@@ -174,7 +188,7 @@ fun LibrarySourceScreen(
         SettingsRow(
             label = stringResource(R.string.sync_fix_rebuild),
             summary = stringResource(R.string.sync_fix_rebuild_desc),
-            enabled = !scanning,
+            enabled = !busy,
             onClick = { confirmFullScan = true },
         )
 
@@ -405,10 +419,13 @@ private fun DiscoveredLibraryCard(lib: DiscoveredLibrary, onUse: (String) -> Uni
 
 /** "309 books · scanned 12 minutes ago" — the relative part left to the platform to localise. */
 @Composable
-private fun statusLine(bookCount: Int, lastScannedAt: Long?): String {
+private fun statusLine(bookCount: Int, lastScannedAt: Long?, now: Long): String {
     val books = stringResource(R.string.sync_books_count, bookCount)
+    // `now` is ticked by the caller rather than read here: composing it would freeze the phrase at
+    // whatever it said when the screen opened, which is a poor showing for the one line whose whole
+    // job is saying how stale the index is.
     val when_ = lastScannedAt?.takeIf { it > 0 }?.let {
-        DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+        DateUtils.getRelativeTimeSpanString(it, now, DateUtils.MINUTE_IN_MILLIS).toString()
     } ?: stringResource(R.string.sync_scanned_never)
     return stringResource(R.string.sync_status_line, books, when_)
 }
@@ -425,7 +442,7 @@ private fun RowSpinner() {
  * tell whether a scan is overdue is to run one.
  */
 @Composable
-private fun ScanStatus(scanState: ScanState, bookCount: Int, lastScannedAt: Long?) {
+private fun ScanStatus(scanState: ScanState, bookCount: Int, lastScannedAt: Long?, now: Long) {
     when (val state = scanState) {
         is ScanState.Scanning -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Amber, strokeWidth = 2.dp)
@@ -436,10 +453,10 @@ private fun ScanStatus(scanState: ScanState, bookCount: Int, lastScannedAt: Long
                 fontSize = 12.sp,
             )
         }
-        is ScanState.Done -> Text(statusLine(bookCount, lastScannedAt), color = Muted, fontSize = 12.sp)
+        is ScanState.Done -> Text(statusLine(bookCount, lastScannedAt, now), color = Muted, fontSize = 12.sp)
         is ScanState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         ScanState.Idle -> if (bookCount > 0) {
-            Text(statusLine(bookCount, lastScannedAt), color = Muted, fontSize = 12.sp)
+            Text(statusLine(bookCount, lastScannedAt, now), color = Muted, fontSize = 12.sp)
         } else {
             Text(stringResource(R.string.set_source_not_scanned), color = Faint, fontSize = 12.sp)
         }

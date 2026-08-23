@@ -73,7 +73,10 @@ class DurationEnricher @Inject constructor(
                 Log.i(TAG, "measureAll: offline after $index/${bookIds.size}, stopping")
                 return
             }
-            onProgress(index, bookIds.size)
+            // index + 1: the label reads "Measuring N of M", so N is the book being worked on,
+            // not the number already behind us — reporting the raw index showed "0 of 41" for the
+            // whole of the first book.
+            onProgress(index + 1, bookIds.size)
             measure(bookId)
         }
         onProgress(bookIds.size, bookIds.size)

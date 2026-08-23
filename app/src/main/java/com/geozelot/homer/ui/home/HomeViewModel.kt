@@ -317,9 +317,21 @@ class HomeViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    val sortMode: StateFlow<LibrarySort> = librarySettings.sortMode
-        .map(LibrarySort::from)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySort.AUTHOR)
+    /**
+     * The active sort, clamped to what the current shelving actually offers.
+     *
+     * Clamped on read rather than corrected on write, for two reasons. A stored pair that predates
+     * the clamp — shelve=author with sort=author, the natural combination before sorting by the
+     * shelved field became pointless — would never pass through a write-side fix, and the chip
+     * would show a value its own menu no longer lists. And leaving the STORED sort alone means
+     * shelving by author borrows Title for the duration and hands the user's real preference back
+     * the moment they shelve some other way.
+     */
+    val sortMode: StateFlow<LibrarySort> =
+        combine(librarySettings.sortMode, librarySettings.shelfMode) { sortKey, shelfKey ->
+            val stored = LibrarySort.from(sortKey)
+            if (stored in LibrarySort.offeredFor(LibraryShelving.from(shelfKey))) stored else LibrarySort.TITLE
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySort.AUTHOR)
 
     val shelfMode: StateFlow<LibraryShelving> = librarySettings.shelfMode
         .map(LibraryShelving::from)
@@ -553,6 +565,16 @@ class HomeViewModel @Inject constructor(
     val indexProgress: StateFlow<LibraryIndexManager.IndexProgress?> = libraryIndexManager.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /**
+     * Whether an index job is queued or running — what the scan actions disable on.
+     *
+     * Not [indexProgress]: that is null until the first progress report, and null again between
+     * enqueueing and the worker starting. Every action enqueues with REPLACE, so a tap in either
+     * of those windows cancels a pass already under way.
+     */
+    val indexBusy: StateFlow<Boolean> = libraryIndexManager.busy
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
 
@@ -780,15 +802,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setShelfMode(shelving: LibraryShelving) {
-        viewModelScope.launch {
-            librarySettings.setShelfMode(shelving.key)
-            // Shelving by the same field the list is sorted by leaves the sort with nothing to do
-            // inside a shelf, so the option disappears — and the stored sort has to move with it,
-            // or the control would show a value it no longer offers.
-            if (LibrarySort.from(librarySettings.sortMode.first()) !in LibrarySort.offeredFor(shelving)) {
-                librarySettings.setSortMode(LibrarySort.TITLE.key)
-            }
-        }
+        // No sort correction here on purpose — `sortMode` clamps on read, which covers a stored
+        // pair this write path would never see, and keeps the user's choice for later.
+        viewModelScope.launch { librarySettings.setShelfMode(shelving.key) }
     }
 
     fun setSeriesMode(mode: LibrarySeriesMode) {

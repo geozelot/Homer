@@ -50,6 +50,16 @@ class LibraryIndexManager @Inject constructor(
             )
         }
 
+    /**
+     * True while an index job is queued OR running. Broader than [progress], which only reports
+     * once a pass reaches a phase that reports — every action enqueues with REPLACE, so the UI has
+     * to stop accepting taps from the moment one is queued, not from the first progress update.
+     */
+    val busy: Flow<Boolean> =
+        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME).map { infos ->
+            infos.any { !it.state.isFinished }
+        }
+
     /** Everyday scan: incremental (skips unchanged subtrees) + fetch missing covers. */
     fun scan() = enqueue(scan = true, incremental = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
 
