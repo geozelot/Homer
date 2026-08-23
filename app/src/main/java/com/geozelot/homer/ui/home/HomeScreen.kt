@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -774,7 +775,7 @@ private fun LibraryControlBar(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_shelve),
+                    label = stringResource(R.string.home_chip_shelve, shelving.label),
                     value = shelving.label,
                     options = LibraryShelving.values().toList(),
                     selected = shelving,
@@ -782,7 +783,7 @@ private fun LibraryControlBar(
                     onSelect = onShelfChange,
                 )
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_series),
+                    label = stringResource(R.string.home_chip_series, series.label),
                     value = series.label,
                     options = LibrarySeriesMode.values().toList(),
                     selected = series,
@@ -791,7 +792,7 @@ private fun LibraryControlBar(
                 )
                 // Only the sorts that still do something — see LibrarySort.offeredFor.
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_sort),
+                    label = stringResource(R.string.home_chip_sort, sort.label),
                     value = sort.label,
                     options = LibrarySort.offeredFor(shelving),
                     selected = sort,
@@ -1498,8 +1499,13 @@ private fun BookListRow(
             // its top edge with a gap beneath. The meta line below is unaffected and stays put, so
             // rows are still all the same height.
             Box(
-                modifier = Modifier.height(
-                    with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
+                // heightIn, not height: a Box does not clip, so a hard height would let two lines
+                // of a script whose fallback metrics run taller than the 16sp line box spill out
+                // and draw over the meta line below. As a minimum it is identical for every title
+                // that fits — which is what keeps rows a uniform height — and simply pushes the
+                // row down for one that doesn't.
+                modifier = Modifier.heightIn(
+                    min = with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
                 ),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -1575,44 +1581,44 @@ private fun SeriesShelfRow(
             modifier = Modifier.padding(SeriesListEnclosurePad),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-        // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
-        Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
-            series.books.take(3).forEachIndexed { i, book ->
-                CoverArt(
-                    model = book.coverModel,
-                    modifier = Modifier
-                        .offset(x = (i * 6).dp)
-                        .size(width = 38.dp, height = 52.dp)
-                        .clip(RoundedCornerShape(6.dp)),
+            // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
+            Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
+                series.books.take(3).forEachIndexed { i, book ->
+                    CoverArt(
+                        model = book.coverModel,
+                        modifier = Modifier
+                            .offset(x = (i * 6).dp)
+                            .size(width = 38.dp, height = 52.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+            ) {
+                Text(
+                    series.name,
+                    style = SerifTitle,
+                    color = Parchment,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = seriesMeta(series, LocalContext.current),
+                    color = Muted,
+                    fontSize = 11.5.sp,
                 )
             }
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
-        ) {
-            Text(
-                series.name,
-                style = SerifTitle,
-                color = Parchment,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            // Chevron immediately left of the overflow button, so the two sit together at the trailing
+            // edge and the overflow still lines up with the one on every book row. Leading it instead
+            // pushed the covers out of line with the book rows above and below.
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
+                tint = Faint,
             )
-            Text(
-                text = seriesMeta(series, LocalContext.current),
-                color = Muted,
-                fontSize = 11.5.sp,
-            )
-        }
-        // Chevron immediately left of the overflow button, so the two sit together at the trailing
-        // edge and the overflow still lines up with the one on every book row. Leading it instead
-        // pushed the covers out of line with the book rows above and below.
-        Icon(
-            imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
-            tint = Faint,
-        )
             Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
