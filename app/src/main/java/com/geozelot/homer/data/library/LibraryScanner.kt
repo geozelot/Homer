@@ -189,16 +189,23 @@ class LibraryScanner @Inject constructor(
     private val detector: BookDetector,
 ) {
     /**
-     * [complete] means the crawl saw the WHOLE tree — no subtree was skipped on an unchanged ETag.
+     * [complete] means the crawl ACCOUNTED FOR the whole tree — which is not the same as having
+     * listed all of it.
      *
-     * It is not the same question as "was this a full crawl". A full crawl has no stored ETags to
-     * skip on, so it is always complete; an *incremental* crawl is complete whenever it happened to
-     * skip nothing, which is every first crawl of a library and any crawl where everything changed.
-     * A pass that found no audio at all is never complete, whatever it skipped — see [scan].
-     * That distinction is the whole point: the marker this feeds is what authorises another device
-     * to delete a book, and until one is stamped a book removed on the server stays on every shelf
-     * for ever. Keying it on the incremental flag meant only "Rebuild the library" could ever
-     * stamp it.
+     * A skipped subtree is not an unknown. The crawl compared its collection ETag against the one
+     * it recorded last time and found them identical, and Nextcloud propagates ETags upward, so
+     * that is positive evidence everything beneath it is exactly what the index already holds.
+     * Visited plus verified-skipped is therefore the entire library, and an incremental crawl
+     * accounts for it just as completely as a full one — it just does it with a comparison instead
+     * of a listing.
+     *
+     * This matters because the marker it feeds is what authorises another device to delete a book.
+     * Keying it on the incremental flag meant only "Rebuild the library" could ever stamp one;
+     * keying it on "skipped nothing" meant only the FIRST crawl of a library could, since every
+     * later scan of an unchanged library skips everything by design. Either way a book removed on
+     * the server stayed on every shelf for ever.
+     *
+     * What is *not* complete is a pass that accounted for nothing at all — see [scan].
      */
     data class Result(val bookCount: Int, val complete: Boolean)
 
@@ -298,18 +305,30 @@ class LibraryScanner @Inject constructor(
             downloadDao.deleteOrphans()
         }
 
-        // Nothing skipped means every folder under the root was listed in this pass — and finding
-        // at least one audio folder is the sanity check on that. A crawl CAN succeed and come back
-        // with nothing usable (a transient 207 from a reverse proxy, a momentarily-empty response),
-        // and such a pass must not be allowed to claim it saw a whole library: the marker it stamps
-        // is what lets another device delete books. An empty library loses nothing by not stamping,
-        // since a structure facet with no books is never published either.
-        val complete = skippedRoots.isEmpty() && audioFolders.isNotEmpty()
+        // Accounted for: audio it listed, or subtrees whose ETag proved they still hold what the
+        // index says. Either is evidence. NEITHER is the case for a pass that came back with
+        // nothing at all — a crawl CAN succeed and return no usable entries (a transient 207 from a
+        // reverse proxy, a momentarily-empty response), and such a pass must not be allowed to
+        // claim it saw a whole library. An empty library loses nothing by not stamping, since a
+        // structure facet with no books is never published either.
+        val complete = audioFolders.isNotEmpty() || skippedRoots.isNotEmpty()
 
-        // Safe only now, and only on a complete crawl: every folder seen carries `now`, so anything
-        // else is gone. Outside the transaction above because it is independent of it — losing this
-        // to a crash just leaves the stale rows for the next complete crawl to drop.
-        if (complete) crawlDirDao.deleteNotScannedAt(now)
+        // A DIFFERENT question, and the reason these are two variables. Pruning the ETag map needs
+        // every folder to have been LISTED, not merely accounted for: a skipped folder was never
+        // upserted with `now`, so pruning on `complete` would delete the very rows the skip relied
+        // on and turn every subsequent scan into a full crawl.
+        // Outside the transaction above because it is independent of it — losing this to a crash
+        // just leaves the stale rows for the next full crawl to drop.
+        if (skippedRoots.isEmpty()) crawlDirDao.deleteNotScannedAt(now)
+
+        // The one line that says what a scan actually did. Without it the only trace of a healthy
+        // incremental pass over an unchanged library was "0 audio folders", which reads exactly
+        // like a total failure — and was reported as one.
+        Log.i(
+            TAG,
+            "crawl of '$root': $directoriesVisited dir(s) listed, ${skippedRoots.size} subtree(s) " +
+                "unchanged and skipped, ${audioFolders.size} with audio, complete=$complete",
+        )
 
         return Result(bookDao.count(), complete = complete)
     }

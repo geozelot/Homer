@@ -304,7 +304,10 @@ fun LibraryScreen(
         SettingsRow(
             label = stringResource(R.string.lib_recheck_lengths),
             summary = stringResource(R.string.lib_recheck_lengths_desc),
-            enabled = IndexPass.LENGTHS !in queued,
+            // A file that failed to measure has no length, so it is counted in `unmeasured`. None
+            // outstanding therefore means there is nothing to re-try, and offering it anyway buys
+            // a pass that reports "measuring lengths for 0 books" and does nothing.
+            enabled = IndexPass.LENGTHS !in queued && unmeasured > 0,
             onClick = { confirmRecheck = true },
         )
 
