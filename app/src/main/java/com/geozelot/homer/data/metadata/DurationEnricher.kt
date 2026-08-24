@@ -71,23 +71,28 @@ class DurationEnricher @Inject constructor(
      * while offline, so continuing would just burn a 30-second timeout per file for nothing.
      */
     suspend fun measureAll(bookIds: List<String>, onProgress: suspend (Int, Int) -> Unit) {
+        // Counted in FILES, not books. A "book" here can be a 1020-file complete edition, and
+        // book-level progress sat on "1 of 226" for the whole of it — which reads as a hang, and
+        // was reported as one. Files move.
+        val total = audioFileDao.countUnmeasured()
+        var done = 0
+        onProgress(0, total)
         for ((index, bookId) in bookIds.withIndex()) {
             coroutineContext.ensureActive()
             if (!networkMonitor.isOnline()) {
-                Log.i(TAG, "measureAll: offline after $index/${bookIds.size}, stopping")
+                Log.i(TAG, "measureAll: offline after $index/${bookIds.size} books, stopping")
                 return
             }
-            // index + 1: the label reads "Measuring N of M", so N is the book being worked on,
-            // not the number already behind us — reporting the raw index showed "0 of 41" for the
-            // whole of the first book.
-            onProgress(index + 1, bookIds.size)
-            measure(bookId)
+            measure(bookId) {
+                done++
+                onProgress(done, total)
+            }
         }
-        onProgress(bookIds.size, bookIds.size)
+        onProgress(total, total)
     }
 
     /** The measurement itself. Suspends until this book is done; no-op if it is already in hand. */
-    private suspend fun measure(bookId: String) {
+    private suspend fun measure(bookId: String, onFileDone: suspend () -> Unit = {}) {
         if (!inFlight.add(bookId)) return
         try {
             val credentials = credentialStore.awaitCredentials() ?: return
@@ -123,6 +128,12 @@ class DurationEnricher @Inject constructor(
             var fromHeader = 0
             var fromFastProbe = 0
             var fromFullProbe = 0
+            // A big book can run for many minutes with nothing to show for it, and the summary
+            // below only prints once the whole book is done. Without a heartbeat there is no way
+            // to tell a slow pass from a stuck one, or to know which tier is doing the work.
+            var processed = 0
+            val startedAtMs = System.currentTimeMillis()
+            var lastHeartbeatMs = startedAtMs
             for (file in missing) {
                 coroutineContext.ensureActive()
                 // Connectivity can drop part-way through. Every further probe would only wait
@@ -174,6 +185,21 @@ class DurationEnricher @Inject constructor(
                     // Only a negative answer we can trust: still online, so "no duration" is
                     // about the file, not the connection.
                     audioFileDao.markDurationAttempted(file.relativePath)
+                }
+
+                processed++
+                onFileDone()
+
+                val now = System.currentTimeMillis()
+                // An early one so a rate is known within seconds, then a steady beat.
+                if (processed == HEARTBEAT_FIRST_AT || now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS) {
+                    lastHeartbeatMs = now
+                    val perFile = (now - startedAtMs) / processed
+                    Log.i(
+                        TAG,
+                        "book $bookId: $processed/${missing.size} at ${perFile}ms/file " +
+                            "(header=$fromHeader fast=$fromFastProbe full=$fromFullProbe)",
+                    )
                 }
             }
 
@@ -248,6 +274,8 @@ class DurationEnricher @Inject constructor(
 
     private companion object {
         const val TAG = "HomerMeta"
+        const val HEARTBEAT_FIRST_AT = 25
+        const val HEARTBEAT_INTERVAL_MS = 30_000L
     }
 }
 

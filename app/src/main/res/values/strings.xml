@@ -217,7 +217,7 @@
     <string name="sync_fix_rebuild_desc">Re-reads every folder from scratch. The slowest option</string>
     <string name="sync_scanned_never">never scanned</string>
     <string name="sync_status_line">%1$s · %2$s</string>
-    <string name="sync_measuring">Measuring %1$d of %2$d…</string>
+    <string name="sync_measuring">Measuring %1$d of %2$d files…</string>
     <string name="sync_fetching_covers">Fetching art %1$d of %2$d…</string>
     <string name="set_measure_confirm_title">Measure every book?</string>
     <string name="set_measure_confirm_body">Homer normally learns a book\u2019s length the first time you open it, because reading it means fetching a piece of every audio file. Doing the whole library at once is thousands of small requests and can take a while — best on Wi\u2011Fi. Books already measured are skipped, and you can stop it at any time; whatever finished is kept.</string>

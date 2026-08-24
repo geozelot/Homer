@@ -34,6 +34,10 @@ interface AudioFileDao {
     @Query("UPDATE audio_files SET durationAttempted = 1 WHERE relativePath = :relativePath")
     suspend fun markDurationAttempted(relativePath: String)
 
+    /** Files still worth probing, library-wide — the denominator for measure progress. */
+    @Query("SELECT COUNT(*) FROM audio_files WHERE durationMs IS NULL AND durationAttempted = 0")
+    suspend fun countUnmeasured(): Int
+
     /** Re-arms duration probing (a full refresh — the user's way to retry a failed probe). */
     @Query("UPDATE audio_files SET durationAttempted = 0")
     suspend fun resetDurationAttempted()
