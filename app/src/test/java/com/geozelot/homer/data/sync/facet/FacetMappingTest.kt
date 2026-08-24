@@ -217,6 +217,28 @@ class FacetMappingTest {
     }
 
     @Test
+    fun `a local total duration survives a facet that has none`() {
+        val e = FacetMapping.bookEntity(
+            "Author/Book", structure, DerivedBook(totalDurationMs = null), book(totalDurationMs = 8_000), now = 1,
+        )
+        assertEquals(8_000L, e.totalDurationMs)
+    }
+
+    @Test
+    fun `the facet wins where it has a value`() {
+        val e = FacetMapping.bookEntity(
+            "Author/Book",
+            structure,
+            DerivedBook(genre = "Fantasy", totalDurationMs = 9_000),
+            book(genre = "Other", totalDurationMs = 1, contentHash = "local-hash"),
+            now = 1,
+        )
+        assertEquals("Fantasy", e.genre)
+        assertEquals(9_000L, e.totalDurationMs)
+        assertEquals("facet-hash", e.contentHash)
+    }
+
+    @Test
     fun `a local measurement survives a facet that lacks it`() {
         val files = FacetMapping.fileEntities(
             "Author/Book",

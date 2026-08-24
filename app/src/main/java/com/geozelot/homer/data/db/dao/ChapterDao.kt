@@ -13,6 +13,10 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE bookId = :bookId ORDER BY sortIndex")
     fun observeForBook(bookId: String): Flow<List<ChapterEntity>>
 
+    /** A one-shot read, for publishing a book's chapters into the shared index. */
+    @Query("SELECT * FROM chapters WHERE bookId = :bookId ORDER BY sortIndex")
+    suspend fun findForBook(bookId: String): List<ChapterEntity>
+
     @Query("DELETE FROM chapters WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
 

@@ -16,7 +16,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverEnricher
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.LibrarySettings
-import com.geozelot.homer.data.sync.HomerCatalogRepository
+import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.first
  * notification. Modelled on the download worker; it reuses WorkManager's SystemForegroundService
  * (data-sync type already declared in the manifest).
  *
- * With the shared index on it also publishes the catalog after a scan (owner-gated creation,
+ * With the shared index on it also publishes what the scan found (a read-only share cannot,
  * open updates).
  */
 @HiltWorker
@@ -39,7 +39,7 @@ class LibraryIndexWorker @AssistedInject constructor(
     private val coverEnricher: CoverEnricher,
     private val durationEnricher: DurationEnricher,
     private val bookDao: BookDao,
-    private val catalog: HomerCatalogRepository,
+    private val libraryIndex: LibraryIndexRepository,
     private val librarySettings: LibrarySettings,
 ) : CoroutineWorker(appContext, params) {
 
@@ -108,10 +108,10 @@ class LibraryIndexWorker @AssistedInject constructor(
                 }
             }
 
-            // Shared catalog: publish the freshly-scanned catalog (owner-gated creation, open updates).
+            // Shared index: publish what this crawl found.
             if (doScan && librarySettings.sharedCatalogEnabled.first()) {
                 setForegroundSafely(foregroundInfo("Updating shared library…", 0, 0))
-                catalog.publishIfAllowed()
+                libraryIndex.push()
             }
             return Result.success()
         } catch (e: CancellationException) {

@@ -6,7 +6,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.metadata.CoverCache
-import com.geozelot.homer.data.sync.HomerCatalogRepository
+import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +20,7 @@ import javax.inject.Singleton
  * re-implementing the override upsert. Every metadata write bumps `updatedAt` and syncs the
  * change out via [HomerSyncRepository]. Corrections to the fields the shared library index
  * carries (title, author, series, index, genre) are also published to the library root via
- * [HomerCatalogRepository.publishEdits], so a household reading the same folder sees the fix
+ * [LibraryIndexRepository.publishEdits], so a household reading the same folder sees the fix
  * instead of each member re-typing it — when the shared index is on and this device may write
  * there. The hidden flag and custom covers stay device-local.
  *
@@ -32,7 +32,7 @@ class BookEditor @Inject constructor(
     private val bookDao: BookDao,
     private val coverCache: CoverCache,
     private val homerSync: HomerSyncRepository,
-    private val catalog: HomerCatalogRepository,
+    private val libraryIndex: LibraryIndexRepository,
     @ApplicationContext private val context: Context,
 ) {
     /**
@@ -69,7 +69,7 @@ class BookEditor @Inject constructor(
             ),
         )
         homerSync.sync(force = true)
-        catalog.publishEdits()
+        libraryIndex.publishEdits()
     }
 
     /**
@@ -80,7 +80,7 @@ class BookEditor @Inject constructor(
     suspend fun clearOverride(bookId: String) {
         bookOverrideDao.upsert(blank(bookId))
         homerSync.sync(force = true)
-        catalog.publishEdits()
+        libraryIndex.publishEdits()
     }
 
     /**
@@ -99,7 +99,7 @@ class BookEditor @Inject constructor(
             )
         }
         homerSync.sync(force = true)
-        catalog.publishEdits()
+        libraryIndex.publishEdits()
     }
 
     /** Quick hide/show, preserving any existing metadata override. */

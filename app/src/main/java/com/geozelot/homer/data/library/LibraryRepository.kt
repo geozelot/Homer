@@ -54,6 +54,10 @@ class LibraryRepository @Inject constructor(
             val result = scanner.scan(root, incremental, System.currentTimeMillis()) { dirs, books ->
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
+            // Only a FULL crawl may stamp this. It is what lets the shared index delete a book:
+            // an incremental scan skips unchanged subtrees, so a book it did not visit is not a
+            // book that is gone, and treating it as one would erase other devices' libraries.
+            if (!incremental) librarySettings.setLastFullCrawlAt(System.currentTimeMillis())
             _scanState.value = ScanState.Done(result.bookCount)
         } catch (e: CancellationException) {
             _scanState.value = ScanState.Idle

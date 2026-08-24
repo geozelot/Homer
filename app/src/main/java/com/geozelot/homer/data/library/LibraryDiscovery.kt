@@ -4,7 +4,8 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
-import com.geozelot.homer.data.sync.HomerCatalog
+import com.geozelot.homer.data.sync.facet.LibraryFacets
+import com.geozelot.homer.data.sync.facet.StructureFacet
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -21,11 +22,11 @@ data class DiscoveredLibrary(
     val kind: Kind,
     /** A private progress manifest (`.homer/index.json`) is present. */
     val hasPrivateIndex: Boolean,
-    /** A shared library catalog (`.homer/catalog.json`) is present. */
+    /** A shared library index (`.homer/structure.json`) is present. */
     val hasSharedCatalog: Boolean,
     /** Nextcloud owner of the folder, if the server exposed it. */
     val owner: String?,
-    /** Book count read from the shared catalog, if present. */
+    /** Book count read from the shared index, if present. */
     val bookCount: Int?,
     /** True if this is the folder currently configured as the library root. */
     val isCurrentRoot: Boolean,
@@ -99,7 +100,7 @@ class LibraryDiscovery @Inject constructor(
         // Existence via PROPFIND Depth 0 (a few hundred bytes). This used to GET the whole
         // catalog for every candidate folder — up to 60 of them, each potentially megabytes —
         // just to decide whether a marker file was there.
-        val hasCatalog = runCatching { webDavClient.exists("$base/catalog.json") }.getOrDefault(false)
+        val hasCatalog = runCatching { webDavClient.exists("$base/${LibraryFacets.STRUCTURE_FILE}") }.getOrDefault(false)
         val hasIndex = checkIndex &&
             runCatching { webDavClient.exists("$base/index.json") }.getOrDefault(false)
 
@@ -109,9 +110,9 @@ class LibraryDiscovery @Inject constructor(
         // candidates the UI just shows that a shared catalog exists.
         val bookCount = if (hasCatalog && (always || relativePath == libraryRoot)) {
             runCatching {
-                webDavClient.getText("$base/catalog.json")?.content
+                webDavClient.getText("$base/${LibraryFacets.STRUCTURE_FILE}")?.content
                     ?.takeIf { it.isNotBlank() }
-                    ?.let { json.decodeFromString<HomerCatalog>(it).books.size }
+                    ?.let { json.decodeFromString<StructureFacet>(it).books.size }
             }.getOrNull()
         } else {
             null

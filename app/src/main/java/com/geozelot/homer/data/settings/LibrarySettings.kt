@@ -163,6 +163,20 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_ONLINE_COVERS] = value }
     }
 
+    /**
+     * When this device last finished a crawl that saw the WHOLE library, and which device that was.
+     *
+     * The shared index publishes this as its crawl marker, and it is the only thing that authorises
+     * deleting a book from other devices — so it is set by a FULL crawl and never by an incremental
+     * one, which by definition cannot testify that a missing book is gone rather than unvisited.
+     */
+    val lastFullCrawlAt: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_FULL_CRAWL_AT] ?: 0L }
+
+    suspend fun setLastFullCrawlAt(value: Long) {
+        context.settingsDataStore.edit { it[KEY_FULL_CRAWL_AT] = value }
+    }
+
     /** One-time guard: whether app data has been relocated from internal storage to the Homer root. */
     val storageRelocated: Flow<Boolean> =
         context.settingsDataStore.data.map { it[KEY_STORAGE_RELOCATED] ?: false }
@@ -242,6 +256,7 @@ class LibrarySettings @Inject constructor(
         val KEY_LAST_COVER_SWEEP_ETAG = stringPreferencesKey("last_cover_sweep_etag")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")
+        val KEY_FULL_CRAWL_AT = longPreferencesKey("last_full_crawl_at")
         val KEY_CUSTOM_STORAGE_URI = stringPreferencesKey("custom_storage_uri")
         val KEY_CUSTOM_STORAGE_PATH = stringPreferencesKey("custom_storage_path")
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")

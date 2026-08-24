@@ -30,6 +30,10 @@ interface BookOverrideDao {
     suspend fun relink(oldId: String, newId: String)
 
     /** Drops overrides for books that are no longer indexed (no FK here, so a prune orphans them). */
+    /** Drops one book's override, for when a shared correction is cleared and nothing personal remains. */
+    @Query("DELETE FROM book_overrides WHERE bookId = :bookId")
+    suspend fun deleteById(bookId: String)
+
     @Query("DELETE FROM book_overrides WHERE bookId NOT IN (SELECT id FROM books)")
     suspend fun deleteOrphans()
 

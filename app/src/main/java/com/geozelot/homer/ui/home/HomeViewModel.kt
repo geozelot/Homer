@@ -30,7 +30,7 @@ import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
 import com.geozelot.homer.data.storage.StorageMigrationManager
 import com.geozelot.homer.data.storage.StorageMigrator
-import com.geozelot.homer.data.sync.HomerCatalogRepository
+import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
@@ -207,7 +207,7 @@ class HomeViewModel @Inject constructor(
     private val crawlDirDao: CrawlDirDao,
     private val bookEditor: BookEditor,
     private val connection: PlaybackConnection,
-    private val catalog: HomerCatalogRepository,
+    private val libraryIndex: LibraryIndexRepository,
     private val discovery: LibraryDiscovery,
     private val storageLocation: StorageLocation,
     private val storageMigrationManager: StorageMigrationManager,
@@ -491,9 +491,8 @@ class HomeViewModel @Inject constructor(
         // touch the network at tier 1 (on-device only).
         viewModelScope.launch {
             if (librarySettings.sharedCatalogEnabled.first()) {
-                // consume() reports whether a shared catalog exists, so this no longer needs a
-                // second probe — that used to download the whole catalog twice on every open.
-                _sharedCatalogAvailable.value = catalog.consume()
+                // pull() reports whether a shared index exists, so this needs no second probe.
+                _sharedCatalogAvailable.value = libraryIndex.pull()
             }
         }
     }
@@ -798,9 +797,9 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             librarySettings.setSharedCatalogEnabled(enabled)
             if (enabled) {
-                if (catalog.exists()) catalog.consume() // bootstrap from the shared library
-                else catalog.publishIfAllowed()         // create it (owner, or claim-based)
-                _sharedCatalogAvailable.value = catalog.exists()
+                if (libraryIndex.exists()) libraryIndex.pull() // bootstrap from the shared library
+                else libraryIndex.push()                       // create it
+                _sharedCatalogAvailable.value = libraryIndex.exists()
             }
         }
     }

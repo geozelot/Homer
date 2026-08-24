@@ -1,0 +1,361 @@
+package com.geozelot.homer.data.sync.facet
+
+import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.room.withTransaction
+import com.geozelot.homer.data.auth.CredentialStore
+import com.geozelot.homer.data.auth.WebDavKind
+import com.geozelot.homer.data.db.HomerDatabase
+import com.geozelot.homer.data.db.dao.AudioFileDao
+import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.ChapterDao
+import com.geozelot.homer.data.metadata.CoverCache
+import com.geozelot.homer.data.net.NetworkMonitor
+import com.geozelot.homer.data.settings.DeviceIdentity
+import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.sync.HomerCatalog
+import com.geozelot.homer.data.webdav.WebDavClient
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * The shared library index: pulling the three facets into the database, and pushing this device's
+ * view back out.
+ *
+ * Replaces the single-catalog repository. The differences that matter are all in what each
+ * direction is allowed to do — a pull may now delete a book, but only on a complete crawl's word;
+ * a push writes only the facets that actually changed, so a title correction no longer rewrites
+ * the whole library.
+ */
+@Singleton
+class LibraryIndexRepository @Inject constructor(
+    private val store: FacetStore,
+    private val db: HomerDatabase,
+    private val bookDao: BookDao,
+    private val audioFileDao: AudioFileDao,
+    private val chapterDao: ChapterDao,
+    private val bookOverrideDao: BookOverrideDao,
+    private val credentialStore: CredentialStore,
+    private val librarySettings: LibrarySettings,
+    private val networkMonitor: NetworkMonitor,
+    private val deviceIdentity: DeviceIdentity,
+    private val webDavClient: WebDavClient,
+    private val coverCache: CoverCache,
+    private val json: Json,
+) {
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "unhandled index error", e) },
+    )
+    private var editPublishJob: Job? = null
+
+    @Volatile
+    private var editsPending = false
+
+    init {
+        // Backgrounding is the natural moment to ship corrections: the user has stopped editing.
+        // addObserver must run on the main thread, hence the explicit dispatcher on an IO scope.
+        scope.launch(Dispatchers.Main) {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    editPublishJob?.cancel()
+                    editPublishJob = scope.launch { publishPendingEdits() }
+                }
+            })
+        }
+    }
+
+    /**
+     * Notes that the user corrected a book, to be shared so a title fixed here is what everyone
+     * reading that folder sees rather than a private note.
+     *
+     * Coalesced rather than sent per edit — a burst of corrections should be one write. It is only
+     * a short delay now: a correction touches `corrections.json`, kilobytes, where the single
+     * catalog rewrote the whole library and made every edit genuinely expensive.
+     */
+    fun publishEdits() {
+        editsPending = true
+        editPublishJob?.cancel()
+        editPublishJob = scope.launch {
+            delay(EDIT_PUBLISH_IDLE_MS)
+            publishPendingEdits()
+        }
+    }
+
+    /**
+     * Publishes coalesced corrections, and only those — a metadata edit has no business rewriting
+     * the structure or the measurements.
+     *
+     * Requires the shared index to be switched on: that toggle is the user's consent to write to
+     * the shared folder. Offline, the pending flag stays set so the next trigger retries.
+     */
+    private suspend fun publishPendingEdits() {
+        if (!editsPending) return
+        if (!librarySettings.sharedCatalogEnabled.first()) {
+            editsPending = false // sharing is off; the correction stays local, nothing to retry
+            return
+        }
+        if (!networkMonitor.isOnline() || !canPublish()) return
+        editsPending = false
+        val deviceId = deviceIdentity.id()
+        val local = CorrectionsFacet(
+            books = bookOverrideDao.getAll()
+                .mapNotNull { o -> FacetMapping.correctionOf(o, deviceId)?.let { o.bookId to it } }
+                .toMap(),
+        )
+        store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+            FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
+        }
+    }
+
+    /**
+     * Whether this device may write the shared index.
+     *
+     * A read-only share reads all three facets exactly like an account does and keeps whatever it
+     * works out for itself locally — the only thing it cannot do is publish. That is the whole
+     * difference between the two, which is why there is no separate share code path.
+     */
+    suspend fun canPublish(): Boolean {
+        val library = credentialStore.awaitCredentials() ?: return false
+        return if (library.kind == WebDavKind.SHARE) librarySettings.libraryWritable.first() else true
+    }
+
+    /** Whether a shared index is present at all, without downloading it. */
+    suspend fun exists(): Boolean {
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
+        return runCatching { webDavClient.exists(pathOf(LibraryFacets.STRUCTURE_FILE)) }.getOrDefault(false)
+    }
+
+    // ── pulling ──────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Reads the shared index and applies it. Returns whether one was found.
+     *
+     * Each facet is fetched conditionally and independently, so the common case — nothing changed
+     * — costs three 304s of a few hundred bytes rather than a multi-megabyte download.
+     */
+    suspend fun pull(): Boolean {
+        if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
+        return try {
+            val structure = store.load(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer())
+            val derived = store.load(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer())
+            val corrections = store.load(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer())
+
+            // Nothing at all where a v1 catalog sits: convert it once rather than make the user
+            // re-crawl and re-measure a library the old index already paid for.
+            if (structure is FacetStore.Load.Missing) {
+                val converted = convertLegacy()
+                if (converted != null) {
+                    apply(converted.structure, converted.derived, converted.corrections)
+                    return true
+                }
+            }
+
+            val s = (structure as? FacetStore.Load.Present)?.value ?: return false
+            apply(
+                s,
+                (derived as? FacetStore.Load.Present)?.value ?: DerivedFacet(),
+                (corrections as? FacetStore.Load.Present)?.value ?: CorrectionsFacet(),
+            )
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "pull failed", e)
+            false
+        }
+    }
+
+    /**
+     * Writes the facets into the database.
+     *
+     * One transaction per book, not one around the loop. Replacing a book's files is a delete
+     * followed by an insert, and a crash in between used to leave the book in the library with no
+     * files at all; per book also keeps the write lock off the position saves that happen during
+     * playback.
+     */
+    private suspend fun apply(
+        structure: StructureFacet,
+        derived: DerivedFacet,
+        corrections: CorrectionsFacet,
+    ) {
+        val now = System.currentTimeMillis()
+        var applied = 0
+        for ((id, book) in structure.books) {
+            val existing = bookDao.findById(id)
+            val existingFiles = if (existing == null) emptyList() else audioFileDao.findForBook(id)
+            val d = derived.books[id]
+            val entity = FacetMapping.bookEntity(id, book, d, existing, now)
+            val files = FacetMapping.fileEntities(id, book, d, existingFiles)
+            val override = FacetMapping.overrideEntity(id, corrections.books[id], bookOverrideDao.findById(id))
+
+            db.withTransaction {
+                bookDao.upsert(listOf(entity))
+                audioFileDao.deleteForBook(id)
+                audioFileDao.upsert(files)
+                // Only rewrite chapters when the facet actually has some: an absent derived entry
+                // is silence, and silence must not erase what this device worked out itself.
+                if (d?.chapterTier != null) {
+                    chapterDao.replaceForBook(id, FacetMapping.chapterEntities(id, d))
+                }
+                if (override != null) bookOverrideDao.upsert(override) else bookOverrideDao.deleteById(id)
+            }
+            applied++
+        }
+        prune(structure)
+        Log.i(TAG, "pulled index: ${structure.books.size} books, $applied applied")
+    }
+
+    /**
+     * Removes books the shared index has proved are gone.
+     *
+     * Requires a complete crawl to have happened after the book was last touched. Without that
+     * marker nothing is deleted at all, because an index that has never seen the whole tree cannot
+     * distinguish a deleted book from one it simply did not visit.
+     */
+    private suspend fun prune(structure: StructureFacet) {
+        val marker = structure.lastFullCrawl ?: return
+        val stale = bookDao.getAll()
+            .filter { it.id !in structure.books && it.updatedAt <= marker.at }
+            .map { it.id }
+        if (stale.isEmpty()) return
+        Log.i(TAG, "pruning ${stale.size} book(s) removed from the library")
+        stale.chunked(SQL_PARAM_CHUNK).forEach { bookDao.deleteByIds(it) }
+    }
+
+    /** Reads a v1 `catalog.json`, converts it, and publishes the result if this device may. */
+    private suspend fun convertLegacy(): LegacyCatalogConverter.Converted? {
+        val legacyPath = "${dirOf()}/$LEGACY_FILE"
+        val body = runCatching { webDavClient.getText(legacyPath) }.getOrNull()?.content
+        if (body.isNullOrBlank()) return null
+        val legacy = runCatching { json.decodeFromString<HomerCatalog>(body) }.getOrNull() ?: run {
+            Log.w(TAG, "a v1 catalog is present but unreadable; ignoring it")
+            return null
+        }
+        Log.i(TAG, "converting a v1 catalog of ${legacy.books.size} books")
+        val converted = LegacyCatalogConverter.convert(legacy)
+        if (canPublish()) {
+            store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { converted.structure }
+            store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { converted.derived }
+        }
+        return converted
+    }
+
+    // ── pushing ──────────────────────────────────────────────────────────────────────────────
+
+    /** Publishes this device's view, facet by facet, writing only what changed. */
+    suspend fun push() {
+        if (!canPublish() || credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
+        try {
+            val local = buildLocal()
+            if (local.structure.books.isEmpty()) {
+                // Nothing to say. Publishing an empty index over a real one would be the worst
+                // possible outcome of a device that has not scanned yet.
+                Log.i(TAG, "not publishing: this device has no books yet")
+                return
+            }
+
+            store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { remote ->
+                FacetMerge.structure(local.structure, remote.valueOr(StructureFacet()))
+            }
+            store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { remote ->
+                FacetMerge.derived(local.derived, remote.valueOr(DerivedFacet()))
+            }
+            store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+                val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
+                merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
+            }
+            uploadNewCovers(local.derived)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "push failed", e)
+        }
+    }
+
+    private data class Local(
+        val structure: StructureFacet,
+        val derived: DerivedFacet,
+        val corrections: CorrectionsFacet,
+    )
+
+    private suspend fun buildLocal(): Local {
+        val overrides = bookOverrideDao.getAll().associateBy { it.bookId }
+        val deviceId = deviceIdentity.id()
+        val structure = LinkedHashMap<String, StructureBook>()
+        val derived = LinkedHashMap<String, DerivedBook>()
+        val corrections = LinkedHashMap<String, BookCorrection>()
+
+        for (book in bookDao.getAll()) {
+            val files = audioFileDao.findForBook(book.id)
+            structure[book.id] = FacetMapping.structureOf(book, files)
+            FacetMapping.derivedOf(book, files, chapterDao.findForBook(book.id))?.let { derived[book.id] = it }
+            overrides[book.id]?.let { o ->
+                FacetMapping.correctionOf(o, deviceId)?.let { corrections[book.id] = it }
+            }
+        }
+
+        val crawledAt = librarySettings.lastFullCrawlAt.first()
+        return Local(
+            structure = StructureFacet(
+                lastFullCrawl = crawledAt.takeIf { it > 0 }?.let { CrawlMarker(at = it, by = deviceId) },
+                books = structure,
+            ),
+            derived = DerivedFacet(books = derived),
+            corrections = CorrectionsFacet(books = corrections),
+        )
+    }
+
+    /** Uploads extracted art to the shared cache so other devices download it instead of re-reading. */
+    private suspend fun uploadNewCovers(local: DerivedFacet) {
+        val coversDir = "${dirOf()}/$COVERS_DIR"
+        var dirEnsured = false
+        for ((id, book) in local.books) {
+            if (!book.hasCachedCover) continue
+            val bytes = coverCache.readBytes(id) ?: continue
+            try {
+                val name = coverCache.coverName(id)
+                if (webDavClient.exists("$coversDir/$name")) continue
+                if (!dirEnsured) {
+                    webDavClient.mkcol(coversDir)
+                    dirEnsured = true
+                }
+                webDavClient.putBytes("$coversDir/$name", bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "cover upload failed for $id", e)
+            }
+        }
+    }
+
+    private fun <T> FacetStore.Load<T>.valueOr(empty: T): T = (this as? FacetStore.Load.Present)?.value ?: empty
+
+    private suspend fun dirOf(): String {
+        val root = librarySettings.libraryRoot.first().trim('/')
+        return listOf(root, LibraryFacets.DIR).filter { it.isNotBlank() }.joinToString("/")
+    }
+
+    private suspend fun pathOf(file: String): String = "${dirOf()}/$file"
+
+    private companion object {
+        const val TAG = "HomerSync"
+        const val LEGACY_FILE = "catalog.json"
+        const val COVERS_DIR = "covers"
+        const val SQL_PARAM_CHUNK = 400
+        const val EDIT_PUBLISH_IDLE_MS = 30_000L
+    }
+}
