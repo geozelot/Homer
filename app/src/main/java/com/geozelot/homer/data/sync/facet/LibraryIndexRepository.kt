@@ -288,8 +288,16 @@ class LibraryIndexRepository @Inject constructor(
         Log.i(TAG, "converting a v1 catalog of ${legacy.books.size} books")
         val converted = LegacyCatalogConverter.convert(legacy)
         if (canPublish()) {
-            store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { converted.structure }
-            store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { converted.derived }
+            // Reported, not discarded. Publishing the converted index is the whole point of the
+            // migration, and a silent failure here leaves everyone else's devices with nothing.
+            report(
+                LibraryFacets.STRUCTURE_FILE,
+                store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { converted.structure },
+            )
+            report(
+                LibraryFacets.DERIVED_FILE,
+                store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { converted.derived },
+            )
         }
         return converted
     }
@@ -308,18 +316,27 @@ class LibraryIndexRepository @Inject constructor(
                 return
             }
 
-            store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { remote ->
-                FacetMerge.structure(local.structure, remote.valueOr(StructureFacet()))
-            }
+            report(
+                LibraryFacets.STRUCTURE_FILE,
+                store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { remote ->
+                    FacetMerge.structure(local.structure, remote.valueOr(StructureFacet()))
+                },
+            )
             var remoteDerived = DerivedFacet()
-            store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { remote ->
-                remoteDerived = remote.valueOr(DerivedFacet())
-                FacetMerge.derived(local.derived, remoteDerived)
-            }
-            store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
-                val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
-                merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
-            }
+            report(
+                LibraryFacets.DERIVED_FILE,
+                store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { remote ->
+                    remoteDerived = remote.valueOr(DerivedFacet())
+                    FacetMerge.derived(local.derived, remoteDerived)
+                },
+            )
+            report(
+                LibraryFacets.CORRECTIONS_FILE,
+                store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+                    val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
+                    merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
+                },
+            )
             uploadNewCovers(local.derived, remoteDerived)
         } catch (e: CancellationException) {
             throw e
@@ -384,6 +401,17 @@ class LibraryIndexRepository @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "cover upload failed for $id", e)
             }
+        }
+    }
+
+    /** Says what became of one facet. A publish that half-succeeds must not look like silence. */
+    private fun report(file: String, result: FacetStore.SaveResult) {
+        when (result) {
+            is FacetStore.SaveResult.Written -> Log.i(TAG, "published $file")
+            is FacetStore.SaveResult.AlreadyCurrent -> Log.i(TAG, "$file already current")
+            is FacetStore.SaveResult.Declined -> Log.i(TAG, "$file: nothing to publish")
+            is FacetStore.SaveResult.Contended -> Log.w(TAG, "$file: lost every write race")
+            is FacetStore.SaveResult.Unavailable -> Log.w(TAG, "$file NOT published: ${result.message}")
         }
     }
 

@@ -135,9 +135,13 @@ class FacetStore @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
+                // Loudly: a facet that fails to upload leaves the shared index incomplete, and
+                // this returning quietly is how a missing structure.json went unnoticed.
+                Log.w(TAG, "could not write $file", e)
                 return SaveResult.Unavailable(e.message ?: "write failed")
             }
         }
+        Log.w(TAG, "gave up writing $file after $MAX_ATTEMPTS attempts")
         return SaveResult.Contended
     }
 

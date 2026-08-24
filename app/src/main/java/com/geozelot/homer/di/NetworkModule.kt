@@ -51,5 +51,13 @@ object NetworkModule {
             .addNetworkInterceptor(certPinningInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
+            // Explicit, because OkHttp's default write timeout is TEN SECONDS and this client
+            // uploads the shared library index — several megabytes for a large library. The
+            // structure facet silently failed to publish on exactly that: the smaller derived
+            // facet fit inside ten seconds and the larger one did not.
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
+
+    /** Generous on purpose: a first publish of a few thousand files is a real upload. */
+    private const val WRITE_TIMEOUT_SECONDS = 120L
 }
