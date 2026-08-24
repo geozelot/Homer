@@ -8,9 +8,19 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.geozelot.homer.data.settings.PlaybackSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.transformLatest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,8 +32,22 @@ import javax.inject.Singleton
 @Singleton
 class LibraryIndexManager @Inject constructor(
     @ApplicationContext context: Context,
+    playbackSettings: PlaybackSettings,
 ) {
     private val workManager = WorkManager.getInstance(context)
+
+    /**
+     * Mirrored into a field rather than read when enqueuing, because [enqueue] is not suspending
+     * and launching a coroutine to read it would leave a window where a second tap enqueues a
+     * second job before `busy` has turned true.
+     */
+    @Volatile private var wifiOnly = false
+
+    init {
+        playbackSettings.wifiOnlyDownloads
+            .onEach { wifiOnly = it }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    }
 
     /** Which long pass the worker is in the middle of, and how far through. */
     enum class IndexPhase { COVERS, LENGTHS }
@@ -59,6 +83,40 @@ class LibraryIndexManager @Inject constructor(
         workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME).map { infos ->
             infos.any { !it.state.isFinished }
         }
+
+    /**
+     * True while a pass is queued but not running — the constraints are not met yet.
+     *
+     * Without this the wifi-only rule below is indistinguishable from a hang: the work sits in
+     * ENQUEUED, [busy] is true, and nothing ever reports progress. The UI says what it is waiting
+     * for instead.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val waiting: Flow<Boolean> =
+        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME)
+            .map { infos ->
+                infos.any { it.state == WorkInfo.State.ENQUEUED } &&
+                    infos.none { it.state == WorkInfo.State.RUNNING }
+            }
+            .distinctUntilChanged()
+            .transformLatest { blocked ->
+                // Every pass is ENQUEUED for a moment before it starts, so claiming immediately
+                // would flash "waiting" on every single tap. Only the claim is delayed; clearing
+                // it is instant, so the notice never outlives the wait it describes.
+                if (!blocked) emit(false) else { delay(WAITING_GRACE_MS); emit(true) }
+            }
+
+    /**
+     * Stops whatever pass is queued or running.
+     *
+     * Every pass here is resumable — a scan re-crawls, a cover or length pass skips everything
+     * already done — so stopping costs only the file in flight, and starting again picks up where
+     * it left off. That is also why there is no separate pause: the work list IS the state, and a
+     * second flag beside it would only drift.
+     */
+    fun cancel() {
+        workManager.cancelUniqueWork(LibraryIndexWorker.WORK_NAME)
+    }
 
     /** Everyday scan: incremental (skips unchanged subtrees) + fetch missing covers. */
     fun scan() = enqueue(scan = true, incremental = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
@@ -100,8 +158,20 @@ class LibraryIndexManager @Inject constructor(
                     LibraryIndexWorker.KEY_MEASURE to measure,
                 ),
             )
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            // Follows the same preference as downloads. A length pass is thousands of requests
+            // over the whole library, so honouring "Wi-Fi only" matters more here than it does for
+            // a single book — this used to run on mobile data regardless of the setting.
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                    .build(),
+            )
             .build()
         workManager.enqueueUniqueWork(LibraryIndexWorker.WORK_NAME, policy, request)
+    }
+
+    private companion object {
+        /** Long enough to cover the ordinary ENQUEUED → RUNNING hop, short enough to be useful. */
+        const val WAITING_GRACE_MS = 2_500L
     }
 }

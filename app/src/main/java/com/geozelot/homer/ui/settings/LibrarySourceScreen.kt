@@ -37,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -94,6 +95,8 @@ fun LibrarySourceScreen(
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val indexProgress by viewModel.indexProgress.collectAsStateWithLifecycle()
+    val indexWaiting by viewModel.indexWaiting.collectAsStateWithLifecycle()
+    val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
 
     var confirmFullScan by remember { mutableStateOf(false) }
     var confirmMeasure by remember { mutableStateOf(false) }
@@ -155,6 +158,32 @@ fun LibrarySourceScreen(
         }
         Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
             ScanStatus(scanState = scanState, bookCount = bookCount, lastScannedAt = lastScannedAt, now = now)
+        }
+
+        // Queued but not started: without saying so, the Wi-Fi-only rule is indistinguishable from
+        // a hang — the button reads "Scanning…" and nothing ever happens.
+        if (indexWaiting) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(
+                        if (wifiOnly) R.string.sync_waiting_wifi else R.string.sync_waiting_network,
+                    ),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
+        // A length pass runs for a long time and resumes itself after the app is killed, so there
+        // has to be a way to call it off. Every pass picks up where it stopped, which is why this
+        // is a plain Stop and not a pause.
+        if (busy) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TextButton(onClick = viewModel::stopIndexing) {
+                    Text(stringResource(R.string.sync_stop), color = Amber, fontSize = 13.sp)
+                }
+            }
         }
 
         Spacer(Modifier.height(18.dp))

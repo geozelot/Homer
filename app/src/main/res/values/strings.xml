@@ -360,6 +360,10 @@
     <string name="player_bookmark_add">Add at current position</string>
     <string name="player_bookmark_empty">No bookmarks yet.</string>
     <string name="player_chapter_fallback">Chapter</string>
+    <string name="sync_stop">Stop</string>
+    <string name="sync_waiting_wifi">Waiting for Wi\u2011Fi \u2014 downloads are set to Wi\u2011Fi only.</string>
+    <string name="sync_waiting_network">Waiting for a connection\u2026</string>
+
     <!-- Settings: updates -->
     <string name="update_channel_name">Updates</string>
     <string name="update_notif_title">Homer %1$s is available</string>

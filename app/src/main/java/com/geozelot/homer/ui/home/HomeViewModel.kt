@@ -553,6 +553,9 @@ class HomeViewModel @Inject constructor(
     /** Measure the length of every book that doesn't have one yet — see the manager for the cost. */
     fun measureBookLengths() = libraryIndexManager.measureDurations()
 
+    /** Stops the running scan / cover / length pass. Every one of them resumes where it stopped. */
+    fun stopIndexing() = libraryIndexManager.cancel()
+
     /** How many books still have no length, so the settings row can say whether it is worth a tap. */
     val unmeasuredCount: StateFlow<Int> = bookDao.observeCountWithoutDuration()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -573,6 +576,11 @@ class HomeViewModel @Inject constructor(
      * of those windows cancels a pass already under way.
      */
     val indexBusy: StateFlow<Boolean> = libraryIndexManager.busy
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Queued but not running: constraints (a metered connection, usually) are not met yet. */
+    val indexWaiting: StateFlow<Boolean> = libraryIndexManager.waiting
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun download(bookId: String) = downloadManager.download(bookId)
