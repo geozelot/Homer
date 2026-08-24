@@ -1,0 +1,237 @@
+package com.geozelot.homer.data.sync.facet
+
+import com.geozelot.homer.data.db.entity.AudioFileEntity
+import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.db.entity.ChapterEntity
+import com.geozelot.homer.data.db.entity.ChapterTier
+
+/**
+ * Between the database and the three facets.
+ *
+ * The split the old catalog could not express runs right through here. Publishing reads the
+ * **detected** values off [BookEntity] and the **deliberate** ones off [BookOverrideEntity], and
+ * sends them to different files — where the single catalog published the *effective* value and
+ * lost the distinction forever. Consuming puts them back, and leaves everything that is nobody
+ * else's business exactly where it was.
+ */
+object FacetMapping {
+
+    // ── publishing: database → facets ────────────────────────────────────────────────────────
+
+    /**
+     * What crawling found. Deliberately the raw [book] fields, never the override-applied ones:
+     * a correction belongs in [correctionOf], and mixing it in here would republish somebody's
+     * edit as though the folder tree had said it.
+     */
+    fun structureOf(book: BookEntity, files: List<AudioFileEntity>): StructureBook = StructureBook(
+        title = book.title,
+        author = book.author,
+        series = book.series,
+        seriesIndex = book.seriesIndex,
+        contentHash = book.contentHash,
+        coverFilePath = book.coverFilePath,
+        isMultiFile = book.isMultiFile,
+        files = files.sortedBy { it.sortIndex }.map {
+            StructureFile(
+                relativePath = it.relativePath,
+                fileName = it.fileName,
+                sortIndex = it.sortIndex,
+                sizeBytes = it.sizeBytes,
+                etag = it.etag,
+                lastModifiedMs = it.lastModified,
+                contentType = it.contentType,
+            )
+        },
+        updatedAt = book.updatedAt,
+    )
+
+    /**
+     * What reading the files taught this device, or null when it has learned nothing worth
+     * sharing. An empty entry would reach other devices as "I looked and found none of it", which
+     * is a stronger claim than silence and would suppress their own probing.
+     */
+    fun derivedOf(
+        book: BookEntity,
+        files: List<AudioFileEntity>,
+        chapters: List<ChapterEntity>,
+    ): DerivedBook? {
+        val durations = files.mapNotNull { f -> f.durationMs?.let { f.relativePath to it } }.toMap()
+        val tier = tierName(book.chapterTier)
+        val hasCachedCover = book.localCoverPath != null
+        if (book.genre == null && book.totalDurationMs == null && !hasCachedCover &&
+            tier == null && durations.isEmpty()
+        ) {
+            return null
+        }
+        return DerivedBook(
+            genre = book.genre,
+            totalDurationMs = book.totalDurationMs,
+            hasCachedCover = hasCachedCover,
+            chapterTier = tier,
+            chapters = chapters.sortedBy { it.sortIndex }.map { DerivedChapter(it.startMs, it.title) },
+            fileDurationsMs = durations,
+            updatedAt = book.updatedAt,
+        )
+    }
+
+    /**
+     * The half of an override that is a claim about the *book*, or null when the override only
+     * carries claims about the *reader*.
+     *
+     * `finished`, `hidden` and `downloadOnPlay` are never published. On a folder shared with other
+     * people they would say who has read what.
+     */
+    fun correctionOf(override: BookOverrideEntity, deviceId: String?): BookCorrection? {
+        if (override.title == null && override.author == null && override.series == null &&
+            override.seriesIndex == null && override.genre == null && override.tags == null
+        ) {
+            return null
+        }
+        return BookCorrection(
+            title = override.title,
+            author = override.author,
+            series = override.series,
+            seriesIndex = override.seriesIndex,
+            genre = override.genre,
+            tags = override.tags,
+            editedAt = override.updatedAt,
+            editedBy = deviceId,
+        )
+    }
+
+    // ── consuming: facets → database ─────────────────────────────────────────────────────────
+
+    /**
+     * Rebuilds a book row from the facets, keeping everything that is this device's own business.
+     *
+     * Cover files, "already tried" flags and the date the book first appeared here are local
+     * bookkeeping; taking the facet's word for them would re-run work another device happens not
+     * to have done, or claim a book has been in this library since somebody else first saw it.
+     */
+    fun bookEntity(
+        id: String,
+        structure: StructureBook,
+        derived: DerivedBook?,
+        existing: BookEntity?,
+        now: Long,
+    ): BookEntity = BookEntity(
+        id = id,
+        // Never null out a hash we have: without one, a renamed folder can never be re-linked and
+        // the book's position and bookmarks are orphaned.
+        contentHash = structure.contentHash ?: existing?.contentHash,
+        title = structure.title,
+        author = structure.author,
+        series = structure.series,
+        seriesIndex = structure.seriesIndex,
+        genre = derived?.genre ?: existing?.genre,
+        relativePath = id,
+        coverFilePath = structure.coverFilePath ?: existing?.coverFilePath,
+        localCoverPath = existing?.localCoverPath,
+        customCoverPath = existing?.customCoverPath,
+        coverAttempted = existing?.coverAttempted ?: false,
+        metadataAttempted = existing?.metadataAttempted ?: false,
+        chapterTier = tierValue(derived?.chapterTier) ?: existing?.chapterTier ?: ChapterTier.UNDETERMINED,
+        isMultiFile = structure.isMultiFile,
+        fileCount = structure.files.size,
+        totalDurationMs = derived?.totalDurationMs ?: existing?.totalDurationMs,
+        addedAt = existing?.addedAt ?: now,
+        updatedAt = structure.updatedAt,
+    )
+
+    /**
+     * The book's files, with every duration this device or the facet knows.
+     *
+     * A measurement is expensive and never wrong, so a local one survives a facet that lacks it —
+     * and `durationAttempted` stays local, because "I tried and got nothing" is a fact about this
+     * device's attempt, not about the file.
+     */
+    fun fileEntities(
+        bookId: String,
+        structure: StructureBook,
+        derived: DerivedBook?,
+        existing: List<AudioFileEntity>,
+    ): List<AudioFileEntity> {
+        val byPath = existing.associateBy { it.relativePath }
+        return structure.files.map { file ->
+            val previous = byPath[file.relativePath]
+            AudioFileEntity(
+                relativePath = file.relativePath,
+                bookId = bookId,
+                fileName = file.fileName,
+                sortIndex = file.sortIndex,
+                sizeBytes = file.sizeBytes,
+                etag = file.etag,
+                lastModified = file.lastModifiedMs,
+                contentType = file.contentType,
+                durationMs = derived?.fileDurationsMs?.get(file.relativePath) ?: previous?.durationMs,
+                durationAttempted = previous?.durationAttempted ?: false,
+            )
+        }
+    }
+
+    /**
+     * Folds an incoming correction into this device's override row.
+     *
+     * The bibliographic half is replaced wholesale — that is how a correction gets *cleared*, and
+     * why the facet merges per book. The personal half is carried through untouched: a shared
+     * correction must never mark a book finished or hidden for somebody who did not do it.
+     *
+     * Returns null when there is nothing to store on either side.
+     */
+    fun overrideEntity(
+        bookId: String,
+        correction: BookCorrection?,
+        existing: BookOverrideEntity?,
+    ): BookOverrideEntity? {
+        val personal = existing?.let { it.finished != null || it.downloadOnPlay != null || it.hidden }
+        if (correction == null) {
+            // Nothing shared to apply. Keep a purely personal override; drop a row that was only
+            // ever holding a correction somebody has since cleared.
+            return if (personal == true) existing.copy(
+                title = null, author = null, series = null, seriesIndex = null,
+                genre = null, tags = null,
+            ) else null
+        }
+        return BookOverrideEntity(
+            bookId = bookId,
+            title = correction.title,
+            author = correction.author,
+            series = correction.series,
+            seriesIndex = correction.seriesIndex,
+            genre = correction.genre,
+            tags = correction.tags,
+            finished = existing?.finished,
+            downloadOnPlay = existing?.downloadOnPlay,
+            hidden = existing?.hidden ?: false,
+            updatedAt = correction.editedAt,
+        )
+    }
+
+    fun chapterEntities(bookId: String, derived: DerivedBook?): List<ChapterEntity> =
+        derived?.chapters.orEmpty().mapIndexed { index, chapter ->
+            ChapterEntity(bookId = bookId, sortIndex = index, title = chapter.title, startMs = chapter.startMs)
+        }
+
+    // ── the chapter tier, as a word rather than a number ─────────────────────────────────────
+
+    /**
+     * The tier travels as a name, not an integer: the facets are JSON in a folder other people can
+     * open, and a bare `2` there means nothing. `UNDETERMINED` maps to null, because "nobody has
+     * worked this out yet" is an absence, and the merge treats absences as yielding to answers.
+     */
+    fun tierName(tier: Int): String? = when (tier) {
+        ChapterTier.EMBEDDED -> "EMBEDDED"
+        ChapterTier.SIDECAR -> "SIDECAR"
+        ChapterTier.NONE -> "NONE"
+        else -> null
+    }
+
+    /** Null for an unknown or absent name, so a facet from a newer Homer cannot corrupt the row. */
+    fun tierValue(name: String?): Int? = when (name) {
+        "EMBEDDED" -> ChapterTier.EMBEDDED
+        "SIDECAR" -> ChapterTier.SIDECAR
+        "NONE" -> ChapterTier.NONE
+        else -> null
+    }
+}
