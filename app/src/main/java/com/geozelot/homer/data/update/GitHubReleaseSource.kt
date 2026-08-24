@@ -13,6 +13,30 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * The version a release actually ships.
+ *
+ * The beta tag is MOVED rather than re-cut, so `v2.0.0-BETA` labels every beta build and the tag
+ * cannot say which one this is. CI puts the rising version in the release TITLE — `2.0.0-BETA.42`
+ * — while the asset keeps a name that is stable per tag, so each rebuild replaces the APK instead
+ * of piling another one onto the same release.
+ *
+ * Read in order of how much CI controls it: the title, then the asset name, then the tag. A title
+ * that carries no digits is somebody's prose, not a version, and is skipped.
+ */
+internal fun releaseVersion(releaseName: String?, apkAssetName: String?, tagName: String): AppVersion {
+    val fromTitle = releaseName?.trim()?.takeIf { it.any(Char::isDigit) }
+    val fromAsset = apkAssetName
+        ?.takeIf { it.startsWith(APK_PREFIX) && it.endsWith(APK_SUFFIX, ignoreCase = true) }
+        ?.removePrefix(APK_PREFIX)
+        ?.dropLast(APK_SUFFIX.length)
+        ?.ifBlank { null }
+    return AppVersion.parse(fromTitle ?: fromAsset ?: tagName)
+}
+
+private const val APK_PREFIX = "homer-"
+private const val APK_SUFFIX = ".apk"
+
 /** Raised when GitHub answered, but refused. Distinguishes "can't check" from "nothing new". */
 class UpdateCheckException(val reason: UpdateFailure, message: String) : IOException(message)
 
@@ -109,18 +133,23 @@ class GitHubReleaseSource @Inject constructor(
         val newest = releases
             .filterNot { it.draft }
             .filter { channel == UpdateChannel.BETA || !it.prerelease }
-            .maxByOrNull { AppVersion.parse(it.tag_name) }
+            .maxByOrNull { it.declaredVersion() }
             ?: return@withContext null
 
-        NewestRelease(AppVersion.parse(newest.tag_name), newest.toUpdateRelease())
+        NewestRelease(newest.declaredVersion(), newest.toUpdateRelease())
     }
+
+    private fun ApiRelease.apkAsset(): ApiAsset? =
+        assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+
+    private fun ApiRelease.declaredVersion(): AppVersion = releaseVersion(name, apkAsset()?.name, tag_name)
 
     /** Null when the release carries no APK — a source-only tag, or a CI upload that failed. */
     private fun ApiRelease.toUpdateRelease(): UpdateRelease? {
-        val apk = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) } ?: return null
+        val apk = apkAsset() ?: return null
         if (apk.browser_download_url.isBlank()) return null
         return UpdateRelease(
-            version = AppVersion.parse(tag_name),
+            version = declaredVersion(),
             tag = tag_name,
             prerelease = prerelease,
             notes = body?.trim()?.ifBlank { null },

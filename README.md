@@ -152,10 +152,17 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **1.1** — stable for day-to-day listening. It's a personal, self-hosted
-project; a few advanced features (share-link libraries, the shared library index, M4B
-chapter text-tracks, certificate pinning) are best-effort and still evolving. Issues and
-patches welcome.
+Homer is at **1.1** — stable for day-to-day listening — with **2.0 in beta**, tagged
+`v2.0.0-BETA`. That tag moves: each build replaces it rather than adding another, so there
+is one beta release to follow and the APK name carries the actual build (`homer-2.0.0-BETA.42.apk`).
+
+2.0 reworks how the library is indexed and synced, and **changes the shared index format
+incompatibly** — a 2.0 device and a 1.x device cannot share a library. Existing shared
+catalogs are converted once, automatically.
+
+It's a personal, self-hosted project; a few advanced features (share-link libraries, the
+shared library index, M4B chapter text-tracks, certificate pinning) are best-effort and
+still evolving. Issues and patches welcome.
 
 ## A note on how this was built
 

@@ -33,7 +33,18 @@ jobs:
           # v1.2.0 -> 1.2.0 (manual runs fall back to a dev name); versionCode is monotonic.
           NAME="${GITHUB_REF_NAME#v}"
           case "$GITHUB_REF" in refs/tags/*) : ;; *) NAME="0.0.0-dev${GITHUB_RUN_NUMBER}" ;; esac
+          # A beta tag is MOVED rather than re-cut, so the tag name alone never changes and every
+          # build would call itself the same version — leaving the in-app updater with nothing
+          # newer to offer. Appending the run number gives a name that still rises: AppVersion
+          # compares the trailing digits numerically, so BETA.9 < BETA.10, and plain 2.0.0 beats
+          # every BETA.n because a release outranks its own pre-releases.
+          # The ASSET name stays stable per tag so a rebuild REPLACES the APK on the release
+          # instead of adding a second one beside it; the rising version rides on the release
+          # title, which is what the updater reads.
+          ASSET="$NAME"
+          case "$NAME" in *-BETA) NAME="${NAME}.${GITHUB_RUN_NUMBER}" ;; esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
           echo "code=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Configure signing
@@ -66,7 +77,7 @@ jobs:
         run: |
           mkdir -p out
           SRC=$(find app/build/outputs/apk/release -name '*.apk' | head -n1)
-          DEST="out/homer-${{ steps.version.outputs.name }}.apk"
+          DEST="out/homer-${{ steps.version.outputs.asset }}.apk"
           cp "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
 
@@ -75,6 +86,7 @@ jobs:
         with:
           name: homer-${{ steps.version.outputs.name }}
           path: ${{ steps.apk.outputs.path }}
+          overwrite: true
 
       - name: Attach APK to the release
         if: startsWith(github.ref, 'refs/tags/')
@@ -82,7 +94,10 @@ jobs:
         with:
           files: ${{ steps.apk.outputs.path }}
           fail_on_unmatched_files: true
-          # A tag carrying a pre-release suffix (v1.1.0-BETA18, v1.2.0-rc1) is marked as one, so
+          # A tag carrying a pre-release suffix (v2.0.0-BETA, v2.1.0-rc1) is marked as one, so
           # `/releases/latest` keeps pointing at the last finished release. The in-app updater's
           # Stable channel relies on this flag to tell a beta from a release.
           prerelease: ${{ contains(github.ref_name, '-') }}
+          # The release TITLE carries the build's real version. A moving beta tag cannot: it
+          # names every build alike, so the updater reads this instead and sees each one rise.
+          name: ${{ steps.version.outputs.name }}
