@@ -204,7 +204,11 @@ fun LibrarySourceScreen(
         SettingsRow(
             label = stringResource(R.string.sync_fix_lengths),
             summary = when {
-                lengths != null -> stringResource(R.string.sync_measuring, lengths.done, lengths.total)
+                lengths != null ->
+                    stringResource(
+                        R.string.sync_measuring,
+                        lengths.books, lengths.bookTotal, lengths.done, lengths.total,
+                    )
                 unmeasured == 0 -> stringResource(R.string.sync_fix_lengths_none)
                 else -> stringResource(R.string.sync_fix_lengths_desc, unmeasured)
             },

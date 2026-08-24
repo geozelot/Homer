@@ -20,7 +20,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
@@ -60,6 +62,14 @@ class DurationEnricher @Inject constructor(
     /** Process-wide: once we learn this device can't do decoder-free probes, stop paying for it. */
     private val fastProbes = FastProbeGate()
 
+    /** How far a whole-library measure pass has got, in both units the user cares about. */
+    data class MeasureProgress(
+        val files: Int,
+        val fileTotal: Int,
+        val books: Int,
+        val bookTotal: Int,
+    )
+
     /** Fire-and-forget; no-op if this book is already fully measured or being measured. */
     fun enrich(bookId: String) {
         scope.launch { measure(bookId) }
@@ -76,24 +86,38 @@ class DurationEnricher @Inject constructor(
      * Stops early when the connection drops: [measure] declines to record anything as unmeasurable
      * while offline, so continuing would just burn a 30-second timeout per file for nothing.
      */
-    suspend fun measureAll(bookIds: List<String>, onProgress: suspend (Int, Int) -> Unit) {
-        // Counted in FILES, not books. A "book" here can be a 1020-file complete edition, and
-        // book-level progress sat on "1 of 226" for the whole of it — which reads as a hang, and
-        // was reported as one. Files move.
-        val total = audioFileDao.countUnmeasured()
-        // Atomic: measure() now runs a book's files concurrently, so this is incremented from
-        // several coroutines and a plain var would quietly lose counts.
-        val done = AtomicInteger(0)
-        onProgress(0, total)
+    suspend fun measureAll(bookIds: List<String>, onProgress: suspend (MeasureProgress) -> Unit) {
+        // Files as well as books. A "book" here can be a 1020-file complete edition, so book-level
+        // progress alone sat on "1 of 226" for the whole of it — which reads as a hang, and was
+        // reported as one. Books alone say how much is left; files say that something is moving.
+        val fileTotal = audioFileDao.countUnmeasured()
+        // Atomic: measure() runs a book's files concurrently, so this is incremented from several
+        // coroutines and a plain var would quietly lose counts.
+        val filesDone = AtomicInteger(0)
+        // Serialised for the same reason. This callback ends in WorkManager's setForeground and
+        // setProgress, which must not be entered from several coroutines at once: doing so failed
+        // the foreground promotion, and because that failure is caught and shrugged off, the
+        // notification silently vanished for the rest of the pass.
+        val publishLock = Mutex()
+
+        suspend fun publish(books: Int) = publishLock.withLock {
+            onProgress(MeasureProgress(filesDone.get(), fileTotal, books, bookIds.size))
+        }
+
+        publish(0)
         for ((index, bookId) in bookIds.withIndex()) {
             coroutineContext.ensureActive()
             if (!networkMonitor.isOnline()) {
                 Log.i(TAG, "measureAll: offline after $index/${bookIds.size} books, stopping")
                 return
             }
-            measure(bookId) { onProgress(done.incrementAndGet(), total) }
+            measure(bookId) {
+                filesDone.incrementAndGet()
+                publish(index + 1)
+            }
         }
-        onProgress(total, total)
+        filesDone.set(fileTotal)
+        publish(bookIds.size)
     }
 
     /** The measurement itself. Suspends until this book is done; no-op if it is already in hand. */

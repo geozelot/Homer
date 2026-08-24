@@ -52,7 +52,14 @@ class LibraryIndexManager @Inject constructor(
     /** Which long pass the worker is in the middle of, and how far through. */
     enum class IndexPhase { COVERS, LENGTHS }
 
-    data class IndexProgress(val phase: IndexPhase, val done: Int, val total: Int)
+    /** [books]/[bookTotal] are only meaningful for [IndexPhase.LENGTHS]; zero elsewhere. */
+    data class IndexProgress(
+        val phase: IndexPhase,
+        val done: Int,
+        val total: Int,
+        val books: Int = 0,
+        val bookTotal: Int = 0,
+    )
 
     /**
      * Progress of the running index job, or null when nothing is running. Read off WorkManager
@@ -71,6 +78,8 @@ class LibraryIndexManager @Inject constructor(
                 phase = phase,
                 done = running.progress.getInt(LibraryIndexWorker.KEY_DONE, 0),
                 total = running.progress.getInt(LibraryIndexWorker.KEY_TOTAL, 0),
+                books = running.progress.getInt(LibraryIndexWorker.KEY_BOOKS, 0),
+                bookTotal = running.progress.getInt(LibraryIndexWorker.KEY_BOOK_TOTAL, 0),
             )
         }
 

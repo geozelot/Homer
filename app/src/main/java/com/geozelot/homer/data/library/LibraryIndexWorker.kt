@@ -89,12 +89,21 @@ class LibraryIndexWorker @AssistedInject constructor(
                 val pending = bookDao.idsWithoutDuration()
                 Log.i(TAG, "measuring lengths for ${pending.size} book(s)")
                 var lastMeasureNotifyMs = 0L
-                durationEnricher.measureAll(pending) { done, total ->
+                durationEnricher.measureAll(pending) { p ->
                     val now = System.currentTimeMillis()
-                    if (done >= total || now - lastMeasureNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
+                    if (p.files >= p.fileTotal || now - lastMeasureNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                         lastMeasureNotifyMs = now
-                        setForegroundSafely(foregroundInfo("Measuring book lengths…", done, total))
-                        report(PHASE_LENGTHS, done, total)
+                        // Both counts: books say how much is left, files say it is still moving.
+                        // One 1020-file book makes either number alone misleading.
+                        setForegroundSafely(
+                            foregroundInfo(
+                                text = "Measuring lengths",
+                                done = p.files,
+                                total = p.fileTotal,
+                                detail = "Book ${p.books} of ${p.bookTotal} · ${p.files} of ${p.fileTotal} files",
+                            ),
+                        )
+                        report(PHASE_LENGTHS, p.files, p.fileTotal, p.books, p.bookTotal)
                     }
                 }
             }
@@ -118,8 +127,16 @@ class LibraryIndexWorker @AssistedInject constructor(
      * same thing inline. A long measure pass is otherwise invisible unless the user pulls down the
      * notification shade — and it is the one action here that can run for many minutes.
      */
-    private suspend fun report(phase: String, done: Int, total: Int) {
-        setProgress(workDataOf(KEY_PHASE to phase, KEY_DONE to done, KEY_TOTAL to total))
+    private suspend fun report(phase: String, done: Int, total: Int, books: Int = 0, bookTotal: Int = 0) {
+        setProgress(
+            workDataOf(
+                KEY_PHASE to phase,
+                KEY_DONE to done,
+                KEY_TOTAL to total,
+                KEY_BOOKS to books,
+                KEY_BOOK_TOTAL to bookTotal,
+            ),
+        )
     }
 
     private suspend fun setForegroundSafely(info: ForegroundInfo) {
@@ -141,11 +158,16 @@ class LibraryIndexWorker @AssistedInject constructor(
         }
     }
 
-    private fun foregroundInfo(text: String, done: Int, total: Int): ForegroundInfo {
+    private fun foregroundInfo(
+        text: String,
+        done: Int,
+        total: Int,
+        detail: String? = null,
+    ): ForegroundInfo {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("Homer")
-            .setContentText(if (total > 0) "$text ${done}/$total" else text)
+            .setContentText(detail ?: if (total > 0) "$text ${done}/$total" else text)
             .setOngoing(true)
             .setProgress(total, done, total == 0)
             .build()
@@ -164,6 +186,8 @@ class LibraryIndexWorker @AssistedInject constructor(
         const val KEY_PHASE = "phase"
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
+        const val KEY_BOOKS = "books"
+        const val KEY_BOOK_TOTAL = "book_total"
         const val PHASE_COVERS = "covers"
         const val PHASE_LENGTHS = "lengths"
         const val KEY_INCREMENTAL = "incremental"
