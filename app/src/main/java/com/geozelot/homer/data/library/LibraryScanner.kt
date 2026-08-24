@@ -263,6 +263,12 @@ class LibraryScanner @Inject constructor(
         // A full crawl saw the whole library, so anything unaccounted for is genuinely gone and
         // its leftovers can be swept. An incremental scan skips unchanged subtrees and can lose a
         // subtree to a transient server error, so it must never sweep — see applyScan.
+        // NOTE the deliberate asymmetry with the completeness flag above. The crawl marker asks
+        // "did this pass see everything", and an incremental pass that skipped nothing did. The
+        // orphan sweep is held to the stricter "was this a full crawl", because what it deletes —
+        // a hand-typed title, a saved position — is not re-derivable from anything, and the cost
+        // of being wrong is therefore not symmetric. Leftover rows are harmless; a lost title is
+        // not. Do not "tidy" these into one condition.
         val orphanedDownloads = db.withTransaction {
             applyScan(books, root, skippedRoots, sweepOrphans = !incremental)
         }

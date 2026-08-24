@@ -6,8 +6,9 @@ import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
@@ -48,9 +49,9 @@ class CoverEnricher @Inject constructor(
         // PROPFIND tells us whether a full sweep could possibly find anything new. No folder (or an
         // unchanged one) means there is nothing to gain, and we fall back to fresh books only.
         val sweepShared = if (sharedCatalog) {
-            val etag = runCatching {
+            val etag = orNullUnlessCancelled {
                 webDavClient.propfind(sharedCoverDir(libraryRoot), depth = 0).firstOrNull()?.etag
-            }.getOrNull()
+            }
             val changed = etag != null && etag != librarySettings.lastCoverSweepEtag.first()
             if (changed) librarySettings.setLastCoverSweepEtag(etag!!)
             changed
@@ -68,9 +69,9 @@ class CoverEnricher @Inject constructor(
             // Shared catalog: prefer the shared cover cache (a small download) over re-extracting
             // the art by streaming the first file.
             if (sharedCatalog) {
-                val cached = runCatching {
+                val cached = orNullUnlessCancelled {
                     webDavClient.getBytes("${sharedCoverDir(libraryRoot)}/${coverCache.coverName(book.id)}")
-                }.getOrNull()
+                }
                 if (cached != null) {
                     bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
                     found++
@@ -85,9 +86,9 @@ class CoverEnricher @Inject constructor(
             // extraction) and the fix for it otherwise being re-downloaded on every display and
             // missing entirely offline.
             if (book.coverFilePath != null) {
-                val folderArt = runCatching {
+                val folderArt = orNullUnlessCancelled {
                     webDavClient.getBytes(joinPath(libraryRoot, book.coverFilePath))
-                }.getOrNull()
+                }
                 if (folderArt != null && folderArt.isNotEmpty()) {
                     bookDao.updateLocalCover(book.id, coverCache.write(book.id, folderArt))
                     found++
@@ -129,6 +130,25 @@ class CoverEnricher @Inject constructor(
 
     /** The shared cover cache folder at the library root. */
     private fun sharedCoverDir(libraryRoot: String): String = joinPath(libraryRoot, ".homer/covers")
+
+    /**
+     * [block]'s result, or null if it failed — but never swallowing cancellation.
+     *
+     * This used to be `runCatching`, which catches Throwable, and `CancellationException` is one:
+     * pressing Stop mid-pass was absorbed here and the loop carried on into the next book. The
+     * `ensureActive()` at the top of the loop bounds that to a single wasted iteration today —
+     * which is exactly the kind of guarantee that quietly stops holding when a line moves, and the
+     * damage if it does is a book marked "no art available" because someone pressed Stop.
+     */
+    private suspend fun <T> orNullUnlessCancelled(block: suspend () -> T): T? =
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "cover fetch failed", e)
+            null
+        }
 
     private companion object {
         const val TAG = "HomerMeta"
