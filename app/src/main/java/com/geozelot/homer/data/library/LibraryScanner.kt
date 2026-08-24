@@ -22,6 +22,20 @@ import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 
 /**
+ * A `LIKE` pattern matching everything beneath [path], with LIKE's own wildcards neutralised.
+ *
+ * `_` matches any single character and `%` matches any run of them, and folder names are full of
+ * underscores — so an unescaped `The_Hobbit/%` also claims the books under `TheXHobbit`. The error
+ * is always in the over-keeping direction, which is why it went unnoticed: a book that should have
+ * been pruned simply survives, under a sibling that happens to be the same shape.
+ *
+ * Escaping the escape character first is not optional; doing it last would double the backslashes
+ * this function just introduced.
+ */
+internal fun likeDescendantsOf(path: String): String =
+    path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
+
+/**
  * Books to remove after a scan: everything indexed that the scan didn't account for. The prune has
  * to be expressed this way round — a single `DELETE … WHERE id NOT IN (:keepIds)` binds one SQL
  * host parameter per kept id and blows SQLite's 999-parameter cap on any real library, aborting the
@@ -180,6 +194,7 @@ class LibraryScanner @Inject constructor(
      * It is not the same question as "was this a full crawl". A full crawl has no stored ETags to
      * skip on, so it is always complete; an *incremental* crawl is complete whenever it happened to
      * skip nothing, which is every first crawl of a library and any crawl where everything changed.
+     * A pass that found no audio at all is never complete, whatever it skipped — see [scan].
      * That distinction is the whole point: the marker this feeds is what authorises another device
      * to delete a book, and until one is stamped a book removed on the server stays on every shelf
      * for ever. Keying it on the incremental flag meant only "Rebuild the library" could ever
@@ -283,8 +298,20 @@ class LibraryScanner @Inject constructor(
             downloadDao.deleteOrphans()
         }
 
-        // Nothing skipped means every folder under the root was listed in this pass.
-        return Result(bookDao.count(), complete = skippedRoots.isEmpty())
+        // Nothing skipped means every folder under the root was listed in this pass — and finding
+        // at least one audio folder is the sanity check on that. A crawl CAN succeed and come back
+        // with nothing usable (a transient 207 from a reverse proxy, a momentarily-empty response),
+        // and such a pass must not be allowed to claim it saw a whole library: the marker it stamps
+        // is what lets another device delete books. An empty library loses nothing by not stamping,
+        // since a structure facet with no books is never published either.
+        val complete = skippedRoots.isEmpty() && audioFolders.isNotEmpty()
+
+        // Safe only now, and only on a complete crawl: every folder seen carries `now`, so anything
+        // else is gone. Outside the transaction above because it is independent of it — losing this
+        // to a crash just leaves the stale rows for the next complete crawl to drop.
+        if (complete) crawlDirDao.deleteNotScannedAt(now)
+
+        return Result(bookDao.count(), complete = complete)
     }
 
     /**
@@ -330,7 +357,8 @@ class LibraryScanner @Inject constructor(
         val keepIds = buildSet {
             books.forEach { add(it.book.id) }
             for (skipped in skippedRoots) {
-                addAll(bookDao.idsUnder(skipped.removePrefix(root).trim('/')))
+                val relative = skipped.removePrefix(root).trim('/')
+                addAll(bookDao.idsUnder(relative, likeDescendantsOf(relative)))
             }
         }
 

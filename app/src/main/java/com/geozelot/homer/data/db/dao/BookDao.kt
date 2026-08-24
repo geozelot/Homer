@@ -89,9 +89,18 @@ interface BookDao {
     @Query("UPDATE books SET chapterTier = :tier WHERE id = :bookId")
     suspend fun updateChapterTier(bookId: String, tier: Int)
 
-    /** Ids of books at or beneath [path] (used to preserve skipped subtrees on rescan). */
-    @Query("SELECT id FROM books WHERE id = :path OR id LIKE :path || '/%'")
-    suspend fun idsUnder(path: String): List<String>
+    /**
+     * Ids of books at or beneath [path] (used to preserve skipped subtrees on rescan).
+     *
+     * `LIKE` and `COLLATE NOCASE` are both deliberate: the path comes from the server's listing and
+     * the ids come from this table, and two spellings differing only in case must still match —
+     * dropping out of the keep-set means being pruned. [descendants] is a LIKE pattern with its own
+     * wildcards already neutralised (see `likeDescendantsOf`), because `_` is a single-character
+     * wildcard and folder names are full of underscores: `The_Hobbit` would otherwise also claim
+     * the books under `TheXHobbit`.
+     */
+    @Query("SELECT id FROM books WHERE id = :path COLLATE NOCASE OR id LIKE :descendants ESCAPE '\\'")
+    suspend fun idsUnder(path: String, descendants: String): List<String>
 
     /**
      * Books with no known total length — the work list for a "measure lengths" pass. A book only

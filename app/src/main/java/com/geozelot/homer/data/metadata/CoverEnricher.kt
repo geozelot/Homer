@@ -86,17 +86,33 @@ class CoverEnricher @Inject constructor(
             // extraction) and the fix for it otherwise being re-downloaded on every display and
             // missing entirely offline.
             if (book.coverFilePath != null) {
-                val folderArt = orNullUnlessCancelled {
+                // Three different answers, and they must not be conflated. The crawl LISTED this
+                // file, so a failed request says nothing about whether the art exists — marking the
+                // book "tried" on a dropped connection blanked its cover permanently, recoverable
+                // only by re-fetching every cover in the library.
+                var requestFailed = false
+                val folderArt = try {
                     webDavClient.getBytes(joinPath(libraryRoot, book.coverFilePath))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "folder cover fetch failed for ${book.id}", e)
+                    requestFailed = true
+                    null
                 }
-                if (folderArt != null && folderArt.isNotEmpty()) {
-                    bookDao.updateLocalCover(book.id, coverCache.write(book.id, folderArt))
-                    found++
-                    continue
+                when {
+                    folderArt != null && folderArt.isNotEmpty() -> {
+                        bookDao.updateLocalCover(book.id, coverCache.write(book.id, folderArt))
+                        found++
+                    }
+                    // Ask again next pass. A file the crawl saw is far likelier to be behind a
+                    // hiccup than to be permanently unreadable, and if it really has gone the next
+                    // crawl clears `coverFilePath` and this branch stops being reachable.
+                    requestFailed -> Unit
+                    // The server answered, and there is nothing usable there. Stop asking; the
+                    // remote URL still renders as a fallback via BookCover.
+                    else -> bookDao.markCoverAttempted(book.id)
                 }
-                // Couldn't fetch it — remember, so a broken path isn't retried every pass. The
-                // remote URL still renders as a fallback via BookCover.
-                bookDao.markCoverAttempted(book.id)
                 continue
             }
             val firstFile = audioFileDao.findForBook(book.id).firstOrNull()

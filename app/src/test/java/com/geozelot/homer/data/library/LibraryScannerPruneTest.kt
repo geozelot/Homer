@@ -5,11 +5,45 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Covers the two pure pieces of a scan's mutate-then-prune sequence: [idsToPrune] (which exists
- * because a `NOT IN (:keepIds)` prune blows SQLite's 999 host-parameter cap) and [relinkMediaId]
- * (which keeps a resumed chapter resolvable after its book's folder is renamed).
+ * Covers the pure pieces of a scan's mutate-then-prune sequence: [idsToPrune] (which exists because
+ * a `NOT IN (:keepIds)` prune blows SQLite's 999 host-parameter cap), [relinkMediaId] (which keeps a
+ * resumed chapter resolvable after its book's folder is renamed) and [likeDescendantsOf] (which
+ * decides which books a skipped subtree protects).
  */
 class LibraryScannerPruneTest {
+
+    // ── keeping the books under a skipped subtree ─────────────────────────────
+
+    @Test
+    fun `an ordinary path becomes a prefix pattern`() {
+        assertEquals("Author/Book/%", likeDescendantsOf("Author/Book"))
+    }
+
+    @Test
+    fun `an underscore is not left as a wildcard`() {
+        // LIKE's `_` matches any single character, and folder names are full of underscores — so
+        // unescaped, this pattern also claims every book under `TheXHobbit`, and a book that should
+        // have been pruned survives instead.
+        assertEquals("The\\_Hobbit/%", likeDescendantsOf("The_Hobbit"))
+    }
+
+    @Test
+    fun `a percent is not left as a wildcard`() {
+        assertEquals("100\\%\\_Real/%", likeDescendantsOf("100%_Real"))
+    }
+
+    @Test
+    fun `the escape character is escaped before the wildcards it introduces`() {
+        // Escaping `\` last would double every backslash the earlier replacements just added, and
+        // the pattern would stop matching the folder it names.
+        assertEquals("a\\\\b\\_c/%", likeDescendantsOf("a\\b_c"))
+    }
+
+    @Test
+    fun `a path with nothing to escape is untouched apart from the suffix`() {
+        assertEquals("A/%", likeDescendantsOf("A"))
+        assertEquals("/%", likeDescendantsOf(""))
+    }
 
     @Test
     fun `only ids missing from the keep set are pruned`() {
