@@ -177,22 +177,18 @@ object FacetMapping {
      * why the facet merges per book. The personal half is carried through untouched: a shared
      * correction must never mark a book finished or hidden for somebody who did not do it.
      *
-     * Returns null when there is nothing to store on either side.
+     * An ABSENT correction changes nothing. It means the shared index has no opinion about this
+     * book — not that a local edit should be discarded. Treating absence as a clear destroyed
+     * corrections made offline before they had ever been published. The cost is that clearing the
+     * *last* correction on a book does not propagate, because there is then no entry to carry the
+     * clear; clearing one field among several does, since the entry survives.
      */
     fun overrideEntity(
         bookId: String,
         correction: BookCorrection?,
         existing: BookOverrideEntity?,
     ): BookOverrideEntity? {
-        val personal = existing?.let { it.finished != null || it.downloadOnPlay != null || it.hidden }
-        if (correction == null) {
-            // Nothing shared to apply. Keep a purely personal override; drop a row that was only
-            // ever holding a correction somebody has since cleared.
-            return if (personal == true) existing.copy(
-                title = null, author = null, series = null, seriesIndex = null,
-                genre = null, tags = null,
-            ) else null
-        }
+        if (correction == null) return existing
         return BookOverrideEntity(
             bookId = bookId,
             title = correction.title,

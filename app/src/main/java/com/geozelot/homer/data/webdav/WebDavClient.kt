@@ -111,6 +111,7 @@ class WebDavClient @Inject constructor(
     /**
      * Uploads [content] to [relativePath]. When [ifMatch] is set, the write only succeeds if
      * the server's ETag still matches (optimistic concurrency) — otherwise [PreconditionFailedException].
+     * [ifNoneMatch] = `"*"` is the mirror image, for creating a file only if nobody beat us to it.
      * Returns the new ETag if the server reported one.
      */
     suspend fun putText(
@@ -118,12 +119,15 @@ class WebDavClient @Inject constructor(
         content: String,
         ifMatch: String? = null,
         credentials: NextcloudCredentials? = null,
+        /** `"*"` makes the write conditional on the file NOT existing — a safe create. */
+        ifNoneMatch: String? = null,
     ): String? =
         withContext(Dispatchers.IO) {
             val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
             val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
             val builder = Request.Builder().url(urlFor(creds, relativePath)).put(body)
             ifMatch?.let { builder.header("If-Match", it) }
+            ifNoneMatch?.let { builder.header("If-None-Match", it) }
             builder.applyAuth(credentials)
             client.newCall(builder.build()).execute().use { response ->
                 when {

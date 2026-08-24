@@ -797,8 +797,10 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             librarySettings.setSharedCatalogEnabled(enabled)
             if (enabled) {
-                if (libraryIndex.exists()) libraryIndex.pull() // bootstrap from the shared library
-                else libraryIndex.push()                       // create it
+                // pull() first, always: it is the only thing that converts a v1 catalog, and
+                // probing for structure.json alone would miss one — publishing this device's view
+                // over it instead, and losing every duration the old index had measured.
+                if (!libraryIndex.pull()) libraryIndex.push()
                 _sharedCatalogAvailable.value = libraryIndex.exists()
             }
         }

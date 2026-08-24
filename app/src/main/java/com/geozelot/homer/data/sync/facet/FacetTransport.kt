@@ -22,10 +22,13 @@ interface FacetTransport {
     /**
      * PUT, returning the new ETag if the server reported one.
      *
-     * @throws com.geozelot.homer.data.webdav.PreconditionFailedException when [ifMatch] no longer
-     *   matches — the file changed under us and the write must be retried against what is there now.
+     * Exactly one guard applies. [ifMatch] is for updating what we read; [onlyIfAbsent] is for
+     * creating a file we believe nobody has yet. With neither, the write is unconditional.
+     *
+     * @throws com.geozelot.homer.data.webdav.PreconditionFailedException when the guard fails —
+     *   somebody got there first, and the write must be retried against what is there now.
      */
-    suspend fun write(path: String, content: String, ifMatch: String?): String?
+    suspend fun write(path: String, content: String, ifMatch: String?, onlyIfAbsent: Boolean = false): String?
 
     suspend fun ensureDir(path: String)
 }
@@ -38,8 +41,8 @@ class WebDavFacetTransport @Inject constructor(
     override suspend fun read(path: String, ifNoneMatch: String?): DavRead =
         dav.readText(path, ifNoneMatch)
 
-    override suspend fun write(path: String, content: String, ifMatch: String?): String? =
-        dav.putText(path, content, ifMatch)
+    override suspend fun write(path: String, content: String, ifMatch: String?, onlyIfAbsent: Boolean): String? =
+        dav.putText(path, content, ifMatch, ifNoneMatch = if (onlyIfAbsent) "*" else null)
 
     override suspend fun ensureDir(path: String) {
         dav.mkcol(path)

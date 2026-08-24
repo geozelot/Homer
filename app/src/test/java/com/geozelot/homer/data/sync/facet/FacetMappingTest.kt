@@ -274,17 +274,31 @@ class FacetMappingTest {
     }
 
     @Test
-    fun `a cleared correction leaves a purely personal row behind`() {
-        val e = FacetMapping.overrideEntity("Author/Book", null, override(title = "Mine", finished = true))
-        assertNotNull(e)
-        assertNull(e!!.title)
-        assertEquals(true, e.finished)
+    fun `an absent correction leaves a local edit completely alone`() {
+        // The data-loss bug: absence was read as "clear it", so a correction made offline was
+        // destroyed by the next pull, before it had ever been published.
+        val mine = override(title = "Mine", finished = true)
+        assertEquals(mine, FacetMapping.overrideEntity("Author/Book", null, mine))
+
+        val unpublished = override(title = "Fixed offline")
+        assertEquals(unpublished, FacetMapping.overrideEntity("Author/Book", null, unpublished))
     }
 
     @Test
-    fun `a row holding only a cleared correction is dropped`() {
-        assertNull(FacetMapping.overrideEntity("Author/Book", null, override(title = "Mine")))
+    fun `an absent correction on a book with no override stays absent`() {
         assertNull(FacetMapping.overrideEntity("Author/Book", null, null))
+    }
+
+    @Test
+    fun `clearing one field among several still propagates`() {
+        // The entry survives with the remaining fields, so the merge carries the clear.
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(genre = "Fantasy", editedAt = 900),
+            override(title = "Wrong", genre = "Fantasy"),
+        )
+        assertNull(e!!.title)
+        assertEquals("Fantasy", e.genre)
     }
 
     @Test

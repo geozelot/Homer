@@ -114,10 +114,19 @@ class FacetStore @Inject constructor(
             if (state is Load.Present && merged == state.value) return SaveResult.AlreadyCurrent
 
             // Only the last attempt gives up the guard; before that a 412 is worth another round.
-            val ifMatch = etags[file].takeUnless { attempt == MAX_ATTEMPTS - 1 }
+            val lastChance = attempt == MAX_ATTEMPTS - 1
+            val ifMatch = etags[file].takeUnless { lastChance }
+            // Creating a file needs the mirror-image guard, or two devices setting the shared index
+            // up at the same moment both write unconditionally and the second erases the first.
+            val onlyIfAbsent = !lastChance && ifMatch == null && state is Load.Missing
             try {
                 ensureDir()
-                val newEtag = transport.write(path, json.encodeToString(serializer, merged), ifMatch)
+                val newEtag = transport.write(
+                    path,
+                    json.encodeToString(serializer, merged),
+                    ifMatch,
+                    onlyIfAbsent = onlyIfAbsent,
+                )
                 newEtag?.let { etags[file] = it } ?: etags.remove(file)
                 return SaveResult.Written
             } catch (e: PreconditionFailedException) {

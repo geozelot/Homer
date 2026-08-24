@@ -62,6 +62,13 @@ class LibraryIndexRepository @Inject constructor(
     )
     private var editPublishJob: Job? = null
 
+    // The last facets actually seen. FacetStore caches an ETag per file and answers Unchanged when
+    // it still matches — which carries no body, so the value has to be kept here. Both caches are
+    // in-memory on the same singleton, so a fresh process gets a full read and neither can be stale.
+    private var lastStructure: StructureFacet? = null
+    private var lastDerived: DerivedFacet? = null
+    private var lastCorrections: CorrectionsFacet? = null
+
     @Volatile
     private var editsPending = false
 
@@ -150,26 +157,40 @@ class LibraryIndexRepository @Inject constructor(
     suspend fun pull(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
         return try {
-            val structure = store.load(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer())
-            val derived = store.load(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer())
-            val corrections = store.load(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer())
+            val structureRead = store.load(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer())
+            val derivedRead = store.load(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer())
+            val correctionsRead = store.load(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer())
 
             // Nothing at all where a v1 catalog sits: convert it once rather than make the user
             // re-crawl and re-measure a library the old index already paid for.
-            if (structure is FacetStore.Load.Missing) {
+            if (structureRead is FacetStore.Load.Missing) {
                 val converted = convertLegacy()
                 if (converted != null) {
+                    lastStructure = converted.structure
+                    lastDerived = converted.derived
+                    lastCorrections = converted.corrections
                     apply(converted.structure, converted.derived, converted.corrections)
                     return true
                 }
             }
 
-            val s = (structure as? FacetStore.Load.Present)?.value ?: return false
-            apply(
-                s,
-                (derived as? FacetStore.Load.Present)?.value ?: DerivedFacet(),
-                (corrections as? FacetStore.Load.Present)?.value ?: CorrectionsFacet(),
-            )
+            // A 304 means our copy IS the remote one — present and current. Reading that as "no
+            // shared index" told the settings screen the library had vanished on every open after
+            // the first. The value comes from the copy that produced the cached ETag; both live
+            // as long as this process does, so one cannot be set without the other.
+            val structure = structureRead.resolve(lastStructure) ?: return false
+            val derived = derivedRead.resolve(lastDerived) ?: DerivedFacet()
+            val corrections = correctionsRead.resolve(lastCorrections) ?: CorrectionsFacet()
+            lastStructure = structure
+            lastDerived = derived
+            lastCorrections = corrections
+
+            // Nothing moved anywhere: no point walking several hundred books to write back what
+            // is already stored.
+            val anyChanged = structureRead is FacetStore.Load.Present ||
+                derivedRead is FacetStore.Load.Present ||
+                correctionsRead is FacetStore.Load.Present
+            if (anyChanged) apply(structure, derived, corrections)
             true
         } catch (e: CancellationException) {
             throw e
@@ -177,6 +198,13 @@ class LibraryIndexRepository @Inject constructor(
             Log.w(TAG, "pull failed", e)
             false
         }
+    }
+
+    /** Present gives its value; Unchanged reuses the copy that produced the cached ETag. */
+    private fun <T> FacetStore.Load<T>.resolve(cached: T?): T? = when (this) {
+        is FacetStore.Load.Present -> value
+        is FacetStore.Load.Unchanged -> cached
+        else -> null
     }
 
     /**
@@ -197,21 +225,33 @@ class LibraryIndexRepository @Inject constructor(
         for ((id, book) in structure.books) {
             val existing = bookDao.findById(id)
             val existingFiles = if (existing == null) emptyList() else audioFileDao.findForBook(id)
+            val existingOverride = bookOverrideDao.findById(id)
             val d = derived.books[id]
             val entity = FacetMapping.bookEntity(id, book, d, existing, now)
             val files = FacetMapping.fileEntities(id, book, d, existingFiles)
-            val override = FacetMapping.overrideEntity(id, corrections.books[id], bookOverrideDao.findById(id))
+            val override = FacetMapping.overrideEntity(id, corrections.books[id], existingOverride)
+
+            // Most books are untouched by any given change, and rewriting them all meant hundreds
+            // of transactions and tens of thousands of row writes for one edited title — taking
+            // the write lock away from position saves during playback. Both reads are already in
+            // hand, so the comparison is free.
+            if (entity == existing && files == existingFiles && override == existingOverride) continue
 
             db.withTransaction {
                 bookDao.upsert(listOf(entity))
-                audioFileDao.deleteForBook(id)
-                audioFileDao.upsert(files)
+                if (files != existingFiles) {
+                    audioFileDao.deleteForBook(id)
+                    audioFileDao.upsert(files)
+                }
                 // Only rewrite chapters when the facet actually has some: an absent derived entry
                 // is silence, and silence must not erase what this device worked out itself.
                 if (d?.chapterTier != null) {
                     chapterDao.replaceForBook(id, FacetMapping.chapterEntities(id, d))
                 }
-                if (override != null) bookOverrideDao.upsert(override) else bookOverrideDao.deleteById(id)
+                // Never deleted. An absent correction means the shared index has nothing to say
+                // about this book, NOT that a local one should go — deleting here destroyed an
+                // edit made offline before it had ever been published.
+                if (override != null && override != existingOverride) bookOverrideDao.upsert(override)
             }
             applied++
         }
@@ -271,14 +311,16 @@ class LibraryIndexRepository @Inject constructor(
             store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { remote ->
                 FacetMerge.structure(local.structure, remote.valueOr(StructureFacet()))
             }
+            var remoteDerived = DerivedFacet()
             store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { remote ->
-                FacetMerge.derived(local.derived, remote.valueOr(DerivedFacet()))
+                remoteDerived = remote.valueOr(DerivedFacet())
+                FacetMerge.derived(local.derived, remoteDerived)
             }
             store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
                 val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
                 merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
             }
-            uploadNewCovers(local.derived)
+            uploadNewCovers(local.derived, remoteDerived)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -320,15 +362,18 @@ class LibraryIndexRepository @Inject constructor(
     }
 
     /** Uploads extracted art to the shared cache so other devices download it instead of re-reading. */
-    private suspend fun uploadNewCovers(local: DerivedFacet) {
+    private suspend fun uploadNewCovers(local: DerivedFacet, remote: DerivedFacet) {
         val coversDir = "${dirOf()}/$COVERS_DIR"
         var dirEnsured = false
         for ((id, book) in local.books) {
             if (!book.hasCachedCover) continue
+            // The remote facet already answers this; probing the server per book cost one PROPFIND
+            // for every cover in the library on every push. Read outside the save's retry loop, so
+            // a lost race cannot make the flags read stale and re-upload everything.
+            if (remote.books[id]?.hasCachedCover == true) continue
             val bytes = coverCache.readBytes(id) ?: continue
             try {
                 val name = coverCache.coverName(id)
-                if (webDavClient.exists("$coversDir/$name")) continue
                 if (!dirEnsured) {
                     webDavClient.mkcol(coversDir)
                     dirEnsured = true

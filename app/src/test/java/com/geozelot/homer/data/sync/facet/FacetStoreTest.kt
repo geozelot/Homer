@@ -46,8 +46,16 @@ class FacetStoreTest {
             return if (reads.isEmpty()) DavRead.Absent else reads.removeAt(0)
         }
 
-        override suspend fun write(path: String, content: String, ifMatch: String?): String? {
+        val createGuards = mutableListOf<Boolean>()
+
+        override suspend fun write(
+            path: String,
+            content: String,
+            ifMatch: String?,
+            onlyIfAbsent: Boolean,
+        ): String? {
             writes += Triple(path, content, ifMatch)
+            createGuards += onlyIfAbsent
             writeThrows?.let { throw it }
             if (failWritesWith412 > 0) {
                 failWritesWith412--
@@ -237,6 +245,32 @@ class FacetStoreTest {
         assertEquals(FacetStore.SaveResult.Written, store(t).save(file, serializer) { facet("a" to "A") })
         assertEquals(1, t.dirsEnsured)
         assertNull(t.writes.single().third)
+    }
+
+    @Test
+    fun `creating a facet refuses to overwrite one that appeared meanwhile`() = runBlocking {
+        // Two devices enabling the shared index at the same moment: without this guard both write
+        // unconditionally and the second erases the first.
+        val t = FakeTransport(mutableListOf(DavRead.Absent))
+        store(t).save(file, serializer) { facet("a" to "A") }
+        assertEquals(listOf(true), t.createGuards)
+    }
+
+    @Test
+    fun `updating an existing facet guards on its etag, not on absence`() = runBlocking {
+        val t = FakeTransport(mutableListOf(body(facet("a" to "A"))))
+        store(t).save(file, serializer) { facet("a" to "B") }
+        assertEquals(listOf(false), t.createGuards)
+        assertEquals("etag-1", t.writes.single().third)
+    }
+
+    @Test
+    fun `the last attempt writes unconditionally rather than losing the change`() = runBlocking {
+        val t = FakeTransport(mutableListOf(DavRead.Absent, DavRead.Absent, DavRead.Absent))
+            .apply { failWritesWith412 = 2 }
+        assertEquals(FacetStore.SaveResult.Written, store(t).save(file, serializer) { facet("a" to "A") })
+        // Guarded, guarded, then forced rather than dropped.
+        assertEquals(listOf(true, true, false), t.createGuards)
     }
 
     @Test
