@@ -82,3 +82,7 @@ jobs:
         with:
           files: ${{ steps.apk.outputs.path }}
           fail_on_unmatched_files: true
+          # A tag carrying a pre-release suffix (v1.1.0-BETA18, v1.2.0-rc1) is marked as one, so
+          # `/releases/latest` keeps pointing at the last finished release. The in-app updater's
+          # Stable channel relies on this flag to tell a beta from a release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
