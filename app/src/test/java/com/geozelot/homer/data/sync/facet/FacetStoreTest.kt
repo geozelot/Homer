@@ -148,6 +148,44 @@ class FacetStoreTest {
         assertEquals(listOf(null, null), t.ifNoneMatches)
     }
 
+    // ── schema version ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a facet of the current schema passes through`() {
+        val load = FacetStore.Load.Present(CorrectionsFacet(version = LibraryFacets.SCHEMA_VERSION))
+        assertTrue(load.ofCurrentSchema(file) { it.version } is FacetStore.Load.Present)
+    }
+
+    @Test
+    fun `an older facet is treated as absent, not merged`() {
+        // v2 derived.json parses perfectly as v3 - only the MEANING of its duration keys changed,
+        // from library-relative to book-relative. Merging it would carry keys matching no file.
+        val load = FacetStore.Load.Present(CorrectionsFacet(version = LibraryFacets.SCHEMA_VERSION - 1))
+        assertTrue(load.ofCurrentSchema(file) { it.version } is FacetStore.Load.Missing)
+    }
+
+    @Test
+    fun `a newer facet is discarded too`() {
+        // Parsing it is not the same as understanding it.
+        val load = FacetStore.Load.Present(CorrectionsFacet(version = LibraryFacets.SCHEMA_VERSION + 1))
+        assertTrue(load.ofCurrentSchema(file) { it.version } is FacetStore.Load.Missing)
+    }
+
+    @Test
+    fun `the version check leaves every other state alone`() {
+        val states = listOf(
+            FacetStore.Load.Unchanged,
+            FacetStore.Load.Missing,
+            FacetStore.Load.Damaged("x"),
+            FacetStore.Load.Unavailable("x"),
+        )
+        for (state in states) {
+            @Suppress("UNCHECKED_CAST")
+            val typed = state as FacetStore.Load<CorrectionsFacet>
+            assertEquals(state, typed.ofCurrentSchema(file) { it.version })
+        }
+    }
+
     // ── saving ───────────────────────────────────────────────────────────────────────────────
 
     @Test

@@ -184,3 +184,23 @@ class FacetStore @Inject constructor(
         const val MAX_ATTEMPTS = 3
     }
 }
+
+/**
+ * Discards a facet written by a different schema, as though it were not there.
+ *
+ * Every facet needs this, not just the structure. A v2 `derived.json` parses perfectly well as v3
+ * — the shape did not change, only the *meaning* of its duration keys, which went from
+ * library-relative to book-relative. It would therefore be merged rather than rejected, its keys
+ * would match no file, and a push would carry the dead entries forward forever.
+ *
+ * A NEWER version is discarded too: being able to parse something is not the same as understanding
+ * it. Treating it as absent sends the caller down the rebuild path, which republishes in the
+ * current shape rather than leaving an empty library.
+ */
+internal fun <T> FacetStore.Load<T>.ofCurrentSchema(file: String, versionOf: (T) -> Int): FacetStore.Load<T> {
+    if (this !is FacetStore.Load.Present) return this
+    val version = versionOf(value)
+    if (version == LibraryFacets.SCHEMA_VERSION) return this
+    Log.i("HomerSync", "$file is schema v$version, not v${LibraryFacets.SCHEMA_VERSION}; rebuilding it")
+    return FacetStore.Load.Missing
+}
