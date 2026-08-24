@@ -155,13 +155,23 @@ class DurationEnricher @Inject constructor(
                 }
             }
 
-            // Nothing was probed above but genre/chapters are still wanted — probe the first
-            // file once just for its tags.
+            // Nothing was probed above but genre/chapters are still wanted — read the first
+            // file's tags once.
+            //
+            // This is the path a WORKING fast probe takes: it answers every duration, so no full
+            // probe ever runs and neither genre nor chapters get picked up on the way. Reading the
+            // tags with a decoder here would put one back per book — for a library of single-file
+            // books, one per file, which is the whole cost the fast path just removed. So the
+            // decoder-free reader goes first and the full probe only rescues a container it
+            // couldn't parse at all.
             if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
                 files.firstOrNull()?.let { first ->
                     coroutineContext.ensureActive()
                     val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
-                    val probe = durationExtractor.probe(url)
+                    val probe = durationExtractor.probeTags(url)
+                        ?: durationExtractor.probe(url).also {
+                            Log.i(TAG, "book $bookId: tags needed the full probe")
+                        }
                     if (genre == null) genre = probe.genre
                     if (firstProbe == null) firstProbe = probe
                 }

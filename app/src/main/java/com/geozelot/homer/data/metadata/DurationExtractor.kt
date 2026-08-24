@@ -7,19 +7,25 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.MetadataRetriever
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.id3.ChapterFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -180,6 +186,59 @@ class DurationExtractor @Inject constructor(
             }
         }
 
+    /**
+     * Genre + embedded chapters, with no decoder anywhere in the path.
+     *
+     * [probe] reaches the tags by building a player WITH renderers and waiting for STATE_READY,
+     * which instantiates a hardware audio decoder. Tags live in the container header, so this uses
+     * [MetadataRetriever] — the same renderer-less reader that already drives cover extraction —
+     * and folds the track metadata exactly the way ExoPlayer does.
+     *
+     * Returns null ONLY when the container could not be read at all (no track groups, a failure,
+     * or a timeout); the caller must rescue that with [probe]. A parsed container with no TCON and
+     * no CHAP frames is a real answer and comes back as an empty [Probe], because that is a
+     * question nothing else will ever settle. `durationMs` is always null here — this path never
+     * speaks about duration, so it can never mark a file unmeasurable.
+     */
+    suspend fun probeTags(mediaUri: String): Probe? = withContext(Dispatchers.IO) {
+        try {
+            val future = MetadataRetriever.retrieveMetadata(
+                DefaultMediaSourceFactory(dataSourceFactory),
+                MediaItem.fromUri(mediaUri),
+            )
+            try {
+                val groups = future.get(TAG_PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                // No track groups means the container never parsed — a structural failure, not an
+                // untagged file. Say nothing rather than settle the question wrongly.
+                if (groups.length == 0) return@withContext null
+
+                val folded = MediaMetadata.Builder()
+                val marks = mutableListOf<ChapterMark>()
+                for (i in 0 until groups.length) {
+                    val group = groups.get(i)
+                    for (j in 0 until group.length) {
+                        val metadata = group.getFormat(j).metadata ?: continue
+                        folded.populateFromMetadata(metadata)
+                        marks += chapterMarks(metadata)
+                    }
+                }
+                Probe(
+                    durationMs = null,
+                    genre = Id3Genres.resolve(folded.build().genre?.toString()),
+                    chapters = marks.distinctBy { it.startMs }.sortedBy { it.startMs },
+                )
+            } finally {
+                // Release the retriever's internal player, looper and open data source instead of
+                // letting an abandoned read linger until the OkHttp timeout.
+                future.cancel(true)
+            }
+        } catch (e: Exception) {
+            // Log.d (stripped from release by R8): the URL carries the account + book path.
+            Log.d(TAG, "decoder-free tag probe failed for $mediaUri", e)
+            null
+        }
+    }
+
     /** Duration + genre, each null if unknown / on failure / on timeout. */
     suspend fun probe(mediaUri: String): Probe =
         withTimeoutOrNull(PROBE_TIMEOUT_MS) {
@@ -245,9 +304,8 @@ class DurationExtractor @Inject constructor(
 
     /**
      * Pulls embedded ID3v2 CHAP frames out of the prepared player's track metadata, in start-time
-     * order. Each chapter's title is a nested TIT2 text subframe (ID3 has no flat title field).
-     * Returns empty for formats without ID3 chapters (e.g. M4B — that path is the "hole" noted in
-     * the chapter-parsing research and stays behind this best-effort probe).
+     * order. Returns empty for formats without ID3 chapters (e.g. M4B — that path is the "hole"
+     * noted in the chapter-parsing research and stays behind this best-effort probe).
      */
     private fun readChapters(exo: ExoPlayer): List<ChapterMark> {
         val marks = mutableListOf<ChapterMark>()
@@ -255,23 +313,31 @@ class DurationExtractor @Inject constructor(
         for (g in groups.indices) {
             val group = groups[g]
             for (t in 0 until group.length) {
-                val metadata = group.getTrackFormat(t).metadata ?: continue
-                for (e in 0 until metadata.length()) {
-                    val entry = metadata.get(e)
-                    if (entry !is ChapterFrame) continue
-                    val title = (0 until entry.subFrameCount)
-                        .map { entry.getSubFrame(it) }
-                        .filterIsInstance<TextInformationFrame>()
-                        .firstOrNull { it.id == "TIT2" }
-                        ?.values?.firstOrNull()
-                        ?.trim()
-                        ?.ifBlank { null }
-                    marks += ChapterMark(startMs = entry.startTimeMs.toLong(), title = title)
-                }
+                marks += chapterMarks(group.getTrackFormat(t).metadata ?: continue)
             }
         }
         return marks.distinctBy { it.startMs }.sortedBy { it.startMs }
     }
+
+    /**
+     * The CHAP frames in one track's metadata. Each chapter's title is a nested TIT2 text subframe
+     * (ID3 has no flat title field). Shared by the player path and [probeTags] so both read
+     * chapters identically — the retriever hands back the same [Metadata] the player exposes.
+     */
+    private fun chapterMarks(metadata: Metadata): List<ChapterMark> =
+        (0 until metadata.length())
+            .map { metadata.get(it) }
+            .filterIsInstance<ChapterFrame>()
+            .map { entry ->
+                val title = (0 until entry.subFrameCount)
+                    .map { entry.getSubFrame(it) }
+                    .filterIsInstance<TextInformationFrame>()
+                    .firstOrNull { it.id == "TIT2" }
+                    ?.values?.firstOrNull()
+                    ?.trim()
+                    ?.ifBlank { null }
+                ChapterMark(startMs = entry.startTimeMs.toLong(), title = title)
+            }
 
     private companion object {
         const val TAG = "HomerMeta"
@@ -283,5 +349,8 @@ class DurationExtractor @Inject constructor(
          * it is what makes a device where the fast path does NOT work cheap to find out about.
          */
         const val FAST_PROBE_TIMEOUT_MS = 12_000L
+
+        /** Matches the cover extractor's — both are the same renderer-less header read. */
+        const val TAG_PROBE_TIMEOUT_SECONDS = 30L
     }
 }
