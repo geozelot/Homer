@@ -42,22 +42,18 @@ object LegacyCatalogConverter {
                 contentHash = book.contentHash,
                 coverFilePath = book.coverFilePath,
                 isMultiFile = book.isMultiFile,
-                files = book.files.map {
+                files = book.files.sortedBy { it.sortIndex }.map {
                     StructureFile(
-                        relativePath = it.relativePath,
-                        fileName = it.fileName,
-                        sortIndex = it.sortIndex,
+                        path = FacetMapping.bookRelative(id, it.relativePath),
                         sizeBytes = it.sizeBytes,
                         etag = it.etag,
-                        lastModifiedMs = it.lastModifiedMs,
-                        contentType = it.contentType,
                     )
                 },
                 updatedAt = book.updatedAt,
             )
 
             val durations = book.files
-                .mapNotNull { file -> file.durationMs?.let { file.relativePath to it } }
+                .mapNotNull { f -> f.durationMs?.let { FacetMapping.bookRelative(id, f.relativePath) to it } }
                 .toMap()
 
             // Skip a book that taught us nothing measurable, rather than filling the facet with

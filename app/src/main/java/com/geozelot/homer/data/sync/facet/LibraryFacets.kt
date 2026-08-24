@@ -20,7 +20,7 @@ import kotlinx.serialization.Serializable
  * difference between them is whether the backend can be written to at all.
  */
 object LibraryFacets {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
     const val DIR = ".homer"
     const val STRUCTURE_FILE = "structure.json"
     const val DERIVED_FILE = "derived.json"
@@ -79,15 +79,30 @@ data class StructureBook(
     val updatedAt: Long = 0,
 )
 
+/**
+ * One file, as small as it can honestly be — this list is the bulk of the index, twelve thousand
+ * entries for a large library, and every field is paid for twelve thousand times.
+ *
+ * What is *not* here, and why:
+ *  - the file name is the last segment of [path];
+ *  - the sort index is the position in the list, which is written in order;
+ *  - the content type and last-modified time are written by the scanner and read by nothing, so
+ *    publishing them cost hundreds of kilobytes to tell other devices something no code asks.
+ */
 @Serializable
 data class StructureFile(
-    val relativePath: String,
-    val fileName: String,
-    val sortIndex: Int,
+    /**
+     * Relative to the BOOK, not the library — `01.mp3`, not
+     * `Serien Divers/TKKG/038 - Die weisse Schmuggler-Yacht/01.mp3`. The book's own id supplies
+     * the rest, and repeating it per file was the single largest thing in the file.
+     *
+     * A leading `/` means the exceptional case: a file that does not live under its own book,
+     * stored library-relative instead. Nothing produces that today; the marker exists so the
+     * encoding cannot silently corrupt a path if something ever does.
+     */
+    val path: String,
     val sizeBytes: Long = 0,
     val etag: String? = null,
-    val lastModifiedMs: Long? = null,
-    val contentType: String? = null,
 )
 
 // ── derived ──────────────────────────────────────────────────────────────────────────────────
@@ -112,7 +127,7 @@ data class DerivedBook(
     /** `EMBEDDED` / `NONE`, or null while nothing has established which. */
     val chapterTier: String? = null,
     val chapters: List<DerivedChapter> = emptyList(),
-    /** Library-relative file path to its measured length. */
+    /** Book-relative file path (see [StructureFile.path]) to its measured length. */
     val fileDurationsMs: Map<String, Long> = emptyMap(),
     val updatedAt: Long = 0,
 )

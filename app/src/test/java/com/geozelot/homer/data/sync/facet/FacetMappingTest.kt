@@ -90,26 +90,63 @@ class FacetMappingTest {
 
     @Test
     fun `structure carries what the crawl saw, in sort order`() {
-        val s = FacetMapping.structureOf(book(), listOf(file("b.mp3", 1), file("a.mp3", 0)))
+        val s = FacetMapping.structureOf(
+            book(),
+            listOf(file("Author/Book/b.mp3", 1), file("Author/Book/a.mp3", 0)),
+        )
         assertEquals("Book", s.title)
         assertEquals("hash", s.contentHash)
-        assertEquals(listOf("a.mp3", "b.mp3"), s.files.map { it.relativePath })
-        assertEquals(listOf("e-a.mp3", "e-b.mp3"), s.files.map { it.etag })
+        assertEquals(listOf("a.mp3", "b.mp3"), s.files.map { it.path })
+        assertEquals(listOf("e-Author/Book/a.mp3", "e-Author/Book/b.mp3"), s.files.map { it.etag })
         assertEquals(100L, s.updatedAt)
     }
 
     @Test
-    fun `structure never carries a duration`() {
-        // Durations are computed, not crawled. Putting them here would merge them by the wrong rule.
-        val s = FacetMapping.structureOf(book(), listOf(file("a.mp3", 0, duration = 5_000)))
-        assertTrue(s.files.all { it.javaClass.declaredFields.none { f -> f.name.contains("duration", true) } })
+    fun `a file path is stored relative to its book`() {
+        // The single largest thing in the index was every file repeating its book's folder.
+        val s = FacetMapping.structureOf(book(), listOf(file("Author/Book/CD1/01.mp3", 0)))
+        assertEquals("CD1/01.mp3", s.files.single().path)
+    }
+
+    @Test
+    fun `the path round-trips exactly`() {
+        val original = "Author/Book/CD1/01.mp3"
+        val s = FacetMapping.structureOf(book(), listOf(file(original, 0)))
+        val back = FacetMapping.fileEntities("Author/Book", s, null, emptyList())
+        assertEquals(original, back.single().relativePath)
+    }
+
+    @Test
+    fun `a file outside its own book keeps a whole path rather than a corrupted one`() {
+        // Nothing produces this; the marker exists so the encoding cannot silently invent a path.
+        val stored = FacetMapping.bookRelative("Author/Book", "Elsewhere/x.mp3")
+        assertEquals("/Elsewhere/x.mp3", stored)
+        assertEquals("Elsewhere/x.mp3", FacetMapping.libraryRelative("Author/Book", stored))
+    }
+
+    @Test
+    fun `a book at the library root round-trips too`() {
+        assertEquals("01.mp3", FacetMapping.bookRelative("", "01.mp3"))
+        assertEquals("01.mp3", FacetMapping.libraryRelative("", "01.mp3"))
+    }
+
+    @Test
+    fun `structure carries neither durations nor fields nothing reads`() {
+        // Durations are computed, not crawled, and would merge by the wrong rule. contentType and
+        // lastModified are written by the scanner and read by no one, at 12k entries apiece.
+        val fields = StructureFile::class.java.declaredFields.map { it.name }
+        assertFalse(fields.any { it.contains("duration", true) })
+        assertFalse(fields.any { it.contains("contentType", true) })
+        assertFalse(fields.any { it.contains("lastModified", true) })
+        assertFalse(fields.any { it.contains("fileName", true) })
+        assertFalse(fields.any { it.contains("sortIndex", true) })
     }
 
     @Test
     fun `derived carries what reading the files taught us`() {
         val d = FacetMapping.derivedOf(
             book(genre = "Fantasy", localCoverPath = "/covers/x", chapterTier = ChapterTier.EMBEDDED, totalDurationMs = 9_000),
-            listOf(file("a.mp3", 0, 4_000), file("b.mp3", 1, 5_000)),
+            listOf(file("Author/Book/a.mp3", 0, 4_000), file("Author/Book/b.mp3", 1, 5_000)),
             listOf(ChapterEntity(bookId = "Author/Book", sortIndex = 0, title = "One", startMs = 0)),
         )
         assertNotNull(d)
@@ -124,7 +161,7 @@ class FacetMappingTest {
     @Test
     fun `a book that taught us nothing produces no derived entry`() {
         // Silence, not a claim that there is nothing to find.
-        assertNull(FacetMapping.derivedOf(book(), listOf(file("a.mp3", 0)), emptyList()))
+        assertNull(FacetMapping.derivedOf(book(), listOf(file("Author/Book/a.mp3", 0)), emptyList()))
     }
 
     @Test
@@ -163,8 +200,8 @@ class FacetMappingTest {
         coverFilePath = "Author/Book/cover.jpg",
         isMultiFile = true,
         files = listOf(
-            StructureFile("a.mp3", "a.mp3", 0, 1024, "e-a", 999, "audio/mpeg"),
-            StructureFile("b.mp3", "b.mp3", 1, 1024, "e-b", 999, "audio/mpeg"),
+            StructureFile("a.mp3", 1024, "e-a"),
+            StructureFile("b.mp3", 1024, "e-b"),
         ),
         updatedAt = 700,
     )
@@ -244,18 +281,18 @@ class FacetMappingTest {
             "Author/Book",
             structure,
             DerivedBook(fileDurationsMs = mapOf("a.mp3" to 4_000)),
-            listOf(file("a.mp3", 0), file("b.mp3", 1, duration = 5_000, attempted = true)),
+            listOf(file("Author/Book/a.mp3", 0), file("Author/Book/b.mp3", 1, duration = 5_000, attempted = true)),
         )
-        assertEquals(4_000L, files.first { it.relativePath == "a.mp3" }.durationMs)
-        assertEquals(5_000L, files.first { it.relativePath == "b.mp3" }.durationMs)
+        assertEquals(4_000L, files.first { it.relativePath == "Author/Book/a.mp3" }.durationMs)
+        assertEquals(5_000L, files.first { it.relativePath == "Author/Book/b.mp3" }.durationMs)
         // "I tried and got nothing" is about this device's attempt, not about the file.
-        assertTrue(files.first { it.relativePath == "b.mp3" }.durationAttempted)
+        assertTrue(files.first { it.relativePath == "Author/Book/b.mp3" }.durationAttempted)
     }
 
     @Test
     fun `a file that left the library is not carried over`() {
-        val files = FacetMapping.fileEntities("Author/Book", structure, null, listOf(file("gone.mp3", 9, 1)))
-        assertEquals(listOf("a.mp3", "b.mp3"), files.map { it.relativePath })
+        val files = FacetMapping.fileEntities("Author/Book", structure, null, listOf(file("Author/Book/gone.mp3", 9, 1)))
+        assertEquals(listOf("Author/Book/a.mp3", "Author/Book/b.mp3"), files.map { it.relativePath })
     }
 
     @Test

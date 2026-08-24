@@ -32,15 +32,12 @@ object FacetMapping {
         contentHash = book.contentHash,
         coverFilePath = book.coverFilePath,
         isMultiFile = book.isMultiFile,
+        // Written in sort order, because the position IS the sort index once published.
         files = files.sortedBy { it.sortIndex }.map {
             StructureFile(
-                relativePath = it.relativePath,
-                fileName = it.fileName,
-                sortIndex = it.sortIndex,
+                path = bookRelative(book.id, it.relativePath),
                 sizeBytes = it.sizeBytes,
                 etag = it.etag,
-                lastModifiedMs = it.lastModified,
-                contentType = it.contentType,
             )
         },
         updatedAt = book.updatedAt,
@@ -56,7 +53,9 @@ object FacetMapping {
         files: List<AudioFileEntity>,
         chapters: List<ChapterEntity>,
     ): DerivedBook? {
-        val durations = files.mapNotNull { f -> f.durationMs?.let { f.relativePath to it } }.toMap()
+        val durations = files
+            .mapNotNull { f -> f.durationMs?.let { bookRelative(book.id, f.relativePath) to it } }
+            .toMap()
         val tier = tierName(book.chapterTier)
         val hasCachedCover = book.localCoverPath != null
         if (book.genre == null && book.totalDurationMs == null && !hasCachedCover &&
@@ -153,21 +152,47 @@ object FacetMapping {
         existing: List<AudioFileEntity>,
     ): List<AudioFileEntity> {
         val byPath = existing.associateBy { it.relativePath }
-        return structure.files.map { file ->
-            val previous = byPath[file.relativePath]
+        return structure.files.mapIndexed { index, file ->
+            val relativePath = libraryRelative(bookId, file.path)
+            val previous = byPath[relativePath]
             AudioFileEntity(
-                relativePath = file.relativePath,
+                relativePath = relativePath,
                 bookId = bookId,
-                fileName = file.fileName,
-                sortIndex = file.sortIndex,
+                // The last segment, exactly as the scanner derives it from the DAV resource. It
+                // feeds contentHash, so a different answer here would orphan every renamed book.
+                fileName = relativePath.substringAfterLast('/'),
+                sortIndex = index,
                 sizeBytes = file.sizeBytes,
                 etag = file.etag,
-                lastModified = file.lastModifiedMs,
-                contentType = file.contentType,
-                durationMs = derived?.fileDurationsMs?.get(file.relativePath) ?: previous?.durationMs,
+                // Not published, because nothing reads them — so keep whatever this device's own
+                // scan found. Overwriting with null would also make every locally-scanned row
+                // differ from its published form, and defeat the per-book skip on every pull.
+                lastModified = previous?.lastModified,
+                contentType = previous?.contentType,
+                durationMs = derived?.fileDurationsMs?.get(file.path) ?: previous?.durationMs,
                 durationAttempted = previous?.durationAttempted ?: false,
             )
         }
+    }
+
+    /**
+     * A file's path relative to its book, which is what the index stores.
+     *
+     * A file that is somehow not under its own book keeps a library-relative path, marked with a
+     * leading `/`. Nothing produces that; the marker is there so the round trip cannot invent a
+     * path if something ever does.
+     */
+    fun bookRelative(bookId: String, relativePath: String): String = when {
+        bookId.isEmpty() -> relativePath
+        relativePath.startsWith("$bookId/") -> relativePath.removePrefix("$bookId/")
+        else -> "/$relativePath"
+    }
+
+    /** The inverse of [bookRelative]. */
+    fun libraryRelative(bookId: String, path: String): String = when {
+        path.startsWith("/") -> path.removePrefix("/")
+        bookId.isEmpty() -> path
+        else -> "$bookId/$path"
     }
 
     /**

@@ -161,9 +161,19 @@ class LibraryIndexRepository @Inject constructor(
             val derivedRead = store.load(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer())
             val correctionsRead = store.load(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer())
 
+            // A structure written by a different schema cannot be read as this one, and pretending
+            // otherwise would apply nonsense. Treated as absent, which sends it down the conversion
+            // path and republishes it in the current shape — self-healing rather than an empty
+            // library. Applies to a NEWER version too: we cannot understand that either.
+            val wrongSchema = (structureRead as? FacetStore.Load.Present)
+                ?.value?.version?.takeIf { it != LibraryFacets.SCHEMA_VERSION }
+            if (wrongSchema != null) {
+                Log.i(TAG, "shared index is schema v$wrongSchema, not v${LibraryFacets.SCHEMA_VERSION}; rebuilding")
+            }
+
             // Nothing at all where a v1 catalog sits: convert it once rather than make the user
             // re-crawl and re-measure a library the old index already paid for.
-            if (structureRead is FacetStore.Load.Missing) {
+            if (structureRead is FacetStore.Load.Missing || wrongSchema != null) {
                 val converted = convertLegacy()
                 if (converted != null) {
                     lastStructure = converted.structure
@@ -178,6 +188,7 @@ class LibraryIndexRepository @Inject constructor(
             // shared index" told the settings screen the library had vanished on every open after
             // the first. The value comes from the copy that produced the cached ETag; both live
             // as long as this process does, so one cannot be set without the other.
+            if (wrongSchema != null) return false
             val structure = structureRead.resolve(lastStructure) ?: return false
             val derived = derivedRead.resolve(lastDerived) ?: DerivedFacet()
             val corrections = correctionsRead.resolve(lastCorrections) ?: CorrectionsFacet()
