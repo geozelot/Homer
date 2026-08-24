@@ -49,6 +49,7 @@ class DurationEnricher @Inject constructor(
     private val webDavClient: WebDavClient,
     private val durationExtractor: DurationExtractor,
     private val audioHeaderDuration: AudioHeaderDuration,
+    private val audioHeaderTags: AudioHeaderTags,
     private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
     private val networkMonitor: NetworkMonitor,
@@ -192,6 +193,8 @@ class DurationEnricher @Inject constructor(
 
             var genre: String? = state.genre
             var firstProbe: DurationExtractor.Probe? = state.firstProbe
+            // null when the book already had its tags and no read was needed at all.
+            var tagsSource: String? = null
             val fromHeader = state.fromHeader
             val fromFastProbe = state.fromFastProbe
             val fromFullProbe = state.fromFullProbe
@@ -199,22 +202,34 @@ class DurationEnricher @Inject constructor(
             // Nothing was probed above but genre/chapters are still wanted — read the first
             // file's tags once.
             //
-            // This is the path a WORKING fast probe takes: it answers every duration, so no full
-            // probe ever runs and neither genre nor chapters get picked up on the way. Reading the
-            // tags with a decoder here would put one back per book — for a library of single-file
-            // books, one per file, which is the whole cost the fast path just removed. So the
-            // decoder-free reader goes first and the full probe only rescues a container it
-            // couldn't parse at all.
+            // This is the path a WORKING duration reader takes: it answers every file, so no probe
+            // ever runs and neither genre nor chapters get picked up on the way. That made this
+            // block the dominant cost of a sweep — one stream opened per book, one to five
+            // seconds, most often to learn the book has no genre. Both answers are in the ID3 tag
+            // at the front of the file, so it is read the same way the durations were.
             if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
                 files.firstOrNull()?.let { first ->
                     coroutineContext.ensureActive()
                     val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
-                    val probe = durationExtractor.probeTags(url)
-                        ?: durationExtractor.probe(url).also {
-                            Log.i(TAG, "book $bookId: tags needed the full probe")
-                        }
-                    if (genre == null) genre = probe.genre
-                    if (firstProbe == null) firstProbe = probe
+                    val fromHeaderTag = audioHeaderTags.read(url)
+                    if (fromHeaderTag != null) {
+                        tagsSource = "header"
+                        // An empty result is an answer: the tag was walked in full and holds no
+                        // genre and no chapters. Id3Tags returns null rather than empty whenever
+                        // it could not see the whole tag, so this can never invent an absence.
+                        if (genre == null) genre = fromHeaderTag.genre
+                        if (firstProbe == null) firstProbe = fromHeaderTag
+                    } else {
+                        // Not ID3, or a tag this cannot walk — MP4-family books land here, and
+                        // their chapters still come from Mp4ChapterParser below.
+                        tagsSource = "probe"
+                        val probe = durationExtractor.probeTags(url)
+                            ?: durationExtractor.probe(url).also {
+                                Log.i(TAG, "book $bookId: tags needed the full probe")
+                            }
+                        if (genre == null) genre = probe.genre
+                        if (firstProbe == null) firstProbe = probe
+                    }
                 }
             }
             if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
@@ -258,7 +273,8 @@ class DurationEnricher @Inject constructor(
             Log.i(
                 TAG,
                 "book $bookId: ${durations.size}/${all.size} files measured " +
-                    "(header=$fromHeader fast=$fromFastProbe full=$fromFullProbe), genre=${genre ?: "—"}",
+                    "(header=$fromHeader fast=$fromFastProbe full=$fromFullProbe), " +
+                    "tags=${tagsSource ?: "—"}, genre=${genre ?: "—"}",
             )
         } finally {
             inFlight.remove(bookId)

@@ -26,7 +26,7 @@ import javax.inject.Singleton
 class Mp4ChapterParser @Inject constructor(
     dataSourceFactory: DataSource.Factory,
 ) {
-    private val boxes = Mp4Boxes(dataSourceFactory)
+    private val boxes = Mp4Boxes(RangedReader(dataSourceFactory))
 
     /** Chapter marks in start order, or empty if none / unreadable. */
     suspend fun parse(mediaUri: String): List<DurationExtractor.ChapterMark> = withContext(Dispatchers.IO) {

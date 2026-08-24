@@ -1,21 +1,15 @@
 package com.geozelot.homer.data.metadata
 
 import android.net.Uri
-import androidx.annotation.OptIn
-import androidx.media3.common.C
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DataSpec
 
 /**
- * Small ranged reads over the authenticated data source, and an MP4 box walk built on them.
+ * An MP4 box walk over [RangedReader].
  *
  * Shared by [Mp4ChapterParser] and [AudioHeaderDuration] so the box arithmetic exists once. The
  * walk skips a box by its recorded size rather than reading through it, so reaching a `moov` at
  * the end of a large file costs a handful of 16-byte requests instead of a download.
  */
-@OptIn(UnstableApi::class)
-internal class Mp4Boxes(private val dataSourceFactory: DataSource.Factory) {
+internal class Mp4Boxes(private val reader: RangedReader) {
 
     data class Box(val contentStart: Long, val contentSize: Long) {
         val end get() = contentStart + contentSize
@@ -46,26 +40,8 @@ internal class Mp4Boxes(private val dataSourceFactory: DataSource.Factory) {
         return null
     }
 
-    /** Reads [length] bytes at [position] via a fresh ranged data-source open (Range request). */
-    fun readAt(uri: Uri, position: Long, length: Long): ByteArray? {
-        if (length <= 0) return null
-        val ds = dataSourceFactory.createDataSource()
-        return try {
-            ds.open(DataSpec.Builder().setUri(uri).setPosition(position).setLength(length).build())
-            val out = ByteArray(length.toInt())
-            var off = 0
-            while (off < out.size) {
-                val n = ds.read(out, off, out.size - off)
-                if (n == C.RESULT_END_OF_INPUT) break
-                off += n
-            }
-            if (off == 0) null else if (off < out.size) out.copyOf(off) else out
-        } catch (e: Exception) {
-            null
-        } finally {
-            runCatching { ds.close() }
-        }
-    }
+    /** Delegates to [RangedReader]; kept so the box walk reads like one thing. */
+    fun readAt(uri: Uri, position: Long, length: Long): ByteArray? = reader.readAt(uri, position, length)
 
     private fun u32(b: ByteArray, o: Int): Long =
         ((b[o].toLong() and 0xFF) shl 24) or ((b[o + 1].toLong() and 0xFF) shl 16) or

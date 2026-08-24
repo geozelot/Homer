@@ -36,7 +36,7 @@ import javax.inject.Singleton
 class AudioHeaderDuration @Inject constructor(
     dataSourceFactory: DataSource.Factory,
 ) {
-    private val boxes = Mp4Boxes(dataSourceFactory)
+    private val boxes = Mp4Boxes(RangedReader(dataSourceFactory))
 
     /**
      * Duration of [mediaUri], or null if it cannot be read from the header alone.
