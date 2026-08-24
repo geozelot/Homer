@@ -25,6 +25,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -71,6 +76,39 @@ class LibraryIndexRepository @Inject constructor(
 
     @Volatile
     private var editsPending = false
+
+    /** The newest full-crawl marker seen in a shared index, from whichever device ran it. */
+    private val remoteCrawl = MutableStateFlow<CrawlMarker?>(null)
+
+    private val _activity = MutableStateFlow(IndexActivity.IDLE)
+
+    /**
+     * What this repository is doing, for the UI to say so.
+     *
+     * It exists for one bad case: converting a v1 catalog is tens of seconds of silence on the very
+     * path that populates an empty library, so the app showed an empty shelf and no reason for it.
+     */
+    val activity: StateFlow<IndexActivity> = _activity.asStateFlow()
+
+    /**
+     * When the library was last crawled end to end, and by whom.
+     *
+     * Worth showing because it is what authorises deletion: a device prunes a book only on the word
+     * of a complete crawl that post-dates it, so "last full crawl, 3 days ago, from Pixel 7" is the
+     * line that explains why books can or cannot disappear.
+     *
+     * A tie goes to this device — the usual reason the two agree is that the remote marker IS this
+     * device's own, published earlier, and "from this device" is the truer caption.
+     */
+    val lastFullCrawl: Flow<CrawlSummary?> =
+        combine(librarySettings.lastFullCrawlAt, remoteCrawl) { localAt, remote ->
+            when {
+                localAt > 0 && localAt >= (remote?.at ?: Long.MIN_VALUE) ->
+                    CrawlSummary(at = localAt, byThisDevice = true, deviceName = deviceIdentity.label)
+                remote != null -> CrawlSummary(at = remote.at, byThisDevice = false, deviceName = remote.byName)
+                else -> null
+            }
+        }
 
     init {
         // Backgrounding is the natural moment to ship corrections: the user has stopped editing.
@@ -168,6 +206,7 @@ class LibraryIndexRepository @Inject constructor(
      */
     suspend fun pull(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
+        _activity.value = IndexActivity.READING
         return try {
             // Every facet is version-checked, not just the structure: a facet from another schema
             // is treated as absent, which rebuilds it rather than merging something whose fields
@@ -187,6 +226,7 @@ class LibraryIndexRepository @Inject constructor(
                     lastStructure = converted.structure
                     lastDerived = converted.derived
                     lastCorrections = converted.corrections
+                    noteCrawl(converted.structure)
                     apply(converted.structure, converted.derived, converted.corrections)
                     return true
                 }
@@ -202,6 +242,7 @@ class LibraryIndexRepository @Inject constructor(
             lastStructure = structure
             lastDerived = derived
             lastCorrections = corrections
+            noteCrawl(structure)
 
             // Nothing moved anywhere: no point walking several hundred books to write back what
             // is already stored.
@@ -215,6 +256,8 @@ class LibraryIndexRepository @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "pull failed", e)
             false
+        } finally {
+            _activity.value = IndexActivity.IDLE
         }
     }
 
@@ -304,6 +347,9 @@ class LibraryIndexRepository @Inject constructor(
             return null
         }
         Log.i(TAG, "converting a v1 catalog of ${legacy.books.size} books")
+        // From here on this is tens of seconds of work on a large library, and it is the step that
+        // fills a shelf that is currently empty. Say so.
+        _activity.value = IndexActivity.CONVERTING
         val converted = LegacyCatalogConverter.convert(legacy)
         if (canPublish()) {
             // Reported, not discarded. Publishing the converted index is the whole point of the
@@ -325,6 +371,7 @@ class LibraryIndexRepository @Inject constructor(
     /** Publishes this device's view, facet by facet, writing only what changed. */
     suspend fun push() {
         if (!canPublish() || credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
+        _activity.value = IndexActivity.PUBLISHING
         try {
             val local = buildLocal()
             if (local.structure.books.isEmpty()) {
@@ -338,6 +385,7 @@ class LibraryIndexRepository @Inject constructor(
                 LibraryFacets.STRUCTURE_FILE,
                 store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { remote ->
                     FacetMerge.structure(local.structure, remote.valueOr(StructureFacet()))
+                        .also(::noteCrawl)
                 },
             )
             var remoteDerived = DerivedFacet()
@@ -360,6 +408,8 @@ class LibraryIndexRepository @Inject constructor(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "push failed", e)
+        } finally {
+            _activity.value = IndexActivity.IDLE
         }
     }
 
@@ -388,7 +438,9 @@ class LibraryIndexRepository @Inject constructor(
         val crawledAt = librarySettings.lastFullCrawlAt.first()
         return Local(
             structure = StructureFacet(
-                lastFullCrawl = crawledAt.takeIf { it > 0 }?.let { CrawlMarker(at = it, by = deviceId) },
+                lastFullCrawl = crawledAt.takeIf { it > 0 }?.let {
+                    CrawlMarker(at = it, by = deviceId, byName = deviceIdentity.label)
+                },
                 books = structure,
             ),
             derived = DerivedFacet(books = derived),
@@ -431,6 +483,17 @@ class LibraryIndexRepository @Inject constructor(
             is FacetStore.SaveResult.Contended -> Log.w(TAG, "$file: lost every write race")
             is FacetStore.SaveResult.Unavailable -> Log.w(TAG, "$file NOT published: ${result.message}")
         }
+    }
+
+    /**
+     * Remembers a structure facet's crawl marker, if it is newer than the one already known.
+     *
+     * Only ever moves forward. A facet read from a device that has not crawled since would
+     * otherwise walk the line backwards, and this is the one line the deletion rule rests on.
+     */
+    private fun noteCrawl(structure: StructureFacet) {
+        val marker = structure.lastFullCrawl ?: return
+        if (marker.at > (remoteCrawl.value?.at ?: Long.MIN_VALUE)) remoteCrawl.value = marker
     }
 
     private fun <T> FacetStore.Load<T>.valueOr(empty: T): T = (this as? FacetStore.Load.Present)?.value ?: empty

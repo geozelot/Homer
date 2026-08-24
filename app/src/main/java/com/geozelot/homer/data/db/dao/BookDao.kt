@@ -42,6 +42,16 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE localCoverPath IS NULL")
     suspend fun booksWithoutArt(): List<BookEntity>
 
+    /**
+     * How many books have no cached art, so the artwork row can say how complete it is.
+     *
+     * Counts what is MISSING rather than what is fetchable: a book already tried and found to have
+     * no art is still a gap the user can see on the shelf, and a row that ignored those would read
+     * "nothing to do" in front of a wall of blank covers.
+     */
+    @Query("SELECT COUNT(*) FROM books WHERE localCoverPath IS NULL")
+    fun observeCountWithoutArt(): Flow<Int>
+
     @Query("UPDATE books SET localCoverPath = :path WHERE id = :bookId")
     suspend fun updateLocalCover(bookId: String, path: String)
 

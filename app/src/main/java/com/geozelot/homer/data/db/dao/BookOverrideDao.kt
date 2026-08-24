@@ -19,6 +19,20 @@ interface BookOverrideDao {
     @Query("SELECT MAX(updatedAt) FROM book_overrides")
     suspend fun maxUpdatedAt(): Long?
 
+    /**
+     * How many books carry a SHARED correction — the count the corrections row reports.
+     *
+     * The predicate is the same one [com.geozelot.homer.data.sync.facet.FacetMapping.correctionOf]
+     * uses to decide there is anything to publish. `finished`, `hidden` and `downloadOnPlay` are
+     * absent on purpose: those are claims about the reader, never published, and counting them here
+     * would promise to share something that never leaves the device.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM book_overrides WHERE title IS NOT NULL OR author IS NOT NULL " +
+            "OR series IS NOT NULL OR seriesIndex IS NOT NULL OR genre IS NOT NULL OR tags IS NOT NULL",
+    )
+    fun observeCorrectionCount(): Flow<Int>
+
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     suspend fun findById(bookId: String): BookOverrideEntity?
 

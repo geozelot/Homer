@@ -40,8 +40,37 @@ object LibraryFacets {
 data class CrawlMarker(
     /** Wall-clock at which the crawl finished. */
     val at: Long,
-    /** The device that ran it — for "last full crawl 3 days ago, from Pixel 7". */
+    /** The device id that ran it. */
     val by: String,
+    /**
+     * That device's own name for itself — for "last full crawl 3 days ago, from Pixel 7". [by] is a
+     * UUID, which is the right thing to compare and the wrong thing to show a person.
+     *
+     * Optional, and deliberately NOT a schema bump: a marker from a device that does not write it
+     * still means exactly what it meant, and treating those facets as another schema would make
+     * every library re-crawl to gain a caption. A missing name reads as "another device".
+     */
+    val byName: String? = null,
+)
+
+/**
+ * What the shared index is doing right now, for the one case where it is slow and invisible:
+ * converting a v1 catalog takes the better part of a minute on a large library, and it happens on
+ * the path that fills an empty shelf. Without this the app shows "your shelf is empty" throughout.
+ */
+enum class IndexActivity { IDLE, READING, CONVERTING, PUBLISHING }
+
+/**
+ * A [CrawlMarker] resolved for display: whose crawl it was, in words rather than a UUID.
+ *
+ * Not serialised — it exists because the answer "was this us?" is a comparison the UI must not be
+ * asked to make.
+ */
+data class CrawlSummary(
+    val at: Long,
+    val byThisDevice: Boolean,
+    /** The other device's name for itself, or null when it published none. */
+    val deviceName: String?,
 )
 
 @Serializable

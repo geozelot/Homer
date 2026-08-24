@@ -122,6 +122,7 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
@@ -161,6 +162,9 @@ fun HomeScreen(
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
+    val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
+    val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -289,13 +293,23 @@ fun HomeScreen(
             when {
                 // Room hasn't delivered yet (or a scan is running): show a discovery phase rather
                 // than flashing "your shelf is empty" on every launch.
-                !libraryLoaded || scanState is ScanState.Scanning ->
-                    LibraryLoading(scanState = scanState, modifier = Modifier.weight(1f))
+                !libraryLoaded || scanState is ScanState.Scanning || indexActivity != IndexActivity.IDLE ->
+                    LibraryLoading(
+                        scanState = scanState,
+                        indexActivity = indexActivity,
+                        modifier = Modifier.weight(1f),
+                    )
                 searching && searchQuery.isNotBlank() ->
                     EmptyResults(modifier = Modifier.weight(1f))
+                // Not "your shelf is empty" any more: on a first run this is where the library
+                // gets found, chosen or named. Only a scanned-and-genuinely-empty library still
+                // reads as empty, which is the one case where it is true.
                 else ->
-                    EmptyLibrary(
-                        onOpenSettings = onOpenSettings,
+                    LibrarySetupPanel(
+                        setup = librarySetup,
+                        onAdopt = viewModel::adopt,
+                        onNameFolder = viewModel::setupNameFolder,
+                        isShare = libraryIsShare,
                         modifier = Modifier.weight(1f),
                     )
             }
@@ -1861,7 +1875,11 @@ private fun SeriesMenu(
  * the empty-shelf screen never flashes on a launch that actually has books.
  */
 @Composable
-private fun LibraryLoading(scanState: ScanState, modifier: Modifier = Modifier) {
+private fun LibraryLoading(
+    scanState: ScanState,
+    indexActivity: IndexActivity,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -1869,8 +1887,16 @@ private fun LibraryLoading(scanState: ScanState, modifier: Modifier = Modifier) 
     ) {
         CircularProgressIndicator(color = Amber)
         Spacer(Modifier.height(16.dp))
-        val label = when (val s = scanState) {
-            is ScanState.Scanning -> stringResource(R.string.home_scanning_progress, s.directoriesVisited, s.booksFound)
+        val label = when {
+            scanState is ScanState.Scanning -> stringResource(
+                R.string.home_scanning_progress,
+                scanState.directoriesVisited,
+                scanState.booksFound,
+            )
+            // Converting an older index is the one step here that runs for the better part of a
+            // minute, so it is named rather than folded into "opening your library".
+            indexActivity == IndexActivity.CONVERTING -> stringResource(R.string.home_converting_index)
+            indexActivity == IndexActivity.READING -> stringResource(R.string.home_reading_index)
             else -> stringResource(R.string.home_opening_library)
         }
         Text(label, color = Muted, fontSize = 14.sp)
@@ -1887,26 +1913,6 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
         Text(stringResource(R.string.home_no_matches), style = SerifTitle, color = Parchment)
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.home_no_matches_hint), color = Muted, fontSize = 13.sp)
-    }
-}
-
-/** The shelf really is empty: no scanning branch here — [LibraryLoading] owns that state. */
-@Composable
-private fun EmptyLibrary(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(stringResource(R.string.home_empty_title), style = SerifTitle, color = Parchment)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.home_empty_hint),
-            color = Muted,
-            fontSize = 13.sp,
-        )
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = onOpenSettings) { Text(stringResource(R.string.home_empty_open_settings)) }
     }
 }
 

@@ -26,12 +26,11 @@ import com.geozelot.homer.ui.login.LoginScreen
 import com.geozelot.homer.ui.player.PlayerScreen
 import com.geozelot.homer.ui.settings.AboutSettingsScreen
 import com.geozelot.homer.ui.settings.DeviceStorageScreen
-import com.geozelot.homer.ui.settings.LibrarySourceScreen
+import com.geozelot.homer.ui.settings.LibraryScreen
 import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
 import com.geozelot.homer.ui.settings.PrivacySettingsScreen
 import com.geozelot.homer.ui.settings.SettingsHubScreen
 import com.geozelot.homer.ui.settings.StorageDialogsHost
-import com.geozelot.homer.ui.settings.SyncSettingsScreen
 import com.geozelot.homer.ui.storage.StorageBrowserScreen
 
 private const val ROUTE_LIBRARY = "library"
@@ -41,9 +40,8 @@ private const val ROUTE_DIAGNOSTICS = "diagnostics"
 private const val ROUTE_LINK_SYNC = "link_sync"
 private const val ROUTE_STORAGE_BROWSER = "storage_browser"
 private const val ROUTE_SETTINGS = "settings"
-private const val ROUTE_SETTINGS_SOURCE = "settings/source"
+private const val ROUTE_SETTINGS_LIBRARY = "settings/library"
 private const val ROUTE_SETTINGS_DEVICE = "settings/device"
-private const val ROUTE_SETTINGS_SYNC = "settings/sync"
 private const val ROUTE_SETTINGS_PLAYBACK = "settings/playback"
 private const val ROUTE_SETTINGS_PRIVACY = "settings/privacy"
 private const val ROUTE_SETTINGS_ABOUT = "settings/about"
@@ -95,17 +93,17 @@ fun LibraryNavHost() {
             SettingsHubScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onBack = { navController.popBackStack() },
-                onOpenSource = { navController.navigate(ROUTE_SETTINGS_SOURCE) },
+                onOpenLibrary = { navController.navigate(ROUTE_SETTINGS_LIBRARY) },
                 onOpenDevice = { navController.navigate(ROUTE_SETTINGS_DEVICE) },
-                onOpenSync = { navController.navigate(ROUTE_SETTINGS_SYNC) },
                 onOpenPlayback = { navController.navigate(ROUTE_SETTINGS_PLAYBACK) },
                 onOpenPrivacy = { navController.navigate(ROUTE_SETTINGS_PRIVACY) },
                 onOpenAbout = { navController.navigate(ROUTE_SETTINGS_ABOUT) },
             )
         }
-        composable(ROUTE_SETTINGS_SOURCE) { entry ->
-            LibrarySourceScreen(
+        composable(ROUTE_SETTINGS_LIBRARY) { entry ->
+            LibraryScreen(
                 viewModel = navController.libraryViewModel(entry),
+                onLinkSyncAccount = { navController.navigate(ROUTE_LINK_SYNC) },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -113,13 +111,6 @@ fun LibraryNavHost() {
             DeviceStorageScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onOpenStorageBrowser = { navController.navigate(ROUTE_STORAGE_BROWSER) },
-                onBack = { navController.popBackStack() },
-            )
-        }
-        composable(ROUTE_SETTINGS_SYNC) { entry ->
-            SyncSettingsScreen(
-                viewModel = navController.libraryViewModel(entry),
-                onLinkSyncAccount = { navController.navigate(ROUTE_LINK_SYNC) },
                 onBack = { navController.popBackStack() },
             )
         }

@@ -18,8 +18,12 @@ import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Faint
 
 /**
- * The settings hub: six rows, one per area, each summarising its own state so the user can see
+ * The settings hub: five rows, one per area, each summarising its own state so the user can see
  * where a setting lives without opening every page.
+ *
+ * "Library source" and "Sync" used to be two of them, and they split one subject down the wrong
+ * seam — the shared index lived under source while the thing it shares lived under sync. They are
+ * now one Library row.
  *
  * The ViewModel is passed in — never resolved here. It is the library destination's [HomeViewModel]
  * instance, scoped by the nav host; building a second one would re-run its `init` (scan, cover
@@ -29,9 +33,8 @@ import com.geozelot.homer.ui.theme.Faint
 fun SettingsHubScreen(
     viewModel: HomeViewModel,
     onBack: () -> Unit,
-    onOpenSource: () -> Unit,
+    onOpenLibrary: () -> Unit,
     onOpenDevice: () -> Unit,
-    onOpenSync: () -> Unit,
     onOpenPlayback: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -39,35 +42,23 @@ fun SettingsHubScreen(
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
-    val syncAccount by viewModel.syncAccount.collectAsStateWithLifecycle()
-    val progressSync by viewModel.progressSyncEnabled.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
     val customStoragePath by viewModel.customStoragePath.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
 
     SettingsScaffold(stringResource(R.string.settings_title), onBack, modifier) {
-        // "Where your books come from" — the server side of the library.
+        // Where the books come from, what Homer has read about them, and what is shared.
         SettingsNavRow(
-            label = stringResource(R.string.set_source_title),
+            label = stringResource(R.string.set_library_title),
             summary = sourceSummary(account, libraryIsShare, bookCount),
-            onClick = onOpenSource,
+            onClick = onOpenLibrary,
         )
         // "What's stored here" — downloads and covers on this phone.
         SettingsNavRow(
             label = stringResource(R.string.set_device_title),
             summary = storageSummary(customStoragePath, customStorageUri),
             onClick = onOpenDevice,
-        )
-        // "What follows you between devices".
-        SettingsNavRow(
-            label = stringResource(R.string.set_sync_title),
-            summary = if (syncing(libraryIsShare, syncAccount != null, progressSync)) {
-                stringResource(R.string.set_sync_state_account)
-            } else {
-                stringResource(R.string.set_sync_state_device)
-            },
-            onClick = onOpenSync,
         )
 
         SettingsDivider()
@@ -131,11 +122,3 @@ private fun storageSummary(customStoragePath: String?, customStorageUri: String?
         stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri))
     else -> stringResource(R.string.settings_storage_default)
 }
-
-/**
- * Whether anything actually follows the user between devices. A share library needs a linked
- * account (its own storage may be read-only and isn't the user's); an account library needs the
- * progress-sync switch on.
- */
-private fun syncing(libraryIsShare: Boolean, hasSyncAccount: Boolean, progressSync: Boolean) =
-    if (libraryIsShare) hasSyncAccount else progressSync

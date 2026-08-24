@@ -159,11 +159,26 @@
     <!-- Home: empty / loading states -->
     <string name="home_scanning_progress">Scanning your library… %1$d folders · %2$d books</string>
     <string name="home_opening_library">Opening your library…</string>
+    <string name="home_reading_index">Reading the shared library\u2026</string>
+    <string name="home_converting_index">Bringing an older library index up to date\u2026</string>
     <string name="home_no_matches">No matches</string>
     <string name="home_no_matches_hint">Try a different title, author, genre or tag.</string>
     <string name="home_empty_title">Your shelf is empty</string>
-    <string name="home_empty_hint">Set your library folder and scan to fill it.</string>
-    <string name="home_empty_open_settings">Open settings</string>
+    <string name="home_empty_hint">Homer read that folder and found no audiobooks in it. Try a different folder under Settings \u203a Library.</string>
+    <!-- First run: what replaces an empty shelf. The sweep that found these folders is the same
+         one the Library page runs; it just happens before the shelf is shown rather than after. -->
+    <string name="setup_looking">Looking for your library\u2026</string>
+    <string name="setup_adopting">Reading your library\u2026</string>
+    <string name="setup_choose_title">Which one is your library?</string>
+    <string name="setup_choose_body">Homer found more than one folder on your server that could be it. Pick one — you can change it later.</string>
+    <string name="setup_use_this">Use this one</string>
+    <string name="setup_none_of_these">None of these \u2014 let me name the folder</string>
+    <string name="setup_folder_title">Where are your books?</string>
+    <!-- Deliberately does not claim the server has no library: it reads the same when the sweep
+         found nothing and when it could not reach the server at all. -->
+    <string name="setup_folder_body">Homer hasn\'t found a library it already knows. Name the folder on your server that holds your audiobooks, or leave it blank to read everything.</string>
+    <string name="setup_scan_folder">Read this folder</string>
+    <string name="setup_sharing_note">Homer will keep a small index in that folder, so your other devices don\'t have to read it all again. It holds titles, lengths and cover art — never your place in a book.</string>
 
     <!-- Home: series edit -->
     <string name="home_series_edit_title">Edit series</string>
@@ -203,18 +218,6 @@
     <!-- Settings: library source (reused wording) -->
     <string name="sync_library_folder">Library folder</string>
     <string name="sync_library_folder_placeholder">e.g. Audiobooks (blank = whole drive)</string>
-    <string name="sync_scanning">Scanning…</string>
-    <string name="sync_scan_library">Scan library</string>
-    <!-- The three recovery actions under the primary Scan button. Each is named for the problem
-         it solves, and carries its own cost, so no separate paragraph is needed. -->
-    <string name="sync_fix_header">IF SOMETHING LOOKS WRONG</string>
-    <string name="sync_fix_covers">Re-fetch all cover art</string>
-    <string name="sync_fix_covers_desc">For books showing no art, or the wrong art</string>
-    <string name="sync_fix_lengths">Measure all book lengths</string>
-    <string name="sync_fix_lengths_desc">Homer learns a length when you open a book. %1$d still unmeasured — thousands of small requests, best on Wi\u2011Fi</string>
-    <string name="sync_fix_lengths_none">Every book has a length.</string>
-    <string name="sync_fix_rebuild">Rebuild the library</string>
-    <string name="sync_fix_rebuild_desc">Re-reads every folder from scratch. The slowest option</string>
     <string name="sync_scanned_never">never scanned</string>
     <string name="sync_status_line">%1$s · %2$s</string>
     <string name="sync_measuring">Book %1$d of %2$d \u00b7 %3$d of %4$d files…</string>
@@ -251,14 +254,11 @@
     </plurals>
 
     <!-- Settings: hub -->
-    <string name="set_source_title">Library source</string>
+    <string name="set_library_title">Library</string>
     <string name="set_source_summary">Where your books come from</string>
     <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
     <string name="set_source_summary_books">%1$s · %2$s</string>
     <string name="set_device_title">On this device</string>
-    <string name="set_sync_title">Sync</string>
-    <string name="set_sync_state_account">Your account</string>
-    <string name="set_sync_state_device">This device only</string>
     <string name="set_playback_title">Playback</string>
     <string name="set_playback_summary">Skip buttons jump %1$ds</string>
     <string name="set_privacy_title">Privacy &amp; security</string>
@@ -267,13 +267,11 @@
     <string name="set_about_summary">Version, diagnostics, licenses</string>
 
     <!-- Settings: library source -->
-    <string name="set_source_current_header">CURRENT SOURCE</string>
     <string name="set_source_none">Not connected</string>
     <string name="set_source_readonly">read-only</string>
     <string name="set_source_account_desc">Your books are read from this account. Homer never moves, renames or deletes them.</string>
     <string name="set_source_share_desc">Your books are read through this share link. Homer never moves, renames or deletes them.</string>
     <string name="set_source_share_root_note">A share link points at a single folder, and that folder is the library. To use a different one, open a different share link.</string>
-    <string name="set_source_not_scanned">Not scanned yet</string>
     <string name="set_source_other_header">OTHER LIBRARIES FOUND</string>
     <string name="set_detail_shared_index"> · shared index</string>
     <string name="set_shared_index_title">Share the library index</string>
@@ -286,6 +284,43 @@
     <string name="set_full_rescan_confirm_title">Rebuild the library?</string>
     <string name="set_full_rescan_confirm_body">Homer will re-read every folder on your server and fetch all cover art again. On a large library this takes a while. Your place, bookmarks and edits are kept.</string>
     <string name="set_full_rescan_confirm_action">Rebuild</string>
+    <!-- Settings: the Library screen. Three sections, one per facet of the shared index: where the
+         books come from, what Homer has managed to read about them, and what is shared. -->
+    <string name="lib_section_source">WHERE YOUR BOOKS COME FROM</string>
+    <string name="lib_section_contents">WHAT HOMER HAS READ</string>
+    <string name="lib_section_sharing">SHARING WITH YOUR OTHER DEVICES</string>
+    <string name="lib_section_startover">START OVER</string>
+    <string name="lib_contents_lead">Each of these is read separately, because they cost wildly different amounts. Asking for one while another is running simply queues it.</string>
+    <string name="lib_row_books">Books</string>
+    <string name="lib_row_artwork">Cover art</string>
+    <string name="lib_row_lengths">Lengths</string>
+    <string name="lib_row_corrections">Your corrections</string>
+    <string name="lib_action_scan">Scan</string>
+    <string name="lib_action_fetch">Fetch</string>
+    <string name="lib_action_measure">Measure</string>
+    <string name="lib_action_publish">Publish</string>
+    <string name="lib_books_none">No books yet — scan to read the folder</string>
+    <string name="lib_artwork_complete">Every book has art</string>
+    <string name="lib_artwork_missing">%1$d without art</string>
+    <string name="lib_lengths_complete">Every book has a length</string>
+    <string name="lib_lengths_missing">%1$d without a length · thousands of small requests, best on Wi\u2011Fi</string>
+    <string name="lib_corrections_none">Nothing corrected yet</string>
+    <string name="lib_corrections_local">%1$s · kept on this device, because sharing is off</string>
+    <string name="lib_corrections_shared">%1$s · shared with anyone reading this folder</string>
+    <!-- The crawl marker, shown because it is what authorises deletion: a book only disappears on
+         the word of a complete crawl that post-dates it. -->
+    <string name="lib_crawl_this_device">Last full crawl %1$s, from this device</string>
+    <string name="lib_crawl_named_device">Last full crawl %1$s, from %2$s</string>
+    <string name="lib_crawl_other_device">Last full crawl %1$s, from another device</string>
+    <string name="lib_crawl_never">No full crawl yet. Until one runs, a book deleted on the server stays on your shelf.</string>
+    <string name="lib_index_publishing">Publishing the index to this folder\u2026</string>
+    <string name="lib_rebuild">Rebuild the library</string>
+    <string name="lib_rebuild_desc">Re-reads every folder and fetches all cover art again. The slowest option</string>
+    <string name="lib_recheck_lengths">Try the lengths that failed</string>
+    <string name="lib_recheck_lengths_desc">Some files can\'t be measured at all. This asks again anyway</string>
+    <string name="lib_recheck_confirm_title">Try the failed lengths again?</string>
+    <string name="lib_recheck_confirm_body">Homer remembers which files it could not measure and stops asking. This forgets that, so the next measure pass tries them all again. Lengths it already knows are kept.</string>
+    <string name="lib_recheck_confirm_action">Try again</string>
     <string name="set_sign_out">Sign out</string>
     <string name="set_sign_out_confirm_title">Sign out of Homer?</string>
     <string name="set_sign_out_confirm_body">Homer will forget this server and clear the library from this device. Your books stay where they are, and so does anything already saved to your account.</string>
@@ -298,8 +333,7 @@
     <string name="set_use_app_storage_confirm_body">Your downloads and cover art will be moved into Homer\'s own storage, which Android erases if you ever uninstall the app. Nothing is deleted right now.</string>
     <string name="set_use_app_storage_confirm_action">Move</string>
 
-    <!-- Settings: sync -->
-    <string name="set_sync_lead">One thing follows you between devices: your place in each book, your bookmarks, and any titles or authors you have corrected. It is saved privately in your own account — nowhere else.</string>
+    <!-- Settings: where a share library's progress goes (an account library uses its own). -->
     <string name="set_sync_account_header">WHERE YOUR PLACE IS SAVED</string>
 
     <!-- Settings: playback -->

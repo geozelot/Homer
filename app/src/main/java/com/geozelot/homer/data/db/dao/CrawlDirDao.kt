@@ -19,6 +19,10 @@ interface CrawlDirDao {
     @Query("SELECT MAX(lastScanned) FROM crawl_dirs")
     fun observeLastScanned(): Flow<Long?>
 
+    /** As [observeLastScanned], read once — "has this device ever crawled?" is a one-off question. */
+    @Query("SELECT MAX(lastScanned) FROM crawl_dirs")
+    suspend fun lastScanned(): Long?
+
     @Upsert
     suspend fun upsert(dir: CrawlDirEntity)
 }
