@@ -40,6 +40,7 @@ class DurationEnricher @Inject constructor(
     private val credentialStore: CredentialStore,
     private val webDavClient: WebDavClient,
     private val durationExtractor: DurationExtractor,
+    private val audioHeaderDuration: AudioHeaderDuration,
     private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
     private val networkMonitor: NetworkMonitor,
@@ -116,6 +117,12 @@ class DurationEnricher @Inject constructor(
             // Genre + embedded chapters live on the (first) file; capture them from its probe.
             var genre: String? = null
             var firstProbe: DurationExtractor.Probe? = null
+            // Which tier answered, for the one summary line at the end. The whole point of the
+            // header reader is that the other two should almost never run; without a count there
+            // is no way to know from a log whether that is true.
+            var fromHeader = 0
+            var fromFastProbe = 0
+            var fromFullProbe = 0
             for (file in missing) {
                 coroutineContext.ensureActive()
                 // Connectivity can drop part-way through. Every further probe would only wait
@@ -128,15 +135,30 @@ class DurationEnricher @Inject constructor(
                 // reaches it by building a player with renderers and waiting for STATE_READY —
                 // which instantiates a hardware audio decoder per file, seconds each, and floods
                 // logcat with codec chatter that evicts Homer's own lines from the log window.
-                var measured = if (fastProbes.shouldTryFast()) durationExtractor.probeDuration(url) else null
-                if (measured != null) {
-                    fastProbes.onFastSuccess()
-                } else {
-                    // The FULL probe is the authority. Nothing is ever recorded as unmeasurable on
-                    // the fast probe's word, so a device where it silently returns nothing loses
-                    // time and never correctness — and the gate stops that loss being unbounded.
+                // Cheapest first: the duration is a few bytes of container header, so read those
+                // rather than streaming the file until a player works it out. Falls through on
+                // anything it cannot read confidently.
+                var measured = audioHeaderDuration.durationMs(url, file.sizeBytes)
+                if (measured != null) fromHeader++
+
+                if (measured == null && fastProbes.shouldTryFast()) {
+                    measured = durationExtractor.probeDuration(url)
+                    // Only a fast-probe answer resets the gate. Crediting it with a header read
+                    // would mean the gate never withdraws on a device where the probe is broken,
+                    // because the header answers most files and would keep clearing the count.
+                    if (measured != null) {
+                        fromFastProbe++
+                        fastProbes.onFastSuccess()
+                    }
+                }
+                if (measured == null) {
+                    // The FULL probe is the authority. Nothing is ever recorded as unmeasurable
+                    // on the header reader's or the fast probe's word, so a file either of them
+                    // declines to answer for loses time and never correctness — and the gate stops
+                    // that loss being unbounded on a device where the fast probe cannot work.
                     val full = durationExtractor.probe(url)
                     measured = full.durationMs
+                    if (measured != null) fromFullProbe++
                     if (genre == null) genre = full.genre
                     if (firstProbe == null) firstProbe = full
                     when {
@@ -214,7 +236,11 @@ class DurationEnricher @Inject constructor(
             if (all.isNotEmpty() && durations.size == all.size) {
                 bookDao.updateTotalDuration(bookId, durations.sum())
             }
-            Log.i(TAG, "book $bookId: ${durations.size}/${all.size} files measured, genre=${genre ?: "—"}")
+            Log.i(
+                TAG,
+                "book $bookId: ${durations.size}/${all.size} files measured " +
+                    "(header=$fromHeader fast=$fromFastProbe full=$fromFullProbe), genre=${genre ?: "—"}",
+            )
         } finally {
             inFlight.remove(bookId)
         }
