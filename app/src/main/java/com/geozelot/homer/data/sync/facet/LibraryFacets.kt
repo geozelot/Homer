@@ -1,0 +1,155 @@
+package com.geozelot.homer.data.sync.facet
+
+import kotlinx.serialization.Serializable
+
+/**
+ * The shared library index, split into three files under `<libraryRoot>/.homer/`.
+ *
+ * They are peers, not layers. Each answers a different question, is produced by a different actor,
+ * and therefore merges by a different rule:
+ *
+ *  - [StructureFacet] — what the library **is**. Produced by crawling the folder tree.
+ *  - [DerivedFacet] — what devices **computed** by reading the files. Expensive, and the whole
+ *    reason to share anything.
+ *  - [CorrectionsFacet] — what a person **said**. Outranks everything detected.
+ *
+ * Splitting them is also what ends the whole-catalog rewrite: fixing one book's title used to
+ * republish every file entry in the library, several megabytes of it, on every edit.
+ *
+ * The files are read and written the same way for an account and for a share link. The only
+ * difference between them is whether the backend can be written to at all.
+ */
+object LibraryFacets {
+    const val SCHEMA_VERSION = 2
+    const val DIR = ".homer"
+    const val STRUCTURE_FILE = "structure.json"
+    const val DERIVED_FILE = "derived.json"
+    const val CORRECTIONS_FILE = "corrections.json"
+}
+
+// ── structure ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Records the crawl that produced a [StructureFacet]'s book set.
+ *
+ * Only a **complete** crawl is recorded here, because this marker exists for exactly one purpose:
+ * authorising deletion. A book missing from a crawl that post-dates it is genuinely gone; without
+ * a marker there is no way to distinguish that from a device that has simply never looked.
+ */
+@Serializable
+data class CrawlMarker(
+    /** Wall-clock at which the crawl finished. */
+    val at: Long,
+    /** The device that ran it — for "last full crawl 3 days ago, from Pixel 7". */
+    val by: String,
+)
+
+@Serializable
+data class StructureFacet(
+    val version: Int = LibraryFacets.SCHEMA_VERSION,
+    /**
+     * The most recent crawl that saw the WHOLE tree, or null if none has. An incremental scan
+     * leaves this untouched: it can add books, and it must never be able to remove one.
+     */
+    val lastFullCrawl: CrawlMarker? = null,
+    val books: Map<String, StructureBook> = emptyMap(),
+)
+
+/**
+ * A book as it exists on disk. Title, author and series are derived from the folder path, so they
+ * belong here rather than in [DerivedFacet] — two devices crawling the same tree produce the same
+ * answer, and a device adopting a catalog without crawling needs them.
+ */
+@Serializable
+data class StructureBook(
+    val title: String,
+    val author: String? = null,
+    val series: String? = null,
+    val seriesIndex: Int? = null,
+    /**
+     * The path-independent fingerprint. Shared because it is derived from the files, and a device
+     * that adopts a book without it can never recognise that book again once its folder is
+     * renamed — orphaning the position and bookmarks permanently.
+     */
+    val contentHash: String? = null,
+    /** Library-relative path to a folder cover image: a file on disk, so a structural fact. */
+    val coverFilePath: String? = null,
+    val isMultiFile: Boolean = false,
+    val files: List<StructureFile> = emptyList(),
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class StructureFile(
+    val relativePath: String,
+    val fileName: String,
+    val sortIndex: Int,
+    val sizeBytes: Long = 0,
+    val etag: String? = null,
+    val lastModifiedMs: Long? = null,
+    val contentType: String? = null,
+)
+
+// ── derived ──────────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class DerivedFacet(
+    val version: Int = LibraryFacets.SCHEMA_VERSION,
+    val books: Map<String, DerivedBook> = emptyMap(),
+)
+
+/**
+ * What reading the files taught us. Every field is nullable or empty-able because "not established
+ * yet" is a distinct state from "established as nothing" — and only the former may be overwritten
+ * by another device's answer.
+ */
+@Serializable
+data class DerivedBook(
+    val genre: String? = null,
+    val totalDurationMs: Long? = null,
+    /** Whether this book's extracted art is in the shared `.homer/covers/` cache. */
+    val hasCachedCover: Boolean = false,
+    /** `EMBEDDED` / `NONE`, or null while nothing has established which. */
+    val chapterTier: String? = null,
+    val chapters: List<DerivedChapter> = emptyList(),
+    /** Library-relative file path to its measured length. */
+    val fileDurationsMs: Map<String, Long> = emptyMap(),
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class DerivedChapter(val startMs: Long, val title: String? = null)
+
+// ── corrections ──────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class CorrectionsFacet(
+    val version: Int = LibraryFacets.SCHEMA_VERSION,
+    val books: Map<String, BookCorrection> = emptyMap(),
+)
+
+/**
+ * A person's deliberate edit to a book's bibliographic fields.
+ *
+ * Only these fields are ever published. `finished`, `hidden` and `downloadOnPlay` also live on
+ * `BookOverrideEntity`, but they are claims about the *reader*, not the book — publishing them to
+ * a folder shared with other people would leak one person's listening habits to everyone else.
+ *
+ * A null field means "no correction to this field", not "clear it": the whole entry is replaced as
+ * one act, so clearing a correction means writing the entry again without it, with a newer
+ * [editedAt]. That is why this facet merges per BOOK rather than per field — an edit is one
+ * deliberate act by one person, and per-field merging would make clearing impossible to express.
+ */
+@Serializable
+data class BookCorrection(
+    val title: String? = null,
+    val author: String? = null,
+    val series: String? = null,
+    val seriesIndex: Int? = null,
+    val genre: String? = null,
+    /** Same encoding as `BookOverrideEntity.tags`. */
+    val tags: String? = null,
+    val editedAt: Long = 0,
+    /** The device the edit was made on, so the UI can say where a change came from. */
+    val editedBy: String? = null,
+)

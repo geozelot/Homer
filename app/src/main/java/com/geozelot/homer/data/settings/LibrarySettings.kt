@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.settings
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -14,7 +15,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.geozelot.homer.data.update.UpdateChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -415,5 +418,45 @@ class UpdateSettings @Inject constructor(
         val KEY_CHANNEL = stringPreferencesKey("update_channel")
         val KEY_LAST_CHECKED = longPreferencesKey("update_last_checked")
         val KEY_NOTIFIED_VERSION = stringPreferencesKey("update_notified_version")
+    }
+}
+
+
+/**
+ * A stable, random identifier for this installation.
+ *
+ * Not a setting, but it lives here because DataStore throws if the same file is opened twice and
+ * this is the one file. Introduced for the shared library's crawl marker, which has to record
+ * *which* device last saw the whole tree — a timestamp alone cannot answer "is this my own crawl
+ * or another device's?", and the answer decides whether a book may be deleted.
+ *
+ * Random, never derived from anything about the device or the account: it is written to a folder
+ * that other people can read.
+ */
+@Singleton
+class DeviceIdentity @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    /** Generated on first read and stable thereafter. */
+    suspend fun id(): String {
+        context.settingsDataStore.data.first()[KEY_DEVICE_ID]?.let { return it }
+        val fresh = UUID.randomUUID().toString()
+        // putIfAbsent semantics: two callers racing on first launch must agree on one id.
+        var winner = fresh
+        context.settingsDataStore.edit { prefs ->
+            val existing = prefs[KEY_DEVICE_ID]
+            if (existing != null) winner = existing else prefs[KEY_DEVICE_ID] = fresh
+        }
+        return winner
+    }
+
+    /**
+     * A short human-readable name for this device, for lines like "last full crawl, from Pixel 7".
+     * Falls back to the model when the user has not named their device.
+     */
+    val label: String get() = Build.MODEL?.trim()?.ifBlank { null } ?: "this device"
+
+    private companion object {
+        val KEY_DEVICE_ID = stringPreferencesKey("device_id")
     }
 }
