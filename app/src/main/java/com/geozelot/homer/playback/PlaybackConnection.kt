@@ -410,6 +410,38 @@ class PlaybackConnection @Inject constructor(
         pushState()
     }
 
+    /**
+     * Stops playback and forgets the queue.
+     *
+     * For signing out, where the library the queue points at is about to be deleted. Clearing
+     * [currentBookId] is what actually ends it: the mini-player hides on a null book, and
+     * [positionSnapshot] returns null, so [PositionSyncer] stops writing positions for a book the
+     * database is about to forget.
+     *
+     * On this class's own scope, not the caller's — sign-out tears down the screen that asked.
+     */
+    fun stop() {
+        scope.launch {
+            switchMutex.withLock {
+                cancelFade()
+                sleepTimer.cancel()
+                controller?.let { c ->
+                    c.pause()
+                    c.clearMediaItems()
+                    c.stop()
+                }
+                currentBookId = null
+                currentCoverModel = null
+                currentOffline = false
+                currentDurations = emptyMap()
+                currentBookTotal = 0L
+                loading = false
+                pendingPlay = false
+                pushState()
+            }
+        }
+    }
+
     fun playPause() {
         val c = controller ?: return
         // Any manual transport input ends a sleep fade: otherwise the ramp keeps running and

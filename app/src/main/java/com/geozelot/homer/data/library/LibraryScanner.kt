@@ -71,6 +71,11 @@ internal data class PlannedWrites(val books: List<BookEntity>, val files: List<A
 /**
  * Merges a scan's findings with what the index already holds.
  *
+ * The carry-over is guarded by SIZE, deliberately not by ETag. A re-encode that lands on exactly
+ * the same byte count is not a thing, and an edit that preserves the size to the byte cannot have
+ * changed the duration either — whereas a server that changes its ETag scheme (an upgrade, a
+ * different storage backend) would invalidate every file at once and re-measure a whole library.
+ *
  * This is the carry-over: a crawl only sees names, sizes and ETags, so everything *measured* —
  * per-file durations, the extracted or user-chosen cover, the probed genre, the chapter tier — is
  * known only to the existing row and has to be copied onto the replacement. Getting it wrong is
@@ -96,8 +101,12 @@ internal fun planWrites(
         val byName = movedOldId?.let { old -> filesByBook[old].orEmpty().associateBy { it.fileName } }.orEmpty()
 
         val merged = book.files.map { file ->
-            val previous = atPath[file.relativePath]
-            val moved = byName[file.fileName]
+            // Only from a file that is still the same bytes. A file replaced in place — re-encoded,
+            // re-tagged, swapped for a better rip — keeps its path and its name, so without this
+            // the old duration was carried on to new audio and the book's time-left was quietly
+            // wrong for ever, with nothing to trigger a re-measure.
+            val previous = atPath[file.relativePath]?.takeIf { it.sizeBytes == file.sizeBytes }
+            val moved = byName[file.fileName]?.takeIf { it.sizeBytes == file.sizeBytes }
             file.copy(
                 durationMs = file.durationMs ?: previous?.durationMs ?: moved?.durationMs,
                 // Carried like the durations themselves: dropping it would make an ordinary rescan
@@ -165,7 +174,18 @@ class LibraryScanner @Inject constructor(
     private val downloadStorage: DownloadStorage,
     private val detector: BookDetector,
 ) {
-    data class Result(val bookCount: Int)
+    /**
+     * [complete] means the crawl saw the WHOLE tree — no subtree was skipped on an unchanged ETag.
+     *
+     * It is not the same question as "was this a full crawl". A full crawl has no stored ETags to
+     * skip on, so it is always complete; an *incremental* crawl is complete whenever it happened to
+     * skip nothing, which is every first crawl of a library and any crawl where everything changed.
+     * That distinction is the whole point: the marker this feeds is what authorises another device
+     * to delete a book, and until one is stamped a book removed on the server stays on every shelf
+     * for ever. Keying it on the incremental flag meant only "Rebuild the library" could ever
+     * stamp it.
+     */
+    data class Result(val bookCount: Int, val complete: Boolean)
 
     private data class Frame(val path: String, val forced: Boolean)
 
@@ -257,7 +277,8 @@ class LibraryScanner @Inject constructor(
             downloadDao.deleteOrphans()
         }
 
-        return Result(bookDao.count())
+        // Nothing skipped means every folder under the root was listed in this pass.
+        return Result(bookDao.count(), complete = skippedRoots.isEmpty())
     }
 
     /**

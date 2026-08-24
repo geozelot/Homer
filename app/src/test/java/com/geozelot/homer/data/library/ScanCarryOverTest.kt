@@ -58,12 +58,13 @@ class ScanCarryOverTest {
         durationMs: Long? = null,
         durationAttempted: Boolean = false,
         index: Int = 0,
+        sizeBytes: Long = 4096,
     ) = AudioFileEntity(
         relativePath = "$bookId/$name",
         bookId = bookId,
         fileName = name,
         sortIndex = index,
-        sizeBytes = 4096,
+        sizeBytes = sizeBytes,
         etag = "etag",
         lastModified = 1,
         contentType = "audio/mpeg",
@@ -95,6 +96,44 @@ class ScanCarryOverTest {
         )
         assertEquals(listOf(1000L, 2000L), planned.files.map { it.durationMs })
         assertEquals("a fully measured book keeps its total", 3000L, planned.books.single().totalDurationMs)
+    }
+
+    @Test
+    fun `a file replaced in place does not inherit the old file's duration`() {
+        // Same path, same name, different bytes — a re-encode, a re-tag, a better rip swapped in.
+        // Carrying the measurement forward attaches the old length to new audio, and nothing ever
+        // re-measures it: the book's time-left, progress ring and auto-finish are wrong for good.
+        val planned = planWrites(
+            detected = listOf(detected("A/One", file("A/One", "01.mp3", sizeBytes = 9999))),
+            existingById = mapOf("A/One" to book("A/One")),
+            filesByBook = mapOf(
+                "A/One" to listOf(file("A/One", "01.mp3", durationMs = 1000, durationAttempted = true)),
+            ),
+            movedFrom = emptyMap(),
+        )
+        assertNull(planned.files.single().durationMs)
+        assertFalse("a changed file earns a fresh probe", planned.files.single().durationAttempted)
+        assertNull("and the book cannot claim a total", planned.books.single().totalDurationMs)
+    }
+
+    @Test
+    fun `a moved book only inherits durations for files that are still the same size`() {
+        // The move match is by NAME, since the path changed with the folder — so it needs the same
+        // guard, or moving a book is a way of laundering a stale measurement onto new audio.
+        val planned = planWrites(
+            detected = listOf(
+                detected("New/One", file("New/One", "01.mp3"), file("New/One", "02.mp3", index = 1, sizeBytes = 7)),
+            ),
+            existingById = mapOf("Old/One" to book("Old/One")),
+            filesByBook = mapOf(
+                "Old/One" to listOf(
+                    file("Old/One", "01.mp3", durationMs = 1000),
+                    file("Old/One", "02.mp3", durationMs = 2000, index = 1),
+                ),
+            ),
+            movedFrom = mapOf("New/One" to "Old/One"),
+        )
+        assertEquals(listOf(1000L, null), planned.files.map { it.durationMs })
     }
 
     @Test

@@ -49,8 +49,20 @@ fun LibrarySetupPanel(
     onAdopt: (String) -> Unit,
     onNameFolder: () -> Unit,
     isShare: Boolean,
+    scanPending: Boolean,
+    wifiOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // A crawl has been asked for and has not started — offline, or waiting for Wi-Fi. The shelf is
+    // empty because nothing has read the library YET, which is the opposite of what "Homer found no
+    // audiobooks" says, and it is what a first run on a bad connection looked like.
+    if (scanPending && setup == LibrarySetup.Ready) {
+        Waiting(
+            label = stringResource(if (wifiOnly) R.string.sync_waiting_wifi else R.string.sync_waiting_network),
+            modifier = modifier,
+        )
+        return
+    }
     when (setup) {
         // Adopting takes as long as reading the index; both are "hold on" states with nothing to
         // decide, and neither should flash a question the app is about to answer itself.

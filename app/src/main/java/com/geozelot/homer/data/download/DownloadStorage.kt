@@ -24,6 +24,17 @@ class DownloadStorage @Inject constructor(
     /** Playable Uri of a downloaded file, or null if it isn't present. */
     suspend fun uri(relativePath: String): Uri? = storageLocation.area().uri(path(relativePath))
 
+    /**
+     * Removes every downloaded file, by deleting the whole area.
+     *
+     * The blunt version on purpose. Reclaiming only the files that no book points at would need a
+     * directory listing the storage backends do not offer — and after signing into a different
+     * account, "everything" and "the orphans" are the same set anyway.
+     */
+    suspend fun deleteAll() {
+        storageLocation.area().delete("downloads")
+    }
+
     /** Removes all downloaded files for a book. */
     suspend fun deleteBook(bookId: String) {
         // A blank id would target `downloads/` itself and recursively wipe EVERY book's files;

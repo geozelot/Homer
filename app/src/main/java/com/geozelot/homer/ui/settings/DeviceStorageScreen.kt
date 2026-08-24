@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +25,7 @@ import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsNote
+import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.home.HomeViewModel
@@ -45,8 +47,10 @@ fun DeviceStorageScreen(
     val customStoragePath by viewModel.customStoragePath.collectAsStateWithLifecycle()
     val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    val downloaded by viewModel.downloadedCount.collectAsStateWithLifecycle()
 
     var confirmUseAppStorage by remember { mutableStateOf(false) }
+    var confirmDeleteDownloads by remember { mutableStateOf(false) }
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -112,8 +116,35 @@ fun DeviceStorageScreen(
             checked = wifiOnly,
             onCheckedChange = viewModel::setWifiOnlyDownloads,
         )
+
+        SettingsDivider()
+
+        // The only way to reclaim this space, and the only way to be rid of files a library this
+        // device no longer has left behind — signing into a different account orphans them, and
+        // nothing else on disk knows they are orphans.
+        SettingsRow(
+            label = stringResource(R.string.set_device_delete_downloads),
+            summary = if (downloaded > 0) {
+                stringResource(
+                    R.string.set_device_delete_downloads_count,
+                    pluralStringResource(R.plurals.sync_books_count, downloaded, downloaded),
+                )
+            } else {
+                stringResource(R.string.set_device_delete_downloads_none)
+            },
+            onClick = { confirmDeleteDownloads = true },
+        )
     }
 
+    if (confirmDeleteDownloads) {
+        ConfirmDialog(
+            title = stringResource(R.string.set_delete_downloads_confirm_title),
+            body = stringResource(R.string.set_delete_downloads_confirm_body),
+            confirmLabel = stringResource(R.string.set_delete_downloads_confirm_action),
+            onConfirm = viewModel::deleteAllDownloads,
+            onDismiss = { confirmDeleteDownloads = false },
+        )
+    }
     if (confirmUseAppStorage) {
         ConfirmDialog(
             title = stringResource(R.string.set_use_app_storage_confirm_title),

@@ -65,10 +65,17 @@ class LibraryRepository @Inject constructor(
             val result = scanner.scan(root, incremental, System.currentTimeMillis()) { dirs, books ->
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
-            // Only a FULL crawl may stamp this. It is what lets the shared index delete a book:
-            // an incremental scan skips unchanged subtrees, so a book it did not visit is not a
-            // book that is gone, and treating it as one would erase other devices' libraries.
-            if (!incremental) librarySettings.setLastFullCrawlAt(System.currentTimeMillis())
+            // Only a COMPLETE crawl may stamp this — one that skipped no subtree. It is what lets
+            // the shared index delete a book: a crawl that did not visit a folder cannot say the
+            // book in it is gone, and treating it as gone would erase other devices' libraries.
+            //
+            // Keyed on what the crawl DID, not on which button asked for it. An incremental scan
+            // that skipped nothing saw exactly as much as a full one, and that is the common case:
+            // the first crawl of a library has no stored ETags to skip on. Requiring the full-crawl
+            // flag meant "Rebuild the library" was the only thing that could ever stamp it, so a
+            // user who only ever scanned had deletions that never propagated and a Library page
+            // that said "no full crawl yet" for ever.
+            if (result.complete) librarySettings.setLastFullCrawlAt(System.currentTimeMillis())
             _scanState.value = ScanState.Done(result.bookCount)
         } catch (e: CancellationException) {
             _scanState.value = ScanState.Idle

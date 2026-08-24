@@ -121,6 +121,7 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.ui.components.HomerSwitch
+import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
@@ -164,6 +165,8 @@ fun HomeScreen(
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
+    val indexQueued by viewModel.indexQueued.collectAsStateWithLifecycle()
+    val wifiOnlyDownloads by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
@@ -310,6 +313,8 @@ fun HomeScreen(
                         onAdopt = viewModel::adopt,
                         onNameFolder = viewModel::setupNameFolder,
                         isShare = libraryIsShare,
+                        scanPending = IndexPass.BOOKS in indexQueued,
+                        wifiOnly = wifiOnlyDownloads,
                         modifier = Modifier.weight(1f),
                     )
             }

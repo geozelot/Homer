@@ -17,6 +17,7 @@ import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
+import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.DiscoveredLibrary
@@ -220,6 +221,7 @@ class HomeViewModel @Inject constructor(
     private val localMirror: LocalMirror,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
+    private val downloadStorage: DownloadStorage,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
@@ -723,6 +725,27 @@ class HomeViewModel @Inject constructor(
     val indexWaiting: StateFlow<Boolean> = libraryIndexManager.waiting
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** How many books are downloaded, so the row that deletes them can say what it would cost. */
+    val downloadedCount: StateFlow<Int> = downloadDao.observeAll()
+        .map { downloads -> downloads.count { it.status == DownloadStatus.DONE } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /**
+     * Deletes every downloaded file and forgets the download state.
+     *
+     * The only way to reclaim the space, and the only way to be rid of files left behind by a
+     * library this device no longer has — signing into a different account orphans them, and
+     * nothing else on disk knows they are orphans. Files first, rows second: a process death in
+     * between then leaves a row still pointing at what is left, for a later pass to finish.
+     */
+    fun deleteAllDownloads() {
+        viewModelScope.launch {
+            runCatching { downloadStorage.deleteAll() }
+                .onFailure { Log.w(TAG_STORAGE, "could not delete the downloads folder", it) }
+            downloadDao.deleteAll()
+        }
+    }
+
     fun download(bookId: String) = downloadManager.download(bookId)
     fun deleteDownload(bookId: String) = downloadManager.delete(bookId)
 
@@ -981,7 +1004,12 @@ class HomeViewModel @Inject constructor(
      * Delegated to [SignOut] rather than done here because clearing the credentials tears this
      * ViewModel down; work launched in [viewModelScope] would be cancelled part-way through.
      */
-    fun logout() = signOut()
+    fun logout() {
+        // Before the library goes: the queue points at books that are about to stop existing, and
+        // a downloaded one would otherwise keep playing out of a library the user just left.
+        connection.stop()
+        signOut()
+    }
 
     private companion object {
         const val LISTENING_LIMIT = 12

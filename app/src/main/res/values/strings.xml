@@ -333,6 +333,13 @@
     <string name="set_device_location_header">WHERE DOWNLOADS ARE KEPT</string>
     <string name="set_device_choose_folder">Choose folder…</string>
     <string name="set_device_downloads_header">DOWNLOADING</string>
+    <string name="set_device_delete_downloads">Delete downloaded books</string>
+    <!-- %1$s is a books count, formatted as a plural by the caller. -->
+    <string name="set_device_delete_downloads_count">Frees the space %1$s are using</string>
+    <string name="set_device_delete_downloads_none">Nothing is downloaded. Files left by a library you have signed out of are removed too</string>
+    <string name="set_delete_downloads_confirm_title">Delete every download?</string>
+    <string name="set_delete_downloads_confirm_body">Every audio file Homer has downloaded to this device is deleted, including anything left behind by a library you have since signed out of. Your books stay on the server and your place in them is kept — a downloaded book simply streams again, or can be downloaded afresh.</string>
+    <string name="set_delete_downloads_confirm_action">Delete</string>
     <string name="set_use_app_storage_confirm_title">Move everything back to app storage?</string>
     <string name="set_use_app_storage_confirm_body">Your downloads and cover art will be moved into Homer\'s own storage, which Android erases if you ever uninstall the app. Nothing is deleted right now.</string>
     <string name="set_use_app_storage_confirm_action">Move</string>
