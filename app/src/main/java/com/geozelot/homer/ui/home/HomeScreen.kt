@@ -141,6 +141,7 @@ import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifDisplay
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Studio
+import com.geozelot.homer.ui.theme.Surface0
 import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
 
@@ -256,11 +257,13 @@ fun HomeScreen(
             val filtering = searching && searchQuery.isNotBlank()
             // The library's header and controls are pinned chrome, not part of the list they act
             // on. The wash runs dark to light down the band, so it lifts away from the listening
-            // panel above and is at its brightest along the edge where the list begins.
+            // panel above and is at its brightest along the edge where the list begins. It starts
+            // on Surface0 — the same flat tone the listening panel carries — so the two pinned
+            // regions share a floor and only the band rises off it.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Ground, Surface1))),
+                    .background(Brush.verticalGradient(listOf(Surface0, Surface1))),
             ) {
                 // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
                 // is what these controls are pointed at.
@@ -914,10 +917,10 @@ private fun ListeningShelf(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // A flat, quiet surface. The wash moved down to the chrome band, where fading
-                // into the page actually marks a boundary — here it was a gradient with nothing
-                // underneath it to hand off to.
-                .background(Surface1.copy(alpha = 0.5f))
+                // A flat, quiet surface, and the exact tone the band's wash starts from, so the
+                // whole pinned block reads as one raised region rather than two tinted strips
+                // that happen to sit together.
+                .background(Surface0)
                 .animateContentSize(),
         ) {
             // Stays put when the strip collapses. It used to disappear, which left a row of bare
@@ -1600,8 +1603,12 @@ private fun SeriesShelfRow(
             ) {
                 Text(
                     series.name,
-                    style = SerifTitle,
+                    // The book rows' own face, not the serif: a shelf sits among those rows and
+                    // reads as one of them, a size up. The serif at 18sp made it a heading.
                     color = Parchment,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
