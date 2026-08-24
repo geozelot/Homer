@@ -558,20 +558,35 @@ class HomeViewModel @Inject constructor(
             _librarySetup.value = LibrarySetup.Ready
             return
         }
+        // A share link IS the library — the Library page says as much, since using a different
+        // folder means opening a different share. There is nothing to discover and no folder to
+        // ask for, so the only sensible first run is to read what the link points at.
+        if (account.value?.kind == WebDavKind.SHARE) {
+            libraryIndexManager.scan()
+            _librarySetup.value = LibrarySetup.Ready
+            return
+        }
+
         _librarySetup.value = LibrarySetup.Looking
         val candidates = runCatching { discovery.discover() }.getOrElse { emptyList() }
         // The Library page shows the same list; priming it (and its freshness stamp) means opening
         // that page straight after setup does not repeat a sweep that is dozens of requests.
         _discovered.value = candidates
         lastDiscoveryAtMs = System.currentTimeMillis()
-        val withIndex = candidates.filter { it.hasSharedCatalog }
-        _librarySetup.value = when {
-            // Exactly one library with an index: there is nothing to ask. Adopting it silently is
-            // the entire point — the user should never learn there was a decision to make.
-            withIndex.size == 1 -> return adopt(withIndex.single().relativePath)
-            candidates.isNotEmpty() -> LibrarySetup.Choose(candidates)
-            else -> LibrarySetup.NothingFound
+
+        // One indexed library of the user's OWN is adopted silently — the entire point is that they
+        // never learn there was a decision to make. A folder shared WITH them is not the same
+        // thing: it is someone else's library, and taking it over without a word is a bigger
+        // assumption than the one tap it costs to confirm.
+        val own = candidates.filter {
+            it.hasSharedCatalog && it.kind != DiscoveredLibrary.Kind.SHARED_FOLDER
         }
+        if (own.size == 1) {
+            adopt(own.single().relativePath)
+            return
+        }
+        _librarySetup.value =
+            if (candidates.isNotEmpty()) LibrarySetup.Choose(candidates) else LibrarySetup.NothingFound
     }
 
     /**

@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -111,6 +113,16 @@ class LibraryIndexRepository @Inject constructor(
         }
 
     init {
+        // A different library root means different files behind the same names. Everything cached
+        // here — the three last-seen facets, the crawl marker, and FacetStore's ETag per file — is
+        // about the library that WAS configured, and a conditional read for `structure.json` would
+        // otherwise carry the old library's ETag to the new one's file. Watching the setting rather
+        // than asking every caller to remember is the only version of this that stays true: the
+        // root is changed by a scan, by adopting a library, and by opening a share link.
+        scope.launch {
+            librarySettings.libraryRoot.distinctUntilChanged().drop(1).collect { forgetLibrary() }
+        }
+
         // Backgrounding is the natural moment to ship corrections: the user has stopped editing.
         // addObserver must run on the main thread, hence the explicit dispatcher on an IO scope.
         scope.launch(Dispatchers.Main) {
@@ -483,6 +495,21 @@ class LibraryIndexRepository @Inject constructor(
             is FacetStore.SaveResult.Contended -> Log.w(TAG, "$file: lost every write race")
             is FacetStore.SaveResult.Unavailable -> Log.w(TAG, "$file NOT published: ${result.message}")
         }
+    }
+
+    /**
+     * Drops everything remembered about the library that was configured until now.
+     *
+     * Both halves have to go together: an ETag without its facet answers `Unchanged` with nothing
+     * to resolve it against, and a facet without its ETag is simply refetched.
+     */
+    private fun forgetLibrary() {
+        Log.i(TAG, "library root changed; forgetting the cached index")
+        lastStructure = null
+        lastDerived = null
+        lastCorrections = null
+        remoteCrawl.value = null
+        store.forgetEtags()
     }
 
     /**
