@@ -323,7 +323,11 @@
     <string name="lib_recheck_confirm_action">Try again</string>
     <string name="set_sign_out">Sign out</string>
     <string name="set_sign_out_confirm_title">Sign out of Homer?</string>
-    <string name="set_sign_out_confirm_body">Homer will forget this server and clear the library from this device. Your books stay where they are, and so does anything already saved to your account.</string>
+    <!-- Says what is actually cleared and what is not. It used to promise the library would go and
+         then clear only the credentials, which is how a second account inherited the first one\'s
+         shelf. Downloaded audio deliberately stays: a sign-out is as often a re-authentication as a
+         departure, and deleting gigabytes would make fixing a password the costliest act in the app. -->
+    <string name="set_sign_out_confirm_body">Homer will forget this server and clear this device\'s library: the books it found, your place in them, your bookmarks and your corrections. Your books stay where they are on the server, and so does anything saved to your account. Files you have already downloaded stay in your storage folder.</string>
 
     <!-- Settings: on this device -->
     <string name="set_device_location_header">WHERE DOWNLOADS ARE KEPT</string>

@@ -12,8 +12,11 @@ import javax.inject.Singleton
 
 /**
  * Single source of truth for authentication. Wraps the [CredentialStore] as observable
- * [AuthState] and owns the login lifecycle (initiate → poll → persist, and logout), for both an
- * account (Login Flow v2) and a public share link.
+ * [AuthState] and owns the login lifecycle (initiate → poll → persist) for both an account
+ * (Login Flow v2) and a public share link.
+ *
+ * Signing out is [SignOut]'s, not this class's: it clears the library and its settings as well as
+ * the credentials, and doing that here would put Room and DataStore behind the auth repository.
  */
 @Singleton
 class AuthRepository @Inject constructor(
@@ -74,8 +77,6 @@ class AuthRepository @Inject constructor(
         credentialStore.setSyncAccount(account)
         return account
     }
-
-    fun logout() = credentialStore.clear()
 
     /**
      * Maps credentials to a coarse [AuthState] for navigation gating. Stays [AuthState.Unknown]

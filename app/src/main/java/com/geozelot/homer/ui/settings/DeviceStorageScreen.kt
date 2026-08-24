@@ -32,7 +32,7 @@ import com.geozelot.homer.ui.theme.Parchment
 /**
  * "What's stored here": the folder this device keeps downloads and cover art in, and when it puts
  * books there. This is the *local* folder — deliberately not called "library folder", which is the
- * folder on the server (see [LibrarySourceScreen]).
+ * folder on the server (see [LibraryScreen]).
  */
 @Composable
 fun DeviceStorageScreen(

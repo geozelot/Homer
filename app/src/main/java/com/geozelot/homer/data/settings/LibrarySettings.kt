@@ -238,6 +238,32 @@ class LibrarySettings @Inject constructor(
         }
     }
 
+    /**
+     * Forgets everything that describes ONE library, for signing out.
+     *
+     * What is here and what is not is the whole point. Gone: the folder, the sharing state, the
+     * crawl and publish markers, and the pinned certificate — that last one pins a *specific*
+     * server, so carrying it into a different account would break TLS for no reason. Kept: how the
+     * user likes their shelf arranged, where downloads live on this device, whether app lock and
+     * pinning are switched on at all, and the device id — none of which belong to the account
+     * being left.
+     */
+    suspend fun clearLibraryState() {
+        context.settingsDataStore.edit {
+            it.remove(KEY_LIBRARY_ROOT)
+            it.remove(KEY_SHARED_CATALOG)
+            it.remove(KEY_LIBRARY_WRITABLE)
+            it.remove(KEY_LAST_PUSHED_REVISION)
+            it.remove(KEY_LAST_COVER_SWEEP_ETAG)
+            it.remove(KEY_LEGACY_MANIFEST_MIGRATED)
+            it.remove(KEY_FULL_CRAWL_AT)
+            it.remove(KEY_PINNED_CERT)
+            // The pre-split tier some installs still fall back to. Left behind, it would decide
+            // sharing for the NEXT library from the last one's setting.
+            it.remove(KEY_SYNC_TIER)
+        }
+    }
+
     private companion object {
         // Legacy linear tiers, kept only to migrate old installs into the two new booleans.
         const val LEGACY_TIER_PROGRESS = 2

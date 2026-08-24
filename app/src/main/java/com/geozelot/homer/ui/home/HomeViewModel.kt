@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.auth.SignOut
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
@@ -198,6 +199,7 @@ enum class LibrarySeriesMode(val key: String, val label: String) {
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val signOut: SignOut,
     private val libraryRepository: LibraryRepository,
     private val libraryIndexManager: LibraryIndexManager,
     private val librarySettings: LibrarySettings,
@@ -587,9 +589,16 @@ class HomeViewModel @Inject constructor(
             _libraryRoot.value = path
             if (account.value?.kind != WebDavKind.SHARE) librarySettings.setSharedCatalogEnabled(true)
             _sharedCatalogAvailable.value = libraryIndex.pull()
-            // No index there, or one that turned out to hold nothing: the folder still has to be
-            // read, and a crawl is the only thing that can do it.
-            if (bookDao.count() == 0) libraryIndexManager.scan()
+            if (bookDao.count() == 0) {
+                // No index there, or one that turned out to hold nothing: the folder still has to
+                // be read, and a crawl is the only thing that can do it.
+                libraryIndexManager.scan()
+            } else {
+                // The index filled the shelf without a crawl, so nothing has looked at the storage
+                // folder — and after a sign-out and back in, or a reinstall over the same folder,
+                // the audio is often already sitting there. Claim it rather than re-downloading it.
+                localMirror.adoptDownloads()
+            }
             _librarySetup.value = LibrarySetup.Ready
         }
     }
@@ -951,7 +960,13 @@ class HomeViewModel @Inject constructor(
     /** Retry a stalled stream from the docked mini-player (after a connection error). */
     fun retry() = connection.retry()
 
-    fun logout() = authRepository.logout()
+    /**
+     * Signs out, and clears the library with it — which is what the confirmation has always said.
+     *
+     * Delegated to [SignOut] rather than done here because clearing the credentials tears this
+     * ViewModel down; work launched in [viewModelScope] would be cancelled part-way through.
+     */
+    fun logout() = signOut()
 
     private companion object {
         const val LISTENING_LIMIT = 12
