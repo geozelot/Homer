@@ -31,6 +31,13 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- In-app updater: hand a downloaded release APK to the system installer. The user still
+         confirms every install in the system dialog, and Android gates this behind a per-app
+         "install unknown apps" toggle that only the user can grant — Homer reports whether it has
+         it and links to the screen, and can do nothing if it is refused. Nothing installs silently.
+         The updater is otherwise inert: the scheduled check is opt-in and off by default. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Android 11+ package visibility: resolve a browser / Custom Tabs provider
          for the Login Flow v2 web step. -->
     <queries>
@@ -115,6 +122,11 @@
         <!-- Handles Pause / Cancel taps on the download notification. -->
         <receiver
             android:name=".data.download.DownloadActionReceiver"
+            android:exported="false" />
+
+        <!-- Outcome of a PackageInstaller session started by the in-app updater. -->
+        <receiver
+            android:name=".data.update.InstallResultReceiver"
             android:exported="false" />
 
     </application>

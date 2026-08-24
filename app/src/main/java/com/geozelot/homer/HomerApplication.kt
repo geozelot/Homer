@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.geozelot.homer.data.update.UpdateCheckWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -26,6 +27,13 @@ class HomerApplication : Application(), ImageLoaderFactory, Configuration.Provid
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
+    override fun onCreate() {
+        super.onCreate()
+        // Enqueued unconditionally: the worker reads the opt-in preference itself and returns
+        // immediately when it is off, so there is no schedule to keep in step with the setting.
+        UpdateCheckWorker.schedule(this)
+    }
 
     override fun newImageLoader(): ImageLoader = imageLoader
 }

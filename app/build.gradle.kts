@@ -30,6 +30,10 @@ android {
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
         versionName = (project.findProperty("versionName") as String?) ?: "1.1.0"
 
+        // Where the in-app updater looks for releases. A fork changes this one line and its own
+        // builds start tracking its own releases instead of upstream's.
+        buildConfigField("String", "UPDATE_REPO", "\"geozelot/Homer\"")
+
         vectorDrawables { useSupportLibrary = true }
 
         // For the Room migration tests in src/androidTest (they need a device/emulator).

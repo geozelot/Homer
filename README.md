@@ -13,6 +13,22 @@ server, and an Audible-class listening experience.
 
 [Go to Releases](https://github.com/geozelot/Homer/releases)
 
+### Staying up to date
+
+Homer can update itself: **Settings → About → Updates**. *Check now* is always available;
+the once-a-day automatic check is **off by default**, because it reaches a third party on a
+schedule you didn't ask for. Nothing about you or your library is sent — only the question.
+Choose **Stable** or **Betas too**, and Homer downloads the release APK and hands it to the
+system installer, which still asks you to confirm.
+
+Prefer to keep updates outside the app? [Obtainium](https://github.com/ImranR98/Obtainium)
+tracks this repository's releases and installs them for you — point it at the repo URL and
+skip Homer's updater entirely.
+
+> A copy you built yourself is signed with your own debug key, so a CI-signed release APK
+> can't replace it — Android refuses the install. Homer detects this and says so rather than
+> failing cryptically. Uninstall the local build first, or keep building it yourself.
+
 
 ## Features
 
@@ -72,6 +88,10 @@ permission at all:
 - **`INTERNET`, `ACCESS_NETWORK_STATE`** — reach your Nextcloud, and fail fast when offline.
 - **`FOREGROUND_SERVICE` / `…_MEDIA_PLAYBACK` / `…_DATA_SYNC`, `POST_NOTIFICATIONS`** — background
   audio playback and offline downloads that survive the app being closed, each with a notification.
+- **`REQUEST_INSTALL_PACKAGES`** — lets the in-app updater hand a downloaded release APK to the
+  system installer. Android gates this behind a per-app *install unknown apps* toggle that only you
+  can grant, and the installer still asks you to confirm every install. Nothing installs silently,
+  and the scheduled check that would find an update is off unless you turn it on.
 - **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
   at install or first run. Homer only sends you to the system grant screen if you explicitly choose
   to keep downloads in a folder you pick yourself (Settings → *On this device* → *Browse device*).
@@ -124,6 +144,11 @@ git tag v0.9.0 && git push origin v0.9.0
 
 CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
 `KEY_PASSWORD` repository secrets are set; otherwise it falls back to a debug-signed APK.
+
+A tag with a pre-release suffix (`v1.1.0-BETA18`, `v1.2.0-rc1`) is marked as a pre-release, so
+`/releases/latest` keeps pointing at the last finished release and the in-app updater's Stable
+channel doesn't offer betas. Forks: the repository the updater watches is the `UPDATE_REPO`
+field in `app/build.gradle.kts`.
 
 ## Status
 

@@ -80,6 +80,8 @@ fun PrivacyScreen(onBack: () -> Unit) {
         Paragraph(stringResource(R.string.about_privacy_library_body))
         SectionHeader(stringResource(R.string.about_privacy_covers_header))
         Paragraph(stringResource(R.string.about_privacy_covers_body))
+        SectionHeader(stringResource(R.string.about_privacy_updates_header))
+        Paragraph(stringResource(R.string.about_privacy_updates_body))
         SectionHeader(stringResource(R.string.about_privacy_lock_header))
         Paragraph(stringResource(R.string.about_privacy_lock_body))
         Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME), color = Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))

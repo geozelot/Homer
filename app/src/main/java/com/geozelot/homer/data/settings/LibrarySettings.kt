@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.geozelot.homer.data.update.UpdateChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -357,5 +358,62 @@ class PlaybackSettings @Inject constructor(
         const val DEFAULT_SEEK_SECONDS = 15
         const val DEFAULT_VOLUME_MODE = "normal"
         const val DEFAULT_AUTO_REWIND = 0
+    }
+}
+
+
+/**
+ * In-app updater preferences. Shares the one settings file with [LibrarySettings] and
+ * [PlaybackSettings] (DataStore throws if the same file is opened twice).
+ *
+ * Automatic checking is OFF by default, matching [LibrarySettings.onlineCoverLookup]: it reaches a
+ * third party (GitHub) on a schedule the user did not ask for, and the privacy / Play-Services-free
+ * stance keeps that opt-in. Checking by hand from the About screen is always available — that is an
+ * explicit action, so it needs no standing consent.
+ */
+@Singleton
+class UpdateSettings @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    /** Whether Homer checks GitHub for a new release on its own, roughly once a day. */
+    val autoCheck: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_AUTO_CHECK] ?: false }
+
+    suspend fun setAutoCheck(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_AUTO_CHECK] = value }
+    }
+
+    /** Which releases to offer: finished ones only, or the betas too. */
+    val channel: Flow<UpdateChannel> =
+        context.settingsDataStore.data.map { UpdateChannel.fromPref(it[KEY_CHANNEL]) }
+
+    suspend fun setChannel(value: UpdateChannel) {
+        context.settingsDataStore.edit { it[KEY_CHANNEL] = value.pref }
+    }
+
+    /** Wall-clock of the last completed check; 0 = never. Drives the "checked N ago" line. */
+    val lastCheckedAtMs: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_LAST_CHECKED] ?: 0L }
+
+    suspend fun setLastCheckedAtMs(value: Long) {
+        context.settingsDataStore.edit { it[KEY_LAST_CHECKED] = value }
+    }
+
+    /**
+     * The newest version the user has already been notified about. Without it the daily check
+     * re-notifies about the same release every day until they install it.
+     */
+    val notifiedVersion: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_NOTIFIED_VERSION] }
+
+    suspend fun setNotifiedVersion(value: String) {
+        context.settingsDataStore.edit { it[KEY_NOTIFIED_VERSION] = value }
+    }
+
+    private companion object {
+        val KEY_AUTO_CHECK = booleanPreferencesKey("update_auto_check")
+        val KEY_CHANNEL = stringPreferencesKey("update_channel")
+        val KEY_LAST_CHECKED = longPreferencesKey("update_last_checked")
+        val KEY_NOTIFIED_VERSION = stringPreferencesKey("update_notified_version")
     }
 }

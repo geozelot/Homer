@@ -77,13 +77,15 @@
 
     <!-- About: privacy -->
     <string name="about_privacy_title">Privacy</string>
-    <string name="about_privacy_p1">Homer is a self-hosted audiobook player. It talks to one server: the Nextcloud you sign in to. There are no analytics, no advertising, no third-party tracking, and no Google Play Services.</string>
+    <string name="about_privacy_p1">Homer is a self-hosted audiobook player. By default it talks to one server: the Nextcloud you sign in to. Two optional features can reach elsewhere, both described below, and both off until you turn them on. There are no analytics, no advertising, no third-party tracking, and no Google Play Services.</string>
     <string name="about_privacy_account_header">YOUR ACCOUNT</string>
     <string name="about_privacy_account_body">Signing in uses Nextcloud\'s Login Flow, which grants Homer a scoped, revocable app password — never your real password. It is stored only in Android\'s Keystore-backed encrypted storage on this device and sent solely to your server to authenticate requests.</string>
     <string name="about_privacy_library_header">YOUR LIBRARY</string>
     <string name="about_privacy_library_body">Browsing, streaming, downloads, and cross-device progress all happen against your own server over WebDAV. Progress and metadata corrections are written to a .homer file in your own storage; nothing is uploaded anywhere else. Offline downloads and cover art are kept on this device (or the folder you choose).</string>
     <string name="about_privacy_covers_header">OPTIONAL ONLINE COVERS</string>
     <string name="about_privacy_covers_body">If — and only if — you turn on \"Look up missing covers online,\" Homer sends the title and author of books that have no embedded art to Open Library (openlibrary.org) to find a cover. This is off by default and sends nothing about your account.</string>
+    <string name="about_privacy_updates_header">OPTIONAL UPDATE CHECK</string>
+    <string name="about_privacy_updates_body">Homer can ask GitHub whether a newer release exists. Checking by hand from Settings \u2192 About does this once; the daily automatic check is off unless you turn it on. The request carries no account, no version and no identifier \u2014 only the question \u2014 and the comparison happens on this device. If you install an update, the APK is downloaded from GitHub and handed to Android\u2019s installer, which asks you to confirm.</string>
     <string name="about_privacy_lock_header">APP LOCK</string>
     <string name="about_privacy_lock_body">The optional app lock uses your device\'s biometric/credential prompt directly. Homer never sees or stores your biometrics.</string>
 
@@ -358,4 +360,38 @@
     <string name="player_bookmark_add">Add at current position</string>
     <string name="player_bookmark_empty">No bookmarks yet.</string>
     <string name="player_chapter_fallback">Chapter</string>
+    <!-- Settings: updates -->
+    <string name="update_channel_name">Updates</string>
+    <string name="update_notif_title">Homer %1$s is available</string>
+    <string name="update_notif_text">Open Homer to install it.</string>
+    <string name="set_update_header">UPDATES</string>
+    <string name="set_update_check">Check for updates</string>
+    <string name="set_update_checking">Checking\u2026</string>
+    <string name="set_update_uptodate">Homer is up to date.</string>
+    <string name="set_update_available">Version %1$s is available.</string>
+    <string name="set_update_downloading">Downloading\u2026</string>
+    <string name="set_update_downloading_pct">Downloading\u2026 %1$d%%</string>
+    <string name="set_update_ready">Ready to install.</string>
+    <string name="set_update_installing">Waiting for the system installer\u2026</string>
+    <string name="set_update_action_check">Check now</string>
+    <string name="set_update_action_install">Download and install</string>
+    <string name="set_update_action_allow">Allow</string>
+    <string name="set_update_action_retry">Try again</string>
+    <string name="set_update_action_view">Open the release page</string>
+    <string name="set_update_auto">Check automatically</string>
+    <string name="set_update_auto_desc">Ask GitHub once a day whether a newer Homer has been released. Off by default: it reaches a third party on a schedule you did not ask for. Nothing about you or your library is sent \u2014 only the question. Checking by hand always works.</string>
+    <string name="set_update_channel">Release channel</string>
+    <string name="set_update_channel_stable">Stable</string>
+    <string name="set_update_channel_beta">Betas too</string>
+    <string name="set_update_channel_desc">Betas are cut often and are meant for testing. Stable releases only, unless you want them.</string>
+    <string name="set_update_last_checked">Last checked %1$s</string>
+    <string name="set_update_never">not yet</string>
+    <string name="set_update_notes_title">What\u2019s new</string>
+    <string name="set_update_err_network">Couldn\u2019t reach GitHub. Check your connection and try again.</string>
+    <string name="set_update_err_ratelimited">GitHub is rate-limiting this address. Try again in an hour.</string>
+    <string name="set_update_err_noasset">The newest release has no APK attached. Open the release page to see what happened.</string>
+    <string name="set_update_err_download">The download didn\u2019t finish. Try again.</string>
+    <string name="set_update_err_signature">That release is signed with a different key than this build, so Android would refuse it. This is normal if you built this copy yourself \u2014 install the release APK by hand instead.</string>
+    <string name="set_update_err_notallowed">Homer needs your permission to install apps.</string>
+    <string name="set_update_err_installfailed">The install didn\u2019t complete.</string>
 </resources>
