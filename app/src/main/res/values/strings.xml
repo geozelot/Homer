@@ -218,6 +218,9 @@
     <string name="sync_scanned_never">never scanned</string>
     <string name="sync_status_line">%1$s · %2$s</string>
     <string name="sync_measuring">Book %1$d of %2$d \u00b7 %3$d of %4$d files…</string>
+    <!-- A pass that has been asked for but has not started: passes queue behind each other now
+         rather than cancelling one another, so a row has to be able to say "your turn is coming". -->
+    <string name="sync_pass_queued">Waiting its turn\u2026</string>
     <string name="sync_fetching_covers">Fetching art %1$d of %2$d…</string>
     <string name="set_measure_confirm_title">Measure every book?</string>
     <string name="set_measure_confirm_body">Homer normally learns a book\u2019s length the first time you open it, because reading it means fetching a piece of every audio file. Doing the whole library at once is thousands of small requests and can take a while — best on Wi\u2011Fi. Books already measured are skipped, and you can stop it at any time; whatever finished is kept.</string>

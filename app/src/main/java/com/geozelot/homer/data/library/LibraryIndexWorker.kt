@@ -23,13 +23,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
- * Foreground (data-sync) worker that indexes the library — an optional scan followed by cover
- * enrichment — so the work survives the app being backgrounded or killed and shows a progress
- * notification. Modelled on the download worker; it reuses WorkManager's SystemForegroundService
- * (data-sync type already declared in the manifest).
+ * Foreground (data-sync) worker that drains the queue of requested [IndexPass]es, so the work
+ * survives the app being backgrounded or killed and shows a progress notification. It reuses
+ * WorkManager's SystemForegroundService (data-sync type already declared in the manifest).
  *
- * With the shared index on it also publishes what the scan found (a read-only share cannot,
- * open updates).
+ * It takes no input: the queue in [IndexPassStore] says what to do. That is what makes a pass
+ * resumable — a run the system stops leaves its token behind, and WorkManager re-running the
+ * worker picks up the same pass.
  */
 @HiltWorker
 class LibraryIndexWorker @AssistedInject constructor(
@@ -41,53 +41,88 @@ class LibraryIndexWorker @AssistedInject constructor(
     private val bookDao: BookDao,
     private val libraryIndex: LibraryIndexRepository,
     private val librarySettings: LibrarySettings,
+    private val passes: IndexPassStore,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val doScan = inputData.getBoolean(KEY_SCAN, false)
-        val resetCovers = inputData.getBoolean(KEY_RESET_COVERS, false)
-        val doMeasure = inputData.getBoolean(KEY_MEASURE, false)
         ensureChannel()
+        var failed = false
+        while (true) {
+            val request = passes.next() ?: break
+            try {
+                runPass(request)
+            } catch (e: CancellationException) {
+                // Stopped, not finished. The token stays, so the pass resumes on the next run —
+                // which is what lets an hours-long sweep complete across several sittings.
+                throw e
+            } catch (e: Exception) {
+                // Dropped rather than left queued: a pass that cannot run now would otherwise be
+                // retried immediately, for ever, with nothing to show for it. The user can ask
+                // again, and the log says what happened.
+                Log.w(TAG, "${request.pass} pass failed", e)
+                failed = true
+            }
+            passes.done(request)
+        }
+        return if (failed) Result.failure() else Result.success()
+    }
 
-        try {
-            // Full re-scan / refresh: clear cached art + every attempted flag, so covers re-fetch
-            // and durations/tags that failed to probe once get another chance.
-            if (resetCovers) libraryRepository.resetEnrichment()
-
-            if (doScan) {
-                setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
-                libraryRepository.scan(incremental = inputData.getBoolean(KEY_INCREMENTAL, false))
-            } else if (coverEnricher.pendingCount() == 0 && !doMeasure) {
-                // Nothing to fetch — finish without ever showing a notification. A measure-only run
-                // has its own work to do, so it must not be short-circuited here.
-                return Result.success()
+    /**
+     * One pass, start to finish.
+     *
+     * The order passes run in is [IndexPass]'s own; this only says what each one does. Each ends by
+     * publishing the facets it could have changed, because the alternative — publishing only after
+     * a crawl — meant an hour-long duration sweep shared nothing until something later triggered a
+     * scan.
+     */
+    private suspend fun runPass(request: PassRequest) {
+        when (request.pass) {
+            IndexPass.CORRECTIONS -> {
+                report(request.pass)
+                setForegroundSafely(foregroundInfo("Sharing corrections…", 0, 0))
+                libraryIndex.pushCorrections()
             }
 
-            // Throttle the notification: one update per book overran Android's ~5/s notify budget on
-            // a large library, so the framework shed the updates and flooded the log with
-            // "rate limit exceeded" instead of showing progress. Once a second is plenty for a
-            // progress bar, and the final call always lands so it never ends mid-way.
-            // Skipped entirely for a measure-only run. "Measure lengths" asked for one expensive
-            // pass; with hundreds of art-less books outstanding this would quietly run a second
-            // one first, and report "Fetching covers…" while doing it.
-            if (!doMeasure) {
+            IndexPass.BOOKS -> {
+                report(request.pass)
+                setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
+                // Deep means a full crawl: every folder re-read rather than unchanged subtrees
+                // skipped on their ETag. Only a full crawl may stamp the marker that authorises
+                // another device to prune.
+                libraryRepository.scan(incremental = !request.deep)
+                publish("Updating shared library…")
+            }
+
+            IndexPass.ARTWORK -> {
+                if (request.deep) libraryRepository.resetCoverArt()
+                // Nothing to fetch: finish without ever showing a notification.
+                if (coverEnricher.pendingCount() == 0) return
+                report(request.pass)
+                // Throttle the notification: one update per book overran Android's ~5/s notify
+                // budget on a large library, so the framework shed the updates and flooded the log
+                // with "rate limit exceeded" instead of showing progress. Once a second is plenty
+                // for a progress bar, and the final call always lands so it never ends mid-way.
                 var lastNotifyMs = 0L
                 coverEnricher.enrich { done, total ->
                     val now = System.currentTimeMillis()
                     if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                         lastNotifyMs = now
                         setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
-                        report(PHASE_COVERS, done, total)
+                        report(request.pass, done, total)
                     }
                 }
+                // Cover art lands in the shared cache, and `derived` records which books have one.
+                publish("Updating shared library…")
             }
 
-            // Lengths, only when explicitly asked for. Sequential (see measureAll) and last, so it
-            // never delays the scan or the covers — and interruptible, since it is the long one:
-            // every book already measured is skipped, so a resumed pass picks up where it stopped.
-            if (doMeasure) {
+            IndexPass.LENGTHS -> {
+                // A stored length is never discarded — a duration is a fact about bytes. Deep only
+                // re-arms what was tried and could not be measured, plus the tag read that rides
+                // along with it.
+                if (request.deep) libraryRepository.rearmDurations()
                 val pending = bookDao.idsWithoutDuration()
                 Log.i(TAG, "measuring lengths for ${pending.size} book(s)")
+                report(request.pass)
                 var lastMeasureNotifyMs = 0L
                 durationEnricher.measureAll(pending) { p ->
                     val now = System.currentTimeMillis()
@@ -103,34 +138,39 @@ class LibraryIndexWorker @AssistedInject constructor(
                                 detail = "Book ${p.books} of ${p.bookTotal} · ${p.files} of ${p.fileTotal} files",
                             ),
                         )
-                        report(PHASE_LENGTHS, p.files, p.fileTotal, p.books, p.bookTotal)
+                        report(request.pass, p.files, p.fileTotal, p.books, p.bookTotal)
                     }
                 }
+                publish("Updating shared library…")
             }
-
-            // Shared index: publish what this crawl found.
-            if (doScan && librarySettings.sharedCatalogEnabled.first()) {
-                setForegroundSafely(foregroundInfo("Updating shared library…", 0, 0))
-                libraryIndex.push()
-            }
-            return Result.success()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "library index failed", e)
-            return Result.failure()
         }
     }
 
+    /** Publishes this device's view, if the user has sharing on (a read-only share cannot). */
+    private suspend fun publish(text: String) {
+        if (!librarySettings.sharedCatalogEnabled.first()) return
+        setForegroundSafely(foregroundInfo(text, 0, 0))
+        libraryIndex.push()
+    }
+
     /**
-     * Mirrors the notification's progress into WorkManager, so the settings screen can show the
-     * same thing inline. A long measure pass is otherwise invisible unless the user pulls down the
-     * notification shade — and it is the one action here that can run for many minutes.
+     * Mirrors the notification's progress into WorkManager, so the library screen can show the same
+     * thing inline. A long measure pass is otherwise invisible unless the user pulls down the
+     * notification shade — and it is the one pass that can run for many minutes.
+     *
+     * Called once with no counts as each pass starts, so the row for the running pass can say so
+     * before there is anything to count.
      */
-    private suspend fun report(phase: String, done: Int, total: Int, books: Int = 0, bookTotal: Int = 0) {
+    private suspend fun report(
+        pass: IndexPass,
+        done: Int = 0,
+        total: Int = 0,
+        books: Int = 0,
+        bookTotal: Int = 0,
+    ) {
         setProgress(
             workDataOf(
-                KEY_PHASE to phase,
+                KEY_PASS to pass.name,
                 KEY_DONE to done,
                 KEY_TOTAL to total,
                 KEY_BOOKS to books,
@@ -179,19 +219,12 @@ class LibraryIndexWorker @AssistedInject constructor(
     }
 
     companion object {
-        const val KEY_SCAN = "scan"
-        const val KEY_MEASURE = "measure"
-
         /** Progress reported back to the UI while the worker runs. */
-        const val KEY_PHASE = "phase"
+        const val KEY_PASS = "pass"
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
         const val KEY_BOOKS = "books"
         const val KEY_BOOK_TOTAL = "book_total"
-        const val PHASE_COVERS = "covers"
-        const val PHASE_LENGTHS = "lengths"
-        const val KEY_INCREMENTAL = "incremental"
-        const val KEY_RESET_COVERS = "reset_covers"
         const val WORK_NAME = "library-index"
         private const val TAG = "HomerScan"
         private const val CHANNEL_ID = "library"

@@ -29,14 +29,25 @@ class LibraryRepository @Inject constructor(
     val libraryRoot: Flow<String> = librarySettings.libraryRoot
 
     /**
-     * Clears cached cover art and every "already attempted" probe flag, so a refresh re-fetches
-     * covers and re-measures the files and tags whose earlier probe came up empty. This is the only
-     * way back for those: once a probe is recorded as fruitless it is never retried on its own.
+     * Drops cached cover art, so a deep artwork pass fetches every book's again.
+     *
+     * Also the only way back for a book whose art was looked for and not found: once a cover probe
+     * is recorded as fruitless it is never retried on its own.
      */
-    suspend fun resetEnrichment() {
+    suspend fun resetCoverArt() {
         bookDao.resetCoverArt()
-        bookDao.resetMetadataAttempted()
+    }
+
+    /**
+     * Re-arms the files whose duration probe came up empty, and the tag read that rides along with
+     * it, so a deep length pass tries them again.
+     *
+     * Stored lengths are deliberately left alone — a duration is a fact about bytes, so there is
+     * nothing to correct, only gaps to fill.
+     */
+    suspend fun rearmDurations() {
         audioFileDao.resetDurationAttempted()
+        bookDao.resetMetadataAttempted()
     }
 
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)

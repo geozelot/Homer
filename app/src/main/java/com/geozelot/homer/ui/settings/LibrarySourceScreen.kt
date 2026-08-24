@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.DiscoveredLibrary
-import com.geozelot.homer.data.library.LibraryIndexManager
+import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.SettingsActionPadding
@@ -87,11 +87,12 @@ fun LibrarySourceScreen(
     val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
     val discovered by viewModel.discovered.collectAsStateWithLifecycle()
     val discovering by viewModel.discovering.collectAsStateWithLifecycle()
-    // A crawl is only one of the passes this worker runs; a cover or length pass leaves scanState
-    // Idle for many minutes. Every action enqueues with REPLACE, so accepting a tap during one
-    // cancels it — `busy` covers all of them, from the moment the job is queued.
-    val indexBusy by viewModel.indexBusy.collectAsStateWithLifecycle()
-    val busy = scanState is ScanState.Scanning || indexBusy
+    // A crawl is only one of the passes the worker runs; a cover or length pass leaves scanState
+    // Idle for many minutes. Each row therefore reads its own pass out of `queued` — a pass that is
+    // already outstanding is the only thing a row refuses, because asking twice is not two passes.
+    val queued by viewModel.indexQueued.collectAsStateWithLifecycle()
+    val indexActive by viewModel.indexActive.collectAsStateWithLifecycle()
+    val crawling = scanState is ScanState.Scanning || IndexPass.BOOKS in queued
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val indexProgress by viewModel.indexProgress.collectAsStateWithLifecycle()
@@ -133,7 +134,7 @@ fun LibrarySourceScreen(
             label = { Text(stringResource(R.string.sync_library_folder)) },
             placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
             singleLine = true,
-            enabled = !busy && !libraryIsShare,
+            enabled = !crawling && !libraryIsShare,
             modifier = Modifier.fillMaxWidth(),
         )
         if (libraryIsShare) {
@@ -149,11 +150,11 @@ fun LibrarySourceScreen(
         // plus a paragraph explaining all four — each row now carries its own explanation instead.
         Button(
             onClick = viewModel::scan,
-            enabled = !busy,
+            enabled = !crawling,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             Text(
-                if (busy) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library),
+                if (crawling) stringResource(R.string.sync_scanning) else stringResource(R.string.sync_scan_library),
             )
         }
         Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
@@ -178,7 +179,7 @@ fun LibrarySourceScreen(
         // A length pass runs for a long time and resumes itself after the app is killed, so there
         // has to be a way to call it off. Every pass picks up where it stopped, which is why this
         // is a plain Stop and not a pause.
-        if (busy) {
+        if (indexActive) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 TextButton(onClick = viewModel::stopIndexing) {
                     Text(stringResource(R.string.sync_stop), color = Amber, fontSize = 13.sp)
@@ -189,40 +190,47 @@ fun LibrarySourceScreen(
         Spacer(Modifier.height(18.dp))
         SettingsSectionHeader(stringResource(R.string.sync_fix_header))
 
-        val covers = indexProgress?.takeIf { it.phase == LibraryIndexManager.IndexPhase.COVERS }
+        val artworkQueued = IndexPass.ARTWORK in queued
+        val covers = indexProgress?.takeIf { it.pass == IndexPass.ARTWORK }
         SettingsRow(
             label = stringResource(R.string.sync_fix_covers),
-            summary = covers?.let { stringResource(R.string.sync_fetching_covers, it.done, it.total) }
-                ?: stringResource(R.string.sync_fix_covers_desc),
-            enabled = !busy,
+            summary = when {
+                covers != null && covers.total > 0 ->
+                    stringResource(R.string.sync_fetching_covers, covers.done, covers.total)
+                artworkQueued -> stringResource(R.string.sync_pass_queued)
+                else -> stringResource(R.string.sync_fix_covers_desc)
+            },
+            enabled = !artworkQueued,
             onClick = viewModel::refreshCoverArt,
-            trailing = { if (covers != null) RowSpinner() },
+            trailing = { if (artworkQueued) RowSpinner() },
         )
         SettingsDivider()
 
-        val lengths = indexProgress?.takeIf { it.phase == LibraryIndexManager.IndexPhase.LENGTHS }
+        val lengthsQueued = IndexPass.LENGTHS in queued
+        val lengths = indexProgress?.takeIf { it.pass == IndexPass.LENGTHS }
         SettingsRow(
             label = stringResource(R.string.sync_fix_lengths),
             summary = when {
-                lengths != null ->
+                lengths != null && lengths.total > 0 ->
                     stringResource(
                         R.string.sync_measuring,
                         lengths.books, lengths.bookTotal, lengths.done, lengths.total,
                     )
+                lengthsQueued -> stringResource(R.string.sync_pass_queued)
                 unmeasured == 0 -> stringResource(R.string.sync_fix_lengths_none)
                 else -> stringResource(R.string.sync_fix_lengths_desc, unmeasured)
             },
             // Nothing to do when every book already has a length, and the summary says so.
-            enabled = !busy && unmeasured > 0,
+            enabled = !lengthsQueued && unmeasured > 0,
             onClick = { confirmMeasure = true },
-            trailing = { if (lengths != null) RowSpinner() },
+            trailing = { if (lengthsQueued) RowSpinner() },
         )
         SettingsDivider()
 
         SettingsRow(
             label = stringResource(R.string.sync_fix_rebuild),
             summary = stringResource(R.string.sync_fix_rebuild_desc),
-            enabled = !busy,
+            enabled = !crawling,
             onClick = { confirmFullScan = true },
         )
 

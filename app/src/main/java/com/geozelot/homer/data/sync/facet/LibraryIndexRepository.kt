@@ -103,29 +103,41 @@ class LibraryIndexRepository @Inject constructor(
     }
 
     /**
-     * Publishes coalesced corrections, and only those — a metadata edit has no business rewriting
-     * the structure or the measurements.
-     *
-     * Requires the shared index to be switched on: that toggle is the user's consent to write to
-     * the shared folder. Offline, the pending flag stays set so the next trigger retries.
+     * Publishes coalesced corrections. Offline, the pending flag stays set so the next trigger
+     * retries — and the flag lives in memory only, which is why the `CORRECTIONS` index pass
+     * exists as a durable way to ask for the same thing.
      */
     private suspend fun publishPendingEdits() {
         if (!editsPending) return
-        if (!librarySettings.sharedCatalogEnabled.first()) {
-            editsPending = false // sharing is off; the correction stays local, nothing to retry
-            return
-        }
-        if (!networkMonitor.isOnline() || !canPublish()) return
+        if (!pushCorrections()) return
         editsPending = false
+    }
+
+    /**
+     * Publishes the shared half of every correction, and only that — a metadata edit has no
+     * business rewriting the structure or the measurements.
+     *
+     * Requires the shared index to be switched on: that toggle is the user's consent to write to
+     * the shared folder. Returns false only when the attempt could not be made at all (offline, or
+     * a share this device may not write), so a caller holding a pending flag knows to keep it;
+     * sharing being off is a settled answer, not a deferral.
+     */
+    suspend fun pushCorrections(): Boolean {
+        if (!librarySettings.sharedCatalogEnabled.first()) return true
+        if (!networkMonitor.isOnline() || !canPublish()) return false
         val deviceId = deviceIdentity.id()
         val local = CorrectionsFacet(
             books = bookOverrideDao.getAll()
                 .mapNotNull { o -> FacetMapping.correctionOf(o, deviceId)?.let { o.bookId to it } }
                 .toMap(),
         )
-        store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
-            FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
-        }
+        report(
+            LibraryFacets.CORRECTIONS_FILE,
+            store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+                FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
+            },
+        )
+        return true
     }
 
     /**

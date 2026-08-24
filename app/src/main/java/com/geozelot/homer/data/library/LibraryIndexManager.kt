@@ -7,7 +7,6 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.geozelot.homer.data.settings.PlaybackSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -16,45 +15,57 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Enqueues the foreground [LibraryIndexWorker] so scanning and cover enrichment run
- * independently of app state (survive backgrounding/kill, progress-notified). A manual
- * [scan] replaces any running index job; the on-open [enrichCovers] keeps an existing one.
+ * Requests maintenance passes over the library and reports what they are doing.
+ *
+ * A request is a token in [IndexPassStore]; one foreground [LibraryIndexWorker] drains the queue.
+ * That indirection is the point: the passes used to share a WorkManager unique name enqueued with
+ * `REPLACE`, so asking for lengths cancelled a cover pass in flight and every action had to be
+ * greyed out while any one of them ran. Nothing here uses `REPLACE`, and asking for a second pass
+ * queues it.
  */
 @Singleton
 class LibraryIndexManager @Inject constructor(
     @ApplicationContext context: Context,
-    playbackSettings: PlaybackSettings,
+    private val playbackSettings: PlaybackSettings,
+    private val passes: IndexPassStore,
 ) {
     private val workManager = WorkManager.getInstance(context)
-
-    /**
-     * Mirrored into a field rather than read when enqueuing, because [enqueue] is not suspending
-     * and launching a coroutine to read it would leave a window where a second tap enqueues a
-     * second job before `busy` has turned true.
-     */
-    @Volatile private var wifiOnly = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val work = workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME)
 
     init {
-        playbackSettings.wifiOnlyDownloads
-            .onEach { wifiOnly = it }
-            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        // The invariant, self-healing: if something is requested and no worker is queued or
+        // running, enqueue one. It closes the window where a request arrives just as the drain
+        // ends — the worker is still RUNNING, so `KEEP` drops the enqueue, and without this the
+        // token would sit there with nothing to drain it. It also picks the queue back up after a
+        // failed run and after a cold start.
+        //
+        // The Wi-Fi preference is part of the combine rather than read at enqueue time so that a
+        // pass resumed on launch cannot be enqueued before its value is known — the resumed pass is
+        // the length sweep, the one where thousands of requests on mobile data actually matter.
+        combine(passes.pending, work, playbackSettings.wifiOnlyDownloads) { pending, infos, wifiOnly ->
+            wifiOnly.takeIf { pending.isNotEmpty() && infos.none { info -> !info.state.isFinished } }
+        }
+            .distinctUntilChanged()
+            .onEach { if (it != null) enqueue(it) }
+            .launchIn(scope)
     }
 
-    /** Which long pass the worker is in the middle of, and how far through. */
-    enum class IndexPhase { COVERS, LENGTHS }
-
-    /** [books]/[bookTotal] are only meaningful for [IndexPhase.LENGTHS]; zero elsewhere. */
+    /** [books]/[bookTotal] are only meaningful for [IndexPass.LENGTHS]; zero elsewhere. */
     data class IndexProgress(
-        val phase: IndexPhase,
+        val pass: IndexPass,
         val done: Int,
         val total: Int,
         val books: Int = 0,
@@ -62,121 +73,149 @@ class LibraryIndexManager @Inject constructor(
     )
 
     /**
-     * Progress of the running index job, or null when nothing is running. Read off WorkManager
-     * rather than held in memory so it survives the settings screen being closed and reopened —
-     * the work outlives the UI, and a measure pass over a whole library outlives it by a lot.
+     * The pass running right now and how far through it is, or null when nothing is running.
+     *
+     * Read off WorkManager rather than held in memory so it survives the screen being closed and
+     * reopened — the work outlives the UI, and a measure pass over a whole library outlives it by
+     * a lot. A [IndexProgress.total] of zero means the pass has started but has no count to report
+     * yet.
      */
-    val progress: Flow<IndexProgress?> =
-        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME).map { infos ->
-            val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING } ?: return@map null
-            val phase = when (running.progress.getString(LibraryIndexWorker.KEY_PHASE)) {
-                LibraryIndexWorker.PHASE_LENGTHS -> IndexPhase.LENGTHS
-                LibraryIndexWorker.PHASE_COVERS -> IndexPhase.COVERS
-                else -> return@map null // running, but not yet in a phase that reports
-            }
-            IndexProgress(
-                phase = phase,
-                done = running.progress.getInt(LibraryIndexWorker.KEY_DONE, 0),
-                total = running.progress.getInt(LibraryIndexWorker.KEY_TOTAL, 0),
-                books = running.progress.getInt(LibraryIndexWorker.KEY_BOOKS, 0),
-                bookTotal = running.progress.getInt(LibraryIndexWorker.KEY_BOOK_TOTAL, 0),
-            )
-        }
+    val progress: Flow<IndexProgress?> = work.map { infos ->
+        val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING } ?: return@map null
+        val pass = IndexPass.of(running.progress.getString(LibraryIndexWorker.KEY_PASS)) ?: return@map null
+        IndexProgress(
+            pass = pass,
+            done = running.progress.getInt(LibraryIndexWorker.KEY_DONE, 0),
+            total = running.progress.getInt(LibraryIndexWorker.KEY_TOTAL, 0),
+            books = running.progress.getInt(LibraryIndexWorker.KEY_BOOKS, 0),
+            bookTotal = running.progress.getInt(LibraryIndexWorker.KEY_BOOK_TOTAL, 0),
+        )
+    }
+
+    /** Which pass is running, for a row that only needs to know that much. */
+    val running: Flow<IndexPass?> = progress.map { it?.pass }
 
     /**
-     * True while an index job is queued OR running. Broader than [progress], which only reports
-     * once a pass reaches a phase that reports — every action enqueues with REPLACE, so the UI has
-     * to stop accepting taps from the moment one is queued, not from the first progress update.
+     * Every pass that has been asked for, whether it is running or still waiting its turn.
+     *
+     * This is what a row shows its own state from. Nothing derives "disable everything" from it
+     * any more — a queued pass is a promise, not a reason to refuse the next request.
      */
-    val busy: Flow<Boolean> =
-        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME).map { infos ->
-            infos.any { !it.state.isFinished }
-        }
+    val queued: Flow<Set<IndexPass>> = passes.pending.map { requests -> requests.map { it.pass }.toSet() }
+
+    /** True while anything at all is outstanding — what Stop is offered on. */
+    val active: Flow<Boolean> = combine(passes.pending, work) { pending, infos ->
+        pending.isNotEmpty() || infos.any { !it.state.isFinished }
+    }.distinctUntilChanged()
 
     /**
      * True while a pass is queued but not running — the constraints are not met yet.
      *
      * Without this the wifi-only rule below is indistinguishable from a hang: the work sits in
-     * ENQUEUED, [busy] is true, and nothing ever reports progress. The UI says what it is waiting
-     * for instead.
+     * ENQUEUED, something is plainly outstanding, and nothing ever reports progress. The UI says
+     * what it is waiting for instead.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val waiting: Flow<Boolean> =
-        workManager.getWorkInfosForUniqueWorkFlow(LibraryIndexWorker.WORK_NAME)
-            .map { infos ->
-                infos.any { it.state == WorkInfo.State.ENQUEUED } &&
-                    infos.none { it.state == WorkInfo.State.RUNNING }
-            }
-            .distinctUntilChanged()
-            .transformLatest { blocked ->
-                // Every pass is ENQUEUED for a moment before it starts, so claiming immediately
-                // would flash "waiting" on every single tap. Only the claim is delayed; clearing
-                // it is instant, so the notice never outlives the wait it describes.
-                if (!blocked) emit(false) else { delay(WAITING_GRACE_MS); emit(true) }
-            }
+    val waiting: Flow<Boolean> = work
+        .map { infos ->
+            infos.any { it.state == WorkInfo.State.ENQUEUED } &&
+                infos.none { it.state == WorkInfo.State.RUNNING }
+        }
+        .distinctUntilChanged()
+        .transformLatest { blocked ->
+            // Every pass is ENQUEUED for a moment before it starts, so claiming immediately would
+            // flash "waiting" on every single tap. Only the claim is delayed; clearing it is
+            // instant, so the notice never outlives the wait it describes.
+            if (!blocked) emit(false) else { delay(WAITING_GRACE_MS); emit(true) }
+        }
 
     /**
-     * Stops whatever pass is queued or running.
+     * Asks for [pass], queued behind whatever is already running.
      *
-     * Every pass here is resumable — a scan re-crawls, a cover or length pass skips everything
-     * already done — so stopping costs only the file in flight, and starting again picks up where
-     * it left off. That is also why there is no separate pause: the work list IS the state, and a
-     * second flag beside it would only drift.
+     * The token is written before the worker is enqueued, so a worker that starts immediately
+     * cannot find an empty queue.
      */
-    fun cancel() {
-        workManager.cancelUniqueWork(LibraryIndexWorker.WORK_NAME)
+    fun request(pass: IndexPass, deep: Boolean = false) {
+        scope.launch {
+            passes.request(PassRequest(pass, deep))
+            enqueue(playbackSettings.wifiOnlyDownloads.first())
+        }
     }
 
-    /** Everyday scan: incremental (skips unchanged subtrees) + fetch missing covers. */
-    fun scan() = enqueue(scan = true, incremental = true, resetCovers = false, policy = ExistingWorkPolicy.REPLACE)
+    /** Everyday scan: incremental crawl (skips unchanged subtrees), then any missing covers. */
+    fun scan() {
+        request(IndexPass.BOOKS)
+        request(IndexPass.ARTWORK)
+    }
 
-    /** Deep re-scan: full crawl (re-reads everything) + re-fetch all cover art. */
-    fun fullScan() = enqueue(scan = true, incremental = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
+    /** Deep re-scan: full crawl re-reading everything, and all cover art fetched again. */
+    fun fullScan() {
+        request(IndexPass.BOOKS, deep = true)
+        request(IndexPass.ARTWORK, deep = true)
+    }
 
-    /** Cover-only pass for books still missing art (on open); keeps a running index job. */
-    fun fetchMissingCovers() = enqueue(scan = false, incremental = false, resetCovers = false, policy = ExistingWorkPolicy.KEEP)
+    /** Cover pass for books still missing art — what the library screen asks for on open. */
+    fun fetchMissingCovers() = request(IndexPass.ARTWORK)
 
-    /** Re-fetch cover art for every book (resets attempts + cached art). */
-    fun refreshCovers() = enqueue(scan = false, incremental = false, resetCovers = true, policy = ExistingWorkPolicy.REPLACE)
+    /** Re-fetch cover art for every book (drops what is cached first). */
+    fun refreshCovers() = request(IndexPass.ARTWORK, deep = true)
 
     /**
      * Measure every book that still has no total length.
      *
-     * Deliberately its own action rather than part of [scan] or [fullScan]. A crawl reads names,
-     * sizes and ETags — one cheap request per folder — whereas a length needs a ranged probe of
-     * every audio file, so a library of a few hundred books is thousands of requests. Folding that
-     * into the everyday scan would make the routine action the expensive one; this way the cost is
-     * asked for.
+     * Deliberately its own pass rather than part of a scan. A crawl reads names, sizes and ETags —
+     * one cheap request per folder — whereas a length needs a ranged probe of every audio file, so
+     * a library of a few hundred books is thousands of requests. Folding that into the everyday
+     * scan would make the routine action the expensive one; this way the cost is asked for.
      */
-    fun measureDurations() =
-        enqueue(scan = false, incremental = false, resetCovers = false, measure = true, policy = ExistingWorkPolicy.REPLACE)
+    fun measureDurations() = request(IndexPass.LENGTHS)
 
-    private fun enqueue(
-        scan: Boolean,
-        incremental: Boolean,
-        resetCovers: Boolean,
-        policy: ExistingWorkPolicy,
-        measure: Boolean = false,
-    ) {
+    /**
+     * As [measureDurations], but re-arms the files whose probe failed before.
+     *
+     * A stored length is never discarded — a duration is a fact about bytes and re-reading it can
+     * only cost time — so this widens the pass to what was tried and could not be measured.
+     */
+    fun remeasureDurations() = request(IndexPass.LENGTHS, deep = true)
+
+    /** Publish outstanding metadata corrections now, rather than on the next idle moment. */
+    fun publishCorrections() = request(IndexPass.CORRECTIONS)
+
+    /**
+     * Stops everything queued or running.
+     *
+     * The queue is cleared *first*: the reconciler above would otherwise see a pending request with
+     * no worker and start one straight back up. Every pass resumes where it stopped when it is next
+     * asked for — a scan re-crawls, a cover or length pass skips what is already done — which is
+     * why this is a plain Stop and not a pause. A second flag beside the queue and WorkManager
+     * would only be a third copy of the same state.
+     */
+    fun cancel() {
+        scope.launch {
+            passes.clear()
+            workManager.cancelUniqueWork(LibraryIndexWorker.WORK_NAME)
+        }
+    }
+
+    /**
+     * Enqueues a drain. Enqueuing twice for one request is deliberately harmless — the queue
+     * absorbs a duplicate and `KEEP` leaves the run in flight alone — so nothing here has to guard
+     * against a second tap.
+     */
+    private fun enqueue(wifiOnly: Boolean) {
         val request = OneTimeWorkRequestBuilder<LibraryIndexWorker>()
-            .setInputData(
-                workDataOf(
-                    LibraryIndexWorker.KEY_SCAN to scan,
-                    LibraryIndexWorker.KEY_INCREMENTAL to incremental,
-                    LibraryIndexWorker.KEY_RESET_COVERS to resetCovers,
-                    LibraryIndexWorker.KEY_MEASURE to measure,
-                ),
-            )
-            // Follows the same preference as downloads. A length pass is thousands of requests
-            // over the whole library, so honouring "Wi-Fi only" matters more here than it does for
-            // a single book — this used to run on mobile data regardless of the setting.
+            // Follows the same preference as downloads. A length pass is thousands of requests over
+            // the whole library, so honouring "Wi-Fi only" matters more here than it does for a
+            // single book — this used to run on mobile data regardless of the setting.
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
                     .build(),
             )
             .build()
-        workManager.enqueueUniqueWork(LibraryIndexWorker.WORK_NAME, policy, request)
+        // KEEP, never REPLACE: a worker already draining the queue will reach this request too, and
+        // replacing it would cancel the pass in flight — the whole defect this queue removes.
+        workManager.enqueueUniqueWork(LibraryIndexWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
     }
 
     private companion object {

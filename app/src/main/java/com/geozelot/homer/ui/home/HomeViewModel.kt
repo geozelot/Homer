@@ -19,6 +19,7 @@ import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryRepository
@@ -552,7 +553,13 @@ class HomeViewModel @Inject constructor(
     /** Measure the length of every book that doesn't have one yet — see the manager for the cost. */
     fun measureBookLengths() = libraryIndexManager.measureDurations()
 
-    /** Stops the running scan / cover / length pass. Every one of them resumes where it stopped. */
+    /** As [measureBookLengths], but also re-arms the files whose probe failed before. */
+    fun remeasureBookLengths() = libraryIndexManager.remeasureDurations()
+
+    /** Publish outstanding metadata corrections now. */
+    fun publishCorrections() = libraryIndexManager.publishCorrections()
+
+    /** Stops everything queued or running. Every pass resumes where it stopped. */
     fun stopIndexing() = libraryIndexManager.cancel()
 
     /** How many books still have no length, so the settings row can say whether it is worth a tap. */
@@ -563,23 +570,25 @@ class HomeViewModel @Inject constructor(
     val lastScannedAt: StateFlow<Long?> = crawlDirDao.observeLastScanned()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Live progress of the cover / length passes, for the rows that trigger them. */
+    /** Live progress of the pass running now, for the row that asked for it. */
     val indexProgress: StateFlow<LibraryIndexManager.IndexProgress?> = libraryIndexManager.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
-     * Whether an index job is queued or running — what the scan actions disable on.
+     * Which passes are outstanding — running or waiting their turn.
      *
-     * Not [indexProgress]: that is null until the first progress report, and null again between
-     * enqueueing and the worker starting. Every action enqueues with REPLACE, so a tap in either
-     * of those windows cancels a pass already under way.
+     * Each row reads its own state from this. It is deliberately not a reason to refuse a tap:
+     * asking for a second pass queues it now, where it used to cancel the one in flight.
      */
-    val indexBusy: StateFlow<Boolean> = libraryIndexManager.busy
+    val indexQueued: StateFlow<Set<IndexPass>> = libraryIndexManager.queued
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** Whether anything at all is outstanding — what Stop is offered on. */
+    val indexActive: StateFlow<Boolean> = libraryIndexManager.active
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Queued but not running: constraints (a metered connection, usually) are not met yet. */
     val indexWaiting: StateFlow<Boolean> = libraryIndexManager.waiting
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun download(bookId: String) = downloadManager.download(bookId)
