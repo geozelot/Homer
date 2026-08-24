@@ -15,9 +15,15 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
@@ -75,7 +81,9 @@ class DurationEnricher @Inject constructor(
         // book-level progress sat on "1 of 226" for the whole of it — which reads as a hang, and
         // was reported as one. Files move.
         val total = audioFileDao.countUnmeasured()
-        var done = 0
+        // Atomic: measure() now runs a book's files concurrently, so this is incremented from
+        // several coroutines and a plain var would quietly lose counts.
+        val done = AtomicInteger(0)
         onProgress(0, total)
         for ((index, bookId) in bookIds.withIndex()) {
             coroutineContext.ensureActive()
@@ -83,10 +91,7 @@ class DurationEnricher @Inject constructor(
                 Log.i(TAG, "measureAll: offline after $index/${bookIds.size} books, stopping")
                 return
             }
-            measure(bookId) {
-                done++
-                onProgress(done, total)
-            }
+            measure(bookId) { onProgress(done.incrementAndGet(), total) }
         }
         onProgress(total, total)
     }
@@ -119,89 +124,53 @@ class DurationEnricher @Inject constructor(
             if (missing.isEmpty() && !needsGenre && !needsChapters) return
             if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
 
-            // Genre + embedded chapters live on the (first) file; capture them from its probe.
-            var genre: String? = null
-            var firstProbe: DurationExtractor.Probe? = null
-            // Which tier answered, for the one summary line at the end. The whole point of the
-            // header reader is that the other two should almost never run; without a count there
-            // is no way to know from a log whether that is true.
-            var fromHeader = 0
-            var fromFastProbe = 0
-            var fromFullProbe = 0
-            // A big book can run for many minutes with nothing to show for it, and the summary
-            // below only prints once the whole book is done. Without a heartbeat there is no way
-            // to tell a slow pass from a stuck one, or to know which tier is doing the work.
-            var processed = 0
-            val startedAtMs = System.currentTimeMillis()
-            var lastHeartbeatMs = startedAtMs
-            for (file in missing) {
-                coroutineContext.ensureActive()
-                // Connectivity can drop part-way through. Every further probe would only wait
-                // out its 30s timeout and then be discarded, so a 40-file book would spend
-                // twenty minutes achieving nothing. Stop and let a later open resume.
-                if (!networkMonitor.isOnline()) break
-                val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
+            // Genre + embedded chapters live on the (first) file; captured from a probe if one
+            // runs. Guarded by [state] below, because the files are measured concurrently.
+            val state = BookMeasureState(total = missing.size, startedAtMs = System.currentTimeMillis())
 
-                // Decoder-free first. A duration lives in the container header, but the full probe
-                // reaches it by building a player with renderers and waiting for STATE_READY —
-                // which instantiates a hardware audio decoder per file, seconds each, and floods
-                // logcat with codec chatter that evicts Homer's own lines from the log window.
-                // Cheapest first: the duration is a few bytes of container header, so read those
-                // rather than streaming the file until a player works it out. Falls through on
-                // anything it cannot read confidently.
-                var measured = audioHeaderDuration.durationMs(url, file.sizeBytes)
-                if (measured != null) fromHeader++
+            // Files are independent, and what is left after the header reader landed is almost
+            // entirely round-trip latency on small ranged reads — so the way to go faster is to
+            // have several in flight. Book-at-a-time is preserved; only the files inside one book
+            // overlap, which keeps the progress denominator and the genre/chapter logic simple.
+            coroutineScope {
+                val slots = Semaphore(MEASURE_CONCURRENCY)
+                // The ExoPlayer tiers stay SERIAL. A device has a small, finite number of hardware
+                // decoders, and running several full probes at once would surface as probe
+                // failures — which this code records as "unmeasurable". Concurrency must never be
+                // able to turn a readable file into a permanently unmeasured one, so the fallback
+                // path keeps exactly the behaviour it has today.
+                val probeSlot = Semaphore(1)
+                missing.map { file ->
+                    async {
+                        slots.withPermit {
+                            ensureActive()
+                            // Connectivity can drop part-way through. Every further probe would
+                            // only wait out its timeout and be discarded, so stop claiming files
+                            // and let a later pass resume.
+                            if (!networkMonitor.isOnline()) return@withPermit
+                            val url = webDavClient
+                                .urlFor(credentials, libraryRoot, file.relativePath).toString()
+                            val measured = measureFile(url, file.sizeBytes, probeSlot, state)
 
-                if (measured == null && fastProbes.shouldTryFast()) {
-                    measured = durationExtractor.probeDuration(url)
-                    // Only a fast-probe answer resets the gate. Crediting it with a header read
-                    // would mean the gate never withdraws on a device where the probe is broken,
-                    // because the header answers most files and would keep clearing the count.
-                    if (measured != null) {
-                        fromFastProbe++
-                        fastProbes.onFastSuccess()
+                            if (measured != null) {
+                                audioFileDao.updateDuration(file.relativePath, measured)
+                            } else if (networkMonitor.isOnline()) {
+                                // Only a negative answer we can trust: still online, so "no
+                                // duration" is about the file, not the connection.
+                                audioFileDao.markDurationAttempted(file.relativePath)
+                            }
+                            state.fileDone(bookId)
+                            onFileDone()
+                        }
                     }
-                }
-                if (measured == null) {
-                    // The FULL probe is the authority. Nothing is ever recorded as unmeasurable
-                    // on the header reader's or the fast probe's word, so a file either of them
-                    // declines to answer for loses time and never correctness — and the gate stops
-                    // that loss being unbounded on a device where the fast probe cannot work.
-                    val full = durationExtractor.probe(url)
-                    measured = full.durationMs
-                    if (measured != null) fromFullProbe++
-                    if (genre == null) genre = full.genre
-                    if (firstProbe == null) firstProbe = full
-                    when {
-                        measured == null -> fastProbes.onBothFailed()
-                        fastProbes.onFullProbeRescue() ->
-                            Log.i(TAG, "decoder-free probes aren't working here; using the full probe from now on")
-                    }
-                }
-
-                if (measured != null) {
-                    audioFileDao.updateDuration(file.relativePath, measured)
-                } else if (networkMonitor.isOnline()) {
-                    // Only a negative answer we can trust: still online, so "no duration" is
-                    // about the file, not the connection.
-                    audioFileDao.markDurationAttempted(file.relativePath)
-                }
-
-                processed++
-                onFileDone()
-
-                val now = System.currentTimeMillis()
-                // An early one so a rate is known within seconds, then a steady beat.
-                if (processed == HEARTBEAT_FIRST_AT || now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS) {
-                    lastHeartbeatMs = now
-                    val perFile = (now - startedAtMs) / processed
-                    Log.i(
-                        TAG,
-                        "book $bookId: $processed/${missing.size} at ${perFile}ms/file " +
-                            "(header=$fromHeader fast=$fromFastProbe full=$fromFullProbe)",
-                    )
-                }
+                }.awaitAll()
             }
+
+            var genre: String? = state.genre
+            var firstProbe: DurationExtractor.Probe? = state.firstProbe
+            val fromHeader = state.fromHeader
+            val fromFastProbe = state.fromFastProbe
+            val fromFullProbe = state.fromFullProbe
 
             // Nothing was probed above but genre/chapters are still wanted — read the first
             // file's tags once.
@@ -272,10 +241,115 @@ class DurationEnricher @Inject constructor(
         }
     }
 
+    /**
+     * The shared tallies for one book's concurrent measure pass.
+     *
+     * Every field is written from several coroutines at once, so all of it sits behind one lock.
+     * Nothing here suspends, which is why a plain monitor is enough and a Mutex would be noise.
+     */
+    private inner class BookMeasureState(private val total: Int, private val startedAtMs: Long) {
+        private val lock = Any()
+        private var header = 0
+        private var fast = 0
+        private var full = 0
+        private var processed = 0
+        private var lastHeartbeatMs = startedAtMs
+        private var genreValue: String? = null
+        private var firstProbeValue: DurationExtractor.Probe? = null
+
+        val fromHeader: Int get() = synchronized(lock) { header }
+        val fromFastProbe: Int get() = synchronized(lock) { fast }
+        val fromFullProbe: Int get() = synchronized(lock) { full }
+        val genre: String? get() = synchronized(lock) { genreValue }
+        val firstProbe: DurationExtractor.Probe? get() = synchronized(lock) { firstProbeValue }
+
+        fun recordHeader() = synchronized(lock) { header++ }
+
+        fun recordFastProbe() = synchronized(lock) { fast++ }
+
+        /**
+         * A full probe also carries the book's genre and any embedded chapters, so whichever file
+         * needed one supplies them. Which file that is no longer has a defined order, and it does
+         * not matter: genre is a property of the book, and chapters are only ever read for
+         * single-file books, where there is exactly one candidate.
+         */
+        fun recordFullProbe(probe: DurationExtractor.Probe) = synchronized(lock) {
+            if (probe.durationMs != null) full++
+            if (genreValue == null) genreValue = probe.genre
+            if (firstProbeValue == null) firstProbeValue = probe
+        }
+
+        /** Counts a finished file and, on a beat, says where the book is and which tier is working. */
+        fun fileDone(bookId: String) {
+            val line = synchronized(lock) {
+                processed++
+                val now = System.currentTimeMillis()
+                // An early one so a rate is known within seconds, then a steady beat.
+                if (processed != HEARTBEAT_FIRST_AT && now - lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) return
+                lastHeartbeatMs = now
+                "book $bookId: $processed/$total at ${(now - startedAtMs) / processed}ms/file " +
+                    "(header=$header fast=$fast full=$full)"
+            }
+            Log.i(TAG, line)
+        }
+    }
+
+    /**
+     * One file, cheapest tier first. Returns its duration, or null if no tier could read it.
+     *
+     * [probeSlot] serialises the two ExoPlayer tiers; see the comment at its construction.
+     */
+    private suspend fun measureFile(
+        url: String,
+        sizeBytes: Long,
+        probeSlot: Semaphore,
+        state: BookMeasureState,
+    ): Long? {
+        // Cheapest first, and concurrent: the duration is a few bytes of container header, so
+        // read those rather than streaming the file until a player works it out.
+        audioHeaderDuration.durationMs(url, sizeBytes)?.let {
+            state.recordHeader()
+            return it
+        }
+
+        return probeSlot.withPermit {
+            if (fastProbes.shouldTryFast()) {
+                val fast = durationExtractor.probeDuration(url)
+                // Only a fast-probe answer resets the gate. Crediting it with a header read would
+                // mean the gate never withdraws on a device where the probe is broken, because the
+                // header answers most files and would keep clearing the count.
+                if (fast != null) {
+                    fastProbes.onFastSuccess()
+                    state.recordFastProbe()
+                    return@withPermit fast
+                }
+            }
+            // The FULL probe is the authority. Nothing is ever recorded as unmeasurable on the
+            // header reader's or the fast probe's word, so a file either of them declines to
+            // answer for loses time and never correctness — and the gate stops that loss being
+            // unbounded on a device where the fast probe cannot work.
+            val full = durationExtractor.probe(url)
+            state.recordFullProbe(full)
+            when {
+                full.durationMs == null -> fastProbes.onBothFailed()
+                fastProbes.onFullProbeRescue() ->
+                    Log.i(TAG, "decoder-free probes aren't working here; using the full probe from now on")
+            }
+            full.durationMs
+        }
+    }
+
     private companion object {
         const val TAG = "HomerMeta"
         const val HEARTBEAT_FIRST_AT = 25
         const val HEARTBEAT_INTERVAL_MS = 30_000L
+
+        /**
+         * Files measured at once within one book. What remains after the header reader is round
+         * trips, so this is the multiplier; kept modest because the other end is one Nextcloud
+         * being asked for thousands of ranges.
+         */
+        const val MEASURE_CONCURRENCY = 6
     }
 }
 

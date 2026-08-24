@@ -49,15 +49,20 @@ import kotlin.coroutines.resume
  * Both failing says nothing about the fast path (the file may genuinely have no readable duration,
  * or the link may have dropped), so it does not count against it. Without that distinction a
  * library of unmeasurable files would disable a perfectly good fast path.
+ *
+ * Synchronised because it is one gate for the whole process: a measure sweep and a book being
+ * opened can be probing at the same time, so the count is not owned by a single caller.
  */
 internal class FastProbeGate(private val fallbackLimit: Int = FALLBACK_LIMIT) {
 
     private var consecutiveRescues = 0
     private var withdrawn = false
 
+    @Synchronized
     fun shouldTryFast(): Boolean = !withdrawn
 
     /** The fast probe answered. */
+    @Synchronized
     fun onFastSuccess() {
         consecutiveRescues = 0
     }
@@ -66,6 +71,7 @@ internal class FastProbeGate(private val fallbackLimit: Int = FALLBACK_LIMIT) {
      * The fast probe found nothing and the full probe found a duration.
      * Returns true on the transition to withdrawn, so the caller can log it once.
      */
+    @Synchronized
     fun onFullProbeRescue(): Boolean {
         if (withdrawn) return false
         consecutiveRescues++
