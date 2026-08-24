@@ -50,6 +50,9 @@ class DurationEnricher @Inject constructor(
     )
     private val inFlight = Collections.synchronizedSet(mutableSetOf<String>())
 
+    /** Process-wide: once we learn this device can't do decoder-free probes, stop paying for it. */
+    private val fastProbes = FastProbeGate()
+
     /** Fire-and-forget; no-op if this book is already fully measured or being measured. */
     fun enrich(bookId: String) {
         scope.launch { measure(bookId) }
@@ -120,8 +123,29 @@ class DurationEnricher @Inject constructor(
                 // twenty minutes achieving nothing. Stop and let a later open resume.
                 if (!networkMonitor.isOnline()) break
                 val url = webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
-                val probe = durationExtractor.probe(url)
-                val measured = probe.durationMs
+
+                // Decoder-free first. A duration lives in the container header, but the full probe
+                // reaches it by building a player with renderers and waiting for STATE_READY —
+                // which instantiates a hardware audio decoder per file, seconds each, and floods
+                // logcat with codec chatter that evicts Homer's own lines from the log window.
+                var measured = if (fastProbes.shouldTryFast()) durationExtractor.probeDuration(url) else null
+                if (measured != null) {
+                    fastProbes.onFastSuccess()
+                } else {
+                    // The FULL probe is the authority. Nothing is ever recorded as unmeasurable on
+                    // the fast probe's word, so a device where it silently returns nothing loses
+                    // time and never correctness — and the gate stops that loss being unbounded.
+                    val full = durationExtractor.probe(url)
+                    measured = full.durationMs
+                    if (genre == null) genre = full.genre
+                    if (firstProbe == null) firstProbe = full
+                    when {
+                        measured == null -> fastProbes.onBothFailed()
+                        fastProbes.onFullProbeRescue() ->
+                            Log.i(TAG, "decoder-free probes aren't working here; using the full probe from now on")
+                    }
+                }
+
                 if (measured != null) {
                     audioFileDao.updateDuration(file.relativePath, measured)
                 } else if (networkMonitor.isOnline()) {
@@ -129,8 +153,6 @@ class DurationEnricher @Inject constructor(
                     // about the file, not the connection.
                     audioFileDao.markDurationAttempted(file.relativePath)
                 }
-                if (genre == null) genre = probe.genre
-                if (firstProbe == null) firstProbe = probe
             }
 
             // Nothing was probed above but genre/chapters are still wanted — probe the first

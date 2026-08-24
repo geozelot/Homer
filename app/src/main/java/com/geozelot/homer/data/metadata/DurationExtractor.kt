@@ -9,9 +9,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.id3.ChapterFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
@@ -22,6 +24,52 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+
+/**
+ * Decides whether [DurationExtractor.probeDuration]'s decoder-free path is still worth trying.
+ *
+ * Whether a renderer-less player reports a duration depends on the device's extractors, and there
+ * is no way to establish that up front. So the fast path is used optimistically and withdrawn if
+ * the full probe keeps having to rescue it: [FALLBACK_LIMIT] consecutive rescues and the rest of
+ * the process goes straight to the full probe. A fast path that does not work on some device
+ * therefore costs a bounded amount of time and never a wrong answer.
+ *
+ * Only a rescue counts — the fast probe finding nothing where the FULL probe then finds a duration.
+ * Both failing says nothing about the fast path (the file may genuinely have no readable duration,
+ * or the link may have dropped), so it does not count against it. Without that distinction a
+ * library of unmeasurable files would disable a perfectly good fast path.
+ */
+internal class FastProbeGate(private val fallbackLimit: Int = FALLBACK_LIMIT) {
+
+    private var consecutiveRescues = 0
+    private var withdrawn = false
+
+    fun shouldTryFast(): Boolean = !withdrawn
+
+    /** The fast probe answered. */
+    fun onFastSuccess() {
+        consecutiveRescues = 0
+    }
+
+    /**
+     * The fast probe found nothing and the full probe found a duration.
+     * Returns true on the transition to withdrawn, so the caller can log it once.
+     */
+    fun onFullProbeRescue(): Boolean {
+        if (withdrawn) return false
+        consecutiveRescues++
+        if (consecutiveRescues < fallbackLimit) return false
+        withdrawn = true
+        return true
+    }
+
+    /** Neither probe found a duration — not the fast path's fault, so it is not held against it. */
+    fun onBothFailed() = Unit
+
+    companion object {
+        const val FALLBACK_LIMIT = 3
+    }
+}
 
 /**
  * Reads a single file's playback duration by preparing a headless [ExoPlayer] over the
@@ -53,6 +101,84 @@ class DurationExtractor @Inject constructor(
     // looper thread so probing never blocks Main and callbacks arrive here in order.
     private val thread = HandlerThread("HomerDurationProbe").apply { start() }
     private val handler = Handler(thread.looper)
+
+    /**
+     * Duration only, with no decoder anywhere in the path.
+     *
+     * [probe] builds a player WITH renderers and waits for STATE_READY, which instantiates a
+     * hardware audio decoder for every file — a Codec2Client/CCodec cluster per probe in logcat,
+     * a couple of seconds each, and hours across a library. A duration lives in the container
+     * header, so this builds the player with NO renderers and takes the value off the timeline the
+     * moment the source reports it, which does not depend on renderer state.
+     *
+     * Returns null when the duration never arrives. Callers MUST read that as "ask [probe]", never
+     * as "this file has no duration": whether a renderer-less player reports a duration depends on
+     * the device's extractors, and that cannot be established from here. [FastProbeGate] bounds
+     * how long a device where this doesn't work goes on paying for it.
+     */
+    suspend fun probeDuration(mediaUri: String): Long? =
+        withTimeoutOrNull(FAST_PROBE_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                handler.post {
+                    val settled = AtomicBoolean(false)
+                    var player: ExoPlayer? = null
+                    try {
+                        val exo = ExoPlayer.Builder(
+                            context,
+                            RenderersFactory { _, _, _, _, _ -> emptyArray() },
+                        )
+                            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                            .build()
+                        player = exo
+
+                        fun finish(duration: Long?) {
+                            if (!settled.compareAndSet(false, true)) return
+                            exo.release()
+                            if (cont.isActive) cont.resume(duration)
+                        }
+
+                        fun resolveIfKnown() {
+                            val d = exo.duration
+                            if (d > 0 && d != C.TIME_UNSET) finish(d)
+                        }
+
+                        exo.addListener(object : Player.Listener {
+                            // The timeline carries the duration as soon as the source is prepared.
+                            // Listening here rather than only on STATE_READY is the whole point of
+                            // having no renderers to become ready.
+                            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                                resolveIfKnown()
+                            }
+
+                            override fun onPlaybackStateChanged(state: Int) {
+                                when (state) {
+                                    Player.STATE_READY -> resolveIfKnown()
+                                    Player.STATE_ENDED -> finish(null)
+                                    else -> Unit
+                                }
+                            }
+
+                            override fun onPlayerError(error: PlaybackException) {
+                                Log.d(TAG, "fast duration probe failed for $mediaUri", error)
+                                finish(null)
+                            }
+                        })
+
+                        exo.setMediaItem(MediaItem.fromUri(mediaUri))
+                        exo.playWhenReady = false
+                        exo.prepare()
+
+                        cont.invokeOnCancellation {
+                            handler.post { if (settled.compareAndSet(false, true)) exo.release() }
+                        }
+                    } catch (e: Throwable) {
+                        Log.d(TAG, "fast duration probe setup failed for $mediaUri", e)
+                        player?.release()
+                        if (settled.compareAndSet(false, true) && cont.isActive) cont.resume(null)
+                    }
+                }
+            }
+        }
 
     /** Duration + genre, each null if unknown / on failure / on timeout. */
     suspend fun probe(mediaUri: String): Probe =
@@ -150,5 +276,12 @@ class DurationExtractor @Inject constructor(
     private companion object {
         const val TAG = "HomerMeta"
         const val PROBE_TIMEOUT_MS = 30_000L
+
+        /**
+         * Shorter than the full probe's on purpose. A working decoder-free probe resolves in well
+         * under a second — it reads a header — so this is not the discriminator for a slow link;
+         * it is what makes a device where the fast path does NOT work cheap to find out about.
+         */
+        const val FAST_PROBE_TIMEOUT_MS = 12_000L
     }
 }
