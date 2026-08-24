@@ -1377,7 +1377,18 @@ private fun ExpandedSeriesHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(series.name, style = SerifTitle, color = Parchment, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    series.name,
+                    // Same face and size as the list view's shelf row, so a series title reads
+                    // identically whichever view it is in. The serif stays for the empty states,
+                    // which are the only headings on this screen that aren't a row of something.
+                    color = Parchment,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
             }
             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
