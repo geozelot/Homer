@@ -108,12 +108,18 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
  * Reads the app's own recent logcat (no permission needed for own-process logs), filtered to
  * Homer's own tags at every level plus warnings/errors from anything else — so the useful lines
  * (scan/download/sync progress, WorkManager failures, crashes) aren't buried under framework noise.
+ *
+ * [NOISY_TAGS] is silenced outright. Creating a media codec emits ~15 warning lines that carry no
+ * information we can act on, and a metadata sweep creates one per file: a 1200-line window filled
+ * up in seconds and held ZERO Homer lines, which is exactly when the log is wanted. Silencing them
+ * is what makes this screen usable during a scan or a length pass.
  */
 private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
-    val filterSpec = HOMER_TAGS.map { "$it:V" } + "*:W" // Homer verbose+, everything else warn+
+    // Later specs win, so the silences must follow the `*:W` default they override.
+    val filterSpec = HOMER_TAGS.map { "$it:V" } + "*:W" + NOISY_TAGS.map { "$it:S" }
     runCatching {
         val process = Runtime.getRuntime().exec(
-            arrayOf("logcat", "-d", "-v", "time", "-t", "1200") + filterSpec.toTypedArray(),
+            arrayOf("logcat", "-d", "-v", "time", "-t", "2000") + filterSpec.toTypedArray(),
         )
         redact(process.inputStream.bufferedReader().use { it.readText() })
     }.getOrElse { "Could not read logs: ${it.message}" }
@@ -132,4 +138,16 @@ private fun redact(raw: String): String = raw
 private val HOMER_TAGS = listOf(
     "HomerAuth", "HomerScan", "HomerMeta", "HomerDownload",
     "HomerStore", "HomerSync", "HomerPlay", "HomerNet",
+)
+
+/**
+ * Framework tags that log at W/E per media codec instance and drown everything else out.
+ *
+ * `.geozelot.homer` is not one of Homer's own tags — it is the native media stack tagging with the
+ * truncated process name ("Failed to query component interface..."). Homer's Kotlin logging only
+ * ever uses [HOMER_TAGS], so silencing it loses nothing of ours.
+ */
+private val NOISY_TAGS = listOf(
+    "Codec2Client", "CCodec", "CCodecConfig", "CCodecBufferChannel",
+    "LoudnessCodecController", "MediaCodec", "MessageQueue", ".geozelot.homer",
 )
