@@ -6,16 +6,21 @@ import android.os.HandlerThread
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.BaseRenderer
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.MetadataRetriever
+import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.id3.ChapterFrame
@@ -78,6 +83,41 @@ internal class FastProbeGate(private val fallbackLimit: Int = FALLBACK_LIMIT) {
 }
 
 /**
+ * A renderer that claims audio tracks and decodes nothing.
+ *
+ * The probe needs the player to load a file's header without instantiating a hardware decoder.
+ * Building it with NO renderers looks like the way to do that, and it is why the first attempt
+ * silently returned nothing on every file: with no renderers, track selection enables no tracks,
+ * and `ProgressiveMediaPeriod.getBufferedPositionUs()` answers `TIME_END_OF_SOURCE` whenever its
+ * enabled-track count is zero. The player reads that as "buffered to the end", `renderersEnded` is
+ * vacuously true because there are no renderers to end — and it goes straight to `STATE_ENDED`,
+ * before the timeline refresh that carries the duration ever arrives.
+ *
+ * One renderer that accepts audio fixes that: a track is enabled, the period reports a real
+ * buffered position, and nothing ends prematurely. [render] does nothing and [isEnded] is always
+ * false, so no sample is ever decoded and no `MediaCodec` is created — the duration still comes
+ * off the timeline, which is populated by the extractor, not by playback.
+ */
+@OptIn(UnstableApi::class)
+private class HeaderOnlyAudioRenderer : BaseRenderer(C.TRACK_TYPE_AUDIO) {
+
+    override fun getName(): String = "HomerHeaderOnlyAudio"
+
+    override fun supportsFormat(format: Format): Int = RendererCapabilities.create(
+        if (MimeTypes.isAudio(format.sampleMimeType)) C.FORMAT_HANDLED else C.FORMAT_UNSUPPORTED_TYPE,
+    )
+
+    override fun render(positionUs: Long, elapsedRealtimeUs: Long) = Unit
+
+    // Never ready and never ended. Ready would invite the player to start making playback
+    // progress; ended is the premature-stop this class exists to prevent. The probe resolves off
+    // the timeline, so neither is needed.
+    override fun isReady(): Boolean = false
+
+    override fun isEnded(): Boolean = false
+}
+
+/**
  * Reads a single file's playback duration by preparing a headless [ExoPlayer] over the
  * authenticated OkHttp data source — the same transport that streams audio. For most
  * container formats ExoPlayer reports the duration once it reaches [Player.STATE_READY]
@@ -122,36 +162,47 @@ class DurationExtractor @Inject constructor(
      * the device's extractors, and that cannot be established from here. [FastProbeGate] bounds
      * how long a device where this doesn't work goes on paying for it.
      */
-    suspend fun probeDuration(mediaUri: String): Long? =
-        withTimeoutOrNull(FAST_PROBE_TIMEOUT_MS) {
+    suspend fun probeDuration(mediaUri: String): Long? {
+        val outcome = withTimeoutOrNull(FAST_PROBE_TIMEOUT_MS) {
             suspendCancellableCoroutine { cont ->
                 handler.post {
                     val settled = AtomicBoolean(false)
                     var player: ExoPlayer? = null
+
+                    fun settle(result: Pair<Long?, String>, exo: ExoPlayer?) {
+                        if (!settled.compareAndSet(false, true)) return
+                        exo?.release()
+                        if (cont.isActive) cont.resume(result)
+                    }
+
                     try {
                         val exo = ExoPlayer.Builder(
                             context,
-                            RenderersFactory { _, _, _, _, _ -> emptyArray() },
+                            RenderersFactory { _, _, _, _, _ -> arrayOf(HeaderOnlyAudioRenderer()) },
                         )
                             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                            // The header is all this needs. Without a tight budget the player
+                            // would happily pull the default ~50s of audio for a number that
+                            // arrives in the first few KB.
+                            .setLoadControl(
+                                DefaultLoadControl.Builder()
+                                    .setBufferDurationsMs(1_000, 2_000, 1_000, 1_000)
+                                    .setTargetBufferBytes(256 * 1024)
+                                    .setPrioritizeTimeOverSizeThresholds(false)
+                                    .build(),
+                            )
                             .build()
                         player = exo
 
-                        fun finish(duration: Long?) {
-                            if (!settled.compareAndSet(false, true)) return
-                            exo.release()
-                            if (cont.isActive) cont.resume(duration)
-                        }
-
                         fun resolveIfKnown() {
                             val d = exo.duration
-                            if (d > 0 && d != C.TIME_UNSET) finish(d)
+                            if (d > 0 && d != C.TIME_UNSET) settle(d to "ok", exo)
                         }
 
                         exo.addListener(object : Player.Listener {
-                            // The timeline carries the duration as soon as the source is prepared.
-                            // Listening here rather than only on STATE_READY is the whole point of
-                            // having no renderers to become ready.
+                            // The timeline carries the duration as soon as the extractor has read
+                            // enough of the container to know it — which is the whole point: it
+                            // does not depend on any renderer becoming ready.
                             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
                                 resolveIfKnown()
                             }
@@ -159,14 +210,16 @@ class DurationExtractor @Inject constructor(
                             override fun onPlaybackStateChanged(state: Int) {
                                 when (state) {
                                     Player.STATE_READY -> resolveIfKnown()
-                                    Player.STATE_ENDED -> finish(null)
+                                    // Should no longer be reachable before the duration arrives
+                                    // (see HeaderOnlyAudioRenderer); named so the log says which
+                                    // way it went if it ever is.
+                                    Player.STATE_ENDED -> settle(null to "ended before a duration", exo)
                                     else -> Unit
                                 }
                             }
 
                             override fun onPlayerError(error: PlaybackException) {
-                                Log.d(TAG, "fast duration probe failed for $mediaUri", error)
-                                finish(null)
+                                settle(null to "error ${error.errorCodeName}", exo)
                             }
                         })
 
@@ -178,13 +231,23 @@ class DurationExtractor @Inject constructor(
                             handler.post { if (settled.compareAndSet(false, true)) exo.release() }
                         }
                     } catch (e: Throwable) {
-                        Log.d(TAG, "fast duration probe setup failed for $mediaUri", e)
-                        player?.release()
-                        if (settled.compareAndSet(false, true) && cont.isActive) cont.resume(null)
+                        settle(null to "setup failed: ${e.message}", player)
                     }
                 }
             }
         }
+
+        // Logged at I, not D: R8 strips Log.d from release builds, and release is the only build
+        // that ever runs against a real library. A silent fast path is what made the first version
+        // of this cost three betas to diagnose.
+        if (outcome == null) {
+            Log.i(TAG, "fast duration probe gave up: timed out after ${FAST_PROBE_TIMEOUT_MS}ms")
+            return null
+        }
+        val (duration, reason) = outcome
+        if (duration == null) Log.i(TAG, "fast duration probe gave up: $reason")
+        return duration
+    }
 
     /**
      * Genre + embedded chapters, with no decoder anywhere in the path.
@@ -347,6 +410,12 @@ class DurationExtractor @Inject constructor(
          * Shorter than the full probe's on purpose. A working decoder-free probe resolves in well
          * under a second — it reads a header — so this is not the discriminator for a slow link;
          * it is what makes a device where the fast path does NOT work cheap to find out about.
+         *
+         * Note what [HeaderOnlyAudioRenderer] changed about the failure profile: the probe no
+         * longer ends early, so a file whose container parses but never yields a duration now
+         * waits this out instead of returning at once. Network and parse failures still settle
+         * immediately through `onPlayerError`, and the gate caps the cost of a device where the
+         * path is broken at three files — but a genuinely unreadable file is dearer than it was.
          */
         const val FAST_PROBE_TIMEOUT_MS = 12_000L
 
