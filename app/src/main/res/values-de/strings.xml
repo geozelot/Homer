@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  German. Addresses the reader with "du", matching the English, which is deliberately personal
+  rather than formal. A few things are left in English on purpose: the app's own name, and the
+  language names in the language picker, which each name themselves.
+-->
+<resources>
+
+    <!-- Shared actions / reused labels -->
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_back">Zurück</string>
+    <string name="action_save">Speichern</string>
+    <string name="action_reset">Zurücksetzen</string>
+    <string name="action_close">Schließen</string>
+    <string name="action_clear">Entfernen</string>
+    <string name="action_retry">Erneut versuchen</string>
+    <string name="action_play">Abspielen</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_edit">Bearbeiten</string>
+    <string name="action_more">Mehr</string>
+    <string name="action_remove">Entfernen</string>
+    <string name="action_refresh">Aktualisieren</string>
+    <string name="action_copy">Kopieren</string>
+    <string name="action_share">Teilen</string>
+    <string name="action_collapse">Zuklappen</string>
+    <string name="action_expand">Aufklappen</string>
+    <string name="action_decrease">Verringern</string>
+    <string name="action_increase">Erhöhen</string>
+    <string name="unknown_author">Unbekannter Autor</string>
+    <string name="status_finished">fertig</string>
+    <string name="time_left">%1$s übrig</string>
+    <string name="chapter_numbered">Kapitel %1$d</string>
+    <string name="menu_offline">Offline</string>
+    <string name="menu_offline_series">Offline · alle Bücher</string>
+    <string name="menu_offline_series_rest">Die übrigen Bücher herunterladen</string>
+
+    <!-- Login -->
+    <string name="login_subtitle">Verbinde deine Nextcloud</string>
+    <string name="login_sync_subtitle">Melde dich an, um deinen Fortschritt zu synchronisieren</string>
+    <string name="login_waiting">Warte darauf, dass du die Anmeldung abschließt…</string>
+    <string name="login_waiting_detail">Wenn du im Browser den Zugriff erteilt hast, tippe auf Zurück, um zu Homer zurückzukehren — die Anmeldung passiert dann automatisch.</string>
+    <string name="login_server_label">Serveradresse</string>
+    <string name="login_server_placeholder">cloud.beispiel.de</string>
+    <string name="login_button">Anmelden</string>
+    <string name="login_mode_account">Konto</string>
+    <string name="login_mode_share">Freigabelink</string>
+    <string name="login_share_label">Freigabelink</string>
+    <string name="login_share_placeholder">https://cloud.beispiel.de/s/…</string>
+    <string name="login_share_password_label">Passwort der Freigabe (falls vorhanden)</string>
+    <string name="login_share_hint">Füge einen Nextcloud-Freigabelink zu deinem Hörbuch-Ordner ein. Dein Hörfortschritt bleibt auf diesem Gerät, solange du dich nicht zusätzlich mit einem Konto anmeldest.</string>
+    <string name="login_share_button">Freigabe öffnen</string>
+
+    <!-- App lock -->
+    <string name="lock_prompt_title">Homer entsperren</string>
+    <string name="lock_prompt_subtitle">Bestätige, dass es du bist</string>
+    <string name="lock_locked">Gesperrt</string>
+    <string name="lock_unlock">Entsperren</string>
+
+    <!-- Mini player -->
+    <string name="player_error_tap_retry">Wiedergabefehler — zum Wiederholen tippen</string>
+    <string name="mini_player_cd_open">Wiedergabe öffnen</string>
+
+    <!-- Edit book dialog -->
+    <string name="edit_title">Buch bearbeiten</string>
+    <string name="edit_field_title">Titel</string>
+    <string name="edit_field_author">Autor</string>
+    <string name="edit_field_series">Serie</string>
+    <string name="edit_field_series_index">Serien-Nr.</string>
+    <string name="edit_field_genre">Genre</string>
+    <string name="edit_field_tags">Schlagwörter</string>
+    <string name="edit_tags_placeholder">durch, Komma, getrennt</string>
+    <string name="edit_hide_from_library">In der Bibliothek ausblenden</string>
+    <string name="edit_on_play">Beim Abspielen</string>
+    <string name="edit_mode_default">Standard</string>
+    <string name="edit_mode_download">Herunterladen</string>
+    <string name="edit_mode_stream">Streamen</string>
+    <string name="mark_completed">Als fertig markieren</string>
+    <string name="edit_change_cover">Cover ändern</string>
+    <string name="edit_choose_cover">Cover auswählen</string>
+    <string name="edit_clear_cover">Cover entfernen</string>
+
+    <!-- About: privacy -->
+    <string name="about_privacy_title">Datenschutz</string>
+    <string name="about_privacy_p1">Homer ist ein selbst gehosteter Hörbuch-Player. Standardmäßig spricht er mit genau einem Server: der Nextcloud, bei der du dich anmeldest. Zwei optionale Funktionen können darüber hinaus gehen — beide sind unten beschrieben und beide sind aus, bis du sie einschaltest. Es gibt keine Analytik, keine Werbung, kein Tracking durch Dritte und keine Google Play Services.</string>
+    <string name="about_privacy_account_header">DEIN KONTO</string>
+    <string name="about_privacy_account_body">Die Anmeldung läuft über Nextclouds Login Flow. Homer erhält dabei ein eigenes, jederzeit widerrufbares App-Passwort — niemals dein echtes Passwort. Es liegt ausschließlich im Keystore-verschlüsselten Speicher dieses Geräts und geht nur an deinen Server, um Anfragen zu authentifizieren.</string>
+    <string name="about_privacy_library_header">DEINE BIBLIOTHEK</string>
+    <string name="about_privacy_library_body">Stöbern, Streamen, Downloads und der geräteübergreifende Fortschritt laufen alle über WebDAV gegen deinen eigenen Server. Fortschritt und Metadaten-Korrekturen landen in einer .homer-Datei in deinem eigenen Speicher; nichts wird irgendwo anders hochgeladen. Offline-Downloads und Cover bleiben auf diesem Gerät (oder in dem Ordner, den du wählst).</string>
+    <string name="about_privacy_covers_header">OPTIONALE COVER-SUCHE</string>
+    <string name="about_privacy_covers_body">Nur wenn du „Fehlende Cover online suchen“ einschaltest, sendet Homer Titel und Autor von Büchern ohne eingebettetes Bild an Open Library (openlibrary.org), um ein Cover zu finden. Das ist standardmäßig aus und sendet nichts über dein Konto.</string>
+    <string name="about_privacy_updates_header">OPTIONALE UPDATE-PRÜFUNG</string>
+    <string name="about_privacy_updates_body">Homer kann GitHub fragen, ob eine neuere Version existiert. Die Prüfung von Hand unter Einstellungen → Über macht das einmalig; die tägliche automatische Prüfung ist aus, solange du sie nicht einschaltest. Die Anfrage enthält kein Konto, keine Version und keine Kennung — nur die Frage — und der Vergleich passiert auf diesem Gerät. Installierst du ein Update, wird die APK von GitHub geladen und an Androids Installationsprogramm übergeben, das dich um Bestätigung bittet.</string>
+    <string name="about_privacy_lock_header">APP-SPERRE</string>
+    <string name="about_privacy_lock_body">Die optionale App-Sperre nutzt direkt die Biometrie- bzw. Bildschirmsperre deines Geräts. Homer sieht und speichert deine biometrischen Daten nie.</string>
+
+    <!-- About: licenses -->
+    <string name="about_licenses_title">Open-Source-Lizenzen</string>
+    <string name="about_licenses_intro">Homer baut auf Open-Source-Software auf. Jede der folgenden Abhängigkeiten steht unter der Apache License 2.0.</string>
+    <string name="about_license_holder">%1$s · Apache License 2.0</string>
+    <string name="about_apache_header">APACHE LICENSE 2.0</string>
+    <string name="about_apache_body">Lizenziert unter der Apache License, Version 2.0 (die „Lizenz“); diese Dateien dürfen nur in Übereinstimmung mit der Lizenz verwendet werden. Eine Kopie der Lizenz findest du unter https://www.apache.org/licenses/LICENSE-2.0. Sofern nicht durch geltendes Recht vorgeschrieben oder schriftlich vereinbart, wird die unter der Lizenz vertriebene Software „WIE BESEHEN“ bereitgestellt, ohne Gewährleistungen oder Bedingungen jeglicher Art, weder ausdrücklich noch implizit.</string>
+    <string name="about_homer_itself">Homer selbst</string>
+    <string name="about_homer_license">© geozelot. Die Lizenz von Homer selbst steht im Projekt-Repository.</string>
+    <string name="about_version">Homer %1$s</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_title">Diagnose</string>
+    <string name="diag_reading_logs">Protokoll wird gelesen…</string>
+    <string name="diag_share_chooser">Protokoll teilen</string>
+    <string name="diag_warning">Homers eigenes aktuelles Protokoll. Serveradresse und Kontoname sind maskiert, aber Buch- und Ordnernamen deiner Bibliothek können darin stehen — sieh es vor dem Teilen durch. Erzeuge das Problem erneut, dann Aktualisieren und Kopieren oder Teilen.</string>
+
+    <!-- Storage browser -->
+    <string name="storage_choose_folder_title">Ordner auswählen</string>
+    <string name="storage_grant_rationale">Um Downloads und Cover in einem Ordner deiner Wahl zu speichern, braucht Homer Zugriff auf alle Dateien. Du erteilst ihn einmal in den Systemeinstellungen und kommst dann hierher zurück.</string>
+    <string name="storage_grant_button">Zugriff auf alle Dateien erteilen</string>
+    <string name="storage_new_folder">Neuer Ordner „Homer“</string>
+    <string name="storage_use_folder">Diesen Ordner verwenden</string>
+
+    <!-- Download notification -->
+    <string name="download_channel_name">Downloads</string>
+    <string name="download_notification_progress">Lädt %1$d/%2$d…</string>
+    <string name="download_action_pause">Pause</string>
+    <string name="download_action_cancel">Abbrechen</string>
+
+    <!-- Home: dialogs -->
+    <string name="home_storage_conflict_title">Ordner enthält schon eine Bibliothek</string>
+    <string name="home_storage_conflict_body">In diesem Ordner liegen bereits Homer-Daten. Diese Bibliothek laden oder durch die Downloads und den Fortschritt dieses Geräts ersetzen?</string>
+    <string name="home_storage_load">Laden</string>
+    <string name="home_storage_replace">Ersetzen</string>
+    <string name="home_migration_title">Bibliothek wird verschoben</string>
+    <string name="home_migration_files">%1$d / %2$d Dateien</string>
+
+    <!-- Home: top bar / search -->
+    <string name="home_cd_search">Suchen</string>
+    <string name="home_cd_settings">Einstellungen</string>
+    <string name="home_cd_close_search">Suche schließen</string>
+    <string name="home_search_placeholder">Titel, Autor, Genre, Schlagwort…</string>
+
+    <!-- Home: library content -->
+    <string name="home_section_listening">Gerade am Hören · %1$d</string>
+    <string name="home_section_library">Bibliothek · %1$d</string>
+    <string name="home_section_results">Ergebnisse · %1$d</string>
+    <string name="home_cd_grid_view">Rasteransicht</string>
+    <string name="home_cd_list_view">Listenansicht</string>
+    <string name="shelve_item">Einzeln</string>
+    <string name="shelve_author">Autor</string>
+    <string name="shelve_genre">Genre</string>
+    <string name="series_stacked">Gestapelt</string>
+    <string name="series_flat">Einzeln</string>
+    <string name="sort_recent">Zuletzt gehört</string>
+    <string name="sort_title">Titel</string>
+    <string name="sort_author">Autor</string>
+    <string name="sort_duration">Länge</string>
+    <string name="home_shelf_unknown_author">Unbekannter Autor</string>
+    <string name="home_shelf_no_genre">Ohne Genre</string>
+    <string name="home_chip_shelve">Regal · %1$s</string>
+    <string name="home_chip_series">Serie · %1$s</string>
+    <string name="home_chip_sort">Sortierung · %1$s</string>
+    <string name="home_meta_series_position">Band %1$d</string>
+    <plurals name="home_series_book_count">
+        <item quantity="one">%1$d Buch</item>
+        <item quantity="other">%1$d Bücher</item>
+    </plurals>
+    <string name="home_series_offline_suffix"> · %1$d offline</string>
+    <string name="home_cd_collapse_series">Serie zuklappen</string>
+    <string name="home_meta_percent_bare">%1$d%%</string>
+
+    <!-- Home: context menu -->
+    <string name="home_menu_pause_download">Download anhalten</string>
+    <string name="home_menu_resume_download">Download fortsetzen</string>
+    <string name="home_menu_retry_download">Download wiederholen</string>
+
+    <!-- Home: empty / loading states -->
+    <string name="home_scanning_progress">Bibliothek wird gescannt… %1$d Ordner · %2$d Bücher</string>
+    <string name="home_opening_library">Bibliothek wird geöffnet…</string>
+    <string name="home_reading_index">Gemeinsame Bibliothek wird gelesen…</string>
+    <string name="home_converting_index">Älterer Bibliotheksindex wird aktualisiert…</string>
+    <string name="home_no_matches">Keine Treffer</string>
+    <string name="home_no_matches_hint">Versuche einen anderen Titel, Autor, ein anderes Genre oder Schlagwort.</string>
+    <string name="home_empty_title">Dein Regal ist leer</string>
+    <string name="home_empty_hint">Homer hat den Ordner gelesen und keine Hörbücher darin gefunden. Probiere unter Einstellungen › Bibliothek einen anderen Ordner.</string>
+    <string name="setup_looking">Suche nach deiner Bibliothek…</string>
+    <string name="setup_adopting">Deine Bibliothek wird gelesen…</string>
+    <string name="setup_choose_title">Welche ist deine Bibliothek?</string>
+    <string name="setup_choose_body">Homer hat auf deinem Server mehr als einen Ordner gefunden, der es sein könnte. Wähle einen — du kannst das später ändern.</string>
+    <string name="setup_use_this">Diesen nehmen</string>
+    <string name="setup_none_of_these">Keiner davon — ich gebe den Ordner an</string>
+    <string name="setup_folder_title">Wo sind deine Bücher?</string>
+    <string name="setup_folder_body">Homer hat keine Bibliothek gefunden, die er schon kennt. Gib den Ordner auf deinem Server an, in dem deine Hörbücher liegen, oder lass das Feld leer, um alles zu lesen.</string>
+    <string name="setup_scan_folder">Diesen Ordner lesen</string>
+    <string name="setup_sharing_note">Homer legt in diesem Ordner einen kleinen Index ab, damit deine anderen Geräte nicht alles erneut lesen müssen. Darin stehen Titel, Längen und Cover — niemals deine Stelle in einem Buch.</string>
+
+    <!-- Home: series edit -->
+    <string name="home_series_edit_title">Serie bearbeiten</string>
+    <string name="home_series_edit_desc">%1$d Bücher — Änderungen gelten für alle davon.</string>
+
+    <!-- Settings: shared labels reused across the settings screens -->
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_account">%1$s · %2$s</string>
+    <string name="settings_library_share">Freigabe · %1$s</string>
+    <string name="settings_sync_device">Fortschritt: nur dieses Gerät</string>
+    <string name="settings_sync_to">Synchronisiert mit %1$s</string>
+    <string name="settings_sync_link">Mit meinem Konto synchronisieren</string>
+    <string name="settings_sync_stop">Nicht mehr synchronisieren</string>
+    <string name="settings_storage_folder">Ordner: %1$s</string>
+    <string name="settings_storage_custom_folder">Eigener Ordner: %1$s</string>
+    <string name="settings_storage_default">App-Speicher (Standard)</string>
+    <string name="settings_storage_custom_desc">Downloads, Cover und Fortschritt liegen in deinem gewählten Ordner — sie bleiben auch nach einer Neuinstallation erhalten.</string>
+    <string name="settings_storage_default_desc">Downloads und Cover liegen im Speicher der App, der beim Deinstallieren gelöscht wird. Wähle einen Ordner, damit sie eine Neuinstallation überleben.</string>
+    <string name="settings_storage_browse">Gerät durchsuchen…</string>
+    <string name="settings_storage_use_app">App-Speicher verwenden</string>
+    <string name="settings_storage_picker_desc">„Ordner auswählen“ nutzt Androids Ordnerauswahl; „Gerät durchsuchen“ nutzt den Zugriff auf alle Dateien (beliebiger Ordner), falls die Auswahl nicht mitspielt. Ein Wechsel verschiebt deine Downloads und Cover an den neuen Ort.</string>
+    <string name="settings_online_covers">Fehlende Cover online suchen</string>
+    <string name="settings_online_covers_desc">Sendet nur Titel und Autor von Büchern ohne Bild an Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — um ein Cover zu finden. Dein Server, dein Konto und deine Bibliothek bleiben privat.</string>
+    <string name="settings_skip_interval">Sprungweite der Tasten</string>
+    <string name="settings_seconds">%1$d s</string>
+    <string name="settings_off">Aus</string>
+    <string name="settings_rewind">Rücksprung beim Fortsetzen</string>
+    <string name="settings_download_on_play">Bücher beim Abspielen herunterladen</string>
+    <string name="settings_download_on_play_desc">Ein Tippen auf Abspielen behält das Buch fürs Offline-Hören (es streamt sofort, während es lädt). Aus bedeutet: nur streamen und manuell herunterladen. Ein einzelnes Buch kann das in seinem Bearbeiten-Dialog überstimmen.</string>
+    <string name="settings_wifi_only">Nur über WLAN herunterladen</string>
+    <string name="settings_app_lock">Zum Öffnen entsperren</string>
+    <string name="settings_app_lock_desc">Fragt nach Fingerabdruck, Gesicht oder Bildschirmsperre, wenn Homer startet oder aus dem Hintergrund zurückkehrt.</string>
+    <string name="settings_cert_pinning">Serverzertifikat anpinnen</string>
+    <string name="settings_cert_pinning_desc">Merkt sich das Zertifikat deines Servers bei der nächsten Verbindung und verweigert die Verbindung, wenn es sich je ändert. Nach einer legitimen Zertifikatserneuerung aus- und wieder einschalten.</string>
+    <string name="settings_diagnostics">Diagnose (Protokoll)</string>
+
+    <!-- Settings: library source (reused wording) -->
+    <string name="sync_library_folder">Bibliotheksordner</string>
+    <string name="sync_library_folder_placeholder">z. B. Hoerbuecher (leer = ganzes Laufwerk)</string>
+    <string name="sync_scanned_never">noch nie gescannt</string>
+    <string name="sync_status_line">%1$s · %2$s</string>
+    <string name="sync_measuring">Buch %1$d von %2$d · %3$d von %4$d Dateien…</string>
+    <string name="sync_pass_queued">Wartet auf seinen Zug…</string>
+    <string name="sync_fetching_covers">Bild %1$d von %2$d wird geholt…</string>
+    <string name="set_measure_confirm_title">Jedes Buch vermessen?</string>
+    <string name="set_measure_confirm_body">Normalerweise lernt Homer die Länge eines Buchs, wenn du es zum ersten Mal öffnest, denn dafür muss ein Stück jeder Audiodatei geladen werden. Die ganze Bibliothek auf einmal sind tausende kleine Anfragen und kann dauern — am besten über WLAN. Bereits vermessene Bücher werden übersprungen, und du kannst jederzeit abbrechen; was fertig ist, bleibt erhalten.</string>
+    <string name="set_measure_confirm_action">Vermessen</string>
+    <string name="sync_show_hidden">Ausgeblendete Bücher zeigen</string>
+    <string name="sync_rediscover">Neu suchen</string>
+    <string name="sync_discovering">Server wird durchsucht…</string>
+    <string name="sync_no_libraries">Noch keine Bibliotheken gefunden — versuche „Neu suchen“.</string>
+    <string name="sync_home_files_root">Start (Dateiwurzel)</string>
+    <string name="sync_tag_in_use">in Benutzung</string>
+    <string name="sync_kind_files_root">Wurzel deines Kontos</string>
+    <string name="sync_kind_library_root">Eingestellte Bibliothek</string>
+    <string name="sync_kind_shared_folder">Geteilter Ordner</string>
+    <plurals name="sync_detail_book_count">
+        <item quantity="one"> (%1$d Buch)</item>
+        <item quantity="other"> (%1$d Bücher)</item>
+    </plurals>
+    <string name="sync_detail_private_progress"> · privater Fortschritt</string>
+    <string name="sync_detail_owner"> · Eigentümer: %1$s</string>
+    <string name="sync_use_as_library">Als Bibliotheksordner verwenden</string>
+    <string name="sync_progress_switch">Meinen Fortschritt über meine Geräte synchronisieren</string>
+    <string name="sync_progress_on_desc">Deine Stelle, Lesezeichen und Korrekturen werden privat in deinem Konto gespeichert und folgen dir über deine Geräte.</string>
+    <string name="sync_progress_off_desc">Alles bleibt nur auf diesem Gerät — auf deinen Server wird nichts geschrieben.</string>
+    <string name="sync_scan_folders_books">%1$d Ordner · %2$d Bücher</string>
+    <plurals name="sync_books_count">
+        <item quantity="one">%1$d Buch</item>
+        <item quantity="other">%1$d Bücher</item>
+    </plurals>
+
+    <!-- Settings: hub -->
+    <string name="set_library_title">Bibliothek</string>
+    <string name="set_source_summary">Woher deine Bücher kommen</string>
+    <string name="set_source_summary_books">%1$s · %2$s</string>
+    <string name="set_device_title">Auf diesem Gerät</string>
+    <string name="set_playback_title">Wiedergabe</string>
+    <string name="set_playback_summary">Tasten springen %1$d s</string>
+    <string name="set_privacy_title">Datenschutz &amp; Sicherheit</string>
+    <string name="set_privacy_summary">App-Sperre, Zertifikat, Online-Abfragen</string>
+    <string name="set_language_title">Sprache</string>
+    <string name="set_language_desc">Die Sprache von Homers eigenen Bildschirmen. Deine Bücher behalten die Sprache, in der sie sind.</string>
+    <string name="set_language_system">System</string>
+    <string name="set_about_title">Über</string>
+    <string name="set_about_summary">Version, Diagnose, Lizenzen</string>
+
+    <!-- Settings: library source -->
+    <string name="set_source_none">Nicht verbunden</string>
+    <string name="set_source_readonly">nur lesen</string>
+    <string name="set_source_account_desc">Deine Bücher werden aus diesem Konto gelesen. Homer verschiebt, umbenennt oder löscht sie nie.</string>
+    <string name="set_source_share_desc">Deine Bücher werden über diesen Freigabelink gelesen. Homer verschiebt, umbenennt oder löscht sie nie.</string>
+    <string name="set_source_share_root_note">Ein Freigabelink zeigt auf genau einen Ordner, und dieser Ordner ist die Bibliothek. Für einen anderen öffne einen anderen Freigabelink.</string>
+    <string name="set_source_other_header">WEITERE GEFUNDENE BIBLIOTHEKEN</string>
+    <string name="set_detail_shared_index"> · gemeinsamer Index</string>
+    <string name="set_shared_index_title">Bibliotheksindex teilen</string>
+    <string name="set_shared_index_desc">Erlaubt deinen anderen Geräten — und allen anderen, die diesen Ordner lesen — das Scannen und das erneute Holen der Cover zu überspringen, und teilt die Titel, Autoren und Serien, die du korrigiert hast, damit niemand dasselbe zweimal richten muss. Nur Angaben zur Bibliothek: niemals deine Hörposition, Lesezeichen oder ausgeblendeten Bücher.</string>
+    <string name="set_shared_index_state_reading">Liest den Index in diesem Ordner, damit dieses Gerät nicht scannen muss.</string>
+    <string name="set_shared_index_state_publishing">Schreibt den Index in diesen Ordner, damit deine anderen Geräte nicht scannen müssen.</string>
+    <string name="set_shared_index_state_off">Jedes Gerät scannt die Bibliothek und baut seine eigenen Cover.</string>
+    <string name="set_shared_index_owner">  Gepflegt von %1$s.</string>
+    <string name="set_shared_index_readonly_note">Dieser Freigabelink ist nur lesbar: Er kann einen vorhandenen Index nutzen, aber keinen anlegen oder aktualisieren.</string>
+    <string name="set_full_rescan_confirm_title">Bibliothek neu aufbauen?</string>
+    <string name="set_full_rescan_confirm_body">Homer liest jeden Ordner auf deinem Server erneut und holt alle Cover noch einmal. Bei einer großen Bibliothek dauert das eine Weile. Deine Stelle, Lesezeichen und Korrekturen bleiben erhalten.</string>
+    <string name="set_full_rescan_confirm_action">Neu aufbauen</string>
+    <string name="lib_section_source">WOHER DEINE BÜCHER KOMMEN</string>
+    <string name="lib_section_contents">WAS HOMER GELESEN HAT</string>
+    <string name="lib_section_sharing">TEILEN MIT DEINEN ANDEREN GERÄTEN</string>
+    <string name="lib_section_startover">VON VORN</string>
+    <string name="lib_contents_lead">Jedes davon wird einzeln gelesen, weil die Kosten weit auseinanderliegen. Wenn du eines anfragst, während ein anderes läuft, wird es einfach eingereiht.</string>
+    <string name="lib_row_books">Bücher</string>
+    <string name="lib_row_artwork">Cover</string>
+    <string name="lib_row_lengths">Längen</string>
+    <string name="lib_row_corrections">Deine Korrekturen</string>
+    <string name="lib_action_scan">Scannen</string>
+    <string name="lib_action_fetch">Holen</string>
+    <string name="lib_action_measure">Vermessen</string>
+    <string name="lib_action_publish">Veröffentlichen</string>
+    <string name="lib_books_none">Noch keine Bücher — scanne, um den Ordner zu lesen</string>
+    <string name="lib_artwork_complete">Jedes Buch hat ein Cover</string>
+    <string name="lib_artwork_missing">%1$d ohne Cover</string>
+    <string name="lib_lengths_complete">Jedes Buch hat eine Länge</string>
+    <string name="lib_lengths_missing">%1$d ohne Länge · tausende kleine Anfragen, am besten über WLAN</string>
+    <string name="lib_corrections_none">Noch nichts korrigiert</string>
+    <string name="lib_corrections_local">%1$s · bleibt auf diesem Gerät, weil das Teilen aus ist</string>
+    <string name="lib_corrections_shared">%1$s · geteilt mit allen, die diesen Ordner lesen</string>
+    <string name="lib_crawl_this_device">Letzter vollständiger Durchlauf %1$s, von diesem Gerät</string>
+    <string name="lib_crawl_named_device">Letzter vollständiger Durchlauf %1$s, von %2$s</string>
+    <string name="lib_crawl_other_device">Letzter vollständiger Durchlauf %1$s, von einem anderen Gerät</string>
+    <string name="lib_crawl_never">Noch kein vollständiger Durchlauf. Bis einer läuft, bleibt ein auf dem Server gelöschtes Buch in deinem Regal.</string>
+    <string name="lib_index_publishing">Index wird in diesen Ordner geschrieben…</string>
+    <string name="lib_rebuild">Bibliothek neu aufbauen</string>
+    <string name="lib_rebuild_desc">Liest jeden Ordner neu und holt alle Cover noch einmal. Die langsamste Möglichkeit</string>
+    <string name="lib_recheck_lengths">Fehlgeschlagene Längen erneut versuchen</string>
+    <string name="lib_recheck_lengths_desc">Manche Dateien lassen sich gar nicht vermessen. Dies fragt trotzdem noch einmal</string>
+    <string name="lib_recheck_confirm_title">Fehlgeschlagene Längen erneut versuchen?</string>
+    <string name="lib_recheck_confirm_body">Homer merkt sich, welche Dateien er nicht vermessen konnte, und fragt sie nicht wieder. Dies vergisst das, sodass der nächste Durchlauf sie alle erneut versucht. Bereits bekannte Längen bleiben erhalten.</string>
+    <string name="lib_recheck_confirm_action">Erneut versuchen</string>
+    <string name="set_sign_out">Abmelden</string>
+    <string name="set_sign_out_confirm_title">Von Homer abmelden?</string>
+    <string name="set_sign_out_confirm_body">Homer vergisst diesen Server und löscht die Bibliothek dieses Geräts: die gefundenen Bücher, deine Stelle darin, deine Lesezeichen und deine Korrekturen. Deine Bücher bleiben, wo sie auf dem Server sind, und ebenso alles, was in deinem Konto gespeichert ist. Schon heruntergeladene Dateien bleiben in deinem Speicherordner.</string>
+
+    <!-- Settings: on this device -->
+    <string name="set_device_location_header">WO DOWNLOADS LIEGEN</string>
+    <string name="set_device_choose_folder">Ordner auswählen…</string>
+    <string name="set_device_downloads_header">HERUNTERLADEN</string>
+    <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>
+    <string name="set_device_delete_downloads_count">Gibt den Platz frei, den %1$s belegen</string>
+    <string name="set_device_delete_downloads_none">Es ist nichts heruntergeladen. Dateien aus einer Bibliothek, von der du dich abgemeldet hast, werden mit entfernt</string>
+    <string name="set_delete_downloads_confirm_title">Alle Downloads löschen?</string>
+    <string name="set_delete_downloads_confirm_body">Jede Audiodatei, die Homer auf dieses Gerät geladen hat, wird gelöscht — auch alles, was von einer Bibliothek übrig ist, von der du dich inzwischen abgemeldet hast. Deine Bücher bleiben auf dem Server und deine Stelle darin bleibt erhalten; ein heruntergeladenes Buch streamt dann einfach wieder oder kann erneut geladen werden.</string>
+    <string name="set_delete_downloads_confirm_action">Löschen</string>
+    <string name="set_use_app_storage_confirm_title">Alles zurück in den App-Speicher?</string>
+    <string name="set_use_app_storage_confirm_body">Deine Downloads und Cover werden in Homers eigenen Speicher verschoben, den Android löscht, falls du die App je deinstallierst. Jetzt wird nichts gelöscht.</string>
+    <string name="set_use_app_storage_confirm_action">Verschieben</string>
+
+    <!-- Settings: where a share library's progress goes -->
+    <string name="set_sync_account_header">WO DEINE STELLE GESPEICHERT WIRD</string>
+
+    <!-- Settings: playback -->
+    <string name="settings_custom">Eigener Wert…</string>
+    <string name="settings_custom_range">Alles von %1$d bis %2$d.</string>
+    <string name="settings_unit_seconds">Sekunden</string>
+    <string name="settings_unit_minutes">Minuten</string>
+    <string name="set_playback_sleep_header">EINSCHLAF-TIMER</string>
+    <string name="set_playback_sleep_lead">Den Timer startest du im Player. Das hier bestimmt, was er tut, während er läuft.</string>
+    <string name="set_playback_shake_desc">Wenn du das Handy schüttelst, während der Timer läuft, bekommst du mehr Zeit.</string>
+    <string name="set_playback_fade_desc">Blendet die Lautstärke aus, bevor er stoppt, damit der Timer keinen Satz halbiert.</string>
+    <string name="player_sleep_custom_title">Einschlafen nach…</string>
+    <string name="player_speed_custom_title">Abspielgeschwindigkeit</string>
+    <string name="player_speed_unit">Geschwindigkeit (z. B. 1.35)</string>
+    <string name="player_speed_custom_range">Alles von 0,25× bis 4×.</string>
+    <string name="set_playback_skip_desc">Wie weit die Sprungtasten des Players springen.</string>
+    <string name="set_playback_rewind_desc">Springt beim erneuten Abspielen ein Stück zurück, damit du den Faden wieder aufnehmen kannst.</string>
+    <string name="set_playback_background_header">WIEDERGABE IM HINTERGRUND</string>
+    <string name="set_playback_background_label">Weiterspielen, wenn Homer geschlossen ist</string>
+    <string name="set_playback_background_on">Erlaubt. Die Wiedergabe sollte auch bei ausgeschaltetem Bildschirm weiterlaufen.</string>
+    <string name="set_playback_background_off">Durch die Akku-Optimierung eingeschränkt — die Wiedergabe kann ein bis zwei Minuten nach dem Verlassen der App stoppen.</string>
+    <string name="set_playback_background_action">Beheben</string>
+    <string name="set_playback_background_desc">Homer betreibt die Wiedergabe schon als Vordergrunddienst und hält einen Wake Lock, solange ein Buch läuft. Manche Handys halten Apps im Hintergrund trotzdem an, um Akku zu sparen — dann verstummt der Ton, bis du die App wieder öffnest. Nur eine uneingeschränkte Ausführung von Homer verhindert das.</string>
+
+    <!-- Settings: privacy &amp; security -->
+    <string name="set_privacy_device_header">DIESES GERÄT</string>
+    <string name="set_privacy_server_header">DEIN SERVER</string>
+    <string name="set_privacy_online_header">ONLINE-ABFRAGEN</string>
+    <string name="set_privacy_statement_summary">Was Homer speichert und was er nie sendet</string>
+
+    <!-- Settings: about -->
+    <string name="set_about_tagline">Ein selbst gehosteter Hörbuch-Player. Keine Konten außer deinen, keine Analytik, kein Tracking.</string>
+    <string name="set_about_diagnostics_summary">Aktuelles Protokoll, um ein Problem zu melden</string>
+    <string name="set_about_licenses_summary">Die Open-Source-Software, auf der Homer aufbaut</string>
+
+    <!-- Player -->
+    <string name="player_loading">Lädt…</string>
+    <string name="player_chapter_of">Kapitel %1$d von %2$d</string>
+    <string name="player_now_playing">LÄUFT GERADE</string>
+    <string name="player_time_remaining">-%1$s</string>
+    <string name="player_time_unknown">--:--</string>
+    <string name="player_cd_previous">Vorheriges Kapitel</string>
+    <string name="player_cd_next">Nächstes Kapitel</string>
+    <string name="player_cd_skip_forward">%1$d Sekunden vorspringen</string>
+    <string name="player_cd_skip_back">%1$d Sekunden zurückspringen</string>
+    <string name="player_chapters">Kapitel</string>
+    <string name="player_error_banner">Server nicht erreichbar — erneut versuchen</string>
+    <string name="player_speed_value">%1$s×</string>
+    <string name="player_sleep_minutes">%1$d min</string>
+    <string name="player_sleep_end_of_chapter">Kapitelende</string>
+    <string name="player_sleep_turn_off">Ausschalten</string>
+    <string name="player_volume">Lautstärke</string>
+    <string name="player_volume_quiet">Leise</string>
+    <string name="player_volume_boost">Lauter</string>
+    <string name="player_volume_reduced">Verringert</string>
+    <string name="player_volume_normal">Normal</string>
+    <string name="player_volume_increased">Erhöht</string>
+    <string name="player_silence">Stille</string>
+    <string name="player_mark">Merken</string>
+    <string name="player_sleep_chapter">Kapitel</string>
+    <string name="player_sleep">Einschlafen</string>
+    <string name="player_sleep_extend_5">+5 min</string>
+    <string name="player_sleep_extend_15">+15 min</string>
+    <string name="player_sleep_extend_30">+30 min</string>
+    <string name="player_sleep_extend_previous">Wie zuvor</string>
+    <string name="player_sleep_extend_chapter">Kapitel</string>
+    <string name="player_shake_to_extend">Schütteln verlängert</string>
+    <string name="player_fade_out">Ausblenden</string>
+    <string name="player_bookmarks_title">Lesezeichen</string>
+    <string name="player_bookmark_add">An aktueller Stelle setzen</string>
+    <string name="player_bookmark_empty">Noch keine Lesezeichen.</string>
+    <string name="player_chapter_fallback">Kapitel</string>
+    <string name="sync_stop">Stopp</string>
+    <string name="sync_waiting_wifi">Warte auf WLAN — Downloads sind auf „nur WLAN“ gestellt.</string>
+    <string name="sync_waiting_network">Warte auf eine Verbindung…</string>
+
+    <!-- Settings: updates -->
+    <string name="update_channel_name">Updates</string>
+    <string name="update_notif_title">Homer %1$s ist verfügbar</string>
+    <string name="update_notif_text">Öffne Homer, um es zu installieren.</string>
+    <string name="set_update_header">UPDATES</string>
+    <string name="set_update_check">Nach Updates suchen</string>
+    <string name="set_update_checking">Suche…</string>
+    <string name="set_update_uptodate">Homer ist aktuell.</string>
+    <string name="set_update_available">Version %1$s ist verfügbar.</string>
+    <string name="set_update_downloading">Lädt…</string>
+    <string name="set_update_downloading_pct">Lädt… %1$d%%</string>
+    <string name="set_update_ready">Bereit zur Installation.</string>
+    <string name="set_update_installing">Warte auf das System-Installationsprogramm…</string>
+    <string name="set_update_action_check">Jetzt suchen</string>
+    <string name="set_update_action_install">Herunterladen und installieren</string>
+    <string name="set_update_action_allow">Erlauben</string>
+    <string name="set_update_action_retry">Erneut versuchen</string>
+    <string name="set_update_action_view">Release-Seite öffnen</string>
+    <string name="set_update_auto">Automatisch suchen</string>
+    <string name="set_update_auto_desc">Fragt GitHub einmal täglich, ob ein neuerer Homer erschienen ist. Standardmäßig aus: Es wendet sich nach einem Zeitplan an einen Dritten, um den du nicht gebeten hast. Über dich oder deine Bibliothek wird nichts gesendet — nur die Frage. Die Suche von Hand geht immer.</string>
+    <string name="set_update_channel">Release-Kanal</string>
+    <string name="set_update_channel_stable">Stabil</string>
+    <string name="set_update_channel_beta">Auch Betas</string>
+    <string name="set_update_channel_desc">Betas erscheinen häufig und sind zum Testen gedacht. Nur stabile Versionen, sofern du nichts anderes willst.</string>
+    <string name="set_update_last_checked">Zuletzt gesucht %1$s</string>
+    <string name="set_update_never">noch nicht</string>
+    <string name="set_update_notes_title">Was ist neu</string>
+    <string name="set_update_err_network">GitHub war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="set_update_err_ratelimited">GitHub bremst diese Adresse gerade. Versuche es in einer Stunde erneut.</string>
+    <string name="set_update_err_noasset">Die neueste Version hat keine APK angehängt. Öffne die Release-Seite, um zu sehen, was passiert ist.</string>
+    <string name="set_update_err_download">Der Download ist nicht fertig geworden. Versuche es erneut.</string>
+    <string name="set_update_err_signature">Diese Version ist mit einem anderen Schlüssel signiert als dieser Build, daher würde Android sie ablehnen. Das ist normal, wenn du diese Kopie selbst gebaut hast — installiere die Release-APK stattdessen von Hand.</string>
+    <string name="set_update_err_notallowed">Homer braucht deine Erlaubnis, Apps zu installieren.</string>
+    <string name="set_update_err_installfailed">Die Installation ist nicht fertig geworden.</string>
+</resources>

@@ -138,6 +138,8 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.biometric)
+    // Per-app language: AppCompatDelegate.setApplicationLocales, backported below Android 13.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
 

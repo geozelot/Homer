@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Homer</string>
+    <!-- A product name: the same in every language, so no translation is expected. -->
+    <string name="app_name" translatable="false">Homer</string>
 
     <!-- Shared actions / reused labels -->
     <string name="action_cancel">Cancel</string>
@@ -140,6 +141,20 @@
     <string name="home_section_results">Results · %1$d</string>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
+    <!-- The library's three arrangement controls. Resources, not Kotlin constants, or every
+         translation shows English chips. -->
+    <string name="shelve_item">Item</string>
+    <string name="shelve_author">Author</string>
+    <string name="shelve_genre">Genre</string>
+    <string name="series_stacked">Stacked</string>
+    <string name="series_flat">Flat</string>
+    <string name="sort_recent">Recently played</string>
+    <string name="sort_title">Title</string>
+    <string name="sort_author">Author</string>
+    <string name="sort_duration">Duration</string>
+    <!-- The two shelf headings Homer writes itself, for books that name neither. -->
+    <string name="home_shelf_unknown_author">Unknown author</string>
+    <string name="home_shelf_no_genre">No genre</string>
     <string name="home_chip_shelve">Shelve · %1$s</string>
     <string name="home_chip_series">Series · %1$s</string>
     <string name="home_chip_sort">Sort · %1$s</string>
@@ -267,6 +282,9 @@
     <string name="set_playback_summary">Skip buttons jump %1$ds</string>
     <string name="set_privacy_title">Privacy &amp; security</string>
     <string name="set_privacy_summary">App lock, certificate, online lookups</string>
+    <string name="set_language_title">Language</string>
+    <string name="set_language_desc">The language Homer\'s own screens are in. Your books keep whatever language they are in.</string>
+    <string name="set_language_system">System</string>
     <string name="set_about_title">About</string>
     <string name="set_about_summary">Version, diagnostics, licenses</string>
 

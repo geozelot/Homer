@@ -2,9 +2,11 @@ package com.geozelot.homer.ui.home
 
 import android.net.Uri
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.geozelot.homer.R
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.SignOut
@@ -132,7 +134,16 @@ private data class EffectiveBook(
  */
 @Immutable
 sealed interface LibraryEntry {
-    data class Header(val title: String) : LibraryEntry
+    /**
+     * A shelf heading.
+     *
+     * [titleRes] is set only for a fallback heading ("Unknown author", "No genre") — the two
+     * headings whose text Homer writes rather than reads off a book. It travels as a resource id
+     * and is resolved when the row draws, not when the list is built: a ViewModel survives the
+     * activity recreation a language change causes, so a heading whose words were baked in would
+     * still be in the old language afterwards.
+     */
+    data class Header(val title: String, @StringRes val titleRes: Int? = null) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
 
     // Annotated on the class as well as the interface: stability is inferred per concrete type,
@@ -147,11 +158,11 @@ sealed interface LibraryEntry {
 }
 
 /** How the library list is ordered (within each shelf). */
-enum class LibrarySort(val key: String, val label: String) {
-    RECENT("recent", "Recently played"),
-    TITLE("title", "Title"),
-    AUTHOR("author", "Author"),
-    DURATION("duration", "Duration");
+enum class LibrarySort(val key: String, @StringRes val label: Int) {
+    RECENT("recent", R.string.sort_recent),
+    TITLE("title", R.string.sort_title),
+    AUTHOR("author", R.string.sort_author),
+    DURATION("duration", R.string.sort_duration);
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: AUTHOR
@@ -177,10 +188,10 @@ enum class LibrarySort(val key: String, val label: String) {
  * ITEM keeps the stored key "none" so nobody's saved preference resets; a stored "series" from
  * before the split falls through [from] to ITEM.
  */
-enum class LibraryShelving(val key: String, val label: String) {
-    ITEM("none", "Item"),
-    AUTHOR("author", "Author"),
-    GENRE("genre", "Genre");
+enum class LibraryShelving(val key: String, @StringRes val label: Int) {
+    ITEM("none", R.string.shelve_item),
+    AUTHOR("author", R.string.shelve_author),
+    GENRE("genre", R.string.shelve_genre);
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: ITEM
@@ -188,9 +199,9 @@ enum class LibraryShelving(val key: String, val label: String) {
 }
 
 /** Whether a multi-book series is drawn as one stacked shelf or as its books, loose in the list. */
-enum class LibrarySeriesMode(val key: String, val label: String) {
-    STACKED("stacked", "Stacked"),
-    FLAT("flat", "Flat");
+enum class LibrarySeriesMode(val key: String, @StringRes val label: Int) {
+    STACKED("stacked", R.string.series_stacked),
+    FLAT("flat", R.string.series_flat);
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: STACKED
@@ -1091,8 +1102,9 @@ private fun buildEntries(
 
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
-        LibraryShelving.GENRE -> sectioned(ordered, "No genre") { unit ->
+        LibraryShelving.AUTHOR ->
+            sectioned(ordered, "Unknown author", R.string.home_shelf_unknown_author) { it.author }
+        LibraryShelving.GENRE -> sectioned(ordered, "No genre", R.string.home_shelf_no_genre) { unit ->
             when (unit) {
                 is SortUnit.Solo -> unit.book.genre
                 is SortUnit.Ser -> seriesGenre(unit.series.books)
@@ -1195,13 +1207,17 @@ internal fun seriesGenre(books: List<BookListItem>): String? =
 private fun sectioned(
     units: List<SortUnit>,
     fallback: String,
+    @StringRes fallbackRes: Int,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
     val byKey = units.groupBy(keyOf)
     val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
     return buildList {
         for (key in keys) {
-            add(LibraryEntry.Header(key ?: fallback))
+            // `title` stays the English fallback even when `titleRes` replaces it on screen: it is
+            // also the header's identity for the duplicate-title key in the grid, which must not
+            // change with the interface language.
+            add(LibraryEntry.Header(key ?: fallback, titleRes = if (key == null) fallbackRes else null))
             byKey.getValue(key).forEach { add(it.toEntry()) }
         }
     }

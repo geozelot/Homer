@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages Homer ships. Android 13+ reads this to offer Homer its own entry under
+  Settings > Apps > Homer > Language, and AppCompat's backport reads it below that — which is why
+  the in-app picker and the system one always agree instead of being two competing settings.
+
+  Add a locale here whenever a values-<code>/ directory is added, or the new translation exists and
+  nothing can select it.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="de" />
+</locale-config>

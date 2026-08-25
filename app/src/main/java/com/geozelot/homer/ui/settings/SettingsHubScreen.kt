@@ -1,10 +1,12 @@
 package com.geozelot.homer.ui.settings
 
+import android.content.Context
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -13,6 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.SettingsDivider
+import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsNavRow
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Faint
@@ -79,6 +82,13 @@ fun SettingsHubScreen(
             onClick = onOpenAbout,
         )
 
+        SettingsDivider()
+
+        // A row rather than a page: one setting does not earn a screen of its own, and this is the
+        // one place in settings a reader will look for it. Not persisted by Homer — the platform
+        // owns the choice, and Android 13+ shows the same setting in system settings.
+        LanguageRow()
+
         Text(
             stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
             color = Faint,
@@ -87,6 +97,38 @@ fun SettingsHubScreen(
         )
     }
 }
+
+/**
+ * Which language Homer's interface is in.
+ *
+ * Reads its value straight from [AppLanguage.current] rather than from a flow, because the platform
+ * recreates the activity when the language changes — by the time this composes again, the strings
+ * around it have already re-resolved and so has this row.
+ */
+@Composable
+private fun LanguageRow() {
+    val context = LocalContext.current
+    val current = AppLanguage.current()
+    SettingsDropdownRow(
+        label = stringResource(R.string.set_language_title),
+        chipLabel = languageLabel(context, current),
+        options = AppLanguage.entries.toList(),
+        selected = current,
+        labelOf = { languageLabel(context, it) },
+        onSelect = { AppLanguage.apply(it) },
+        description = stringResource(R.string.set_language_desc),
+    )
+}
+
+/**
+ * "System", "English", "Deutsch".
+ *
+ * Every language names ITSELF, in its own language, and is therefore not translated — a reader
+ * looking for German finds "Deutsch" whatever the interface currently says. Only "System" is
+ * translated, because it names a behaviour rather than a language.
+ */
+private fun languageLabel(context: Context, language: AppLanguage): String =
+    if (language == AppLanguage.SYSTEM) context.getString(R.string.set_language_system) else language.label
 
 /** The library source in one line: the share or account it comes from, plus how much is in it. */
 @Composable
