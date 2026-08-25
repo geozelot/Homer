@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -54,12 +53,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
@@ -110,9 +110,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -340,8 +337,6 @@ fun HomeScreen(
                     ctx = RowContext(shelfMode, seriesMode),
                     expanded = expanded,
                     onBookClick = onBookClick,
-                    onToggleShelf = viewModel::toggleShelf,
-                    onAllShelves = viewModel::setAllShelvesCollapsed,
                     actions = actions,
                 )
             }
@@ -594,8 +589,6 @@ private fun LazyGridScope.libraryContent(
     /** Book ids anchoring the open series shelves — see [isOpen]. */
     expanded: MutableList<String>,
     onBookClick: (String) -> Unit,
-    onToggleShelf: (key: String, collapsed: Boolean) -> Unit,
-    onAllShelves: (collapsed: Boolean) -> Unit,
     actions: BookActions,
 ) {
     // Membership test for the open shelves, hoisted out of the per-entry loop: `expanded` holds
@@ -631,24 +624,12 @@ private fun LazyGridScope.libraryContent(
     // repeats of the title is just as unique and only changes when the titles themselves do.
     val headerOrdinals = HashMap<String, Int>()
 
-    entries.forEachIndexed { index, entry ->
+    entries.forEach { entry ->
         when (entry) {
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
                 key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
-            ) {
-                // A rule above every shelf but the first. Spacing alone left it ambiguous which
-                // books belonged to which author once a shelf ran past the fold — the last row of
-                // one shelf and the first of the next were the same distance apart as any two rows.
-                ShelfHeader(
-                    header = entry,
-                    ruled = index > 0,
-                    onToggle = { onToggleShelf(entry.key, !entry.collapsed) },
-                    onCollapseAll = { onAllShelves(true) },
-                    onExpandAll = { onAllShelves(false) },
-                    onOpenBook = onBookClick,
-                )
-            }
+            ) { SectionLabelRow(entry.title) }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
@@ -763,118 +744,6 @@ private fun SectionLabelRow(
         color = Muted,
         modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
     )
-}
-
-/** Extra air before a shelf heading, on top of the heading's own top padding. */
-private val ShelfBreakSpacing = 10.dp
-
-/**
- * A shelf heading, and the control that folds the shelf away.
- *
- * The heading used to be a label, so a library shelved by author was one long scroll with no way
- * past a prolific one — the books were the only thing you could interact with. Now the whole header
- * is the target, it carries its count, and it wears the same boxed triangle a series row does.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ShelfHeader(
-    header: LibraryEntry.Header,
-    ruled: Boolean,
-    onToggle: () -> Unit,
-    onCollapseAll: () -> Unit,
-    onExpandAll: () -> Unit,
-    onOpenBook: (String) -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Column {
-        if (ruled) {
-            HorizontalDivider(
-                color = Line,
-                modifier = Modifier.padding(top = ShelfBreakSpacing, bottom = 2.dp),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true })
-                .padding(top = 10.dp, bottom = 6.dp, start = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = header.title.uppercase(),
-                style = SectionLabel,
-                color = Muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Text(
-                // Books, not rows: a stacked series is one row and several books, and the count is
-                // what the reader weighs when deciding whether to unfold.
-                text = stringResource(R.string.home_shelf_count, header.count),
-                color = Faint,
-                fontSize = 11.sp,
-                maxLines = 1,
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp),
-            )
-            Spacer(Modifier.weight(1f))
-            DisclosureGlyph(expanded = !header.collapsed)
-            ShelfMenu(menuOpen, onCollapseAll, onExpandAll) { menuOpen = false }
-        }
-        // A folded shelf still shows what is in it. Collapsing to an opaque bar would leave nothing
-        // but a thing to open again, and the point of folding is to skim past, not to hide.
-        if (header.collapsed) ShelfSpines(header, onOpenBook)
-    }
-}
-
-/** The covers standing in for a folded shelf's rows, tappable straight through to the book. */
-@Composable
-private fun ShelfSpines(header: LibraryEntry.Header, onOpenBook: (String) -> Unit) {
-    Row(
-        modifier = Modifier.padding(start = 2.dp, top = 2.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        header.preview.forEach { book ->
-            CoverArt(
-                model = book.coverModel,
-                modifier = Modifier
-                    .size(width = 22.dp, height = 33.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .border(1.dp, Line, RoundedCornerShape(3.dp))
-                    .clickable { onOpenBook(book.id) },
-            )
-        }
-        val hidden = header.count - header.preview.size
-        if (hidden > 0) {
-            Text(
-                stringResource(R.string.home_shelf_more, hidden),
-                color = Faint,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(start = 3.dp),
-            )
-        }
-    }
-}
-
-/** Long-press a shelf heading: the whole-library fold, which is the point when shelved by author. */
-@Composable
-private fun ShelfMenu(
-    expanded: Boolean,
-    onCollapseAll: () -> Unit,
-    onExpandAll: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.home_shelf_collapse_all)) },
-            onClick = { onCollapseAll(); onDismiss() },
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.home_shelf_expand_all)) },
-            onClick = { onExpandAll(); onDismiss() },
-        )
-    }
 }
 
 /** Resting size of the two pinned headers; they fall back to [SectionLabel]'s 12sp on scroll. */
@@ -1227,9 +1096,7 @@ private fun BookGridCard(
     actions: BookActions,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val position = bookPosition(book, ctx)
-    val progress = bookProgressFraction(book)
+    val showRing = book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished
 
     Column(
         modifier = Modifier
@@ -1251,51 +1118,18 @@ private fun BookGridCard(
             if (book.isDownloaded) {
                 DownloadBadge(modifier = Modifier.align(Alignment.TopEnd).padding(7.dp))
             }
-            // Slot 2 as a corner ribbon, over a scrim so it survives a pale cover.
-            if (position != null) {
-                Text(
-                    position,
-                    color = Amber,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.SemiBold,
+            if (showRing) {
+                ProgressRing(
+                    progress = book.progress ?: 0f,
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 6.dp, bottom = 9.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Studio.copy(alpha = 0.78f))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                        .align(Alignment.BottomEnd)
+                        .padding(7.dp)
+                        .size(24.dp),
                 )
-            }
-            // Slot 3 as the cover's bottom edge: full width, unmistakable at any cell size, and it
-            // costs the text block nothing. It replaces a corner ring that had to be big enough to
-            // read and was therefore big enough to cover the art.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .background(Studio.copy(alpha = 0.55f)),
-            ) {
-                if (progress > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(progress)
-                            .background(if (book.finished) Sage else Amber),
-                    )
-                }
             }
         }
         Box {
-            GridCardText(
-                title = book.title,
-                // One line, not two: identity then time. A grid cell cannot afford a third text
-                // line without pushing cards off the fold, and the cover is now carrying the rest.
-                meta = listOfNotNull(
-                    bookIdentity(book, ctx, context).takeIf { it.isNotEmpty() },
-                    bookStateText(book, context),
-                ).joinToString(" · "),
-            ) {
+            GridCardText(title = book.title, meta = bookMeta(book, ctx, LocalContext.current)) {
                 menuOpen = true
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
@@ -1304,9 +1138,9 @@ private fun BookGridCard(
 }
 
 /**
- * Title (2 reserved lines) + meta (1 reserved line) beside an overflow button — a fixed-height
+ * Title (2 reserved lines) + meta (2 reserved lines) beside an overflow button — a fixed-height
  * block, so every grid card (book or series) is exactly the same total height and their bottoms
- * line up. The meta line lost its second row when progress and offline moved onto the cover.
+ * line up.
  *
  * The button is 32dp wide rather than the usual 48: a grid cell is only about 100dp across, and a
  * square target would take half of it away from the title. It is a full 48dp tall, the tap targets
@@ -1333,8 +1167,8 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
                 color = Muted,
                 fontSize = 10.sp,
                 lineHeight = 13.sp,
-                minLines = 1,
-                maxLines = 1,
+                minLines = 2,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -1359,78 +1193,43 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
 @Immutable
 private data class RowContext(val shelving: LibraryShelving, val series: LibrarySeriesMode)
 
-// ── The three slots ─────────────────────────────────────────────────────────────────────────
-//
-// Every item answers three questions, and each one has a permanent home. They used to arrive as a
-// single dot-joined string of up to six facts in an order that depended on how the shelf happened
-// to be arranged — so nothing was ever in the same place twice, and the fact a listener most wants
-// ("how far through am I") sat at the end where the ellipsis lands.
-//
-//   1  IDENTITY  what is this        — the bibliographic facts the shelf isn't already showing
-//   2  POSITION  where in a set      — a badge in front of the title; part of naming the book
-//   3  STATE     what I've done      — progress, time, offline; fixed order, fixed shape
-//
-// User tags are deliberately absent. They are a filter rather than a fact about the book, and being
-// unbounded in number they were what made the line ragged in the first place.
-
 /**
- * Slot 1: the bibliographic facts the current arrangement is NOT already showing.
+ * The line under a book's title: the facts the current arrangement is NOT already showing.
  *
  * Shelved by author, the author is the section heading — repeating it on every row beneath is
  * noise, so the line carries the genre instead. Shelved by genre, the reverse. Shelved by item,
- * both, in that order and never any other.
+ * both. A series book loose in the list adds its episode number, which a stacked shelf conveys by
+ * position and therefore omits. Length last, whenever it is known.
+ *
+ * Plain text rather than chips: the genre pill and the tag bubbles gave every row a different
+ * height depending on whether that book happened to have either.
  */
-private fun bookIdentity(
+private fun bookMeta(
     book: BookListItem,
     ctx: RowContext,
     context: android.content.Context,
+    withStatus: Boolean = false,
 ): String = buildList {
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
     if (ctx.shelving != LibraryShelving.GENRE) book.genre?.let { add(it) }
+    if (ctx.series == LibrarySeriesMode.FLAT && book.series != null && book.seriesIndex != null) {
+        add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
+    }
+    book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
+    addAll(book.tags)
+    if (withStatus) {
+        when {
+            book.finished -> add(context.getString(R.string.status_finished))
+            // Gated on `started`, not merely on progress being computable: marking a book
+            // completed RESETS it to position 0, which is measurable, so progress comes out 0f
+            // rather than null and the row went on advertising "0%" for a book just cleared.
+            book.started && book.progress != null ->
+                add(context.getString(R.string.home_meta_percent_bare, (book.progress * 100).toInt()))
+        }
+    }
 }.joinToString(" · ")
-
-/**
- * Slot 2: a series book's position, or null when the arrangement already conveys it.
- *
- * A stacked series shelf lists its books in reading order, so the number is implicit there and
- * repeating it is noise; a series book loose in the list has nothing else to say where it sits.
- */
-private fun bookPosition(book: BookListItem, ctx: RowContext): String? =
-    book.seriesIndex?.takeIf { ctx.series == LibrarySeriesMode.FLAT && book.series != null }?.toString()
-
-/**
- * Slot 3, the words: time remaining once started, total length before that, "Finished" at the end.
- *
- * Remaining is the number a listener actually wants; the total only matters before you begin. One
- * slot, two meanings, decided by whether there is any progress — and null when the book has never
- * been measured, where the bar beside it is the only honest thing to show.
- */
-private fun bookStateText(book: BookListItem, context: android.content.Context): String? = when {
-    book.finished -> context.getString(R.string.status_finished)
-    // Gated on `started`, not merely on a computable remainder: marking a book completed RESETS it
-    // to position 0, which is measurable, so a just-cleared book would otherwise report its whole
-    // length as "left".
-    book.started && book.timeLeftMs != null -> context.getString(
-        R.string.time_left,
-        formatCompactDuration(book.timeLeftMs),
-    )
-    else -> book.totalDurationMs?.takeIf { it > 0 }?.let { formatCompactDuration(it) }
-}
-
-/**
- * Slot 3, the bar: how far through, as a fraction.
- *
- * Always drawn, never conditional — an empty bar and a full one are both information, and a bar
- * that disappeared for an unstarted book would make every row a different height for the one
- * reason a row must not vary.
- */
-private fun bookProgressFraction(book: BookListItem): Float = when {
-    book.finished -> 1f
-    book.started -> book.progress ?: 0f
-    else -> 0f
-}
 
 // The stack fans diagonally up-right and is scaled so the whole stack fills the cell — the
 // same footprint as a single book card. STACK_SPREAD is the fraction of the cell the fan
@@ -1493,17 +1292,14 @@ private fun SeriesGridCard(
     }
 }
 
-/**
- * A series card's one meta line: how many books, and how long they are altogether.
- *
- * One line, because a book card is one line and the two have to be the same height — their bottoms
- * line up across a row of the grid. What that costs is the "N offline" count, which the shelf row in
- * list view still carries and which the individual cards inside an opened series show anyway.
- */
 private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String =
+    // The grid card reserves two lines, so the length gets one of its own rather than trailing the
+    // episode count as it does on the narrower shelf row.
     buildString {
         append(context.getString(R.string.home_series_book_count, series.books.size))
-        seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
+        val downloaded = series.books.count { it.isDownloaded }
+        if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
+        seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
     }
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
@@ -1614,9 +1410,7 @@ private fun ExpandedSeriesHeader(
                 )
                 Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
             }
-            // The same boxed triangle the list view's shelf row uses, so open/closed reads the
-            // same way in both views.
-            DisclosureGlyph(expanded = true)
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
         }
         // Separates the shelf's own title from its episodes. Inset from the enclosure's side rails
         // so it reads as a rule inside the card rather than a second edge of it.
@@ -1710,15 +1504,23 @@ private fun BookListRow(
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // No badge over the art here. A 46dp cover has no corner to spare — the badge sat on the
-        // illustration — and "I have this offline" is a fact about my copy, so it belongs on the
-        // state line with the rest of them.
-        CoverArt(
-            model = book.coverModel,
-            modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(8.dp)),
-        )
+        Box {
+            CoverArt(
+                model = book.coverModel,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            if (book.isDownloaded) {
+                DownloadBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(0.dp)
+                        .size(16.dp),
+                    iconSize = 9.dp,
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -1740,23 +1542,8 @@ private fun BookListRow(
                 ),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                val position = bookPosition(book, ctx)
                 Text(
-                    // The series number rides in front of the title as part of naming the book,
-                    // rather than in the meta line where it competed with the author for the same
-                    // run of text.
-                    text = buildAnnotatedString {
-                        if (position != null) {
-                            withStyle(
-                                SpanStyle(
-                                    color = Amber,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                            ) { append("$position  ") }
-                        }
-                        append(book.title)
-                    },
+                    book.title,
                     color = Parchment,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1766,14 +1553,13 @@ private fun BookListRow(
                 )
             }
             Text(
-                text = bookIdentity(book, ctx, LocalContext.current),
+                text = bookMeta(book, ctx, LocalContext.current, withStatus = true),
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 1.dp),
             )
-            BookStateLine(book, modifier = Modifier.padding(top = 3.dp))
         }
         Box {
             IconButton(onClick = { menuOpen = true }) {
@@ -1787,44 +1573,6 @@ private fun BookListRow(
 
 /** Line height of a list row's title; the reserved block is two of these. */
 private val ListRowTitleLineHeight = 16.sp
-
-/**
- * Slot 3 as a row: how far through, how much is left, and whether it is on the device.
- *
- * Always the same three pieces in the same order, whether or not this book has any of them, so the
- * eye lands on the answer instead of reading for it. The bar is what replaced "45%" buried at the
- * end of a dot-joined line.
- */
-@Composable
-private fun BookStateLine(book: BookListItem, modifier: Modifier = Modifier) {
-    val text = bookStateText(book, LocalContext.current)
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        // The same bar the currently-listening shelf uses, at a fixed width so every row's text
-        // starts in the same place whatever the book's progress.
-        ProgressBar(fraction = bookProgressFraction(book), modifier = Modifier.width(46.dp))
-        if (text != null) {
-            Text(
-                text,
-                color = if (book.finished) Sage else Faint,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 7.dp),
-            )
-        }
-        if (book.isDownloaded) {
-            Icon(
-                Icons.Filled.DownloadDone,
-                // Decorative: the row it sits in is one accessibility node and already names the
-                // book; a second "Downloaded" spoken mid-row only interrupts the title.
-                contentDescription = null,
-                tint = Sage,
-                modifier = Modifier.padding(start = 7.dp).size(13.dp),
-            )
-        }
-    }
-}
-
 
 // ── Series shelf row ───────────────────────────────────────────────────────
 
@@ -1900,14 +1648,14 @@ private fun SeriesShelfRow(
                     fontSize = 11.5.sp,
                 )
             }
-            // Immediately left of the overflow button, so the two sit together at the trailing
-            // edge and the overflow still lines up with the one on every book row. Leading it
-            // instead pushed the covers out of line with the book rows above and below.
-            //
-            // A solid triangle in its own outlined box, not a bare chevron: the thin hairline
-            // chevron read as punctuation in a text line rather than as the control that opens the
-            // shelf, which is the one thing this row is for.
-            DisclosureGlyph(expanded = expanded)
+            // Chevron immediately left of the overflow button, so the two sit together at the trailing
+            // edge and the overflow still lines up with the one on every book row. Leading it instead
+            // pushed the covers out of line with the book rows above and below.
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
+                tint = Faint,
+            )
             Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
@@ -1920,31 +1668,6 @@ private fun SeriesShelfRow(
         if (expanded) {
             HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = SeriesListEnclosurePad))
         }
-    }
-}
-
-/**
- * The open/closed marker on a shelf row: a filled triangle inside a soft outlined square.
- *
- * Decorative only — the whole row is the control and carries the expand/collapse label, so a second
- * focusable node here would just make TalkBack read the shelf twice.
- */
-@Composable
-private fun DisclosureGlyph(expanded: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(26.dp)
-            .clip(RoundedCornerShape(7.dp))
-            .background(Surface2)
-            .border(1.dp, Line, RoundedCornerShape(7.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = if (expanded) Icons.Filled.ArrowDropDown else Icons.Filled.ArrowRight,
-            contentDescription = null,
-            tint = Muted,
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 
@@ -1965,6 +1688,33 @@ private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
     }
 }
 
+@Composable
+private fun ProgressRing(progress: Float, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(Studio.copy(alpha = 0.72f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(24.dp).padding(5.dp)) {
+            val stroke = 3.dp.toPx()
+            drawArc(
+                color = Parchment.copy(alpha = 0.18f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = stroke),
+            )
+            drawArc(
+                color = Amber,
+                startAngle = -90f,
+                sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                useCenter = false,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
+    }
+}
 
 // ── Cover art (title-forward placeholder) ─────────────────────────────────────
 

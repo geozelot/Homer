@@ -11,7 +11,6 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geozelot.homer.data.update.UpdateChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -240,29 +239,6 @@ class LibrarySettings @Inject constructor(
     }
 
     /**
-     * Which shelves the user has folded away, as scope-prefixed keys ("author:Mark Lawrence").
-     *
-     * Persisted because a fold is a browsing decision, not a scroll position: the point of folding
-     * a prolific author is to stop scrolling past them, and a set that reset on relaunch would make
-     * you fold them again every morning. Keys for a shelving mode you are not using simply never
-     * match, so switching modes starts fresh without needing to clear anything.
-     */
-    val collapsedShelves: Flow<Set<String>> =
-        context.settingsDataStore.data.map { it[KEY_COLLAPSED_SHELVES].orEmpty() }
-
-    suspend fun setShelfCollapsed(key: String, collapsed: Boolean) {
-        context.settingsDataStore.edit {
-            val current = it[KEY_COLLAPSED_SHELVES].orEmpty()
-            it[KEY_COLLAPSED_SHELVES] = if (collapsed) current + key else current - key
-        }
-    }
-
-    /** Replaces the whole set — what "collapse all" and "expand all" do. */
-    suspend fun setCollapsedShelves(keys: Set<String>) {
-        context.settingsDataStore.edit { it[KEY_COLLAPSED_SHELVES] = keys }
-    }
-
-    /**
      * Forgets everything that describes ONE library, for signing out.
      *
      * What is here and what is not is the whole point. Gone: the folder, the sharing state, the
@@ -282,8 +258,6 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_LEGACY_MANIFEST_MIGRATED)
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
-            // Shelf names from a library this device no longer has.
-            it.remove(KEY_COLLAPSED_SHELVES)
             // The pre-split tier some installs still fall back to. Left behind, it would decide
             // sharing for the NEXT library from the last one's setting.
             it.remove(KEY_SYNC_TIER)
@@ -314,7 +288,6 @@ class LibrarySettings @Inject constructor(
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
         val KEY_CERT_PIN = booleanPreferencesKey("cert_pinning_enabled")
         val KEY_PINNED_CERT = stringPreferencesKey("pinned_server_cert")
-        val KEY_COLLAPSED_SHELVES = stringSetPreferencesKey("collapsed_shelves")
     }
 }
 

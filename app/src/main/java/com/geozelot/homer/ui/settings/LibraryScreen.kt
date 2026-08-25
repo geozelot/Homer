@@ -3,7 +3,6 @@ package com.geozelot.homer.ui.settings
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,10 +37,9 @@ import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.DiscoveredLibraryCard
 import com.geozelot.homer.ui.components.SettingsActionPadding
-import com.geozelot.homer.ui.components.SettingsActionRow
+import com.geozelot.homer.ui.components.SettingsCard
+import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
-import com.geozelot.homer.ui.components.SettingsGroup
-import com.geozelot.homer.ui.components.SettingsRowDivider
 import com.geozelot.homer.ui.components.SettingsNote
 import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
@@ -120,45 +118,46 @@ fun LibraryScreen(
 
     SettingsScaffold(stringResource(R.string.set_library_title), onBack, modifier) {
         // ── Source ───────────────────────────────────────────────────────────
-        SettingsGroup(title = stringResource(R.string.lib_section_source)) {
-            CurrentSource(
-                login = account?.loginName,
-                host = account?.serverUrl?.substringAfter("://"),
-                isShare = libraryIsShare,
-                writable = libraryWritable,
+        SettingsSectionHeader(stringResource(R.string.lib_section_source))
+        CurrentSourceCard(
+            login = account?.loginName,
+            host = account?.serverUrl?.substringAfter("://"),
+            isShare = libraryIsShare,
+            writable = libraryWritable,
+        )
+
+        // A share link points at exactly one folder — the share IS the library — so editing the
+        // folder would only break it.
+        OutlinedTextField(
+            value = libraryRoot,
+            onValueChange = viewModel::onLibraryRootChange,
+            label = { Text(stringResource(R.string.sync_library_folder)) },
+            placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
+            singleLine = true,
+            enabled = IndexPass.BOOKS !in queued && !libraryIsShare,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
+        if (libraryIsShare) {
+            SettingsNote(
+                stringResource(R.string.set_source_share_root_note),
+                modifier = Modifier.padding(top = 6.dp),
             )
-            SettingsRowDivider()
-            // A share link points at exactly one folder — the share IS the library — so editing
-            // the folder would only break it.
-            OutlinedTextField(
-                value = libraryRoot,
-                onValueChange = viewModel::onLibraryRootChange,
-                label = { Text(stringResource(R.string.sync_library_folder)) },
-                placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
-                singleLine = true,
-                enabled = IndexPass.BOOKS !in queued && !libraryIsShare,
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp),
-            )
-            if (libraryIsShare) {
-                SettingsNote(stringResource(R.string.set_source_share_root_note))
-            }
         }
 
-        SettingsGroup(title = stringResource(R.string.set_source_other_header)) {
-            DiscoveredLibraries(
-                discovered = discovered,
-                discovering = discovering,
-                // The button is an explicit request: bypass the freshness throttle.
-                onRediscover = { viewModel.rediscover(force = true) },
-                onUse = viewModel::onLibraryRootChange,
-            )
-        }
+        DiscoveredLibraries(
+            discovered = discovered,
+            discovering = discovering,
+            // The button is an explicit request: bypass the freshness throttle.
+            onRediscover = { viewModel.rediscover(force = true) },
+            onUse = viewModel::onLibraryRootChange,
+        )
+
+        SettingsDivider()
 
         // ── Contents ─────────────────────────────────────────────────────────
-        SettingsGroup(
-            title = stringResource(R.string.lib_section_contents),
-            lead = stringResource(R.string.lib_contents_lead),
-        ) {
+        SettingsSectionHeader(stringResource(R.string.lib_section_contents))
+        SettingsExplanation(stringResource(R.string.lib_contents_lead))
+
         val running = indexProgress
         BooksRow(
             queued = IndexPass.BOOKS in queued,
@@ -168,21 +167,21 @@ fun LibraryScreen(
             now = now,
             onScan = viewModel::scan,
         )
-        SettingsRowDivider()
+        SettingsDivider()
         ArtworkRow(
             queued = IndexPass.ARTWORK in queued,
             progress = running?.takeIf { it.pass == IndexPass.ARTWORK },
             artless = artless,
             onFetch = viewModel::fetchCoverArt,
         )
-        SettingsRowDivider()
+        SettingsDivider()
         LengthsRow(
             queued = IndexPass.LENGTHS in queued,
             progress = running?.takeIf { it.pass == IndexPass.LENGTHS },
             unmeasured = unmeasured,
             onMeasure = { confirmMeasure = true },
         )
-        SettingsRowDivider()
+        SettingsDivider()
         CorrectionsRow(
             queued = IndexPass.CORRECTIONS in queued,
             count = corrections,
@@ -216,13 +215,14 @@ fun LibraryScreen(
             }
         }
 
-        // The crawl marker sits under the contents rows because it qualifies all of them: it is
-        // the reason a book that has left the server may still be on the shelf.
-        CrawlLine(lastFullCrawl, now, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
-        }
+        // The crawl marker sits under the contents rows because it qualifies all of them: it is the
+        // reason a book that has left the server may still be on the shelf.
+        CrawlLine(lastFullCrawl, now, modifier = Modifier.padding(top = 10.dp))
+
+        SettingsDivider()
 
         // ── Sharing ──────────────────────────────────────────────────────────
-        SettingsGroup(title = stringResource(R.string.lib_section_sharing)) {
+        SettingsSectionHeader(stringResource(R.string.lib_section_sharing))
         // What the index is doing right now. The rows above cover the passes; this covers the two
         // steps that are pure network and used to happen in complete silence.
         when (indexActivity) {
@@ -239,15 +239,15 @@ fun LibraryScreen(
             onChange = viewModel::setSharedCatalog,
         )
 
-        SettingsRowDivider()
+        SettingsDivider()
 
         if (libraryIsShare) {
             // A share link is somebody else's storage: progress stays on this device until the
             // user points it at an account of their own.
+            SettingsSectionHeader(stringResource(R.string.set_sync_account_header))
             val sync = syncAccount
-            SettingsActionRow(
-                label = stringResource(R.string.set_sync_account_header_row),
-                summary = if (sync != null) {
+            SettingsRow(
+                label = if (sync != null) {
                     stringResource(
                         R.string.settings_sync_to,
                         "${sync.loginName}@${sync.serverUrl.substringAfter("://")}",
@@ -255,13 +255,17 @@ fun LibraryScreen(
                 } else {
                     stringResource(R.string.settings_sync_device)
                 },
-                action = if (sync != null) {
-                    stringResource(R.string.settings_sync_stop)
+            ) {
+                if (sync != null) {
+                    TextButton(onClick = viewModel::unlinkSyncAccount, contentPadding = SettingsActionPadding) {
+                        Text(stringResource(R.string.settings_sync_stop))
+                    }
                 } else {
-                    stringResource(R.string.settings_sync_link)
-                },
-                onClick = if (sync != null) viewModel::unlinkSyncAccount else onLinkSyncAccount,
-            )
+                    TextButton(onClick = onLinkSyncAccount, contentPadding = SettingsActionPadding) {
+                        Text(stringResource(R.string.settings_sync_link))
+                    }
+                }
+            }
         } else {
             SettingsSwitchRow(
                 label = stringResource(R.string.sync_progress_switch),
@@ -274,47 +278,43 @@ fun LibraryScreen(
                 },
             )
         }
-        }
 
-        SettingsGroup(title = stringResource(R.string.lib_section_shelf_header)) {
-            SettingsSwitchRow(
-                label = stringResource(R.string.sync_show_hidden),
-                checked = showHidden,
-                onCheckedChange = viewModel::setShowHidden,
-            )
-        }
+        SettingsDivider()
+
+        SettingsSwitchRow(
+            label = stringResource(R.string.sync_show_hidden),
+            checked = showHidden,
+            onCheckedChange = viewModel::setShowHidden,
+        )
+
+        SettingsDivider()
 
         // ── Start over ───────────────────────────────────────────────────────
-        // The two actions that redo work already done. They are not "fixes" — the Contents rows say
+        // The two actions that redo work already done. They are not "fixes" — the rows above say
         // what is incomplete and offer to complete it — these throw away a previous answer, which
         // is a different and rarer thing to want.
-        SettingsGroup(title = stringResource(R.string.lib_section_startover)) {
-            SettingsActionRow(
-                label = stringResource(R.string.lib_rebuild),
-                summary = stringResource(R.string.lib_rebuild_desc),
-                action = stringResource(R.string.set_full_rescan_confirm_action),
-                enabled = IndexPass.BOOKS !in queued,
-                onClick = { confirmRebuild = true },
-            )
-            SettingsRowDivider()
-            SettingsActionRow(
-                label = stringResource(R.string.lib_recheck_lengths),
-                summary = stringResource(R.string.lib_recheck_lengths_desc),
-                action = stringResource(R.string.lib_recheck_confirm_action),
-                // A file that failed to measure has no length, so it is counted in `unmeasured`.
-                // None outstanding therefore means there is nothing to re-try, and offering it
-                // anyway buys a pass that reports "measuring lengths for 0 books" and does nothing.
-                enabled = IndexPass.LENGTHS !in queued && unmeasured > 0,
-                onClick = { confirmRecheck = true },
-            )
-            SettingsRowDivider()
-            SettingsActionRow(
-                label = stringResource(R.string.set_sign_out),
-                summary = stringResource(R.string.lib_sign_out_desc),
-                action = stringResource(R.string.set_sign_out),
-                danger = true,
-                onClick = { confirmSignOut = true },
-            )
+        SettingsSectionHeader(stringResource(R.string.lib_section_startover))
+        SettingsRow(
+            label = stringResource(R.string.lib_rebuild),
+            summary = stringResource(R.string.lib_rebuild_desc),
+            enabled = IndexPass.BOOKS !in queued,
+            onClick = { confirmRebuild = true },
+        )
+        SettingsDivider()
+        SettingsRow(
+            label = stringResource(R.string.lib_recheck_lengths),
+            summary = stringResource(R.string.lib_recheck_lengths_desc),
+            // A file that failed to measure has no length, so it is counted in `unmeasured`. None
+            // outstanding therefore means there is nothing to re-try, and offering it anyway buys
+            // a pass that reports "measuring lengths for 0 books" and does nothing.
+            enabled = IndexPass.LENGTHS !in queued && unmeasured > 0,
+            onClick = { confirmRecheck = true },
+        )
+
+        SettingsDivider()
+
+        TextButton(onClick = { confirmSignOut = true }, contentPadding = SettingsActionPadding) {
+            Text(stringResource(R.string.set_sign_out), color = Danger)
         }
     }
 
@@ -510,15 +510,10 @@ private fun CrawlLine(crawl: CrawlSummary?, now: Long, modifier: Modifier = Modi
 
 // ── source ───────────────────────────────────────────────────────────────────────────────────
 
-/**
- * Which server (and which kind of access) the library is being read from right now.
- *
- * A row inside the Source group rather than a card of its own: a card inside a card read as two
- * boundaries for one thing, and the group's own title already says what this is.
- */
+/** Which server (and which kind of access) the library is being read from right now. */
 @Composable
-private fun CurrentSource(login: String?, host: String?, isShare: Boolean, writable: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+private fun CurrentSourceCard(login: String?, host: String?, isShare: Boolean, writable: Boolean) {
+    SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = when {

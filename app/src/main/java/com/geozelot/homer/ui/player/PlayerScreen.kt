@@ -401,58 +401,6 @@ fun PlayerScreen(
     }
 }
 
-/**
- * Types an exact playback speed.
- *
- * Its own dialog rather than [CustomNumberDialog] because a speed is fractional, and the one thing
- * a listener must not be able to do by accident is set it to zero — which is silence that looks
- * like a stall. Anything unparseable leaves the speed alone; anything out of range is clamped.
- */
-@Composable
-private fun CustomSpeedDialog(initial: Float, onConfirm: (Float) -> Unit, onDismiss: () -> Unit) {
-    var text by rememberSaveable { mutableStateOf(formatSpeed(initial)) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.player_speed_custom_title)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    // One separator, digits only — and both separators accepted, because the
-                    // keyboard offers whichever the locale uses and the parser below wants a dot.
-                    onValueChange = { entered ->
-                        text = entered.filter { it.isDigit() || it == '.' || it == ',' }.take(4)
-                    },
-                    label = { Text(stringResource(R.string.player_speed_unit)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    stringResource(R.string.player_speed_custom_range),
-                    color = Muted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    text.replace(',', '.').toFloatOrNull()
-                        ?.let { onConfirm(it.coerceIn(MIN_SPEED, MAX_SPEED)) }
-                    onDismiss()
-                },
-            ) { Text(stringResource(R.string.action_save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-
-private val SPEED_PRESETS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
-private const val MIN_SPEED = 0.25f
-private const val MAX_SPEED = 4.0f
-
 // ── Artwork ──────────────────────────────────────────────────────────────────
 
 /** Below this viewport height the cover and the control cluster sit side by side, not stacked. */
@@ -711,7 +659,7 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
             val r = d / 2f
             val cx = inset + r
             val cy = inset + r
-            val headAngle = Math.toRadians((start).toDouble())
+            val headAngle = Math.toRadians(start.toDouble())
             val hx = cx + r * kotlin.math.cos(headAngle).toFloat()
             val hy = cy + r * kotlin.math.sin(headAngle).toFloat()
             val h = 5.dp.toPx()
@@ -945,31 +893,59 @@ private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean, context: andro
 
 // ── Sleep settings (advanced: shake-extend + fade) ────────────────────────────
 
-
+/**
+ * Types an exact playback speed.
+ *
+ * Its own dialog rather than [CustomNumberDialog] because a speed is fractional, and the one thing
+ * a listener must not be able to do by accident is set it to zero — which is silence that looks
+ * like a stall. Anything unparseable leaves the speed alone; anything out of range is clamped.
+ */
 @Composable
-private fun Stepper(value: String, onDec: () -> Unit, onInc: () -> Unit) {
-    // The buttons are bare glyphs, so they carry an explicit label — TalkBack announces nothing
-    // useful for "−"/"+" on their own. The readout is min-width, not fixed: at a large font scale a
-    // fixed 44dp clipped "30 seconds".
-    val decrease = stringResource(R.string.action_decrease)
-    val increase = stringResource(R.string.action_increase)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(
-            onClick = onDec,
-            modifier = Modifier.semantics { contentDescription = decrease },
-        ) { Text("−", style = MaterialTheme.typography.titleLarge) }
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.widthIn(min = 44.dp),
-            textAlign = TextAlign.Center,
-        )
-        IconButton(
-            onClick = onInc,
-            modifier = Modifier.semantics { contentDescription = increase },
-        ) { Text("+", style = MaterialTheme.typography.titleLarge) }
-    }
+private fun CustomSpeedDialog(initial: Float, onConfirm: (Float) -> Unit, onDismiss: () -> Unit) {
+    var text by rememberSaveable { mutableStateOf(formatSpeed(initial)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.player_speed_custom_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    // One separator, digits only — and both separators accepted, because the
+                    // keyboard offers whichever the locale uses and the parser below wants a dot.
+                    onValueChange = { entered ->
+                        text = entered.filter { it.isDigit() || it == '.' || it == ',' }.take(4)
+                    },
+                    label = { Text(stringResource(R.string.player_speed_unit)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.player_speed_custom_range),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    text.replace(',', '.').toFloatOrNull()
+                        ?.let { onConfirm(it.coerceIn(MIN_SPEED, MAX_SPEED)) }
+                    onDismiss()
+                },
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
 }
+
+private val SPEED_PRESETS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+
+/** Bounds for a typed speed. Zero is silence that looks like a stall, so it is not reachable. */
+private const val MIN_SPEED = 0.25f
+private const val MAX_SPEED = 4.0f
 
 // ── List dialogs (bookmarks, chapters) ───────────────────────────────────────
 

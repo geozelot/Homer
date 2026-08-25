@@ -132,24 +132,7 @@ private data class EffectiveBook(
  */
 @Immutable
 sealed interface LibraryEntry {
-    /**
-     * A shelf heading, and the control that folds the shelf away.
-     *
-     * [key] is scoped by the shelving mode, so folding "Mark Lawrence" while shelved by author does
-     * not also fold a genre that happens to share the name — and switching the shelving starts
-     * fresh, because those are different shelves.
-     */
-    data class Header(
-        val title: String,
-        val key: String,
-        val count: Int,
-        val collapsed: Boolean = false,
-        /**
-         * A few covers to show in place of the folded rows. A shelf that collapsed to an opaque bar
-         * would only be a thing to open again; five spines are enough to recognise what is in there.
-         */
-        val preview: List<BookListItem> = emptyList(),
-    ) : LibraryEntry
+    data class Header(val title: String) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
 
     // Annotated on the class as well as the interface: stability is inferred per concrete type,
@@ -368,45 +351,14 @@ class HomeViewModel @Inject constructor(
     /** Library list, filtered by the query, ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
         combine(books, _searchQuery, sortMode, shelfMode, seriesMode) { list, query, sort, shelving, series ->
-            val searching = query.isNotBlank()
-            val filtered = if (!searching) {
+            val filtered = if (query.isBlank()) {
                 list
             } else {
                 val needle = query.trim().lowercase()
                 list.filter { it.matchesQuery(needle) }
             }
-            buildEntries(filtered, sort, shelving, series) to searching
-        }
-            // Folding is applied after the grouping rather than inside it — all it needs to know is
-            // that a header owns every entry until the next one. It is also the sixth input, and
-            // combine's typed overloads stop at five.
-            .combine(librarySettings.collapsedShelves) { (built, searching), collapsed ->
-                applyCollapse(built, collapsed, searching)
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /** Folds a shelf away, or unfolds it. */
-    fun toggleShelf(key: String, collapsed: Boolean) {
-        viewModelScope.launch { librarySettings.setShelfCollapsed(key, collapsed) }
-    }
-
-    /**
-     * Folds every shelf, or unfolds the lot.
-     *
-     * Collapse-all reads the shelves out of the CURRENT list rather than from anything stored, so it
-     * only ever folds what is actually on screen; expand-all clears the set outright, including keys
-     * left behind by a shelving mode the user has since changed.
-     */
-    fun setAllShelvesCollapsed(collapsed: Boolean) {
-        viewModelScope.launch {
-            val keys = if (collapsed) {
-                entries.value.filterIsInstance<LibraryEntry.Header>().mapTo(mutableSetOf()) { it.key }
-            } else {
-                emptySet()
-            }
-            librarySettings.setCollapsedShelves(keys)
-        }
-    }
+            buildEntries(filtered, sort, shelving, series)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The currently-playing book as its live library row, so the docked mini-player shows an
@@ -1139,10 +1091,9 @@ private fun buildEntries(
 
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author", "author") { it.author }
+        LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
         // A stacked series spans genres, so it can't sit under one; it keeps its own section.
-        LibraryShelving.GENRE ->
-            sectioned(ordered, "No genre", "genre") { (it as? SortUnit.Solo)?.book?.genre }
+        LibraryShelving.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
     }
 }
 
@@ -1217,81 +1168,17 @@ private fun unitDuration(u: SortUnit): Long = when (u) {
 private fun sectioned(
     units: List<SortUnit>,
     fallback: String,
-    scope: String,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
     val byKey = units.groupBy(keyOf)
     val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
     return buildList {
         for (key in keys) {
-            val group = byKey.getValue(key)
-            val title = key ?: fallback
-            add(
-                LibraryEntry.Header(
-                    title = title,
-                    // Scoped by shelving, and by the TITLE rather than the position: a shelf keeps
-                    // its folded state when a book is added above it.
-                    key = "$scope:$title",
-                    // Books, not units — a stacked series is one row but several books, and "7
-                    // books" is what the reader is deciding whether to unfold.
-                    count = group.sumOf { unit ->
-                        when (unit) {
-                            is SortUnit.Solo -> 1
-                            is SortUnit.Ser -> unit.series.books.size
-                        }
-                    },
-                ),
-            )
-            group.forEach { add(it.toEntry()) }
+            add(LibraryEntry.Header(key ?: fallback))
+            byKey.getValue(key).forEach { add(it.toEntry()) }
         }
     }
 }
-
-/**
- * Folds away the rows under every collapsed shelf, leaving the header and a few covers.
- *
- * A post-pass over the built list rather than part of the grouping, because that is all it needs to
- * be: a header owns every entry until the next header.
- *
- * [searching] switches the whole thing off. A filtered list is not the shelved library — if a match
- * sat inside a folded shelf it would simply be invisible, and a search that silently hides results
- * is worse than one that ignores a browsing preference.
- */
-internal fun applyCollapse(
-    entries: List<LibraryEntry>,
-    collapsed: Set<String>,
-    searching: Boolean,
-): List<LibraryEntry> {
-    if (searching || collapsed.isEmpty()) return entries
-    val out = ArrayList<LibraryEntry>(entries.size)
-    var folding = false
-    var preview = mutableListOf<BookListItem>()
-    var headerAt = -1
-    for (entry in entries) {
-        when (entry) {
-            is LibraryEntry.Header -> {
-                if (folding) out[headerAt] = (out[headerAt] as LibraryEntry.Header).copy(preview = preview)
-                folding = entry.key in collapsed
-                preview = mutableListOf()
-                headerAt = out.size
-                out += if (folding) entry.copy(collapsed = true) else entry
-            }
-            is LibraryEntry.Standalone ->
-                if (folding) preview.addUpTo(PREVIEW_COVERS, entry.book) else out += entry
-            is LibraryEntry.Series ->
-                if (folding) entry.books.forEach { preview.addUpTo(PREVIEW_COVERS, it) } else out += entry
-        }
-    }
-    if (folding) out[headerAt] = (out[headerAt] as LibraryEntry.Header).copy(preview = preview)
-    return out
-}
-
-private fun MutableList<BookListItem>.addUpTo(limit: Int, book: BookListItem) {
-    if (size < limit) add(book)
-}
-
-/** How many covers a folded shelf shows before it says "+N". */
-internal const val PREVIEW_COVERS = 5
 
 /** Case-insensitive match across title, author, series, genre and tags. */
 private fun BookListItem.matchesQuery(needle: String): Boolean =

@@ -17,11 +17,9 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -51,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Amber
-import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
@@ -174,13 +171,7 @@ fun SettingsNote(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * A tappable settings row that navigates elsewhere.
- *
- * The glyph sits in its own outlined box rather than floating as a bare chevron, for the same
- * reason the action pill exists: a hairline arrow at the end of a line of text reads as
- * punctuation, not as the thing you press.
- */
+/** A tappable settings row that navigates elsewhere (label + optional summary + chevron). */
 @Composable
 fun SettingsNavRow(
     label: String,
@@ -189,21 +180,35 @@ fun SettingsNavRow(
     summary: String? = null,
 ) {
     SettingsRow(label = label, summary = summary, onClick = onClick, modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Surface2)
-                .border(1.dp, Line, RoundedCornerShape(7.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.ArrowRight,
-                contentDescription = null,
-                tint = Muted,
-                modifier = Modifier.size(20.dp),
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted)
+    }
+}
+
+/** A settings row whose trailing control picks one of [options]. */
+@Composable
+fun <T> SettingsDropdownRow(
+    label: String,
+    chipLabel: String,
+    options: List<T>,
+    selected: T,
+    labelOf: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    onCustom: (() -> Unit)? = null,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsRow(label = label) {
+            DropdownChip(
+                label = chipLabel,
+                options = options,
+                selected = selected,
+                labelOf = labelOf,
+                onSelect = onSelect,
+                onCustom = onCustom,
             )
         }
+        description?.let { SettingsExplanation(it) }
     }
 }
 
@@ -303,38 +308,6 @@ fun <T> DropdownChip(
 }
 
 /**
- * A setting that picks one of several values: label, its own description, and a chip that opens the
- * list. The one row shape for every choice in settings.
- *
- * The description lives INSIDE the row rather than as a paragraph after it. Floating explanations
- * were ambiguous — a reader could not tell whether one belonged to the setting above or below — and
- * they made every group a different height for the same amount of content.
- */
-@Composable
-fun <T> SettingsChoiceRow(
-    label: String,
-    value: T,
-    options: List<T>,
-    labelOf: (T) -> String,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-    description: String? = null,
-    enabled: Boolean = true,
-    onCustom: (() -> Unit)? = null,
-) {
-    SettingsRow(label = label, summary = description, enabled = enabled, modifier = modifier) {
-        DropdownChip(
-            label = labelOf(value),
-            options = options,
-            selected = value,
-            labelOf = labelOf,
-            onSelect = onSelect,
-            onCustom = onCustom,
-        )
-    }
-}
-
-/**
  * Types an exact value for a setting whose presets did not include the one wanted.
  *
  * Clamped rather than rejected: someone who types 900 into a skip interval meant "as much as you
@@ -384,136 +357,24 @@ fun CustomNumberDialog(
     )
 }
 
-/**
- * A titled group of settings: an all-caps label, an optional line of prose, and a card holding the
- * rows that belong together.
- *
- * The card is the point. Settings used to be one flat column of rows with hairlines between them
- * and descriptions floating in the gaps, so nothing said where a group started or which row a
- * paragraph belonged to — the reader had to infer both from spacing. A boundary answers it.
- *
- * Group prose goes ABOVE the card ([lead]) and caveats below it, because both are about the group;
- * anything about a single setting belongs to that row, where it cannot be misread.
- */
+/** A rounded, outlined surface that groups related settings content. */
 @Composable
-fun SettingsGroup(
-    title: String? = null,
-    modifier: Modifier = Modifier,
-    lead: String? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(modifier = modifier.fillMaxWidth().padding(bottom = 18.dp)) {
-        title?.let { SettingsSectionHeader(it) }
-        lead?.let {
-            Text(
-                it,
-                color = Muted,
-                fontSize = 11.5.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Surface1)
-                .border(1.dp, Line, RoundedCornerShape(14.dp))
-                .padding(horizontal = 14.dp, vertical = 4.dp),
-            content = content,
-        )
-    }
-}
-
-/**
- * The hairline between two rows of a [SettingsGroup].
- *
- * Inset from the card's own padding is deliberate: flush to the edge it reads as another border of
- * the card rather than a division inside it.
- */
-@Composable
-fun SettingsRowDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier = modifier, color = Line.copy(alpha = 0.6f))
-}
-
-/**
- * A row whose trailing control is a real button.
- *
- * The whole reason this exists: an action used to be a bare amber word, indistinguishable from the
- * summary text beside it, and a tappable row looked exactly like an unreachable one. Everything
- * tappable in settings now wears the same outlined pill — this, [DropdownChip] and [SettingsNavRow]
- * — so "can I press it" is answered by the shape and never by trying.
- */
-@Composable
-fun SettingsActionRow(
-    label: String,
-    action: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    summary: String? = null,
-    enabled: Boolean = true,
-    /** Colours the pill as destructive — deleting downloads, signing out. */
-    danger: Boolean = false,
-    /** Replaces the pill with a spinner: the action is running and asking again would do nothing. */
-    busy: Boolean = false,
-) {
-    SettingsRow(
-        label = label,
-        summary = summary,
-        enabled = enabled,
-        // The row itself is not clickable: the button is the target, and a row-wide hit area that
-        // fires a destructive action from a stray tap on the description is not worth the
-        // convenience.
-        modifier = modifier,
-    ) {
-        if (busy) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Amber, strokeWidth = 2.dp)
-        } else {
-            PillButton(text = action, onClick = onClick, enabled = enabled, danger = danger)
-        }
-    }
-}
-
-/**
- * The one button shape settings uses: a compact outlined pill.
- *
- * Sized to sit level with an 11sp label rather than to fill a 48dp target, so the tap area is
- * expanded around it instead — inflating the pill itself would break its alignment with the text it
- * sits beside, which is the whole reason the dropdown chip does the same thing.
- */
-@Composable
-fun PillButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    danger: Boolean = false,
-) {
-    val fg = when {
-        !enabled -> Faint
-        danger -> Danger
-        else -> Amber
-    }
-    Box(
+fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
         modifier = modifier
-            .sizeIn(minHeight = 48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text,
-            color = fg,
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, if (enabled) fg.copy(alpha = 0.45f) else Line, RoundedCornerShape(8.dp))
-                .background(if (enabled) fg.copy(alpha = 0.10f) else Color.Transparent)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        )
-    }
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface1)
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        content = content,
+    )
+}
+
+/** The hairline that separates settings groups. */
+@Composable
+fun SettingsDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(modifier = modifier.padding(vertical = 14.dp), color = Line)
 }
 
 /** A small pill: genre/tag chips in the library, status chips in settings. */

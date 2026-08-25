@@ -12,9 +12,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.components.SettingsGroup
+import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsNavRow
-import com.geozelot.homer.ui.components.SettingsRowDivider
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Faint
 
@@ -49,41 +48,36 @@ fun SettingsHubScreen(
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
 
     SettingsScaffold(stringResource(R.string.settings_title), onBack, modifier) {
-        // The books, and where they are kept — one group, because they are two halves of the same
-        // question: what is in the library and what of it is on this phone.
-        SettingsGroup(title = stringResource(R.string.set_hub_books_header)) {
-            SettingsNavRow(
-                label = stringResource(R.string.set_library_title),
-                summary = sourceSummary(account, libraryIsShare, bookCount),
-                onClick = onOpenLibrary,
-            )
-            SettingsRowDivider()
-            SettingsNavRow(
-                label = stringResource(R.string.set_device_title),
-                summary = storageSummary(customStoragePath, customStorageUri),
-                onClick = onOpenDevice,
-            )
-        }
+        // Where the books come from, what Homer has read about them, and what is shared.
+        SettingsNavRow(
+            label = stringResource(R.string.set_library_title),
+            summary = sourceSummary(account, libraryIsShare, bookCount),
+            onClick = onOpenLibrary,
+        )
+        // "What's stored here" — downloads and covers on this phone.
+        SettingsNavRow(
+            label = stringResource(R.string.set_device_title),
+            summary = storageSummary(customStoragePath, customStorageUri),
+            onClick = onOpenDevice,
+        )
 
-        SettingsGroup(title = stringResource(R.string.set_hub_app_header)) {
-            SettingsNavRow(
-                label = stringResource(R.string.set_playback_title),
-                summary = stringResource(R.string.set_playback_summary, seekSeconds),
-                onClick = onOpenPlayback,
-            )
-            SettingsRowDivider()
-            SettingsNavRow(
-                label = stringResource(R.string.set_privacy_title),
-                summary = stringResource(R.string.set_privacy_summary),
-                onClick = onOpenPrivacy,
-            )
-            SettingsRowDivider()
-            SettingsNavRow(
-                label = stringResource(R.string.set_about_title),
-                summary = stringResource(R.string.set_about_summary),
-                onClick = onOpenAbout,
-            )
-        }
+        SettingsDivider()
+
+        SettingsNavRow(
+            label = stringResource(R.string.set_playback_title),
+            summary = stringResource(R.string.set_playback_summary, seekSeconds),
+            onClick = onOpenPlayback,
+        )
+        SettingsNavRow(
+            label = stringResource(R.string.set_privacy_title),
+            summary = stringResource(R.string.set_privacy_summary),
+            onClick = onOpenPrivacy,
+        )
+        SettingsNavRow(
+            label = stringResource(R.string.set_about_title),
+            summary = stringResource(R.string.set_about_summary),
+            onClick = onOpenAbout,
+        )
 
         Text(
             stringResource(R.string.about_version, BuildConfig.VERSION_NAME),

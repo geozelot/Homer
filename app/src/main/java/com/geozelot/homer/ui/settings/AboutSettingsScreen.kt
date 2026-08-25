@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.text.format.DateUtils
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -28,13 +27,12 @@ import com.geozelot.homer.data.update.UpdateChannel
 import com.geozelot.homer.data.update.UpdateFailure
 import com.geozelot.homer.data.update.UpdateRelease
 import com.geozelot.homer.data.update.UpdateState
-import com.geozelot.homer.ui.components.SettingsActionRow
-import com.geozelot.homer.ui.components.SettingsChoiceRow
-import com.geozelot.homer.ui.components.SettingsGroup
-import com.geozelot.homer.ui.components.SettingsRowDivider
+import com.geozelot.homer.ui.components.SettingsDivider
+import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsNavRow
 import com.geozelot.homer.ui.components.SettingsNote
 import com.geozelot.homer.ui.components.SettingsRow
+import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
@@ -65,19 +63,17 @@ fun AboutSettingsScreen(
 
         UpdateSection()
 
-        SettingsGroup(title = stringResource(R.string.set_about_more_header)) {
-            SettingsNavRow(
-                label = stringResource(R.string.settings_diagnostics),
-                summary = stringResource(R.string.set_about_diagnostics_summary),
-                onClick = onOpenDiagnostics,
-            )
-            SettingsRowDivider()
-            SettingsNavRow(
-                label = stringResource(R.string.about_licenses_title),
-                summary = stringResource(R.string.set_about_licenses_summary),
-                onClick = onOpenLicenses,
-            )
-        }
+        SettingsDivider()
+        SettingsNavRow(
+            label = stringResource(R.string.settings_diagnostics),
+            summary = stringResource(R.string.set_about_diagnostics_summary),
+            onClick = onOpenDiagnostics,
+        )
+        SettingsNavRow(
+            label = stringResource(R.string.about_licenses_title),
+            summary = stringResource(R.string.set_about_licenses_summary),
+            onClick = onOpenLicenses,
+        )
     }
 }
 
@@ -112,54 +108,56 @@ private fun UpdateSection(viewModel: UpdateViewModel = hiltViewModel()) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    SettingsDivider()
+    SettingsSectionHeader(stringResource(R.string.set_update_header))
+
+    SettingsRow(
+        label = stringResource(R.string.set_update_check),
+        summary = statusSummary(state, lastChecked),
+        onClick = actionFor(state)?.let { action -> { runAction(action, context, viewModel, state) } },
+        trailing = {
+            actionFor(state)?.let { action ->
+                Text(stringResource(action.label), color = Amber, fontSize = 13.sp)
+            }
+        },
+    )
+
+    // Only while a download is actually running: a bar sitting at zero reads as stuck.
+    (state as? UpdateState.Downloading)?.fraction?.let { fraction ->
+        LinearProgressIndicator(
+            progress = { fraction },
+            color = Amber,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+    }
+
+    // Trimmed: a release body can be a whole changelog, and this is a settings row, not a page.
+    (state as? UpdateState.Available)?.release?.notes?.let { notes ->
+        val shown = if (notes.length > NOTES_MAX_CHARS) notes.take(NOTES_MAX_CHARS).trimEnd() + "\u2026" else notes
+        SettingsNote("${stringResource(R.string.set_update_notes_title)}\n$shown")
+    }
+
+    SettingsSwitchRow(
+        label = stringResource(R.string.set_update_auto),
+        checked = autoCheck,
+        onCheckedChange = viewModel::setAutoCheck,
+        description = stringResource(R.string.set_update_auto_desc),
+    )
+
     // Resolved up front: labelOf is a plain lambda, so it cannot call stringResource itself.
     val stableLabel = stringResource(R.string.set_update_channel_stable)
     val betaLabel = stringResource(R.string.set_update_channel_beta)
     val channelLabel = { c: UpdateChannel -> if (c == UpdateChannel.BETA) betaLabel else stableLabel }
 
-    SettingsGroup(title = stringResource(R.string.set_update_header)) {
-        val action = actionFor(state)
-        SettingsActionRow(
-            label = stringResource(R.string.set_update_check),
-            summary = statusSummary(state, lastChecked),
-            action = stringResource(action?.label ?: R.string.set_update_action_check),
-            enabled = action != null,
-            busy = state is UpdateState.Checking,
-            onClick = { action?.let { runAction(it, context, viewModel, state) } },
-        )
-
-        // Only while a download is actually running: a bar sitting at zero reads as stuck.
-        (state as? UpdateState.Downloading)?.fraction?.let { fraction ->
-            LinearProgressIndicator(
-                progress = { fraction },
-                color = Amber,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            )
-        }
-
-        // Trimmed: a release body can be a whole changelog, and this is a settings row, not a page.
-        (state as? UpdateState.Available)?.release?.notes?.let { notes ->
-            val shown = if (notes.length > NOTES_MAX_CHARS) notes.take(NOTES_MAX_CHARS).trimEnd() + "\u2026" else notes
-            SettingsNote("${stringResource(R.string.set_update_notes_title)}\n$shown")
-        }
-
-        SettingsRowDivider()
-        SettingsSwitchRow(
-            label = stringResource(R.string.set_update_auto),
-            checked = autoCheck,
-            onCheckedChange = viewModel::setAutoCheck,
-            description = stringResource(R.string.set_update_auto_desc),
-        )
-        SettingsRowDivider()
-        SettingsChoiceRow(
-            label = stringResource(R.string.set_update_channel),
-            description = stringResource(R.string.set_update_channel_desc),
-            value = channel,
-            options = UpdateChannel.entries.toList(),
-            labelOf = channelLabel,
-            onSelect = viewModel::setChannel,
-        )
-    }
+    SettingsDropdownRow(
+        label = stringResource(R.string.set_update_channel),
+        chipLabel = channelLabel(channel),
+        options = UpdateChannel.entries.toList(),
+        selected = channel,
+        labelOf = channelLabel,
+        onSelect = viewModel::setChannel,
+        description = stringResource(R.string.set_update_channel_desc),
+    )
 }
 
 /** The one line under "Check for updates": where the updater is, or when it last looked. */

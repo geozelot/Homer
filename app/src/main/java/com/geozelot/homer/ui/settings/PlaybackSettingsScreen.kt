@@ -22,11 +22,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.CustomNumberDialog
-import com.geozelot.homer.ui.components.SettingsChoiceRow
+import com.geozelot.homer.ui.components.SettingsDivider
+import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsExplanation
-import com.geozelot.homer.ui.components.SettingsGroup
 import com.geozelot.homer.ui.components.SettingsRow
-import com.geozelot.homer.ui.components.SettingsRowDivider
+import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.home.HomeViewModel
 
@@ -34,10 +34,10 @@ import com.geozelot.homer.ui.home.HomeViewModel
  * How the player behaves: the two numbers that shape its feel, what the sleep timer does, and
  * whether the system will let playback continue off screen.
  *
- * The sleep settings used to live in a dialog behind the player's sleep button — two rows of
- * preferences hidden inside a transient control, where they were both hard to find and impossible
- * to change without a book open. The timer itself stays in the player, because starting one is an
- * action about this listening session; how it behaves is a preference and belongs here.
+ * The sleep settings used to live in a dialog behind the player's sleep button — two preferences
+ * hidden inside a transient control, where they were both hard to find and impossible to change
+ * without a book open. The timer itself stays in the player, because starting one is an action
+ * about this listening session; how it behaves is a preference and belongs here.
  */
 @Composable
 fun PlaybackSettingsScreen(
@@ -56,55 +56,63 @@ fun PlaybackSettingsScreen(
     var customFade by remember { mutableStateOf(false) }
 
     SettingsScaffold(stringResource(R.string.set_playback_title), onBack, modifier) {
-        SettingsGroup(title = stringResource(R.string.set_playback_feel_header)) {
-            SettingsChoiceRow(
-                label = stringResource(R.string.settings_skip_interval),
-                description = stringResource(R.string.set_playback_skip_desc),
-                value = seekSeconds,
-                options = SEEK_OPTIONS,
-                labelOf = { context.getString(R.string.settings_seconds, it) },
-                onSelect = viewModel::setSeekSeconds,
-                onCustom = { customSeek = true },
-            )
-            SettingsRowDivider()
-            SettingsChoiceRow(
-                label = stringResource(R.string.settings_rewind),
-                description = stringResource(R.string.set_playback_rewind_desc),
-                value = autoRewind,
-                options = REWIND_OPTIONS,
-                labelOf = { secondsOrOff(context, it) },
-                onSelect = viewModel::setAutoRewindSeconds,
-                onCustom = { customRewind = true },
-            )
-        }
+        SettingsDropdownRow(
+            label = stringResource(R.string.settings_skip_interval),
+            chipLabel = stringResource(R.string.settings_seconds, seekSeconds),
+            options = SEEK_OPTIONS,
+            selected = seekSeconds,
+            labelOf = { context.getString(R.string.settings_seconds, it) },
+            onSelect = viewModel::setSeekSeconds,
+            description = stringResource(R.string.set_playback_skip_desc),
+            onCustom = { customSeek = true },
+        )
+        SettingsDropdownRow(
+            label = stringResource(R.string.settings_rewind),
+            chipLabel = if (autoRewind == 0) {
+                stringResource(R.string.settings_off)
+            } else {
+                stringResource(R.string.settings_seconds, autoRewind)
+            },
+            options = REWIND_OPTIONS,
+            selected = autoRewind,
+            labelOf = {
+                if (it == 0) {
+                    context.getString(R.string.settings_off)
+                } else {
+                    context.getString(R.string.settings_seconds, it)
+                }
+            },
+            onSelect = viewModel::setAutoRewindSeconds,
+            description = stringResource(R.string.set_playback_rewind_desc),
+            onCustom = { customRewind = true },
+        )
 
-        SettingsGroup(
-            title = stringResource(R.string.set_playback_sleep_header),
-            lead = stringResource(R.string.set_playback_sleep_lead),
-        ) {
-            SettingsChoiceRow(
-                label = stringResource(R.string.player_shake_to_extend),
-                description = stringResource(R.string.set_playback_shake_desc),
-                value = sleepExtend,
-                options = SLEEP_EXTEND_OPTIONS,
-                labelOf = { context.getString(sleepExtendLabel(it)) },
-                onSelect = viewModel::setSleepExtend,
-            )
-            SettingsRowDivider()
-            SettingsChoiceRow(
-                label = stringResource(R.string.player_fade_out),
-                description = stringResource(R.string.set_playback_fade_desc),
-                value = sleepFade,
-                options = SLEEP_FADE_OPTIONS,
-                labelOf = { secondsOrOff(context, it) },
-                onSelect = viewModel::setSleepFadeOutSeconds,
-                onCustom = { customFade = true },
-            )
-        }
+        SettingsDivider()
+        SettingsSectionHeader(stringResource(R.string.set_playback_sleep_header))
+        SettingsExplanation(stringResource(R.string.set_playback_sleep_lead))
+        SettingsDropdownRow(
+            label = stringResource(R.string.player_shake_to_extend),
+            chipLabel = stringResource(sleepExtendLabel(sleepExtend)),
+            options = SLEEP_EXTEND_OPTIONS,
+            selected = sleepExtend,
+            labelOf = { context.getString(sleepExtendLabel(it)) },
+            onSelect = viewModel::setSleepExtend,
+            description = stringResource(R.string.set_playback_shake_desc),
+        )
+        SettingsDropdownRow(
+            label = stringResource(R.string.player_fade_out),
+            chipLabel = secondsOrOff(context, sleepFade),
+            options = SLEEP_FADE_OPTIONS,
+            selected = sleepFade,
+            labelOf = { secondsOrOff(context, it) },
+            onSelect = viewModel::setSleepFadeOutSeconds,
+            description = stringResource(R.string.set_playback_fade_desc),
+            onCustom = { customFade = true },
+        )
 
-        SettingsGroup(title = stringResource(R.string.set_playback_background_header)) {
-            BatteryOptimisationRow()
-        }
+        SettingsDivider()
+        SettingsSectionHeader(stringResource(R.string.set_playback_background_header))
+        BatteryOptimisationRow()
     }
 
     if (customSeek) {
