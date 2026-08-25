@@ -1092,13 +1092,17 @@ private fun buildEntries(
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
         LibraryShelving.AUTHOR -> sectioned(ordered, "Unknown author") { it.author }
-        // A stacked series spans genres, so it can't sit under one; it keeps its own section.
-        LibraryShelving.GENRE -> sectioned(ordered, "No genre") { (it as? SortUnit.Solo)?.book?.genre }
+        LibraryShelving.GENRE -> sectioned(ordered, "No genre") { unit ->
+            when (unit) {
+                is SortUnit.Solo -> unit.book.genre
+                is SortUnit.Ser -> seriesGenre(unit.series.books)
+            }
+        }
     }
 }
 
 /** A list unit awaiting placement: a standalone book or a collapsed series shelf. */
-private sealed interface SortUnit {
+internal sealed interface SortUnit {
     data class Solo(val book: BookListItem) : SortUnit
     data class Ser(val series: LibraryEntry.Series) : SortUnit
 
@@ -1118,13 +1122,18 @@ private sealed interface SortUnit {
 private val inSeriesOrder: Comparator<BookListItem> =
     compareBy({ it.seriesIndex == null }, { it.seriesIndex }, { it.title.lowercase() })
 
-/** Collapses author+series sets (2+) into ordered series units; everything else stays solo. */
-private fun collapseIntoUnits(books: List<BookListItem>): List<SortUnit> {
+/**
+ * Collapses author+series sets into ordered series units; everything else stays solo.
+ *
+ * A set of ONE counts. It used to need two members, so a series you own a single volume of was
+ * indistinguishable from a standalone book — which hid the fact that it belongs to something, and
+ * meant the shelf silently appeared the day a second volume arrived.
+ */
+internal fun collapseIntoUnits(books: List<BookListItem>): List<SortUnit> {
     val bySeries = books.filter { it.series != null }.groupBy { "${it.author.orEmpty()}|${it.series}" }
     val consumed = HashSet<String>()
     val units = mutableListOf<SortUnit>()
     for ((key, members) in bySeries) {
-        if (members.size < 2) continue
         units += SortUnit.Ser(
             LibraryEntry.Series(
                 key = key,
@@ -1163,6 +1172,24 @@ private fun unitDuration(u: SortUnit): Long = when (u) {
     is SortUnit.Solo -> u.book.totalDurationMs ?: -1L
     is SortUnit.Ser -> u.series.books.sumOf { it.totalDurationMs ?: 0L }
 }
+
+/**
+ * The genre a series shelves under: the one its books agree on, or the commonest if they don't.
+ *
+ * Series used to fall into "No genre" wholesale, on the reasoning that a series can span genres —
+ * but that made shelving by genre hide every series in the library under one heading nobody was
+ * looking in. Disagreement is the rare case and it is now the user's to fix, since a series edit
+ * can set the genre for every volume at once.
+ *
+ * Ties go to the earliest volume: [books] arrive in reading order and `groupingBy` preserves it, so
+ * a two-genre series shelves under the one it started as. Null only when NO volume has a genre.
+ */
+internal fun seriesGenre(books: List<BookListItem>): String? =
+    books.mapNotNull { it.genre }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
 
 /** Groups [units] into sections keyed by [keyOf] (nulls last under [fallback]) with headers. */
 private fun sectioned(

@@ -146,7 +146,11 @@
     <string name="home_meta_series_position">Book %1$d</string>
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
          unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
-    <string name="home_series_book_count">%1$d books</string>
+    <!-- A series' size. A plural because a series of ONE is now shown as a series. -->
+    <plurals name="home_series_book_count">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Collapse series</string>
     <string name="home_meta_percent_bare">%1$d%%</string>

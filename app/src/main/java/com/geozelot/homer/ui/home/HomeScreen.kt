@@ -1296,7 +1296,7 @@ private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content
     // The grid card reserves two lines, so the length gets one of its own rather than trailing the
     // episode count as it does on the narrower shelf row.
     buildString {
-        append(context.getString(R.string.home_series_book_count, series.books.size))
+        append(context.resources.getQuantityString(R.plurals.home_series_book_count, series.books.size, series.books.size))
         val downloaded = series.books.count { it.isDownloaded }
         if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
         seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
@@ -1453,7 +1453,7 @@ private fun ExpandedSeriesRow(
 }
 
 private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
-    append(context.getString(R.string.home_series_book_count, series.books.size))
+    append(context.resources.getQuantityString(R.plurals.home_series_book_count, series.books.size, series.books.size))
     // Whole-series length, on the shelf row as well as the grid card — a book row shows its own
     // length, so a shelf that hid the sum was the one place the number went missing.
     seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
