@@ -1903,9 +1903,6 @@ private fun LibraryLoading(
                 scanState.directoriesVisited,
                 scanState.booksFound,
             )
-            // Converting an older index is the one step here that runs for the better part of a
-            // minute, so it is named rather than folded into "opening your library".
-            indexActivity == IndexActivity.CONVERTING -> stringResource(R.string.home_converting_index)
             indexActivity == IndexActivity.READING -> stringResource(R.string.home_reading_index)
             else -> stringResource(R.string.home_opening_library)
         }

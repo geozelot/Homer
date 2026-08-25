@@ -912,7 +912,7 @@ class HomeViewModel @Inject constructor(
         }
         val hasExisting = runCatching {
             val area = storageLocation.areaFor(target)
-            area.exists(MIRROR_MARKER) || area.exists(LEGACY_MIRROR_MARKER)
+            area.exists(MIRROR_MARKER)
         }.getOrDefault(false)
         if (hasExisting) {
             // The folder already has Homer data — let the user choose load vs replace.
@@ -1050,7 +1050,6 @@ class HomeViewModel @Inject constructor(
         /** How long a discovery sweep stays fresh enough to reuse (the button always forces). */
         const val DISCOVERY_TTL_MS = 10 * 60_000L
         const val MIRROR_MARKER = "progress.json"
-        const val LEGACY_MIRROR_MARKER = ".homer/index.json"
         const val TAG_STORAGE = "HomerStore"
     }
 }

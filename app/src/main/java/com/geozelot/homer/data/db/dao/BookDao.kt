@@ -89,16 +89,6 @@ interface BookDao {
     @Query("UPDATE books SET language = :language WHERE id = :bookId")
     suspend fun updateLanguage(bookId: String, language: String)
 
-    /**
-     * Stamps every book with a language — the bulk answer for a library that is all one language.
-     *
-     * Writes the DETECTED field rather than an override on purpose: a real tag or filename read
-     * later simply replaces it, where a correction would outrank the tag for ever and need clearing
-     * by hand, book by book, the day a second language arrives.
-     */
-    @Query("UPDATE books SET language = :language")
-    suspend fun setAllLanguages(language: String)
-
     /** The languages actually present, so a filter only appears when it distinguishes something. */
     @Query("SELECT DISTINCT language FROM books WHERE language IS NOT NULL ORDER BY language")
     fun observeLanguages(): Flow<List<String>>

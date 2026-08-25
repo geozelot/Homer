@@ -1,12 +1,12 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 15,
-    "identityHash": "08475f61906e86bcdf3930ddccf46b93",
+    "version": 1,
+    "identityHash": "0be77754050a5d2eb532bd9a246166f5",
     "entities": [
       {
         "tableName": "books",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `contentHash` TEXT, `title` TEXT NOT NULL, `author` TEXT, `series` TEXT, `seriesIndex` INTEGER, `genre` TEXT, `relativePath` TEXT NOT NULL, `coverFilePath` TEXT, `localCoverPath` TEXT, `customCoverPath` TEXT, `coverAttempted` INTEGER NOT NULL, `chapterTier` INTEGER NOT NULL, `isMultiFile` INTEGER NOT NULL, `fileCount` INTEGER NOT NULL, `totalDurationMs` INTEGER, `addedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `contentHash` TEXT, `title` TEXT NOT NULL, `author` TEXT, `series` TEXT, `seriesIndex` INTEGER, `genre` TEXT, `language` TEXT, `relativePath` TEXT NOT NULL, `coverFilePath` TEXT, `localCoverPath` TEXT, `customCoverPath` TEXT, `coverAttempted` INTEGER NOT NULL, `metadataAttempted` INTEGER NOT NULL, `chapterTier` INTEGER NOT NULL, `isMultiFile` INTEGER NOT NULL, `fileCount` INTEGER NOT NULL, `totalDurationMs` INTEGER, `addedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -46,6 +46,11 @@
             "affinity": "TEXT"
           },
           {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "relativePath",
             "columnName": "relativePath",
             "affinity": "TEXT",
@@ -69,6 +74,12 @@
           {
             "fieldPath": "coverAttempted",
             "columnName": "coverAttempted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadataAttempted",
+            "columnName": "metadataAttempted",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -117,7 +128,7 @@
       },
       {
         "tableName": "audio_files",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`relativePath` TEXT NOT NULL, `bookId` TEXT NOT NULL, `fileName` TEXT NOT NULL, `sortIndex` INTEGER NOT NULL, `sizeBytes` INTEGER NOT NULL, `etag` TEXT, `lastModified` INTEGER, `contentType` TEXT, `durationMs` INTEGER, PRIMARY KEY(`relativePath`), FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`relativePath` TEXT NOT NULL, `bookId` TEXT NOT NULL, `fileName` TEXT NOT NULL, `sortIndex` INTEGER NOT NULL, `sizeBytes` INTEGER NOT NULL, `etag` TEXT, `lastModified` INTEGER, `contentType` TEXT, `durationMs` INTEGER, `durationAttempted` INTEGER NOT NULL, PRIMARY KEY(`relativePath`), FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "relativePath",
@@ -168,6 +179,12 @@
             "fieldPath": "durationMs",
             "columnName": "durationMs",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationAttempted",
+            "columnName": "durationAttempted",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -411,7 +428,7 @@
       },
       {
         "tableName": "book_overrides",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bookId` TEXT NOT NULL, `title` TEXT, `author` TEXT, `series` TEXT, `seriesIndex` INTEGER, `genre` TEXT, `tags` TEXT, `finished` INTEGER, `downloadOnPlay` INTEGER, `hidden` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`bookId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bookId` TEXT NOT NULL, `title` TEXT, `author` TEXT, `series` TEXT, `seriesIndex` INTEGER, `genre` TEXT, `language` TEXT, `tags` TEXT, `finished` INTEGER, `downloadOnPlay` INTEGER, `hidden` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`bookId`))",
         "fields": [
           {
             "fieldPath": "bookId",
@@ -442,6 +459,11 @@
           {
             "fieldPath": "genre",
             "columnName": "genre",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
             "affinity": "TEXT"
           },
           {
@@ -547,7 +569,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '08475f61906e86bcdf3930ddccf46b93')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0be77754050a5d2eb532bd9a246166f5')"
     ]
   }
 }

@@ -54,11 +54,10 @@ data class CrawlMarker(
 )
 
 /**
- * What the shared index is doing right now, for the one case where it is slow and invisible:
- * converting a v1 catalog takes the better part of a minute on a large library, and it happens on
- * the path that fills an empty shelf. Without this the app shows "your shelf is empty" throughout.
+ * What the shared index is doing right now, so a slow read is not silence: a first pull on a slow
+ * link would otherwise leave an empty shelf with no explanation.
  */
-enum class IndexActivity { IDLE, READING, CONVERTING, PUBLISHING }
+enum class IndexActivity { IDLE, READING, PUBLISHING }
 
 /**
  * A [CrawlMarker] resolved for display: whose crawl it was, in words rather than a UUID.

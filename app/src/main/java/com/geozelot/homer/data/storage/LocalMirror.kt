@@ -18,7 +18,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Keeps a local `.homer/index.json` progress mirror inside the active [StorageLocation] area, so
+ * Keeps a local `progress.json` mirror inside the active [StorageLocation] area, so
  * resume positions survive an app reinstall (they otherwise live only in the internal Room DB) —
  * especially for users with progress sync off, whose positions never reach the server manifest.
  * Uses the same [HomerIndex] format as the server manifest (positions only here).
@@ -37,8 +37,6 @@ class LocalMirror @Inject constructor(
     private val downloadStorage: DownloadStorage,
     private val json: Json,
 ) {
-    @Volatile private var legacyCleaned = false
-
     /** Writes the current resume positions to the visible `progress.json` in the active area. */
     suspend fun export() {
         val states = playbackStateDao.getAll()
@@ -49,19 +47,13 @@ class LocalMirror @Inject constructor(
         runCatching {
             val area = storageLocation.area()
             area.write(MIRROR_PATH, json.encodeToString(HomerIndex(books = books)).toByteArray())
-            // Device storage stays non-hidden: drop the old hidden `.homer/` mirror once we've
-            // written the visible copy (the server keeps its own `.homer/`, untouched here).
-            if (!legacyCleaned) {
-                runCatching { area.delete(LEGACY_MIRROR_PATH) }
-                legacyCleaned = true
-            }
         }.onFailure { Log.w(TAG, "local mirror export failed", it) }
     }
 
-    /** Merges positions from the area's `progress.json` (or the legacy `.homer/index.json`) into Room (LWW). */
+    /** Merges positions from the area's `progress.json` into Room (last write wins). */
     suspend fun import() {
         val area = storageLocation.area()
-        val bytes = runCatching { area.readBytes(MIRROR_PATH) ?: area.readBytes(LEGACY_MIRROR_PATH) }.getOrNull() ?: return
+        val bytes = runCatching { area.readBytes(MIRROR_PATH) }.getOrNull() ?: return
         val index = runCatching { json.decodeFromString<HomerIndex>(String(bytes)) }.getOrElse {
             Log.w(TAG, "local mirror unparseable; skipping import")
             return
@@ -111,8 +103,6 @@ class LocalMirror @Inject constructor(
 
     private companion object {
         const val TAG = "HomerStore"
-        // Visible on the device (the server keeps its hidden `.homer/index.json` separately).
         const val MIRROR_PATH = "progress.json"
-        const val LEGACY_MIRROR_PATH = ".homer/index.json"
     }
 }

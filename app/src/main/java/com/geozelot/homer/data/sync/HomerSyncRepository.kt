@@ -135,7 +135,6 @@ class HomerSyncRepository @Inject constructor(
         // library folder, so changing that folder moved the manifest and silently broke
         // sync. It's now pinned to the files-root. If the pinned copy is absent but a
         // legacy per-root copy exists, seed the new location from it so nothing is lost.
-        migrateLegacyManifest(dir, path, account)
 
         // Read the remote state ONCE, conditionally when we still hold the copy we last saw or
         // wrote: an unchanged manifest answers 304 with no body. The old loop re-downloaded the
@@ -301,40 +300,6 @@ class HomerSyncRepository @Inject constructor(
         }
     }
 
-    /**
-     * Seeds the pinned files-root manifest from a legacy per-library-root copy, once per
-     * process. Cheap after the first run: as soon as the pinned copy exists (or there's no
-     * legacy to migrate) the flag short-circuits all further checks.
-     */
-    private suspend fun migrateLegacyManifest(
-        dir: String,
-        path: String,
-        account: NextcloudCredentials,
-    ) {
-        // Persisted, not per-process: this used to re-probe on every app launch, paying a full
-        // manifest GET (two, when the pinned copy was absent) purely as an existence test.
-        if (librarySettings.legacyManifestMigrated.first()) return
-        val root = librarySettings.libraryRoot.first().trim('/')
-        // No configurable root, or the root already IS the files-root → nothing to migrate.
-        if (root.isEmpty()) { librarySettings.setLegacyManifestMigrated(true); return }
-        try {
-            // Existence via PROPFIND Depth 0, not a full download.
-            if (webDavClient.exists(path, account)) {
-                librarySettings.setLegacyManifestMigrated(true)
-                return
-            }
-            val legacy = webDavClient.getText("$root/$DIR/$FILE", account)?.content
-            if (legacy != null && legacy.isNotBlank()) {
-                ensureDir(dir, account)
-                webDavClient.putText(path, legacy, null, account)
-                Log.i(TAG, "migrated legacy manifest ($root/$DIR/$FILE) to pinned $path")
-            }
-            librarySettings.setLegacyManifestMigrated(true)
-        } catch (e: Exception) {
-            // Leave the flag unset so a transient failure retries on a later sync.
-            Log.w(TAG, "legacy manifest migration skipped", e)
-        }
-    }
 
     private suspend fun ensureDir(dir: String, account: NextcloudCredentials) {
         if (ensuredDir == dir) return

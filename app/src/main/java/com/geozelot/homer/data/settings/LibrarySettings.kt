@@ -70,13 +70,9 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SORT_MODE] = value }
     }
 
-    // Two independent switches (they replaced a linear "sync tier"). Each falls back to the legacy
-    // KEY_SYNC_TIER when its own key isn't set yet, so existing installs keep their behaviour:
-    // tier 1 → (progress off, catalog off), tier 2 → (on, off), tier 3 → (on, on).
-
     /** Sync my listening progress to my account's `.homer/index.json` (cross-device for me). */
     val progressSyncEnabled: Flow<Boolean> =
-        context.settingsDataStore.data.map { it[KEY_PROGRESS_SYNC] ?: ((it[KEY_SYNC_TIER] ?: LEGACY_TIER_PROGRESS) >= LEGACY_TIER_PROGRESS) }
+        context.settingsDataStore.data.map { it[KEY_PROGRESS_SYNC] ?: true }
 
     suspend fun setProgressSyncEnabled(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_PROGRESS_SYNC] = value }
@@ -84,7 +80,7 @@ class LibrarySettings @Inject constructor(
 
     /** Use the shared library catalog + cover cache at the library root's `.homer/`. */
     val sharedCatalogEnabled: Flow<Boolean> =
-        context.settingsDataStore.data.map { it[KEY_SHARED_CATALOG] ?: ((it[KEY_SYNC_TIER] ?: LEGACY_TIER_PROGRESS) >= LEGACY_TIER_SHARED) }
+        context.settingsDataStore.data.map { it[KEY_SHARED_CATALOG] ?: false }
 
     suspend fun setSharedCatalogEnabled(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_SHARED_CATALOG] = value }
@@ -124,14 +120,6 @@ class LibrarySettings @Inject constructor(
 
     suspend fun setLastCoverSweepEtag(value: String) {
         context.settingsDataStore.edit { it[KEY_LAST_COVER_SWEEP_ETAG] = value }
-    }
-
-    /** Set once the one-time legacy-manifest migration has been checked, so it stops re-probing. */
-    val legacyManifestMigrated: Flow<Boolean> =
-        context.settingsDataStore.data.map { it[KEY_LEGACY_MANIFEST_MIGRATED] ?: false }
-
-    suspend fun setLegacyManifestMigrated(value: Boolean) {
-        context.settingsDataStore.edit { it[KEY_LEGACY_MANIFEST_MIGRATED] = value }
     }
 
     /** How the library is shelved: "none" | "author" | "series" | "genre". The stored key and
@@ -255,30 +243,21 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_LIBRARY_WRITABLE)
             it.remove(KEY_LAST_PUSHED_REVISION)
             it.remove(KEY_LAST_COVER_SWEEP_ETAG)
-            it.remove(KEY_LEGACY_MANIFEST_MIGRATED)
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
-            // The pre-split tier some installs still fall back to. Left behind, it would decide
-            // sharing for the NEXT library from the last one's setting.
-            it.remove(KEY_SYNC_TIER)
         }
     }
 
     private companion object {
-        // Legacy linear tiers, kept only to migrate old installs into the two new booleans.
-        const val LEGACY_TIER_PROGRESS = 2
-        const val LEGACY_TIER_SHARED = 3
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SERIES_MODE = stringPreferencesKey("library_series_mode")
-        val KEY_SYNC_TIER = intPreferencesKey("sync_tier")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
         val KEY_LAST_PUSHED_REVISION = longPreferencesKey("sync_last_pushed_revision")
-        val KEY_LEGACY_MANIFEST_MIGRATED = booleanPreferencesKey("sync_legacy_manifest_migrated")
         val KEY_LAST_COVER_SWEEP_ETAG = stringPreferencesKey("last_cover_sweep_etag")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
         val KEY_STORAGE_RELOCATED = booleanPreferencesKey("storage_relocated")

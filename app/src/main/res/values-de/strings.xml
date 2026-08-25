@@ -176,7 +176,6 @@
     <string name="home_scanning_progress">Bibliothek wird gescannt… %1$d Ordner · %2$d Bücher</string>
     <string name="home_opening_library">Bibliothek wird geöffnet…</string>
     <string name="home_reading_index">Gemeinsame Bibliothek wird gelesen…</string>
-    <string name="home_converting_index">Älterer Bibliotheksindex wird aktualisiert…</string>
     <string name="home_no_matches">Keine Treffer</string>
     <string name="home_no_matches_hint">Versuche einen anderen Titel, Autor, ein anderes Genre oder Schlagwort.</string>
     <string name="home_empty_title">Dein Regal ist leer</string>

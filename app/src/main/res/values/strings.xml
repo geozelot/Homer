@@ -181,7 +181,6 @@
     <string name="home_scanning_progress">Scanning your library… %1$d folders · %2$d books</string>
     <string name="home_opening_library">Opening your library…</string>
     <string name="home_reading_index">Reading the shared library\u2026</string>
-    <string name="home_converting_index">Bringing an older library index up to date\u2026</string>
     <string name="home_no_matches">No matches</string>
     <string name="home_no_matches_hint">Try a different title, author, genre or tag.</string>
     <string name="home_empty_title">Your shelf is empty</string>

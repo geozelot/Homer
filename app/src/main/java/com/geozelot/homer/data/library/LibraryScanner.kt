@@ -146,10 +146,11 @@ internal fun planWrites(
             coverAttempted = if (uncachedFolderCover) false else (source?.coverAttempted ?: false),
             metadataAttempted = source?.metadataAttempted ?: false,
             genre = source?.genre,
-            // The crawl DOES know a language (it reads the names), so unlike genre this prefers
-            // what was just detected and falls back to the stored value — a tag-derived language
-            // survives a rescan that finds no hint in the names.
-            language = book.book.language ?: source?.language,
+            // Carried like genre: an established language is not re-litigated by a rescan. The
+            // names are only consulted for a book that has none — which also means a language
+            // seeded into the shared index, or read from a tag, survives a rename that leaves the
+            // filenames saying something else.
+            language = source?.language ?: book.book.language,
             chapterTier = source?.chapterTier ?: book.book.chapterTier,
             totalDurationMs = total,
         )

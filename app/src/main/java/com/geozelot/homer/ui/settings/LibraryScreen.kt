@@ -227,7 +227,6 @@ fun LibraryScreen(
         // steps that are pure network and used to happen in complete silence.
         when (indexActivity) {
             IndexActivity.READING -> SettingsNote(stringResource(R.string.home_reading_index))
-            IndexActivity.CONVERTING -> SettingsNote(stringResource(R.string.home_converting_index))
             IndexActivity.PUBLISHING -> SettingsNote(stringResource(R.string.lib_index_publishing))
             IndexActivity.IDLE -> Unit
         }

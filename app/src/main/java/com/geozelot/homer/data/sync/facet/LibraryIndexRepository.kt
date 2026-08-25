@@ -16,7 +16,6 @@ import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.DeviceIdentity
 import com.geozelot.homer.data.settings.LibrarySettings
-import com.geozelot.homer.data.sync.HomerCatalog
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -85,10 +84,8 @@ class LibraryIndexRepository @Inject constructor(
     private val _activity = MutableStateFlow(IndexActivity.IDLE)
 
     /**
-     * What this repository is doing, for the UI to say so.
-     *
-     * It exists for one bad case: converting a v1 catalog is tens of seconds of silence on the very
-     * path that populates an empty library, so the app showed an empty shelf and no reason for it.
+     * What this repository is doing, for the UI to say so — a pull or a push is otherwise silent,
+     * and on a slow link a first pull leaves an empty shelf with no explanation.
      */
     val activity: StateFlow<IndexActivity> = _activity.asStateFlow()
 
@@ -230,20 +227,6 @@ class LibraryIndexRepository @Inject constructor(
             val correctionsRead = store.load(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer())
                 .ofCurrentSchema(LibraryFacets.CORRECTIONS_FILE) { it.version }
 
-            // Nothing at all where a v1 catalog sits: convert it once rather than make the user
-            // re-crawl and re-measure a library the old index already paid for.
-            if (structureRead is FacetStore.Load.Missing) {
-                val converted = convertLegacy()
-                if (converted != null) {
-                    lastStructure = converted.structure
-                    lastDerived = converted.derived
-                    lastCorrections = converted.corrections
-                    noteCrawl(converted.structure)
-                    apply(converted.structure, converted.derived, converted.corrections)
-                    return true
-                }
-            }
-
             // A 304 means our copy IS the remote one — present and current. Reading that as "no
             // shared index" told the settings screen the library had vanished on every open after
             // the first. The value comes from the copy that produced the cached ETag; both live
@@ -349,34 +332,6 @@ class LibraryIndexRepository @Inject constructor(
         stale.chunked(SQL_PARAM_CHUNK).forEach { bookDao.deleteByIds(it) }
     }
 
-    /** Reads a v1 `catalog.json`, converts it, and publishes the result if this device may. */
-    private suspend fun convertLegacy(): LegacyCatalogConverter.Converted? {
-        val legacyPath = "${dirOf()}/$LEGACY_FILE"
-        val body = runCatching { webDavClient.getText(legacyPath) }.getOrNull()?.content
-        if (body.isNullOrBlank()) return null
-        val legacy = runCatching { json.decodeFromString<HomerCatalog>(body) }.getOrNull() ?: run {
-            Log.w(TAG, "a v1 catalog is present but unreadable; ignoring it")
-            return null
-        }
-        Log.i(TAG, "converting a v1 catalog of ${legacy.books.size} books")
-        // From here on this is tens of seconds of work on a large library, and it is the step that
-        // fills a shelf that is currently empty. Say so.
-        _activity.value = IndexActivity.CONVERTING
-        val converted = LegacyCatalogConverter.convert(legacy)
-        if (canPublish()) {
-            // Reported, not discarded. Publishing the converted index is the whole point of the
-            // migration, and a silent failure here leaves everyone else's devices with nothing.
-            report(
-                LibraryFacets.STRUCTURE_FILE,
-                store.save(LibraryFacets.STRUCTURE_FILE, StructureFacet.serializer()) { converted.structure },
-            )
-            report(
-                LibraryFacets.DERIVED_FILE,
-                store.save(LibraryFacets.DERIVED_FILE, DerivedFacet.serializer()) { converted.derived },
-            )
-        }
-        return converted
-    }
 
     // ── pushing ──────────────────────────────────────────────────────────────────────────────
 
@@ -534,7 +489,6 @@ class LibraryIndexRepository @Inject constructor(
 
     private companion object {
         const val TAG = "HomerSync"
-        const val LEGACY_FILE = "catalog.json"
         const val COVERS_DIR = "covers"
         const val SQL_PARAM_CHUNK = 400
         const val EDIT_PUBLISH_IDLE_MS = 30_000L
