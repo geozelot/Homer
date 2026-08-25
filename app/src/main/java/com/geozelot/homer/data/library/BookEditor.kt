@@ -84,18 +84,23 @@ class BookEditor @Inject constructor(
     }
 
     /**
-     * Applies a series-level edit (name + author) to every member book, preserving each book's
-     * own title/index/genre/tags/finished/hidden. Blank reverts that field to detection.
+     * Applies a series-level edit (name, author, genre) to every member book, preserving each
+     * book's own title/index/tags/finished/hidden. Blank reverts that field to detection.
+     *
+     * Genre belongs here because it is a property of the work, not of one volume: a series is one
+     * genre, and fixing it a book at a time on a twenty-volume series was the tedious way to do
+     * something that is true of all of them.
      */
-    suspend fun saveSeriesOverride(bookIds: List<String>, series: String, author: String) {
+    suspend fun saveSeriesOverride(bookIds: List<String>, series: String, author: String, genre: String) {
         val now = System.currentTimeMillis()
         val s = series.trim().ifBlank { null }
         val a = author.trim().ifBlank { null }
+        val g = genre.trim().ifBlank { null }
         for (id in bookIds) {
             val existing = bookOverrideDao.findById(id)
             bookOverrideDao.upsert(
-                existing?.copy(series = s, author = a, updatedAt = now)
-                    ?: blank(id).copy(series = s, author = a),
+                existing?.copy(series = s, author = a, genre = g, updatedAt = now)
+                    ?: blank(id).copy(series = s, author = a, genre = g),
             )
         }
         homerSync.sync(force = true)

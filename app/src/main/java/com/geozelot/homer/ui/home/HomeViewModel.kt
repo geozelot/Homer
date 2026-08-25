@@ -758,6 +758,22 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setWifiOnlyDownloads(value) }
     }
 
+    /** What a shake does to a running sleep timer. */
+    val sleepExtend: StateFlow<String> = playbackSettings.sleepExtend
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "previous")
+
+    /** How long the volume ramps down for when the sleep timer ends; 0 = stop outright. */
+    val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun setSleepExtend(mode: String) {
+        viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
+    }
+
+    fun setSleepFadeOutSeconds(seconds: Int) {
+        viewModelScope.launch { playbackSettings.setSleepFadeOutSeconds(seconds) }
+    }
+
     fun setSeekSeconds(value: Int) {
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
@@ -818,8 +834,8 @@ class HomeViewModel @Inject constructor(
      * Applies a series-level edit (name + author) to every member book (see [BookEditor]).
      * Members re-group under the new series name; the change syncs like any override.
      */
-    fun saveSeriesOverride(bookIds: List<String>, series: String, author: String) {
-        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author) }
+    fun saveSeriesOverride(bookIds: List<String>, series: String, author: String, genre: String) {
+        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author, genre) }
     }
 
     /** Reverts a book to pure detection (see [BookEditor.clearOverride]). */

@@ -53,13 +53,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
@@ -385,8 +384,8 @@ fun HomeScreen(
     entries.findSeries(editingSeriesKey)?.let { series ->
         SeriesEditDialog(
             series = series,
-            onSave = { name, author ->
-                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author)
+            onSave = { name, author, genre ->
+                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author, genre)
                 editingSeriesKey = null
             },
             onDismiss = { editingSeriesKey = null },
@@ -624,12 +623,17 @@ private fun LazyGridScope.libraryContent(
     // repeats of the title is just as unique and only changes when the titles themselves do.
     val headerOrdinals = HashMap<String, Int>()
 
-    entries.forEach { entry ->
+    entries.forEachIndexed { index, entry ->
         when (entry) {
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
                 key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
-            ) { SectionLabelRow(entry.title) }
+            ) {
+                // A rule above every shelf but the first. Spacing alone left it ambiguous which
+                // books belonged to which author once a shelf ran past the fold — the last row of
+                // one shelf and the first of the next were the same distance apart as any two rows.
+                SectionLabelRow(entry.title, ruled = index > 0)
+            }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
@@ -736,15 +740,28 @@ private fun SectionLabelRow(
     topPadding: Dp = 12.dp,
     bottomPadding: Dp = 8.dp,
     large: Boolean = false,
+    /** Draw a hairline above, separating this shelf from the one that ended. */
+    ruled: Boolean = false,
 ) {
-    Text(
-        text = text.uppercase(),
-        style = SectionLabel,
-        fontSize = if (large) SectionLabelLargeSize else SectionLabel.fontSize,
-        color = Muted,
-        modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
-    )
+    Column {
+        if (ruled) {
+            HorizontalDivider(
+                color = Line,
+                modifier = Modifier.padding(top = ShelfBreakSpacing, bottom = 2.dp),
+            )
+        }
+        Text(
+            text = text.uppercase(),
+            style = SectionLabel,
+            fontSize = if (large) SectionLabelLargeSize else SectionLabel.fontSize,
+            color = Muted,
+            modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
+        )
+    }
 }
+
+/** Extra air before a shelf heading, on top of the heading's own top padding. */
+private val ShelfBreakSpacing = 10.dp
 
 /** Resting size of the two pinned headers; they fall back to [SectionLabel]'s 12sp on scroll. */
 private val SectionLabelLargeSize = 14.sp
@@ -1215,7 +1232,7 @@ private fun bookMeta(
     }
     if (ctx.shelving != LibraryShelving.GENRE) book.genre?.let { add(it) }
     if (ctx.series == LibrarySeriesMode.FLAT && book.series != null && book.seriesIndex != null) {
-        add(context.getString(R.string.home_meta_episode, book.seriesIndex))
+        add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }
     book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
     addAll(book.tags)
@@ -1296,7 +1313,7 @@ private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content
     // The grid card reserves two lines, so the length gets one of its own rather than trailing the
     // episode count as it does on the narrower shelf row.
     buildString {
-        append(context.getString(R.string.home_series_episodes, series.books.size))
+        append(context.getString(R.string.home_series_book_count, series.books.size))
         val downloaded = series.books.count { it.isDownloaded }
         if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
         seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
@@ -1410,7 +1427,9 @@ private fun ExpandedSeriesHeader(
                 )
                 Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
             }
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
+            // The same boxed triangle the list view's shelf row uses, so open/closed reads the
+            // same way in both views.
+            DisclosureGlyph(expanded = true)
         }
         // Separates the shelf's own title from its episodes. Inset from the enclosure's side rails
         // so it reads as a rule inside the card rather than a second edge of it.
@@ -1453,7 +1472,7 @@ private fun ExpandedSeriesRow(
 }
 
 private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
-    append(context.getString(R.string.home_series_episodes, series.books.size))
+    append(context.getString(R.string.home_series_book_count, series.books.size))
     // Whole-series length, on the shelf row as well as the grid card — a book row shows its own
     // length, so a shelf that hid the sum was the one place the number went missing.
     seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
@@ -1648,14 +1667,14 @@ private fun SeriesShelfRow(
                     fontSize = 11.5.sp,
                 )
             }
-            // Chevron immediately left of the overflow button, so the two sit together at the trailing
-            // edge and the overflow still lines up with the one on every book row. Leading it instead
-            // pushed the covers out of line with the book rows above and below.
-            Icon(
-                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
-                tint = Faint,
-            )
+            // Immediately left of the overflow button, so the two sit together at the trailing
+            // edge and the overflow still lines up with the one on every book row. Leading it
+            // instead pushed the covers out of line with the book rows above and below.
+            //
+            // A solid triangle in its own outlined box, not a bare chevron: the thin hairline
+            // chevron read as punctuation in a text line rather than as the control that opens the
+            // shelf, which is the one thing this row is for.
+            DisclosureGlyph(expanded = expanded)
             Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
@@ -1668,6 +1687,31 @@ private fun SeriesShelfRow(
         if (expanded) {
             HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = SeriesListEnclosurePad))
         }
+    }
+}
+
+/**
+ * The open/closed marker on a shelf row: a filled triangle inside a soft outlined square.
+ *
+ * Decorative only — the whole row is the control and carries the expand/collapse label, so a second
+ * focusable node here would just make TalkBack read the shelf twice.
+ */
+@Composable
+private fun DisclosureGlyph(expanded: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(Surface2)
+            .border(1.dp, Line, RoundedCornerShape(7.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ArrowDropDown else Icons.Filled.ArrowRight,
+            contentDescription = null,
+            tint = Muted,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -1925,12 +1969,18 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
 @Composable
 private fun SeriesEditDialog(
     series: LibraryEntry.Series,
-    onSave: (name: String, author: String) -> Unit,
+    onSave: (name: String, author: String, genre: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // rememberSaveable, like the book dialog: a rotation used to throw away what was typed.
     var name by rememberSaveable { mutableStateOf(series.name) }
     var author by rememberSaveable { mutableStateOf(series.author.orEmpty()) }
+    // Prefilled only when the whole series already agrees. Showing one member's genre would make
+    // Save quietly impose it on the rest, and blank means "leave it to detection" — so a series
+    // that disagrees with itself starts empty and the user is choosing, not confirming.
+    var genre by rememberSaveable {
+        mutableStateOf(series.books.map { it.genre }.distinct().singleOrNull().orEmpty())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.home_series_edit_title)) },
@@ -1957,9 +2007,18 @@ private fun SeriesEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                OutlinedTextField(
+                    value = genre,
+                    onValueChange = { genre = it },
+                    label = { Text(stringResource(R.string.edit_field_genre)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, author) }) { Text(stringResource(R.string.action_save)) } },
+        confirmButton = {
+            TextButton(onClick = { onSave(name, author, genre) }) { Text(stringResource(R.string.action_save)) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }

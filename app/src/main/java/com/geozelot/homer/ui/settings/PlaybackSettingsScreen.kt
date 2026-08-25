@@ -21,15 +21,24 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.components.SettingsDivider
-import com.geozelot.homer.ui.components.SettingsDropdownRow
+import com.geozelot.homer.ui.components.CustomNumberDialog
+import com.geozelot.homer.ui.components.SettingsChoiceRow
 import com.geozelot.homer.ui.components.SettingsExplanation
+import com.geozelot.homer.ui.components.SettingsGroup
 import com.geozelot.homer.ui.components.SettingsRow
-import com.geozelot.homer.ui.components.SettingsSectionHeader
+import com.geozelot.homer.ui.components.SettingsRowDivider
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.home.HomeViewModel
 
-/** Skip distance and rewind-on-resume — the two numbers that shape how the player feels. */
+/**
+ * How the player behaves: the two numbers that shape its feel, what the sleep timer does, and
+ * whether the system will let playback continue off screen.
+ *
+ * The sleep settings used to live in a dialog behind the player's sleep button — two rows of
+ * preferences hidden inside a transient control, where they were both hard to find and impossible
+ * to change without a book open. The timer itself stays in the player, because starting one is an
+ * action about this listening session; how it behaves is a preference and belongs here.
+ */
 @Composable
 fun PlaybackSettingsScreen(
     viewModel: HomeViewModel,
@@ -38,42 +47,112 @@ fun PlaybackSettingsScreen(
 ) {
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
+    val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
+    val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    SettingsScaffold(stringResource(R.string.set_playback_title), onBack, modifier) {
-        SettingsDropdownRow(
-            label = stringResource(R.string.settings_skip_interval),
-            chipLabel = stringResource(R.string.settings_seconds, seekSeconds),
-            options = SEEK_OPTIONS,
-            selected = seekSeconds,
-            labelOf = { context.getString(R.string.settings_seconds, it) },
-            onSelect = viewModel::setSeekSeconds,
-            description = stringResource(R.string.set_playback_skip_desc),
-        )
-        SettingsDropdownRow(
-            label = stringResource(R.string.settings_rewind),
-            chipLabel = if (autoRewind == 0) {
-                stringResource(R.string.settings_off)
-            } else {
-                stringResource(R.string.settings_seconds, autoRewind)
-            },
-            options = REWIND_OPTIONS,
-            selected = autoRewind,
-            labelOf = {
-                if (it == 0) {
-                    context.getString(R.string.settings_off)
-                } else {
-                    context.getString(R.string.settings_seconds, it)
-                }
-            },
-            onSelect = viewModel::setAutoRewindSeconds,
-            description = stringResource(R.string.set_playback_rewind_desc),
-        )
+    var customSeek by remember { mutableStateOf(false) }
+    var customRewind by remember { mutableStateOf(false) }
+    var customFade by remember { mutableStateOf(false) }
 
-        SettingsDivider()
-        SettingsSectionHeader(stringResource(R.string.set_playback_background_header))
-        BatteryOptimisationRow()
+    SettingsScaffold(stringResource(R.string.set_playback_title), onBack, modifier) {
+        SettingsGroup(title = stringResource(R.string.set_playback_feel_header)) {
+            SettingsChoiceRow(
+                label = stringResource(R.string.settings_skip_interval),
+                description = stringResource(R.string.set_playback_skip_desc),
+                value = seekSeconds,
+                options = SEEK_OPTIONS,
+                labelOf = { context.getString(R.string.settings_seconds, it) },
+                onSelect = viewModel::setSeekSeconds,
+                onCustom = { customSeek = true },
+            )
+            SettingsRowDivider()
+            SettingsChoiceRow(
+                label = stringResource(R.string.settings_rewind),
+                description = stringResource(R.string.set_playback_rewind_desc),
+                value = autoRewind,
+                options = REWIND_OPTIONS,
+                labelOf = { secondsOrOff(context, it) },
+                onSelect = viewModel::setAutoRewindSeconds,
+                onCustom = { customRewind = true },
+            )
+        }
+
+        SettingsGroup(
+            title = stringResource(R.string.set_playback_sleep_header),
+            lead = stringResource(R.string.set_playback_sleep_lead),
+        ) {
+            SettingsChoiceRow(
+                label = stringResource(R.string.player_shake_to_extend),
+                description = stringResource(R.string.set_playback_shake_desc),
+                value = sleepExtend,
+                options = SLEEP_EXTEND_OPTIONS,
+                labelOf = { context.getString(sleepExtendLabel(it)) },
+                onSelect = viewModel::setSleepExtend,
+            )
+            SettingsRowDivider()
+            SettingsChoiceRow(
+                label = stringResource(R.string.player_fade_out),
+                description = stringResource(R.string.set_playback_fade_desc),
+                value = sleepFade,
+                options = SLEEP_FADE_OPTIONS,
+                labelOf = { secondsOrOff(context, it) },
+                onSelect = viewModel::setSleepFadeOutSeconds,
+                onCustom = { customFade = true },
+            )
+        }
+
+        SettingsGroup(title = stringResource(R.string.set_playback_background_header)) {
+            BatteryOptimisationRow()
+        }
     }
+
+    if (customSeek) {
+        CustomNumberDialog(
+            title = stringResource(R.string.settings_skip_interval),
+            unit = stringResource(R.string.settings_unit_seconds),
+            initial = seekSeconds,
+            range = 1..300,
+            onConfirm = viewModel::setSeekSeconds,
+            onDismiss = { customSeek = false },
+        )
+    }
+    if (customRewind) {
+        CustomNumberDialog(
+            title = stringResource(R.string.settings_rewind),
+            unit = stringResource(R.string.settings_unit_seconds),
+            initial = autoRewind,
+            range = 0..120,
+            onConfirm = viewModel::setAutoRewindSeconds,
+            onDismiss = { customRewind = false },
+        )
+    }
+    if (customFade) {
+        CustomNumberDialog(
+            title = stringResource(R.string.player_fade_out),
+            unit = stringResource(R.string.settings_unit_seconds),
+            initial = sleepFade,
+            range = 0..120,
+            onConfirm = viewModel::setSleepFadeOutSeconds,
+            onDismiss = { customFade = false },
+        )
+    }
+}
+
+/** "off" for zero, "%ds" otherwise — the same phrasing wherever a duration can be nothing. */
+private fun secondsOrOff(context: Context, seconds: Int): String =
+    if (seconds == 0) {
+        context.getString(R.string.settings_off)
+    } else {
+        context.getString(R.string.settings_seconds, seconds)
+    }
+
+private fun sleepExtendLabel(mode: String): Int = when (mode) {
+    "5" -> R.string.player_sleep_extend_5
+    "15" -> R.string.player_sleep_extend_15
+    "30" -> R.string.player_sleep_extend_30
+    "chapter" -> R.string.player_sleep_extend_chapter
+    else -> R.string.player_sleep_extend_previous
 }
 
 /**
@@ -148,3 +227,5 @@ private fun Context.openBatteryOptimisationSettings() {
 
 private val SEEK_OPTIONS = listOf(5, 10, 15, 20, 30, 45, 60)
 private val REWIND_OPTIONS = listOf(0, 5, 10, 15, 20, 30)
+private val SLEEP_FADE_OPTIONS = listOf(0, 5, 10, 20, 30, 60)
+private val SLEEP_EXTEND_OPTIONS = listOf("5", "15", "30", "previous", "chapter")

@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -48,9 +49,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,6 +63,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -76,8 +78,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -86,6 +92,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -98,6 +105,7 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
+import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.EditBookDialog
@@ -136,7 +144,8 @@ fun PlayerScreen(
     val cover by viewModel.cover.collectAsStateWithLifecycle()
 
     // rememberSaveable: a rotation used to close whichever dialog was open.
-    var showSleepDialog by rememberSaveable { mutableStateOf(false) }
+    var customSpeed by rememberSaveable { mutableStateOf(false) }
+    var customSleep by rememberSaveable { mutableStateOf(false) }
     var showBookmarksDialog by rememberSaveable { mutableStateOf(false) }
     var showChaptersDialog by rememberSaveable { mutableStateOf(false) }
     var showEditDialog by rememberSaveable { mutableStateOf(false) }
@@ -267,7 +276,8 @@ fun PlayerScreen(
                 onSleepMinutes = viewModel::startSleepTimer,
                 onSleepEndOfChapter = viewModel::startSleepTimerEndOfChapter,
                 onSleepOff = viewModel::cancelSleepTimer,
-                onSleepSettings = { showSleepDialog = true },
+                onCustomSpeed = { customSpeed = true },
+                onCustomSleep = { customSleep = true },
                 onVolumeMode = viewModel::setVolumeMode,
                 onToggleSkipSilence = { viewModel.setSkipSilence(!skipSilence) },
                 onMark = { showBookmarksDialog = true },
@@ -372,21 +382,76 @@ fun PlayerScreen(
         }
     }
 
-    if (showSleepDialog) {
-        SleepSettingsDialog(
-            isActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
-            extendMode = sleepExtend,
-            fadeSeconds = sleepFade,
-            onOff = {
-                viewModel.cancelSleepTimer()
-                showSleepDialog = false
-            },
-            onSetExtend = viewModel::setSleepExtend,
-            onSetFade = viewModel::setSleepFadeOut,
-            onDismiss = { showSleepDialog = false },
+    if (customSpeed) {
+        CustomSpeedDialog(
+            initial = state.playbackSpeed,
+            onConfirm = viewModel::setSpeed,
+            onDismiss = { customSpeed = false },
+        )
+    }
+    if (customSleep) {
+        CustomNumberDialog(
+            title = stringResource(R.string.player_sleep_custom_title),
+            unit = stringResource(R.string.settings_unit_minutes),
+            initial = 45,
+            range = 1..600,
+            onConfirm = { minutes -> viewModel.startSleepTimer(minutes * 60_000L) },
+            onDismiss = { customSleep = false },
         )
     }
 }
+
+/**
+ * Types an exact playback speed.
+ *
+ * Its own dialog rather than [CustomNumberDialog] because a speed is fractional, and the one thing
+ * a listener must not be able to do by accident is set it to zero — which is silence that looks
+ * like a stall. Anything unparseable leaves the speed alone; anything out of range is clamped.
+ */
+@Composable
+private fun CustomSpeedDialog(initial: Float, onConfirm: (Float) -> Unit, onDismiss: () -> Unit) {
+    var text by rememberSaveable { mutableStateOf(formatSpeed(initial)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.player_speed_custom_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    // One separator, digits only — and both separators accepted, because the
+                    // keyboard offers whichever the locale uses and the parser below wants a dot.
+                    onValueChange = { entered ->
+                        text = entered.filter { it.isDigit() || it == '.' || it == ',' }.take(4)
+                    },
+                    label = { Text(stringResource(R.string.player_speed_unit)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.player_speed_custom_range),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    text.replace(',', '.').toFloatOrNull()
+                        ?.let { onConfirm(it.coerceIn(MIN_SPEED, MAX_SPEED)) }
+                    onDismiss()
+                },
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+private val SPEED_PRESETS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+private const val MIN_SPEED = 0.25f
+private const val MAX_SPEED = 4.0f
 
 // ── Artwork ──────────────────────────────────────────────────────────────────
 
@@ -601,26 +666,74 @@ private fun Transport(
     }
 }
 
-/** Skip-back / skip-forward button: a circular-arrow icon with the seconds count centered in it. */
+/**
+ * Skip-back / skip-forward button: a circular arrow with the seconds count inside it.
+ *
+ * The arc is drawn rather than taken from `Icons.Filled.Replay`, whose arrowhead reaches well into
+ * the middle of the glyph — exactly where the number goes, so the two overlapped. Drawing it leaves
+ * a deliberate gap at the top for the head and keeps the whole interior clear for the digits.
+ */
 @Composable
 private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
+    val label = if (forward) {
+        stringResource(R.string.player_cd_skip_forward, seconds)
+    } else {
+        stringResource(R.string.player_cd_skip_back, seconds)
+    }
     Box(
         modifier = Modifier
             .size(56.dp)
             .clip(CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            Icons.Filled.Replay,
-            contentDescription = if (forward) stringResource(R.string.player_cd_skip_forward, seconds) else stringResource(R.string.player_cd_skip_back, seconds),
-            tint = Parchment,
-            // The Replay glyph is a counter-clockwise arrow; mirror it for the forward button.
-            modifier = Modifier.size(40.dp).then(if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier),
-        )
-        Text("$seconds", color = Parchment, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        Canvas(modifier = Modifier.size(SeekGlyphSize)) {
+            val stroke = 2.dp.toPx()
+            // Inset by half the stroke so the arc's outer edge lands on the glyph bounds rather
+            // than half a stroke outside them.
+            val inset = stroke / 2f
+            val d = size.minDimension - stroke
+            // The gap the arrowhead occupies, left open at the top. Mirrored for the forward
+            // button so both heads sit at the top with the tails running the other way.
+            val gap = 74f
+            val start = if (forward) -90f + gap / 2f else -90f - gap / 2f
+            drawArc(
+                color = Parchment,
+                startAngle = start,
+                sweepAngle = if (forward) 360f - gap else -(360f - gap),
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = Size(d, d),
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+            // A filled triangle at the arc's open end, pointing along the direction of travel.
+            val r = d / 2f
+            val cx = inset + r
+            val cy = inset + r
+            val headAngle = Math.toRadians((start).toDouble())
+            val hx = cx + r * kotlin.math.cos(headAngle).toFloat()
+            val hy = cy + r * kotlin.math.sin(headAngle).toFloat()
+            val h = 5.dp.toPx()
+            val dir = if (forward) 1f else -1f
+            drawPath(
+                Path().apply {
+                    // Tip points across the gap; the base straddles the stroke, so the head reads
+                    // as the end of the line rather than a separate mark floating beside it.
+                    moveTo(hx + dir * h * 0.9f, hy)
+                    lineTo(hx - dir * h * 0.2f, hy - h * 0.75f)
+                    lineTo(hx - dir * h * 0.2f, hy + h * 0.75f)
+                    close()
+                },
+                color = Parchment,
+            )
+        }
+        Text("$seconds", color = Parchment, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
+
+/** Outer size of the drawn circular arrow; the digits sit in the clear middle of it. */
+private val SeekGlyphSize = 38.dp
 
 /** Wide pill opening the chapter picker; sits below the title. */
 @Composable
@@ -677,7 +790,8 @@ private fun ToolRow(
     onSleepMinutes: (Long) -> Unit,
     onSleepEndOfChapter: () -> Unit,
     onSleepOff: () -> Unit,
-    onSleepSettings: () -> Unit,
+    onCustomSpeed: () -> Unit,
+    onCustomSleep: () -> Unit,
     onVolumeMode: (String) -> Unit,
     onToggleSkipSilence: () -> Unit,
     onMark: () -> Unit,
@@ -699,7 +813,7 @@ private fun ToolRow(
                 onClick = { open = true },
             )
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f).forEach { preset ->
+                SPEED_PRESETS.forEach { preset ->
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -710,6 +824,11 @@ private fun ToolRow(
                         onClick = { onSpeed(preset); open = false },
                     )
                 }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
+                    onClick = { open = false; onCustomSpeed() },
+                )
             }
         }
 
@@ -733,17 +852,17 @@ private fun ToolRow(
                     text = { Text(stringResource(R.string.player_sleep_end_of_chapter)) },
                     onClick = { onSleepEndOfChapter(); open = false },
                 )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
+                    onClick = { open = false; onCustomSleep() },
+                )
                 if (sleepActive) {
+                    HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.player_sleep_turn_off), color = MaterialTheme.colorScheme.error) },
                         onClick = { onSleepOff(); open = false },
                     )
                 }
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.player_sleep_settings)) },
-                    onClick = { onSleepSettings(); open = false },
-                )
             }
         }
 
@@ -826,64 +945,6 @@ private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean, context: andro
 
 // ── Sleep settings (advanced: shake-extend + fade) ────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SleepSettingsDialog(
-    isActive: Boolean,
-    extendMode: String,
-    fadeSeconds: Int,
-    onOff: () -> Unit,
-    onSetExtend: (String) -> Unit,
-    onSetFade: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val extendOptions = listOf(
-        "5" to stringResource(R.string.player_sleep_extend_5),
-        "15" to stringResource(R.string.player_sleep_extend_15),
-        "30" to stringResource(R.string.player_sleep_extend_30),
-        "previous" to stringResource(R.string.player_sleep_extend_previous),
-        "chapter" to stringResource(R.string.player_sleep_extend_chapter),
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.player_sleep_settings_title)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(stringResource(R.string.player_shake_to_extend), style = MaterialTheme.typography.labelMedium, color = Muted)
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    extendOptions.forEach { (value, lbl) ->
-                        FilterChip(
-                            selected = extendMode == value,
-                            onClick = { onSetExtend(value) },
-                            label = { Text(lbl) },
-                        )
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.player_fade_out), modifier = Modifier.weight(1f))
-                    Stepper(
-                        value = if (fadeSeconds == 0) stringResource(R.string.settings_off) else stringResource(R.string.settings_seconds, fadeSeconds),
-                        onDec = { onSetFade((fadeSeconds - 1).coerceAtLeast(0)) },
-                        onInc = { onSetFade((fadeSeconds + 1).coerceAtMost(30)) },
-                    )
-                }
-                if (isActive) {
-                    TextButton(onClick = onOff, contentPadding = PaddingValues(0.dp)) {
-                        Text(stringResource(R.string.player_turn_off_timer), color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
-    )
-}
 
 @Composable
 private fun Stepper(value: String, onDec: () -> Unit, onInc: () -> Unit) {

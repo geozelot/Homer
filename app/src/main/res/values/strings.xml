@@ -27,8 +27,8 @@
     <string name="time_left">%1$s left</string>
     <string name="chapter_numbered">Chapter %1$d</string>
     <string name="menu_offline">Offline</string>
-    <string name="menu_offline_series">Offline · all episodes</string>
-    <string name="menu_offline_series_rest">Download the remaining episodes</string>
+    <string name="menu_offline_series">Offline · all books</string>
+    <string name="menu_offline_series_rest">Download the remaining books</string>
 
     <!-- Login -->
     <string name="login_subtitle">Connect your Nextcloud</string>
@@ -143,12 +143,11 @@
     <string name="home_chip_shelve">Shelve · %1$s</string>
     <string name="home_chip_series">Series · %1$s</string>
     <string name="home_chip_sort">Sort · %1$s</string>
-    <string name="home_meta_episode">Episode %1$d</string>
+    <string name="home_meta_series_position">Book %1$d</string>
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
          unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
-    <string name="home_series_episodes">%1$d episodes</string>
+    <string name="home_series_book_count">%1$d books</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
-    <string name="home_cd_collapse_series">Collapse series</string>
     <string name="home_meta_percent_bare">%1$d%%</string>
 
     <!-- Home: context menu -->
@@ -348,6 +347,19 @@
     <string name="set_sync_account_header">WHERE YOUR PLACE IS SAVED</string>
 
     <!-- Settings: playback -->
+    <string name="settings_custom">Custom\u2026</string>
+    <string name="settings_custom_range">Anything from %1$d to %2$d.</string>
+    <string name="settings_unit_seconds">Seconds</string>
+    <string name="settings_unit_minutes">Minutes</string>
+    <string name="player_sleep_custom_title">Sleep after\u2026</string>
+    <string name="player_speed_custom_title">Playback speed</string>
+    <string name="player_speed_unit">Speed (e.g. 1.35)</string>
+    <string name="player_speed_custom_range">Anything from 0.25\u00d7 to 4\u00d7.</string>
+    <string name="set_playback_feel_header">HOW THE PLAYER FEELS</string>
+    <string name="set_playback_sleep_header">SLEEP TIMER</string>
+    <string name="set_playback_sleep_lead">You start a timer from the player. These decide what it does while it runs.</string>
+    <string name="set_playback_shake_desc">Shaking the phone while the timer is counting down gives you more time.</string>
+    <string name="set_playback_fade_desc">Eases the volume down before it stops, so the timer doesn\'t cut a sentence in half.</string>
     <string name="set_playback_skip_desc">How far the player\'s skip buttons jump.</string>
     <string name="set_playback_rewind_desc">Steps back a little when you press play again, so you can pick the thread back up.</string>
     <string name="set_playback_background_header">PLAYING IN THE BACKGROUND</string>
@@ -384,7 +396,6 @@
     <string name="player_sleep_minutes">%1$dm</string>
     <string name="player_sleep_end_of_chapter">End of chapter</string>
     <string name="player_sleep_turn_off">Turn off</string>
-    <string name="player_sleep_settings">Sleep settings…</string>
     <string name="player_volume">Volume</string>
     <string name="player_volume_quiet">Quiet</string>
     <string name="player_volume_boost">Boost</string>
@@ -400,10 +411,8 @@
     <string name="player_sleep_extend_30">+30m</string>
     <string name="player_sleep_extend_previous">Previous</string>
     <string name="player_sleep_extend_chapter">Chapter</string>
-    <string name="player_sleep_settings_title">Sleep settings</string>
     <string name="player_shake_to_extend">Shake to extend</string>
     <string name="player_fade_out">Fade out</string>
-    <string name="player_turn_off_timer">Turn off timer</string>
     <string name="player_bookmarks_title">Bookmarks</string>
     <string name="player_bookmark_add">Add at current position</string>
     <string name="player_bookmark_empty">No bookmarks yet.</string>
