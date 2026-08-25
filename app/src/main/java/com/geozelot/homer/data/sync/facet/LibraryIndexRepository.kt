@@ -10,6 +10,7 @@ import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.metadata.CoverCache
@@ -54,6 +55,7 @@ class LibraryIndexRepository @Inject constructor(
     private val audioFileDao: AudioFileDao,
     private val chapterDao: ChapterDao,
     private val bookOverrideDao: BookOverrideDao,
+    private val bookmarkDao: BookmarkDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
     private val networkMonitor: NetworkMonitor,
@@ -173,10 +175,14 @@ class LibraryIndexRepository @Inject constructor(
         if (!librarySettings.sharedCatalogEnabled.first()) return true
         if (!networkMonitor.isOnline() || !canPublish()) return false
         val deviceId = deviceIdentity.id()
+        // Cuts join the overrides here: a book can carry a hand-made chapter list and no corrected
+        // field at all, so iterating the override table alone would publish neither.
+        val cuts = bookmarkDao.allCuts().groupBy { it.bookId }
+        val overrides = bookOverrideDao.getAll().associateBy { it.bookId }
         val local = CorrectionsFacet(
-            books = bookOverrideDao.getAll()
-                .mapNotNull { o -> FacetMapping.correctionOf(o, deviceId)?.let { o.bookId to it } }
-                .toMap(),
+            books = (overrides.keys + cuts.keys).mapNotNull { id ->
+                FacetMapping.correctionOf(overrides[id], cuts[id].orEmpty(), deviceId)?.let { id to it }
+            }.toMap(),
         )
         report(
             LibraryFacets.CORRECTIONS_FILE,
@@ -300,9 +306,15 @@ class LibraryIndexRepository @Inject constructor(
                     audioFileDao.upsert(files)
                 }
                 // Only rewrite chapters when the facet actually has some: an absent derived entry
-                // is silence, and silence must not erase what this device worked out itself.
-                if (d?.chapterTier != null) {
-                    chapterDao.replaceForBook(id, FacetMapping.chapterEntities(id, d))
+                // is silence, and silence must not erase what this device worked out itself. A
+                // correction's cuts count as having some, even where no tag ever did — that is the
+                // whole point of cutting a book nothing had chapters for.
+                val cut = corrections.books[id]?.chapters?.isNotEmpty() == true
+                if (d?.chapterTier != null || cut) {
+                    chapterDao.replaceForBook(
+                        id,
+                        FacetMapping.chapterEntities(id, d, corrections.books[id]),
+                    )
                 }
                 // Never deleted. An absent correction means the shared index has nothing to say
                 // about this book, NOT that a local one should go — deleting here destroyed an
@@ -393,13 +405,13 @@ class LibraryIndexRepository @Inject constructor(
         val derived = LinkedHashMap<String, DerivedBook>()
         val corrections = LinkedHashMap<String, BookCorrection>()
 
+        val cuts = bookmarkDao.allCuts().groupBy { it.bookId }
         for (book in bookDao.getAll()) {
             val files = audioFileDao.findForBook(book.id)
             structure[book.id] = FacetMapping.structureOf(book, files)
             FacetMapping.derivedOf(book, files, chapterDao.findForBook(book.id))?.let { derived[book.id] = it }
-            overrides[book.id]?.let { o ->
-                FacetMapping.correctionOf(o, deviceId)?.let { corrections[book.id] = it }
-            }
+            FacetMapping.correctionOf(overrides[book.id], cuts[book.id].orEmpty(), deviceId)
+                ?.let { corrections[book.id] = it }
         }
 
         val crawledAt = librarySettings.lastFullCrawlAt.first()

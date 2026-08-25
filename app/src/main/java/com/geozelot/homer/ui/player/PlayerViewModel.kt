@@ -246,7 +246,7 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun addBookmark() = connection.addBookmark()
+    fun addBookmark(kind: String) = connection.addBookmark(kind)
     fun jumpToBookmark(bookmark: BookmarkEntity) =
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
     fun deleteBookmark(bookmark: BookmarkEntity) =

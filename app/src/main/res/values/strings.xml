@@ -447,6 +447,9 @@
     <string name="player_fade_out">Fade out</string>
     <string name="player_bookmarks_title">Bookmarks</string>
     <string name="player_bookmark_add">Add at current position</string>
+    <string name="player_chapter_cut_add">Cut a chapter here</string>
+    <string name="player_chapter_cut_desc">Chapter cuts become this book\'s chapters for everyone reading this folder \u2014 unlike a bookmark, which stays yours.</string>
+    <string name="player_chapter_cut_tag">CHAPTER CUT</string>
     <string name="player_bookmark_empty">No bookmarks yet.</string>
     <string name="player_chapter_fallback">Chapter</string>
     <string name="sync_stop">Stop</string>

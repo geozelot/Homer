@@ -17,6 +17,7 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
@@ -25,6 +26,7 @@ import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.sync.HomerSyncRepository
+import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -107,6 +109,7 @@ class PlaybackConnection @Inject constructor(
     private val bookOverrideDao: BookOverrideDao,
     private val downloadManager: DownloadManager,
     private val homerSync: HomerSyncRepository,
+    private val libraryIndex: LibraryIndexRepository,
     private val localMirror: LocalMirror,
 ) {
     // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
@@ -600,7 +603,15 @@ class PlaybackConnection @Inject constructor(
     }
 
     /** Saves a bookmark at the current chapter + position of the playing book. */
-    fun addBookmark() {
+    /**
+     * Marks the current position.
+     *
+     * @param kind [BookmarkKind.NOTE] for a private mark, [BookmarkKind.CUT] for a chapter boundary.
+     *   A cut is a claim about the book rather than about the listener, so it also goes out with the
+     *   metadata corrections and becomes everybody's chapter list — which is why it publishes and a
+     *   note does not.
+     */
+    fun addBookmark(kind: String = BookmarkKind.NOTE) {
         val c = controller ?: return
         val bookId = currentBookId ?: return
         val mediaId = c.currentMediaItem?.mediaId ?: return
@@ -616,10 +627,14 @@ class PlaybackConnection @Inject constructor(
                     positionMs = position,
                     label = null,
                     createdAt = now,
+                    kind = kind,
                 ),
             )
             bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
             homerSync.sync(force = true)
+            // A cut changes the book's chapter list, so it belongs in the shared index. Coalesced
+            // the same way a title edit is — cutting a book is a burst of cuts, not one.
+            if (kind == BookmarkKind.CUT) libraryIndex.publishEdits()
         }
     }
 

@@ -64,6 +64,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -103,6 +104,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
 import com.geozelot.homer.ui.components.CustomNumberDialog
@@ -353,6 +355,9 @@ fun PlayerScreen(
     if (showBookmarksDialog) {
         BookmarksDialog(
             bookmarks = bookmarks,
+            // Only a single-file book has anything to cut: a multi-file book's files are already
+            // its chapters.
+            canCut = state.chapterCount <= 1,
             onAdd = viewModel::addBookmark,
             onJump = {
                 viewModel.jumpToBookmark(it)
@@ -965,7 +970,13 @@ private fun dialogContentMaxHeight(fraction: Float = 0.45f): Dp =
 @Composable
 private fun BookmarksDialog(
     bookmarks: List<BookmarkEntity>,
-    onAdd: () -> Unit,
+    /**
+     * Whether cutting is offered at all. A multi-file book's files ARE its chapters, so there is
+     * nothing to cut — and offering it would invite somebody to publish a chapter list that
+     * contradicts the file list every other reader navigates by.
+     */
+    canCut: Boolean,
+    onAdd: (kind: String) -> Unit,
     onJump: (BookmarkEntity) -> Unit,
     onDelete: (BookmarkEntity) -> Unit,
     onDismiss: () -> Unit,
@@ -979,8 +990,30 @@ private fun BookmarksDialog(
             // got crushed on a short screen (and in landscape).
             LazyColumn(modifier = Modifier.heightIn(max = dialogContentMaxHeight())) {
                 item(key = "add") {
-                    Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { onAdd(BookmarkKind.NOTE) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Text(stringResource(R.string.player_bookmark_add))
+                    }
+                }
+                if (canCut) {
+                    item(key = "cut") {
+                        // Outlined, not filled: marking a place for yourself is the everyday act,
+                        // and cutting a chapter is a change everyone reading this folder will get.
+                        OutlinedButton(
+                            onClick = { onAdd(BookmarkKind.CUT) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        ) {
+                            Text(stringResource(R.string.player_chapter_cut_add))
+                        }
+                        Text(
+                            stringResource(R.string.player_chapter_cut_desc),
+                            color = Muted,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                        )
                     }
                 }
                 if (bookmarks.isEmpty()) {
@@ -1003,6 +1036,16 @@ private fun BookmarksDialog(
                         ) {
                             val chapterFallback = stringResource(R.string.player_chapter_fallback)
                             Column(modifier = Modifier.weight(1f)) {
+                                if (bookmark.kind == BookmarkKind.CUT) {
+                                    // Said out loud, because the two look identical in a list and
+                                    // only one of them other people can see.
+                                    Text(
+                                        stringResource(R.string.player_chapter_cut_tag),
+                                        color = Amber,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
                                 Text(
                                     bookmark.chapterTitle.ifEmpty { chapterFallback },
                                     fontWeight = FontWeight.SemiBold,

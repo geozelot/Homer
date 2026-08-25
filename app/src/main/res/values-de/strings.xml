@@ -424,6 +424,9 @@
     <string name="player_fade_out">Ausblenden</string>
     <string name="player_bookmarks_title">Lesezeichen</string>
     <string name="player_bookmark_add">An aktueller Stelle setzen</string>
+    <string name="player_chapter_cut_add">Hier ein Kapitel schneiden</string>
+    <string name="player_chapter_cut_desc">Kapitelschnitte werden zu den Kapiteln dieses Buchs \u2014 für alle, die diesen Ordner lesen. Ein Lesezeichen bleibt dagegen deins.</string>
+    <string name="player_chapter_cut_tag">KAPITELSCHNITT</string>
     <string name="player_bookmark_empty">Noch keine Lesezeichen.</string>
     <string name="player_chapter_fallback">Kapitel</string>
     <string name="sync_stop">Stopp</string>

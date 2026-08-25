@@ -2,6 +2,8 @@ package com.geozelot.homer.data.sync.facet
 
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.BookmarkEntity
+import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
@@ -174,6 +176,7 @@ class FacetMappingTest {
     fun `a correction publishes only claims about the book`() {
         val c = FacetMapping.correctionOf(
             override(title = "Proper Title", finished = true, hidden = true, downloadOnPlay = false),
+            cuts = emptyList(),
             deviceId = "phone",
         )
         assertNotNull(c)
@@ -188,8 +191,72 @@ class FacetMappingTest {
 
     @Test
     fun `a purely personal override publishes nothing at all`() {
-        assertNull(FacetMapping.correctionOf(override(finished = true, hidden = true), "phone"))
+        assertNull(FacetMapping.correctionOf(override(finished = true, hidden = true), emptyList(), "phone"))
     }
+
+    @Test
+    fun `chapter cuts alone are worth publishing`() {
+        // A single-file book can carry a hand-made chapter list and no corrected field anywhere —
+        // and that chapter list is the thing other readers most want out of the index.
+        val c = FacetMapping.correctionOf(
+            override = null,
+            cuts = listOf(cut(positionMs = 900L, label = "Two"), cut(positionMs = 0L, label = "One")),
+            deviceId = "phone",
+        )
+        assertNotNull(c)
+        assertNull("nothing was corrected, only cut", c!!.title)
+        assertEquals(listOf(900L, 0L), c.chapters.map { it.startMs })
+    }
+
+    @Test
+    fun `a cut's own timestamp can be the reason to republish`() {
+        // `editedAt` drives the corrections merge, so a cut made after the last field edit has to
+        // move it forward or the newer chapter list loses to the older correction.
+        val c = FacetMapping.correctionOf(override(title = "T"), listOf(cut(0L, "One", createdAt = 9_000L)), "phone")
+        assertEquals(9_000L, c!!.editedAt)
+    }
+
+    @Test
+    fun `a person's cuts outrank the chapters a tag supplied`() {
+        val fromTag = DerivedBook(chapterTier = "EMBEDDED", chapters = listOf(DerivedChapter(0L, "Tag")))
+        val chapters = FacetMapping.chapterEntities(
+            bookId = "A/One",
+            derived = fromTag,
+            correction = BookCorrection(chapters = listOf(DerivedChapter(0L, "Mine"), DerivedChapter(60L, "Also"))),
+        )
+        assertEquals(listOf("Mine", "Also"), chapters.map { it.title })
+    }
+
+    @Test
+    fun `cuts are stored in playing order however they were made`() {
+        // A cut made later can belong earlier in the book, and sortIndex is read as playing order.
+        val chapters = FacetMapping.chapterEntities(
+            bookId = "A/One",
+            derived = null,
+            correction = BookCorrection(
+                chapters = listOf(DerivedChapter(120L, "Third"), DerivedChapter(0L, "First"), DerivedChapter(60L, "Second")),
+            ),
+        )
+        assertEquals(listOf("First", "Second", "Third"), chapters.map { it.title })
+        assertEquals(listOf(0, 1, 2), chapters.map { it.sortIndex })
+    }
+
+    @Test
+    fun `no cuts falls back to what the tag said`() {
+        val fromTag = DerivedBook(chapterTier = "EMBEDDED", chapters = listOf(DerivedChapter(0L, "Tag")))
+        val chapters = FacetMapping.chapterEntities("A/One", fromTag, BookCorrection(title = "T"))
+        assertEquals(listOf("Tag"), chapters.map { it.title })
+    }
+
+    private fun cut(positionMs: Long, label: String?, createdAt: Long = 500L) = BookmarkEntity(
+        bookId = "A/One",
+        mediaId = "A/One/01.mp3",
+        chapterTitle = "",
+        positionMs = positionMs,
+        label = label,
+        createdAt = createdAt,
+        kind = BookmarkKind.CUT,
+    )
 
     // ── consuming ────────────────────────────────────────────────────────────────────────────
 

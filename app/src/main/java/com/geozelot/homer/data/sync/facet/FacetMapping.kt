@@ -2,6 +2,7 @@ package com.geozelot.homer.data.sync.facet
 
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
@@ -82,22 +83,30 @@ object FacetMapping {
      * `finished`, `hidden` and `downloadOnPlay` are never published. On a folder shared with other
      * people they would say who has read what.
      */
-    fun correctionOf(override: BookOverrideEntity, deviceId: String?): BookCorrection? {
-        if (override.title == null && override.author == null && override.series == null &&
-            override.seriesIndex == null && override.genre == null && override.language == null &&
-            override.tags == null
-        ) {
-            return null
-        }
+    fun correctionOf(
+        override: BookOverrideEntity?,
+        cuts: List<BookmarkEntity>,
+        deviceId: String?,
+    ): BookCorrection? {
+        val nothingCorrected = override == null || (
+            override.title == null && override.author == null && override.series == null &&
+                override.seriesIndex == null && override.genre == null && override.language == null &&
+                override.tags == null
+            )
+        // Cuts alone are worth publishing: a book can have a hand-made chapter list and no
+        // corrected field anywhere, and it is the chapter list other readers most want.
+        if (nothingCorrected && cuts.isEmpty()) return null
         return BookCorrection(
-            title = override.title,
-            author = override.author,
-            series = override.series,
-            seriesIndex = override.seriesIndex,
-            genre = override.genre,
-            language = override.language,
-            tags = override.tags,
-            editedAt = override.updatedAt,
+            title = override?.title,
+            author = override?.author,
+            series = override?.series,
+            seriesIndex = override?.seriesIndex,
+            genre = override?.genre,
+            language = override?.language,
+            tags = override?.tags,
+            chapters = cuts.map { DerivedChapter(startMs = it.positionMs, title = it.label) },
+            // The later of the two, because either can be the reason to republish.
+            editedAt = maxOf(override?.updatedAt ?: 0L, cuts.maxOfOrNull { it.createdAt } ?: 0L),
             editedBy = deviceId,
         )
     }
@@ -234,10 +243,27 @@ object FacetMapping {
         )
     }
 
-    fun chapterEntities(bookId: String, derived: DerivedBook?): List<ChapterEntity> =
-        derived?.chapters.orEmpty().mapIndexed { index, chapter ->
-            ChapterEntity(bookId = bookId, sortIndex = index, title = chapter.title, startMs = chapter.startMs)
-        }
+    /**
+     * A book's chapters: the cuts somebody made if there are any, otherwise whatever the tags said.
+     *
+     * A person's cuts outrank a tag for the same reason a corrected title outranks a folder name —
+     * somebody looked at this book and decided. And a single-file book with unusable tag chapters is
+     * exactly why cutting exists, so a tag that "wins" would defeat the feature.
+     */
+    fun chapterEntities(
+        bookId: String,
+        derived: DerivedBook?,
+        correction: BookCorrection? = null,
+    ): List<ChapterEntity> {
+        val chapters = correction?.chapters?.takeIf { it.isNotEmpty() } ?: derived?.chapters.orEmpty()
+        return chapters
+            // Sorted, because a cut made later can belong earlier in the book and `sortIndex` is
+            // read as playing order.
+            .sortedBy { it.startMs }
+            .mapIndexed { index, chapter ->
+                ChapterEntity(bookId = bookId, sortIndex = index, title = chapter.title, startMs = chapter.startMs)
+            }
+    }
 
     // ── the chapter tier, as a word rather than a number ─────────────────────────────────────
 

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "0be77754050a5d2eb532bd9a246166f5",
+    "identityHash": "c94db2706ffc9b04f913c403e0c1cef8",
     "entities": [
       {
         "tableName": "books",
@@ -285,7 +285,7 @@
       },
       {
         "tableName": "bookmarks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bookId` TEXT NOT NULL, `mediaId` TEXT NOT NULL, `chapterTitle` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `label` TEXT, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bookId` TEXT NOT NULL, `mediaId` TEXT NOT NULL, `chapterTitle` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `label` TEXT, `createdAt` INTEGER NOT NULL, `kind` TEXT NOT NULL, FOREIGN KEY(`bookId`) REFERENCES `books`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -326,6 +326,12 @@
             "fieldPath": "createdAt",
             "columnName": "createdAt",
             "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -569,7 +575,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0be77754050a5d2eb532bd9a246166f5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c94db2706ffc9b04f913c403e0c1cef8')"
     ]
   }
 }

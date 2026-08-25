@@ -203,6 +203,15 @@ data class BookCorrection(
     val language: String? = null,
     /** Same encoding as `BookOverrideEntity.tags`. */
     val tags: String? = null,
+    /**
+     * Chapter cuts a person made in a single-file book, in playing order.
+     *
+     * Here rather than in [DerivedBook] because of the split the whole design rests on: a derived
+     * chapter is what a TAG said, and a cut is what a PERSON said. That also gives them the right
+     * merge rule — newest edit wins outright, rather than "non-null wins", which for two people's
+     * differing chapter lists would mean whoever wrote first owns them for ever.
+     */
+    val chapters: List<DerivedChapter> = emptyList(),
     val editedAt: Long = 0,
     /** The device the edit was made on, so the UI can say where a change came from. */
     val editedBy: String? = null,
