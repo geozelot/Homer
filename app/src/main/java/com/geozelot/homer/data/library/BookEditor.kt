@@ -5,6 +5,7 @@ import android.net.Uri
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
@@ -47,6 +48,7 @@ class BookEditor @Inject constructor(
         series: String,
         seriesIndex: String,
         genre: String,
+        language: String,
         tags: String,
         hidden: Boolean,
         downloadOnPlay: Boolean?,
@@ -61,6 +63,7 @@ class BookEditor @Inject constructor(
                 series = series.trim().ifBlank { null },
                 seriesIndex = seriesIndex.trim().toIntOrNull(),
                 genre = genre.trim().ifBlank { null },
+                language = BookLanguage.normalise(language) ?: language.trim().ifBlank { null },
                 tags = tagList.takeIf { it.isNotEmpty() }?.joinToString("\n"),
                 finished = finished,
                 downloadOnPlay = downloadOnPlay,

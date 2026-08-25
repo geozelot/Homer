@@ -141,12 +141,15 @@ class DurationEnricher @Inject constructor(
             // forever. A full library refresh clears the flags to allow a retry.
             val metadataTried = book?.metadataAttempted ?: false
             val needsGenre = book?.genre == null && !metadataTried
+            // The crawl may already have read a language out of the file names. That is a real
+            // answer, so a tag read is only wanted where it found nothing.
+            val needsLanguage = book?.language == null && !metadataTried
             // Embedded chapters only apply to single-file books (a multi-file book's file list
             // already is its chapter list). Extract once, when the tier is still undetermined.
             val needsChapters = files.size == 1 && !metadataTried &&
                 (book?.chapterTier ?: ChapterTier.UNDETERMINED) == ChapterTier.UNDETERMINED
             val missing = files.filter { it.durationMs == null && !it.durationAttempted }
-            if (missing.isEmpty() && !needsGenre && !needsChapters) return
+            if (missing.isEmpty() && !needsGenre && !needsLanguage && !needsChapters) return
             if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
 
             // Genre + embedded chapters live on the (first) file; captured from a probe if one
@@ -192,6 +195,7 @@ class DurationEnricher @Inject constructor(
             }
 
             var genre: String? = state.genre
+            var language: String? = state.language
             var firstProbe: DurationExtractor.Probe? = state.firstProbe
             // null when the book already had its tags and no read was needed at all.
             var tagsSource: String? = null
@@ -207,7 +211,9 @@ class DurationEnricher @Inject constructor(
             // block the dominant cost of a sweep — one stream opened per book, one to five
             // seconds, most often to learn the book has no genre. Both answers are in the ID3 tag
             // at the front of the file, so it is read the same way the durations were.
-            if ((needsGenre && genre == null) || (needsChapters && firstProbe == null)) {
+            if ((needsGenre && genre == null) || (needsLanguage && language == null) ||
+                (needsChapters && firstProbe == null)
+            ) {
                 files.firstOrNull()?.let { first ->
                     coroutineContext.ensureActive()
                     val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
@@ -218,6 +224,7 @@ class DurationEnricher @Inject constructor(
                         // genre and no chapters. Id3Tags returns null rather than empty whenever
                         // it could not see the whole tag, so this can never invent an absence.
                         if (genre == null) genre = fromHeaderTag.genre
+                        if (language == null) language = fromHeaderTag.language
                         if (firstProbe == null) firstProbe = fromHeaderTag
                     } else {
                         // Not ID3, or a tag this cannot walk — MP4-family books land here, and
@@ -228,14 +235,17 @@ class DurationEnricher @Inject constructor(
                                 Log.i(TAG, "book $bookId: tags needed the full probe")
                             }
                         if (genre == null) genre = probe.genre
+                        if (language == null) language = probe.language
                         if (firstProbe == null) firstProbe = probe
                     }
                 }
             }
             if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
+            if (needsLanguage && language != null) bookDao.updateLanguage(bookId, language!!)
             // No genre in the tags, or the probe itself failed: settle it so the next open
             // doesn't stream this book's first file all over again for the same answer.
-            if (((needsGenre && genre == null) || (needsChapters && firstProbe == null)) &&
+            if (((needsGenre && genre == null) || (needsLanguage && language == null) ||
+                    (needsChapters && firstProbe == null)) &&
                 networkMonitor.isOnline()
             ) {
                 bookDao.markMetadataAttempted(bookId)
@@ -295,12 +305,14 @@ class DurationEnricher @Inject constructor(
         private var processed = 0
         private var lastHeartbeatMs = startedAtMs
         private var genreValue: String? = null
+        private var languageValue: String? = null
         private var firstProbeValue: DurationExtractor.Probe? = null
 
         val fromHeader: Int get() = synchronized(lock) { header }
         val fromFastProbe: Int get() = synchronized(lock) { fast }
         val fromFullProbe: Int get() = synchronized(lock) { full }
         val genre: String? get() = synchronized(lock) { genreValue }
+        val language: String? get() = synchronized(lock) { languageValue }
         val firstProbe: DurationExtractor.Probe? get() = synchronized(lock) { firstProbeValue }
 
         fun recordHeader() = synchronized(lock) { header++ }
@@ -316,6 +328,7 @@ class DurationEnricher @Inject constructor(
         fun recordFullProbe(probe: DurationExtractor.Probe) = synchronized(lock) {
             if (probe.durationMs != null) full++
             if (genreValue == null) genreValue = probe.genre
+            if (languageValue == null) languageValue = probe.language
             if (firstProbeValue == null) firstProbeValue = probe
         }
 

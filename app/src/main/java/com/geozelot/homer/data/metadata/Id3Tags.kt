@@ -21,7 +21,12 @@ package com.geozelot.homer.data.metadata
 internal object Id3Tags {
 
     /** What the tag says. An empty [chapters] means the tag genuinely carries none. */
-    data class Tags(val genre: String?, val chapters: List<DurationExtractor.ChapterMark>)
+    data class Tags(
+        val genre: String?,
+        /** ISO 639-1 code from a TLAN frame, already normalised; null if the tag carries none. */
+        val language: String?,
+        val chapters: List<DurationExtractor.ChapterMark>,
+    )
 
     /**
      * Parses the tag at the start of the file.
@@ -57,6 +62,7 @@ internal object Id3Tags {
         val window = Window(head, fetch)
         var cursor = HEADER_BYTES.toLong()
         var genre: String? = null
+        var language: String? = null
         val chapters = mutableListOf<DurationExtractor.ChapterMark>()
         var guard = 0
 
@@ -77,6 +83,14 @@ internal object Id3Tags {
                         val body = window.at(cursor + FRAME_HEADER_BYTES, frameSize.toInt()) ?: return null
                         genre = Id3Genres.resolve(decodeText(body))
                     }
+                    // The tag's own statement of what language the book is in. Normalised here
+                    // rather than stored raw: TLAN carries ISO 639-2, and half the files in the
+                    // wild use the bibliographic code where the other half use the terminological
+                    // one — "ger" and "deu" are the same book.
+                    "TLAN" -> {
+                        val body = window.at(cursor + FRAME_HEADER_BYTES, frameSize.toInt()) ?: return null
+                        language = BookLanguage.normalise(decodeText(body))
+                    }
                     "CHAP" -> {
                         val body = window.at(cursor + FRAME_HEADER_BYTES, frameSize.toInt()) ?: return null
                         parseChapter(body, major)?.let(chapters::add)
@@ -86,7 +100,7 @@ internal object Id3Tags {
             cursor += FRAME_HEADER_BYTES + frameSize
         }
 
-        return Tags(genre, chapters.distinctBy { it.startMs }.sortedBy { it.startMs })
+        return Tags(genre, language, chapters.distinctBy { it.startMs }.sortedBy { it.startMs })
     }
 
     /**

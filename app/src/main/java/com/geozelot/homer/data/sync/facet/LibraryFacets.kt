@@ -150,6 +150,15 @@ data class DerivedFacet(
 @Serializable
 data class DerivedBook(
     val genre: String? = null,
+    /**
+     * ISO 639-1 code read from a tag or the file names.
+     *
+     * Optional with a default, and deliberately NOT a schema bump: a facet written before this
+     * field existed simply carries no language, which is exactly what "nothing established it yet"
+     * means. Bumping would make every device treat every older facet as absent and republish a
+     * whole library to gain one field.
+     */
+    val language: String? = null,
     val totalDurationMs: Long? = null,
     /** Whether this book's extracted art is in the shared `.homer/covers/` cache. */
     val hasCachedCover: Boolean = false,
@@ -191,6 +200,8 @@ data class BookCorrection(
     val series: String? = null,
     val seriesIndex: Int? = null,
     val genre: String? = null,
+    /** A deliberate language, as an ISO 639-1 code. Outranks whatever any tag says. */
+    val language: String? = null,
     /** Same encoding as `BookOverrideEntity.tags`. */
     val tags: String? = null,
     val editedAt: Long = 0,

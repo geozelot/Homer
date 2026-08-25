@@ -28,6 +28,11 @@ data class BookEntity(
     val seriesIndex: Int?,
     /** Detected genre from embedded tags (filled lazily on first open); user-overridable. */
     val genre: String? = null,
+    /**
+     * What language the book is in, as an ISO 639-1 code — the DETECTED value, from a tag or from
+     * the file names. A deliberate correction lives on [BookOverrideEntity] like every other one.
+     */
+    val language: String? = null,
     val relativePath: String,
     /** Relative path of a cover image file in the book folder (remote), if any. */
     val coverFilePath: String?,

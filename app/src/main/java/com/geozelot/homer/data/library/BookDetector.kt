@@ -3,6 +3,7 @@ package com.geozelot.homer.data.library
 import android.util.Log
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.webdav.DavResource
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -125,6 +126,12 @@ class BookDetector @Inject constructor() {
         val book = BookEntity(
             id = relToRoot,
             contentHash = contentHash(fileEntities),
+            // Free: the crawl already holds every name this looks at, so a library nobody has
+            // tagged still gets a language out of "Kapitel 03.mp3". A tag read later wins over it.
+            language = BookLanguage.fromNames(
+                folderName = relToRoot.substringAfterLast('/'),
+                fileNames = fileEntities.map { it.fileName },
+            ),
             title = title,
             author = author,
             series = series,

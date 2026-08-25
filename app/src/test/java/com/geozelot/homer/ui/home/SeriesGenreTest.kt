@@ -29,6 +29,7 @@ class SeriesGenreTest {
         series = "S",
         seriesIndex = null,
         genre = null,
+        language = null,
         tags = emptyList(),
         totalDurationMs = null,
         timeLeftMs = null,

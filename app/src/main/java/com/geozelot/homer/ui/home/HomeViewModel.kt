@@ -79,6 +79,8 @@ data class BookListItem(
     val series: String?,
     val seriesIndex: Int?,
     val genre: String?,
+    /** ISO 639-1 code, override applied; null when nothing has established one. */
+    val language: String?,
     /** User tags (from the override layer); empty if none. */
     val tags: List<String>,
     val totalDurationMs: Long?,
@@ -317,6 +319,7 @@ class HomeViewModel @Inject constructor(
                     series = book.series,
                     seriesIndex = book.seriesIndex,
                     genre = book.genre,
+                    language = book.language,
                     tags = eff.tags,
                     totalDurationMs = total,
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
@@ -832,12 +835,15 @@ class HomeViewModel @Inject constructor(
         series: String,
         seriesIndex: String,
         genre: String,
+        language: String,
         tags: String,
         hidden: Boolean,
         downloadOnPlay: Boolean?,
     ) {
         viewModelScope.launch {
-            bookEditor.saveOverride(bookId, title, author, series, seriesIndex, genre, tags, hidden, downloadOnPlay)
+            bookEditor.saveOverride(
+                bookId, title, author, series, seriesIndex, genre, language, tags, hidden, downloadOnPlay,
+            )
         }
     }
 

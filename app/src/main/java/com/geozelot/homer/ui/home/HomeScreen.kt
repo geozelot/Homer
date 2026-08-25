@@ -368,8 +368,10 @@ fun HomeScreen(
     entries.findBook(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, genre, tags, hidden, downloadOnPlay ->
-                viewModel.saveOverride(book.id, title, author, series, index, genre, tags, hidden, downloadOnPlay)
+            onSave = { title, author, series, index, genre, language, tags, hidden, downloadOnPlay ->
+                viewModel.saveOverride(
+                    book.id, title, author, series, index, genre, language, tags, hidden, downloadOnPlay,
+                )
                 editingId = null
             },
             onReset = {
@@ -434,6 +436,7 @@ private fun BookListItem.toEditable() = EditableBook(
     series = series,
     seriesIndex = seriesIndex,
     genre = genre,
+    language = language,
     tags = tags,
     hidden = hidden,
     hasCustomCover = hasCustomCover,

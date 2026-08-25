@@ -46,7 +46,12 @@ class AudioHeaderTags @Inject constructor(
             } ?: return@withContext null
             // Shaped as a Probe so the caller treats it exactly like the reader it replaces.
             // durationMs stays null: this path never speaks about duration.
-            DurationExtractor.Probe(durationMs = null, genre = tags.genre, chapters = tags.chapters)
+            DurationExtractor.Probe(
+                durationMs = null,
+                genre = tags.genre,
+                language = tags.language,
+                chapters = tags.chapters,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

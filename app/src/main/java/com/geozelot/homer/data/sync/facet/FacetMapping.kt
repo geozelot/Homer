@@ -58,13 +58,14 @@ object FacetMapping {
             .toMap()
         val tier = tierName(book.chapterTier)
         val hasCachedCover = book.localCoverPath != null
-        if (book.genre == null && book.totalDurationMs == null && !hasCachedCover &&
-            tier == null && durations.isEmpty()
+        if (book.genre == null && book.language == null && book.totalDurationMs == null &&
+            !hasCachedCover && tier == null && durations.isEmpty()
         ) {
             return null
         }
         return DerivedBook(
             genre = book.genre,
+            language = book.language,
             totalDurationMs = book.totalDurationMs,
             hasCachedCover = hasCachedCover,
             chapterTier = tier,
@@ -83,7 +84,8 @@ object FacetMapping {
      */
     fun correctionOf(override: BookOverrideEntity, deviceId: String?): BookCorrection? {
         if (override.title == null && override.author == null && override.series == null &&
-            override.seriesIndex == null && override.genre == null && override.tags == null
+            override.seriesIndex == null && override.genre == null && override.language == null &&
+            override.tags == null
         ) {
             return null
         }
@@ -93,6 +95,7 @@ object FacetMapping {
             series = override.series,
             seriesIndex = override.seriesIndex,
             genre = override.genre,
+            language = override.language,
             tags = override.tags,
             editedAt = override.updatedAt,
             editedBy = deviceId,
@@ -124,6 +127,7 @@ object FacetMapping {
         series = structure.series,
         seriesIndex = structure.seriesIndex,
         genre = derived?.genre ?: existing?.genre,
+        language = derived?.language ?: existing?.language,
         relativePath = id,
         coverFilePath = structure.coverFilePath ?: existing?.coverFilePath,
         localCoverPath = existing?.localCoverPath,
@@ -221,6 +225,7 @@ object FacetMapping {
             series = correction.series,
             seriesIndex = correction.seriesIndex,
             genre = correction.genre,
+            language = correction.language,
             tags = correction.tags,
             finished = existing?.finished,
             downloadOnPlay = existing?.downloadOnPlay,

@@ -77,6 +77,7 @@ data class EditableBook(
     val series: String?,
     val seriesIndex: Int?,
     val genre: String?,
+    val language: String?,
     val tags: List<String>,
     val hidden: Boolean,
     val hasCustomCover: Boolean,
@@ -92,7 +93,17 @@ data class EditableBook(
 @Composable
 fun EditBookDialog(
     book: EditableBook,
-    onSave: (title: String, author: String, series: String, index: String, genre: String, tags: String, hidden: Boolean, downloadOnPlay: Boolean?) -> Unit,
+    onSave: (
+        title: String,
+        author: String,
+        series: String,
+        index: String,
+        genre: String,
+        language: String,
+        tags: String,
+        hidden: Boolean,
+        downloadOnPlay: Boolean?,
+    ) -> Unit,
     onReset: () -> Unit,
     onPickCover: (Uri) -> Unit,
     onClearCover: () -> Unit,
@@ -110,6 +121,7 @@ fun EditBookDialog(
     var series by rememberSaveable { mutableStateOf(book.series.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
     var genre by rememberSaveable { mutableStateOf(book.genre.orEmpty()) }
+    var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
     var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by rememberSaveable { mutableStateOf(book.hidden) }
     // Per-book play mode: null = follow the global setting, true = download on play, false = stream.
@@ -147,6 +159,16 @@ fun EditBookDialog(
                     label = { Text(stringResource(R.string.edit_field_series_index)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = language,
+                    // A free field rather than a picker: the codes are short, the set is open, and
+                    // a picker would have to enumerate every language somebody might own a book in.
+                    onValueChange = { language = it },
+                    label = { Text(stringResource(R.string.edit_field_language)) },
+                    placeholder = { Text(stringResource(R.string.edit_language_placeholder)) },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
@@ -195,7 +217,7 @@ fun EditBookDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(title, author, series, index, genre, tags, hidden, playMode)
+                onSave(title, author, series, index, genre, language, tags, hidden, playMode)
             }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {

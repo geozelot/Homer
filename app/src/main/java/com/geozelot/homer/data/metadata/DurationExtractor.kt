@@ -142,10 +142,15 @@ class DurationExtractor @Inject constructor(
     /** One embedded chapter mark: where it starts in the file and its title (if tagged). */
     data class ChapterMark(val startMs: Long, val title: String?)
 
-    /** What one probe learned: duration, (best-effort) genre, and any embedded ID3 chapters. */
+    /**
+     * What one probe learned: duration, (best-effort) genre and language, and any embedded ID3
+     * chapters.
+     */
     data class Probe(
         val durationMs: Long?,
         val genre: String?,
+        /** ISO 639-1 code, already normalised; null when nothing in the file said. */
+        val language: String? = null,
         val chapters: List<ChapterMark> = emptyList(),
     )
 
@@ -283,17 +288,22 @@ class DurationExtractor @Inject constructor(
 
                 val folded = MediaMetadata.Builder()
                 val marks = mutableListOf<ChapterMark>()
+                // Walked by hand: MediaMetadata folds the standard fields and has no language
+                // among them, so populateFromMetadata cannot carry this one.
+                var language: String? = null
                 for (i in 0 until groups.length) {
                     val group = groups.get(i)
                     for (j in 0 until group.length) {
                         val metadata = group.getFormat(j).metadata ?: continue
                         folded.populateFromMetadata(metadata)
+                        if (language == null) language = languageTag(metadata)
                         marks += chapterMarks(metadata)
                     }
                 }
                 Probe(
                     durationMs = null,
                     genre = Id3Genres.resolve(folded.build().genre?.toString()),
+                    language = language,
                     chapters = marks.distinctBy { it.startMs }.sortedBy { it.startMs },
                 )
             } finally {
@@ -329,7 +339,10 @@ class DurationExtractor @Inject constructor(
                             val genre = Id3Genres.resolve(exo.mediaMetadata.genre?.toString())
                             val chapters = readChapters(exo)
                             exo.release()
-                            if (cont.isActive) cont.resume(Probe(duration, genre, chapters))
+                            // Named, not positional: this path has no language to offer (the
+                            // full probe reads MediaMetadata, which folds no language field), and
+                            // a positional call silently put the chapters in its place.
+                            if (cont.isActive) cont.resume(Probe(duration, genre, chapters = chapters))
                         }
 
                         exo.addListener(object : Player.Listener {
@@ -407,6 +420,20 @@ class DurationExtractor @Inject constructor(
                     ?.ifBlank { null }
                 ChapterMark(startMs = entry.startTimeMs.toLong(), title = title)
             }
+
+    /**
+     * The TLAN frame, if the container carries one.
+     *
+     * Normalised on the way out for the same reason [Id3Tags] does it: the frame holds ISO 639-2,
+     * and a file is as likely to say "ger" as "deu".
+     */
+    private fun languageTag(metadata: Metadata): String? =
+        (0 until metadata.length())
+            .map { metadata.get(it) }
+            .filterIsInstance<TextInformationFrame>()
+            .firstOrNull { it.id == "TLAN" }
+            ?.values?.firstOrNull()
+            ?.let(BookLanguage::normalise)
 
     private companion object {
         const val TAG = "HomerMeta"
