@@ -207,32 +207,6 @@ fun SettingsNavRow(
     }
 }
 
-/** A settings row whose trailing control picks one of [options]. */
-@Composable
-fun <T> SettingsDropdownRow(
-    label: String,
-    chipLabel: String,
-    options: List<T>,
-    selected: T,
-    labelOf: (T) -> String,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-    description: String? = null,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        SettingsRow(label = label) {
-            DropdownChip(
-                label = chipLabel,
-                options = options,
-                selected = selected,
-                labelOf = labelOf,
-                onSelect = onSelect,
-            )
-        }
-        description?.let { SettingsExplanation(it) }
-    }
-}
-
 /** A compact bordered pill that opens a menu of [options]. */
 @Composable
 fun <T> DropdownChip(
@@ -540,26 +514,6 @@ fun PillButton(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
-}
-
-/** A rounded, outlined surface that groups related settings content. */
-@Composable
-fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface1)
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        content = content,
-    )
-}
-
-/** The hairline that separates settings groups. */
-@Composable
-fun SettingsDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier = modifier.padding(vertical = 14.dp), color = Line)
 }
 
 /** A small pill: genre/tag chips in the library, status chips in settings. */

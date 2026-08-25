@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,12 +22,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.ConfirmDialog
-import com.geozelot.homer.ui.components.SettingsActionPadding
-import com.geozelot.homer.ui.components.SettingsDivider
-import com.geozelot.homer.ui.components.SettingsExplanation
-import com.geozelot.homer.ui.components.SettingsNote
+import com.geozelot.homer.ui.components.PillButton
+import com.geozelot.homer.ui.components.SettingsActionRow
+import com.geozelot.homer.ui.components.SettingsGroup
 import com.geozelot.homer.ui.components.SettingsRow
-import com.geozelot.homer.ui.components.SettingsSectionHeader
+import com.geozelot.homer.ui.components.SettingsRowDivider
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Parchment
@@ -66,74 +66,82 @@ fun DeviceStorageScreen(
     val custom = customStoragePath ?: customStorageUri
 
     SettingsScaffold(stringResource(R.string.set_device_title), onBack, modifier) {
-        SettingsSectionHeader(stringResource(R.string.set_device_location_header))
-        Text(
-            when {
-                customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath!!)
-                customStorageUri != null ->
-                    stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri!!))
-                else -> stringResource(R.string.settings_storage_default)
-            },
-            color = Parchment,
-            fontSize = 14.sp,
-        )
-        SettingsExplanation(
-            text = if (custom != null) {
+        SettingsGroup(
+            title = stringResource(R.string.set_device_location_header),
+            lead = if (custom != null) {
                 stringResource(R.string.settings_storage_custom_desc)
             } else {
                 stringResource(R.string.settings_storage_default_desc)
             },
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { folderPicker.launch(null) }, contentPadding = SettingsActionPadding) {
-                Text(stringResource(R.string.set_device_choose_folder))
-            }
-            TextButton(onClick = onOpenStorageBrowser, contentPadding = SettingsActionPadding) {
-                Text(stringResource(R.string.settings_storage_browse))
-            }
-            if (custom != null) {
-                // Reverting moves every downloaded file back into app storage, so it asks first.
-                TextButton(
-                    onClick = { confirmUseAppStorage = true },
-                    contentPadding = SettingsActionPadding,
-                ) { Text(stringResource(R.string.settings_storage_use_app)) }
+        ) {
+            SettingsRow(
+                label = when {
+                    customStoragePath != null ->
+                        stringResource(R.string.settings_storage_folder, customStoragePath!!)
+                    customStorageUri != null ->
+                        stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri!!))
+                    else -> stringResource(R.string.settings_storage_default)
+                },
+                summary = stringResource(R.string.settings_storage_picker_desc),
+            )
+            SettingsRowDivider()
+            // Three actions on one row of pills rather than three rows: they are alternatives to
+            // each other, all answering the same question of where the folder should be.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PillButton(
+                    text = stringResource(R.string.set_device_choose_folder),
+                    onClick = { folderPicker.launch(null) },
+                )
+                PillButton(
+                    text = stringResource(R.string.settings_storage_browse),
+                    onClick = onOpenStorageBrowser,
+                )
+                if (custom != null) {
+                    // Reverting moves every downloaded file back into app storage, so it asks first.
+                    PillButton(
+                        text = stringResource(R.string.settings_storage_use_app),
+                        onClick = { confirmUseAppStorage = true },
+                    )
+                }
             }
         }
-        SettingsNote(stringResource(R.string.settings_storage_picker_desc))
 
-        SettingsDivider()
-
-        SettingsSectionHeader(stringResource(R.string.set_device_downloads_header))
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_download_on_play),
-            checked = downloadOnPlay,
-            onCheckedChange = viewModel::setDownloadOnPlay,
-            description = stringResource(R.string.settings_download_on_play_desc),
-        )
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_wifi_only),
-            checked = wifiOnly,
-            onCheckedChange = viewModel::setWifiOnlyDownloads,
-        )
-
-        SettingsDivider()
-
-        // The only way to reclaim this space, and the only way to be rid of files a library this
-        // device no longer has left behind — signing into a different account orphans them, and
-        // nothing else on disk knows they are orphans.
-        SettingsRow(
-            label = stringResource(R.string.set_device_delete_downloads),
-            summary = if (downloaded > 0) {
-                stringResource(
-                    R.string.set_device_delete_downloads_count,
-                    pluralStringResource(R.plurals.sync_books_count, downloaded, downloaded),
-                )
-            } else {
-                stringResource(R.string.set_device_delete_downloads_none)
-            },
-            onClick = { confirmDeleteDownloads = true },
-        )
+        SettingsGroup(title = stringResource(R.string.set_device_downloads_header)) {
+            SettingsSwitchRow(
+                label = stringResource(R.string.settings_download_on_play),
+                checked = downloadOnPlay,
+                onCheckedChange = viewModel::setDownloadOnPlay,
+                description = stringResource(R.string.settings_download_on_play_desc),
+            )
+            SettingsRowDivider()
+            SettingsSwitchRow(
+                label = stringResource(R.string.settings_wifi_only),
+                checked = wifiOnly,
+                onCheckedChange = viewModel::setWifiOnlyDownloads,
+            )
+            SettingsRowDivider()
+            // The only way to reclaim this space, and the only way to be rid of files a library this
+            // device no longer has left behind — signing into a different account orphans them, and
+            // nothing else on disk knows they are orphans.
+            SettingsActionRow(
+                label = stringResource(R.string.set_device_delete_downloads),
+                summary = if (downloaded > 0) {
+                    stringResource(
+                        R.string.set_device_delete_downloads_count,
+                        pluralStringResource(R.plurals.sync_books_count, downloaded, downloaded),
+                    )
+                } else {
+                    stringResource(R.string.set_device_delete_downloads_none)
+                },
+                action = stringResource(R.string.set_delete_downloads_confirm_action),
+                enabled = downloaded > 0,
+                danger = true,
+                onClick = { confirmDeleteDownloads = true },
+            )
+        }
     }
 
     if (confirmDeleteDownloads) {

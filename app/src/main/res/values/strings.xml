@@ -23,7 +23,7 @@
     <string name="action_decrease">Decrease</string>
     <string name="action_increase">Increase</string>
     <string name="unknown_author">Unknown author</string>
-    <string name="status_finished">finished</string>
+    <string name="status_finished">Finished</string>
     <string name="time_left">%1$s left</string>
     <string name="chapter_numbered">Chapter %1$d</string>
     <string name="menu_offline">Offline</string>
@@ -147,8 +147,12 @@
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
          unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
     <string name="home_series_book_count">%1$d books</string>
+    <!-- Beside a shelf heading: how many books are on the shelf, folded or not. -->
+    <string name="home_shelf_count">%1$d books</string>
+    <string name="home_shelf_more">+%1$d</string>
+    <string name="home_shelf_collapse_all">Collapse all shelves</string>
+    <string name="home_shelf_expand_all">Expand all shelves</string>
     <string name="home_series_offline_suffix"> · %1$d offline</string>
-    <string name="home_meta_percent_bare">%1$d%%</string>
 
     <!-- Home: context menu -->
     <string name="home_menu_pause_download">Pause download</string>
@@ -253,6 +257,8 @@
     </plurals>
 
     <!-- Settings: hub -->
+    <string name="set_hub_books_header">YOUR BOOKS</string>
+    <string name="set_hub_app_header">THE APP</string>
     <string name="set_library_title">Library</string>
     <string name="set_source_summary">Where your books come from</string>
     <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
@@ -264,6 +270,7 @@
     <string name="set_privacy_summary">App lock, certificate, online lookups</string>
     <string name="set_about_title">About</string>
     <string name="set_about_summary">Version, diagnostics, licenses</string>
+    <string name="set_about_more_header">ABOUT THIS BUILD</string>
 
     <!-- Settings: library source -->
     <string name="set_source_none">Not connected</string>
@@ -289,6 +296,9 @@
     <string name="lib_section_contents">WHAT HOMER HAS READ</string>
     <string name="lib_section_sharing">SHARING WITH YOUR OTHER DEVICES</string>
     <string name="lib_section_startover">START OVER</string>
+    <string name="lib_section_shelf_header">ON YOUR SHELF</string>
+    <string name="lib_sign_out_desc">Forgets this server and clears the library from this device</string>
+    <string name="set_sync_account_header_row">Where your place is saved</string>
     <string name="lib_contents_lead">Each of these is read separately, because they cost wildly different amounts. Asking for one while another is running simply queues it.</string>
     <string name="lib_row_books">Books</string>
     <string name="lib_row_artwork">Cover art</string>
@@ -343,8 +353,6 @@
     <string name="set_use_app_storage_confirm_body">Your downloads and cover art will be moved into Homer\'s own storage, which Android erases if you ever uninstall the app. Nothing is deleted right now.</string>
     <string name="set_use_app_storage_confirm_action">Move</string>
 
-    <!-- Settings: where a share library's progress goes (an account library uses its own). -->
-    <string name="set_sync_account_header">WHERE YOUR PLACE IS SAVED</string>
 
     <!-- Settings: playback -->
     <string name="settings_custom">Custom\u2026</string>
