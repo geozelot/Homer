@@ -464,6 +464,30 @@ private fun CorrectionsRow(
     )
 }
 
+/**
+ * What a reader device shows instead of the Contents actions: what the index says is here, and how
+ * complete it is.
+ *
+ * Stated rather than actionable, because none of it is this device's to change. The gaps are worth
+ * naming anyway — a shelf with 40 art-less books is not broken, it is waiting for whoever maintains
+ * the index, and saying so is the difference between patience and a bug report.
+ */
+@Composable
+private fun ReaderContents(bookCount: Int, artless: Int, unmeasured: Int) {
+    val lines = listOfNotNull(
+        pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount),
+        stringResource(R.string.lib_artwork_missing, artless).takeIf { artless > 0 },
+        stringResource(R.string.lib_reader_unmeasured, unmeasured).takeIf { unmeasured > 0 },
+    )
+    Text(
+        lines.joinToString(" · "),
+        color = Muted,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
+        modifier = Modifier.padding(vertical = 4.dp),
+    )
+}
+
 /** One job in the queue: what it knows, and the one thing that would close the gap. */
 @Composable
 private fun PassRow(
@@ -570,6 +594,10 @@ private fun SharedIndexSetting(
         buildString {
             append(
                 when {
+                    // Three situations, and the switch alone cannot tell them apart: reading an
+                    // index somebody else keeps is a different thing from keeping one, and both are
+                    // different from every device working it out for itself.
+                    enabled && !writable -> context.getString(R.string.set_shared_index_state_reader)
                     enabled && available -> context.getString(R.string.set_shared_index_state_reading)
                     enabled -> context.getString(R.string.set_shared_index_state_publishing)
                     else -> context.getString(R.string.set_shared_index_state_off)

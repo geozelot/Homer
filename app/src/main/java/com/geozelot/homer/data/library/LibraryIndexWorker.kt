@@ -42,6 +42,7 @@ class LibraryIndexWorker @AssistedInject constructor(
     private val libraryIndex: LibraryIndexRepository,
     private val librarySettings: LibrarySettings,
     private val passes: IndexPassStore,
+    private val maintenance: LibraryMaintenance,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -94,6 +95,10 @@ class LibraryIndexWorker @AssistedInject constructor(
             }
 
             IndexPass.ARTWORK -> {
+                // A reader device gets the shared cache and nothing else — and a DEEP artwork pass
+                // is entirely about re-creating art, so for a reader there is nothing to do at all.
+                val readerOnly = !maintenance.maintainsNow()
+                if (readerOnly && request.deep) return
                 if (request.deep) libraryRepository.resetCoverArt()
                 // Nothing to fetch: finish without ever showing a notification.
                 if (coverEnricher.pendingCount() == 0) return
@@ -103,7 +108,7 @@ class LibraryIndexWorker @AssistedInject constructor(
                 // with "rate limit exceeded" instead of showing progress. Once a second is plenty
                 // for a progress bar, and the final call always lands so it never ends mid-way.
                 var lastNotifyMs = 0L
-                coverEnricher.enrich { done, total ->
+                coverEnricher.enrich(sharedOnly = readerOnly) { done, total ->
                     val now = System.currentTimeMillis()
                     if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                         lastNotifyMs = now
@@ -111,8 +116,9 @@ class LibraryIndexWorker @AssistedInject constructor(
                         report(request.pass, done, total)
                     }
                 }
-                // Cover art lands in the shared cache, and `derived` records which books have one.
-                publish("Updating shared library…")
+                // Cover art lands in the shared cache, and `derived` records which books have one
+                // — neither of which a reader has anything to say about.
+                if (!readerOnly) publish("Updating shared library…")
             }
 
             IndexPass.LENGTHS -> {

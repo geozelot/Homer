@@ -293,6 +293,7 @@
     <string name="set_shared_index_desc">Erlaubt deinen anderen Geräten — und allen anderen, die diesen Ordner lesen — das Scannen und das erneute Holen der Cover zu überspringen, und teilt die Titel, Autoren und Serien, die du korrigiert hast, damit niemand dasselbe zweimal richten muss. Nur Angaben zur Bibliothek: niemals deine Hörposition, Lesezeichen oder ausgeblendeten Bücher.</string>
     <string name="set_shared_index_state_reading">Liest den Index in diesem Ordner, damit dieses Gerät nicht scannen muss.</string>
     <string name="set_shared_index_state_publishing">Schreibt den Index in diesen Ordner, damit deine anderen Geräte nicht scannen müssen.</string>
+    <string name="set_shared_index_state_reader">Liest den Index in diesem Ordner. Dieses Gerät scannt nicht selbst — wer dort schreiben darf, hält ihn für alle aktuell.</string>
     <string name="set_shared_index_state_off">Jedes Gerät scannt die Bibliothek und baut seine eigenen Cover.</string>
     <string name="set_shared_index_owner">  Gepflegt von %1$s.</string>
     <string name="set_shared_index_readonly_note">Dieser Freigabelink ist nur lesbar: Er kann einen vorhandenen Index nutzen, aber keinen anlegen oder aktualisieren.</string>
@@ -303,6 +304,8 @@
     <string name="lib_section_contents">WAS HOMER GELESEN HAT</string>
     <string name="lib_section_sharing">TEILEN MIT DEINEN ANDEREN GERÄTEN</string>
     <string name="lib_section_startover">VON VORN</string>
+    <string name="lib_contents_reader_lead">Dieses Gerät liest einen Index, den jemand mit Schreibrecht auf diesen Ordner pflegt, und scannt daher selbst nicht. Neue und gelöschte Bücher kommen an, sobald dort das nächste Mal aktualisiert wird.</string>
+    <string name="lib_reader_unmeasured">%1$d ohne Länge</string>
     <string name="lib_contents_lead">Jedes davon wird einzeln gelesen, weil die Kosten weit auseinanderliegen. Wenn du eines anfragst, während ein anderes läuft, wird es einfach eingereiht.</string>
     <string name="lib_row_books">Bücher</string>
     <string name="lib_row_artwork">Cover</string>

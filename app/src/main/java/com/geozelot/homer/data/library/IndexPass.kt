@@ -10,18 +10,30 @@ package com.geozelot.homer.data.library
 enum class IndexPass(
     /** Whether the pass has a thorough variant — see [PassRequest.deep]. */
     val hasDeep: Boolean,
+    /**
+     * Whether the pass is only for a device that maintains the library.
+     *
+     * A crawl, a measure pass and a correction publish all either write the shared index or produce
+     * work whose whole value is being shared. A device reading an index it cannot write runs none of
+     * them — see [com.geozelot.homer.data.library.LibraryMaintenance].
+     *
+     * Artwork is the exception, and deliberately: its first act is to pull covers out of the shared
+     * cache, which is one small download per book and the only way a reader device shows any art at
+     * all. The half of it that *creates* art is what the pass itself withholds from a reader.
+     */
+    val needsMaintainer: Boolean,
 ) {
     /** Publish the shared half of every metadata correction. */
-    CORRECTIONS(hasDeep = false),
+    CORRECTIONS(hasDeep = false, needsMaintainer = true),
 
     /** Crawl the folder tree. Deep = a full crawl instead of an incremental one. */
-    BOOKS(hasDeep = true),
+    BOOKS(hasDeep = true, needsMaintainer = true),
 
     /** Fetch cover art for books without any. Deep = drop what is cached and fetch it all again. */
-    ARTWORK(hasDeep = true),
+    ARTWORK(hasDeep = true, needsMaintainer = false),
 
     /** Measure the books that have no length. Deep = re-arm files whose probe failed before. */
-    LENGTHS(hasDeep = true),
+    LENGTHS(hasDeep = true, needsMaintainer = true),
     ;
 
     companion object {

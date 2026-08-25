@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.library
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
@@ -40,6 +41,7 @@ class LibraryIndexManager @Inject constructor(
     @ApplicationContext context: Context,
     private val playbackSettings: PlaybackSettings,
     private val passes: IndexPassStore,
+    private val maintenance: LibraryMaintenance,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -137,6 +139,14 @@ class LibraryIndexManager @Inject constructor(
      */
     fun request(pass: IndexPass, deep: Boolean = false) {
         scope.launch {
+            // Refused here, not merely hidden in the UI. `fetchMissingCovers()` runs on every app
+            // open, so a reader device would otherwise start a pass on each launch however carefully
+            // the screens were written — and the whole point of the rule is that the requests never
+            // reach the server.
+            if (pass.needsMaintainer && !maintenance.maintainsNow()) {
+                Log.i(TAG, "not running the $pass pass: this device reads an index it cannot write")
+                return@launch
+            }
             passes.request(PassRequest(pass, deep))
             enqueue(playbackSettings.wifiOnlyDownloads.first())
         }
@@ -219,6 +229,8 @@ class LibraryIndexManager @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "HomerScan"
+
         /** Long enough to cover the ordinary ENQUEUED → RUNNING hop, short enough to be useful. */
         const val WAITING_GRACE_MS = 2_500L
     }

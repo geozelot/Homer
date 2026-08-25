@@ -26,6 +26,7 @@ import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
+import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
@@ -217,6 +218,7 @@ class HomeViewModel @Inject constructor(
     private val signOut: SignOut,
     private val libraryRepository: LibraryRepository,
     private val libraryIndexManager: LibraryIndexManager,
+    private val maintenance: LibraryMaintenance,
     private val librarySettings: LibrarySettings,
     private val webDavClient: WebDavClient,
     private val homerSync: HomerSyncRepository,
@@ -247,6 +249,17 @@ class HomeViewModel @Inject constructor(
 
     /** The account private progress syncs to (null = device-local). */
     val syncAccount: StateFlow<NextcloudCredentials?> = authRepository.syncAccount
+
+    /**
+     * Whether this device maintains the library, or only reads it — what every expensive action on
+     * the Library screen is offered on.
+     */
+    val maintainsLibrary: StateFlow<Boolean> = maintenance.maintains
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    /** Whether this device reads an index somebody else keeps. */
+    val readsSharedIndex: StateFlow<Boolean> = maintenance.readsOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Whether the library backend is writable (a read-write share, or an account). */
     val libraryWritable: StateFlow<Boolean> = librarySettings.libraryWritable

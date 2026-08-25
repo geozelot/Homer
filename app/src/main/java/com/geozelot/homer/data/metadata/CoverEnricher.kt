@@ -36,7 +36,15 @@ class CoverEnricher @Inject constructor(
     suspend fun pendingCount(): Int = bookDao.booksNeedingCover().size
 
     /** Fetches covers for all books missing one, reporting progress. Suspends until done. */
-    suspend fun enrich(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }) {
+    /**
+     * @param sharedOnly take covers out of the shared cache and create none. What a device reading
+     *   an index it cannot write is allowed to do: art it downloads is art somebody already
+     *   published, where art it extracts could never leave this device.
+     */
+    suspend fun enrich(
+        sharedOnly: Boolean = false,
+        onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+    ) {
         val credentials = credentialStore.awaitCredentials() ?: return
         val libraryRoot = librarySettings.libraryRoot.first()
         val sharedCatalog = librarySettings.sharedCatalogEnabled.first()
@@ -81,6 +89,11 @@ class CoverEnricher @Inject constructor(
                 // re-stream it every pass; leave it for a future publish to the shared cache.
                 if (book.coverAttempted) continue
             }
+            // A device that only reads the index stops here. What remains below CREATES art —
+            // fetching the folder image, streaming the first file for embedded art, asking Open
+            // Library — and none of it can be published from here, so every reader would pay for
+            // the same extraction and keep the result to itself.
+            if (sharedOnly) continue
             // A cover image sitting in the book's folder on the server: fetch that one small file
             // and cache it. This is both the cheapest source (no audio streaming, unlike embedded
             // extraction) and the fix for it otherwise being re-downloaded on every display and
