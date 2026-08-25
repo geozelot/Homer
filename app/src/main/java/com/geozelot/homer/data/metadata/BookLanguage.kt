@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.metadata
 
 import java.text.Normalizer
+import java.util.Locale
 
 /**
  * What language a book is in, worked out from what the files themselves say.
@@ -82,6 +83,19 @@ object BookLanguage {
     private val byIso3 = TABLE.flatMap { l -> l.iso3.map { it to l } }.toMap()
     private val byName = TABLE.flatMap { l -> l.names.map { it to l } }.toMap()
     private val byChapterWord = TABLE.flatMap { l -> l.chapterWords.map { it to l } }.toMap()
+
+    /**
+     * A language's name in the reader's own language — "Deutsch" in a German interface, "German" in
+     * an English one.
+     *
+     * The platform's table, not one of Homer's: it already knows every language's name in every
+     * locale, and duplicating a slice of that here would be a second thing to translate.
+     */
+    fun displayName(code: String): String =
+        Locale.forLanguageTag(code).displayLanguage.ifBlank { code.uppercase() }
+
+    /** The short marker a library row shows — the code itself, upper-cased. */
+    fun shortLabel(code: String): String = code.uppercase(Locale.ROOT)
 
     /**
      * Anything a tag or a name might carry, reduced to a stored two-letter code — or null.

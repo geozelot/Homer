@@ -193,7 +193,8 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
 enum class LibraryShelving(val key: String, @StringRes val label: Int) {
     ITEM("none", R.string.shelve_item),
     AUTHOR("author", R.string.shelve_author),
-    GENRE("genre", R.string.shelve_genre);
+    GENRE("genre", R.string.shelve_genre),
+    LANGUAGE("language", R.string.shelve_language);
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: ITEM
@@ -362,17 +363,52 @@ class HomeViewModel @Inject constructor(
         .map(LibrarySeriesMode::from)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySeriesMode.STACKED)
 
-    /** Library list, filtered by the query, ordered by [sortMode], sectioned by [shelfMode]. */
+    /**
+     * Every language the library actually holds, so nothing about languages is offered until there
+     * is a choice to make. On a single-language library the filter chip and the row marker are the
+     * same word on all 309 rows, which is noise rather than information.
+     */
+    val languages: StateFlow<List<String>> = bookDao.observeLanguages()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * The filter as it can actually be applied: null unless the language is still present.
+     *
+     * Validated rather than trusted. A stored filter naming a language that has since been
+     * re-tagged away would otherwise empty the shelf, with the only clue being a chip the reader has
+     * to notice and reset.
+     */
+    private val effectiveLanguageFilter: Flow<String?> =
+        combine(librarySettings.languageFilter, bookDao.observeLanguages()) { filter, present ->
+            filter?.takeIf { it in present }
+        }
+
+    /** What the filter chip shows. */
+    val languageFilter: StateFlow<String?> = librarySettings.languageFilter
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setLanguageFilter(code: String?) {
+        viewModelScope.launch { librarySettings.setLanguageFilter(code) }
+    }
+
+    /** Library list, filtered by query and language, ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
         combine(books, _searchQuery, sortMode, shelfMode, seriesMode) { list, query, sort, shelving, series ->
-            val filtered = if (query.isBlank()) {
-                list
-            } else {
-                val needle = query.trim().lowercase()
-                list.filter { it.matchesQuery(needle) }
+            Arrangement(list, query, sort, shelving, series)
+        }
+            // A sixth input, and combine's typed overloads stop at five. The filter has to run
+            // BEFORE the grouping — it changes which books are on which shelf — so the building
+            // happens in this stage rather than the one above.
+            .combine(effectiveLanguageFilter) { a, language ->
+                var filtered = a.books
+                if (language != null) filtered = filtered.filter { it.language == language }
+                if (a.query.isNotBlank()) {
+                    val needle = a.query.trim().lowercase()
+                    filtered = filtered.filter { it.matchesQuery(needle) }
+                }
+                buildEntries(filtered, a.sort, a.shelving, a.series)
             }
-            buildEntries(filtered, sort, shelving, series)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The currently-playing book as its live library row, so the docked mini-player shows an
@@ -1080,6 +1116,15 @@ sealed interface LibrarySetup {
     data object NothingFound : LibrarySetup
 }
 
+/** The five inputs that decide the list, bundled so the language filter can be a sixth. */
+private data class Arrangement(
+    val books: List<BookListItem>,
+    val query: String,
+    val sort: LibrarySort,
+    val shelving: LibraryShelving,
+    val series: LibrarySeriesMode,
+)
+
 /** A storage-folder change awaiting the user's decision when the target already holds a library. */
 data class PendingStorageChange(val source: String?, val target: String?)
 
@@ -1115,6 +1160,15 @@ private fun buildEntries(
                 is SortUnit.Ser -> seriesGenre(unit.series.books)
             }
         }
+        // Shelved rather than only filtered: on a mixed library, seeing German and English as two
+        // shelves is more use than hiding one of them.
+        LibraryShelving.LANGUAGE ->
+            sectioned(ordered, "No language", R.string.home_shelf_no_language) { unit ->
+                when (unit) {
+                    is SortUnit.Solo -> unit.book.language
+                    is SortUnit.Ser -> seriesLanguage(unit.series.books)
+                }
+            }
     }
 }
 
@@ -1203,6 +1257,19 @@ private fun unitDuration(u: SortUnit): Long = when (u) {
  */
 internal fun seriesGenre(books: List<BookListItem>): String? =
     books.mapNotNull { it.genre }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+
+/**
+ * The language a series shelves under — the same rule as [seriesGenre], for the same reason.
+ *
+ * A series is one work in one language far more reliably than it is one genre, so agreement is
+ * near-universal here and the tie-break barely ever runs.
+ */
+internal fun seriesLanguage(books: List<BookListItem>): String? =
+    books.mapNotNull { it.language }
         .groupingBy { it }
         .eachCount()
         .maxByOrNull { it.value }

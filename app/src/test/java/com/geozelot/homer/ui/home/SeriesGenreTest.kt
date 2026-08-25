@@ -15,8 +15,13 @@ import org.junit.Test
  */
 class SeriesGenreTest {
 
-    private fun book(id: String, genre: String? = null, series: String? = "S", index: Int? = null) =
-        blank(id).copy(genre = genre, series = series, seriesIndex = index)
+    private fun book(
+        id: String,
+        genre: String? = null,
+        series: String? = "S",
+        index: Int? = null,
+        language: String? = null,
+    ) = blank(id).copy(genre = genre, series = series, seriesIndex = index, language = language)
 
     private fun blank(id: String) = BookListItem(
         id = id,
@@ -112,6 +117,29 @@ class SeriesGenreTest {
         // genre halfway shelves under what it started as — arbitrary either way, but the same
         // answer every time, which is what stops a shelf moving between launches.
         assertEquals("Sci-Fi", seriesGenre(listOf(book("a", "Sci-Fi"), book("b", "Fantasy"))))
+    }
+
+    // ── which language shelf ──────────────────────────────────────────────────
+
+    @Test
+    fun `a series shelves under the language its books agree on`() {
+        assertEquals(
+            "de",
+            seriesLanguage(listOf(book("a", language = "de"), book("b", language = "de"))),
+        )
+    }
+
+    @Test
+    fun `a partly tagged series shelves under the language it does have`() {
+        assertEquals("de", seriesLanguage(listOf(book("a"), book("b", language = "de"))))
+    }
+
+    @Test
+    fun `a series with no language at all has none`() {
+        // The state of a whole library before anything has read a tag, and it must stay null rather
+        // than pick a language for books nothing has said anything about.
+        assertNull(seriesLanguage(listOf(book("a"), book("b"))))
+        assertNull(seriesLanguage(emptyList()))
     }
 
     @Test

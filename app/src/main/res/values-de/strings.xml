@@ -147,6 +147,7 @@
     <string name="shelve_item">Einzeln</string>
     <string name="shelve_author">Autor</string>
     <string name="shelve_genre">Genre</string>
+    <string name="shelve_language">Sprache</string>
     <string name="series_stacked">Gestapelt</string>
     <string name="series_flat">Einzeln</string>
     <string name="sort_recent">Zuletzt gehört</string>
@@ -155,9 +156,12 @@
     <string name="sort_duration">Länge</string>
     <string name="home_shelf_unknown_author">Unbekannter Autor</string>
     <string name="home_shelf_no_genre">Ohne Genre</string>
+    <string name="home_shelf_no_language">Ohne Sprache</string>
     <string name="home_chip_shelve">Regal · %1$s</string>
     <string name="home_chip_series">Serie · %1$s</string>
     <string name="home_chip_sort">Sortierung · %1$s</string>
+    <string name="home_chip_language">Sprache · %1$s</string>
+    <string name="home_language_all">Alle</string>
     <string name="home_meta_series_position">Band %1$d</string>
     <plurals name="home_series_book_count">
         <item quantity="one">%1$d Buch</item>

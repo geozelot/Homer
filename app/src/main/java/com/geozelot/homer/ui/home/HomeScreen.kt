@@ -123,6 +123,7 @@ import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.DropdownChip
@@ -163,6 +164,8 @@ fun HomeScreen(
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val languages by viewModel.languages.collectAsStateWithLifecycle()
+    val languageFilter by viewModel.languageFilter.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
     val indexQueued by viewModel.indexQueued.collectAsStateWithLifecycle()
@@ -282,9 +285,12 @@ fun HomeScreen(
                     shelving = shelfMode,
                     series = seriesMode,
                     gridView = gridView,
+                    languages = languages,
+                    languageFilter = languageFilter,
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
+                    onLanguageChange = viewModel::setLanguageFilter,
                     onToggleView = viewModel::setGridView,
                     modifier = Modifier.padding(horizontal = LibraryGridPadding),
                 )
@@ -334,7 +340,7 @@ fun HomeScreen(
                 libraryContent(
                     entries = entries,
                     gridView = gridView,
-                    ctx = RowContext(shelfMode, seriesMode),
+                    ctx = RowContext(shelfMode, seriesMode, mixedLanguages = languages.size > 1),
                     expanded = expanded,
                     onBookClick = onBookClick,
                     actions = actions,
@@ -767,9 +773,13 @@ private fun LibraryControlBar(
     shelving: LibraryShelving,
     series: LibrarySeriesMode,
     gridView: Boolean,
+    /** Every language present. Empty or single means the chip below never appears. */
+    languages: List<String>,
+    languageFilter: String?,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibrarySeriesMode) -> Unit,
+    onLanguageChange: (String?) -> Unit,
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -826,6 +836,25 @@ private fun LibraryControlBar(
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onSortChange,
                 )
+                // Only once there is a choice. On a single-language library this chip would offer
+                // "German" and nothing else, which is a control that cannot do anything.
+                if (languages.size > 1) {
+                    val all = stringResource(R.string.home_language_all)
+                    val labelOf = { code: String? ->
+                        code?.let { BookLanguage.displayName(it) } ?: all
+                    }
+                    val selected = languageFilter?.takeIf { it in languages }
+                    DropdownChip(
+                        label = stringResource(R.string.home_chip_language, labelOf(selected)),
+                        value = labelOf(selected),
+                        // Null leads, so clearing the filter is the first thing under the thumb
+                        // rather than the last.
+                        options = listOf<String?>(null) + languages,
+                        selected = selected,
+                        labelOf = labelOf,
+                        onSelect = onLanguageChange,
+                    )
+                }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1196,7 +1225,12 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
 
 /** What the arrangement already tells the reader, so a row can say something else instead. */
 @Immutable
-private data class RowContext(val shelving: LibraryShelving, val series: LibrarySeriesMode)
+private data class RowContext(
+    val shelving: LibraryShelving,
+    val series: LibrarySeriesMode,
+    /** Whether the library holds more than one language — see [bookMeta]. */
+    val mixedLanguages: Boolean = false,
+)
 
 /**
  * The line under a book's title: the facts the current arrangement is NOT already showing.
@@ -1219,6 +1253,11 @@ private fun bookMeta(
         add(book.author ?: context.getString(R.string.unknown_author))
     }
     if (ctx.shelving != LibraryShelving.GENRE) book.genre?.let { add(it) }
+    // Only where it distinguishes something: on a single-language library this is the same two
+    // letters on every row, and shelved BY language the heading above already says it.
+    if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
+        book.language?.let { add(BookLanguage.shortLabel(it)) }
+    }
     if (ctx.series == LibrarySeriesMode.FLAT && book.series != null && book.seriesIndex != null) {
         add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }

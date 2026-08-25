@@ -148,6 +148,7 @@
     <string name="shelve_item">Item</string>
     <string name="shelve_author">Author</string>
     <string name="shelve_genre">Genre</string>
+    <string name="shelve_language">Language</string>
     <string name="series_stacked">Stacked</string>
     <string name="series_flat">Flat</string>
     <string name="sort_recent">Recently played</string>
@@ -157,9 +158,13 @@
     <!-- The two shelf headings Homer writes itself, for books that name neither. -->
     <string name="home_shelf_unknown_author">Unknown author</string>
     <string name="home_shelf_no_genre">No genre</string>
+    <string name="home_shelf_no_language">No language</string>
     <string name="home_chip_shelve">Shelve · %1$s</string>
     <string name="home_chip_series">Series · %1$s</string>
     <string name="home_chip_sort">Sort · %1$s</string>
+    <!-- Only offered while the library actually holds more than one language. -->
+    <string name="home_chip_language">Language · %1$s</string>
+    <string name="home_language_all">All</string>
     <string name="home_meta_series_position">Book %1$d</string>
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
          unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
