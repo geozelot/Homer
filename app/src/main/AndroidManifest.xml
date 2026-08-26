@@ -130,20 +130,6 @@
             android:name=".data.update.InstallResultReceiver"
             android:exported="false" />
 
-        <!-- Not a service that runs: AppCompat looks for this declaration to decide whether it
-             should persist the app's chosen language itself and re-apply it on the next launch.
-             Android 13+ stores the choice in the framework; below that this is the only thing that
-             makes the setting survive a restart. Disabled and unexported because nothing ever
-             binds it — the meta-data IS the whole point. -->
-        <service
-            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
-            android:enabled="false"
-            android:exported="false">
-            <meta-data
-                android:name="autoStoreLocales"
-                android:value="true" />
-        </service>
-
     </application>
 
 </manifest>

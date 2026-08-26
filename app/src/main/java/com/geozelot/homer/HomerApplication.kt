@@ -1,11 +1,13 @@
 package com.geozelot.homer
 
 import android.app.Application
+import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.geozelot.homer.data.update.UpdateCheckWorker
+import com.geozelot.homer.ui.settings.AppLanguage
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -27,6 +29,15 @@ class HomerApplication : Application(), ImageLoaderFactory, Configuration.Provid
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
+    /**
+     * Wrapped here as well as in the activity, so the chosen language reaches the strings that
+     * workers and notifications build off the application context — not just the ones Compose
+     * resolves. Below Android 13 only; above it the framework has already done it.
+     */
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppLanguage.wrap(base))
+    }
 
     override fun onCreate() {
         super.onCreate()

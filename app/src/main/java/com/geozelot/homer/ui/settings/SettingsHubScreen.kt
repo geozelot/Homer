@@ -108,14 +108,14 @@ fun SettingsHubScreen(
 @Composable
 private fun LanguageRow() {
     val context = LocalContext.current
-    val current = AppLanguage.current()
+    val current = AppLanguage.current(context)
     SettingsDropdownRow(
         label = stringResource(R.string.set_language_title),
         chipLabel = languageLabel(context, current),
         options = AppLanguage.entries.toList(),
         selected = current,
         labelOf = { languageLabel(context, it) },
-        onSelect = { AppLanguage.apply(it) },
+        onSelect = { AppLanguage.apply(context, it) },
         description = stringResource(R.string.set_language_desc),
     )
 }
