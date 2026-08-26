@@ -110,6 +110,13 @@ class DownloadWorker @AssistedInject constructor(
         } catch (e: CancellationException) {
             throw e // stopped/cancelled — DownloadManager.delete does the cleanup
         } catch (e: Exception) {
+            // A cancelled download usually unwinds through here rather than through
+            // CancellationException. The blocking byte copy cannot be interrupted, so when the
+            // notification's Cancel calls DownloadManager.delete the worker writes on and then fails
+            // to finalize against the folder that cleanup has already removed. That is the user
+            // getting precisely what they asked for; logging it as a failure and asking for a retry
+            // made a deliberate cancel look like a storage fault.
+            if (isStopped) return Result.failure()
             Log.w(TAG, "download failed for $bookId (attempt ${runAttemptCount + 1})", e)
             if (runAttemptCount + 1 < MAX_ATTEMPTS) return Result.retry()
             // KEEP whatever already landed. This used to delete the whole book on final failure,
