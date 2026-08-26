@@ -369,6 +369,12 @@
     <!-- %1$s is a books count, formatted as a plural by the caller. -->
     <string name="set_device_delete_downloads_count">Frees the space %1$s are using</string>
     <string name="set_device_delete_downloads_none">Nothing is downloaded. Files left by a library you have signed out of are removed too</string>
+    <string name="set_device_notify_header">NOTIFICATIONS</string>
+    <string name="set_device_notify_label">Let Homer send notifications</string>
+    <string name="set_device_notify_on">Allowed. Playback controls, scans and downloads all show their progress.</string>
+    <string name="set_device_notify_off">Blocked — scans, downloads and playback run silently, with nothing on screen.</string>
+    <string name="set_device_notify_action">Fix</string>
+    <string name="set_device_notify_desc">Homer notifies you for three things: the playback controls on your lock screen, a library scan while it is running, and a download while it is running. Blocked, all three still work — you simply cannot see or control them without opening the app.</string>
     <string name="set_delete_downloads_confirm_title">Delete every download?</string>
     <string name="set_delete_downloads_confirm_body">Every audio file Homer has downloaded to this device is deleted, including anything left behind by a library you have since signed out of. Your books stay on the server and your place in them is kept — a downloaded book simply streams again, or can be downloaded afresh.</string>
     <string name="set_delete_downloads_confirm_action">Delete</string>

@@ -31,7 +31,13 @@ fun HomerApp() {
             ) { CircularProgressIndicator() }
 
             AuthState.LoggedOut -> LoginScreen()
-            is AuthState.LoggedIn -> LibraryNavHost()
+            is AuthState.LoggedIn -> {
+                // Asked here, not at launch: there is nothing to notify about until an account
+                // exists, and asked BEFORE the library rather than by the player, because a scan
+                // and a download both notify long before anybody opens a book.
+                NotificationPermissionRequest()
+                LibraryNavHost()
+            }
         }
     }
 }

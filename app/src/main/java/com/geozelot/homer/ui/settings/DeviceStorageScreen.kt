@@ -18,8 +18,15 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.notificationsEnabled
+import com.geozelot.homer.ui.openNotificationSettings
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
@@ -29,6 +36,7 @@ import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Parchment
 
 /**
@@ -134,6 +142,11 @@ fun DeviceStorageScreen(
             },
             onClick = { confirmDeleteDownloads = true },
         )
+
+        SettingsDivider()
+
+        SettingsSectionHeader(stringResource(R.string.set_device_notify_header))
+        NotificationRow()
     }
 
     if (confirmDeleteDownloads) {
@@ -159,3 +172,42 @@ fun DeviceStorageScreen(
 /** A readable folder name from a SAF tree Uri (e.g. …/tree/primary%3AAudiobooks → "Audiobooks"). */
 internal fun storageFolderName(treeUri: String): String =
     Uri.decode(treeUri).substringAfterLast('/').substringAfterLast(':').ifBlank { "selected folder" }
+
+/**
+ * Whether Homer may post notifications, and a way back for the user who said no.
+ *
+ * Homer asks for the permission once, on the way into the library. Android only ever shows that
+ * dialog a couple of times, so for anybody who refused it this row is the only route back — and
+ * without it a scan, a download and a playback control all run with nothing on screen to show for
+ * them.
+ *
+ * Re-read on every resume, because the change is made in system Settings and the user comes back.
+ */
+@Composable
+private fun NotificationRow() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var allowed by remember { mutableStateOf(context.notificationsEnabled()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) allowed = context.notificationsEnabled()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    SettingsRow(
+        label = stringResource(R.string.set_device_notify_label),
+        summary = stringResource(
+            if (allowed) R.string.set_device_notify_on else R.string.set_device_notify_off,
+        ),
+        onClick = if (allowed) null else ({ context.openNotificationSettings() }),
+        trailing = {
+            if (!allowed) {
+                Text(stringResource(R.string.set_device_notify_action), color = Amber, fontSize = 13.sp)
+            }
+        },
+    )
+    SettingsExplanation(stringResource(R.string.set_device_notify_desc))
+}

@@ -346,6 +346,12 @@
     <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>
     <string name="set_device_delete_downloads_count">Gibt den Platz frei, den %1$s belegen</string>
     <string name="set_device_delete_downloads_none">Es ist nichts heruntergeladen. Dateien aus einer Bibliothek, von der du dich abgemeldet hast, werden mit entfernt</string>
+    <string name="set_device_notify_header">BENACHRICHTIGUNGEN</string>
+    <string name="set_device_notify_label">Homer darf Benachrichtigungen senden</string>
+    <string name="set_device_notify_on">Erlaubt. Wiedergabesteuerung, Scans und Downloads zeigen ihren Fortschritt.</string>
+    <string name="set_device_notify_off">Blockiert — Scans, Downloads und Wiedergabe laufen still, ohne Anzeige.</string>
+    <string name="set_device_notify_action">Beheben</string>
+    <string name="set_device_notify_desc">Homer benachrichtigt dich in drei Fällen: die Wiedergabesteuerung auf dem Sperrbildschirm, ein laufender Bibliotheks-Scan und ein laufender Download. Blockiert funktionieren alle drei weiterhin — du kannst sie nur nicht sehen oder steuern, ohne die App zu öffnen.</string>
     <string name="set_delete_downloads_confirm_title">Alle Downloads löschen?</string>
     <string name="set_delete_downloads_confirm_body">Jede Audiodatei, die Homer auf dieses Gerät geladen hat, wird gelöscht — auch alles, was von einer Bibliothek übrig ist, von der du dich inzwischen abgemeldet hast. Deine Bücher bleiben auf dem Server und deine Stelle darin bleibt erhalten; ein heruntergeladenes Buch streamt dann einfach wieder oder kann erneut geladen werden.</string>
     <string name="set_delete_downloads_confirm_action">Löschen</string>
