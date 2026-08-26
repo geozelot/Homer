@@ -1,0 +1,188 @@
+package com.geozelot.homer.ui.home
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The two rules the whole collection design rests on, and the guarantee they exist to protect:
+ * a library that has never nested a folder must render identically at every stacking depth.
+ */
+class CollectionsTest {
+
+    private fun book(
+        id: String,
+        title: String = id,
+        author: String? = "Pratchett",
+        series: String? = null,
+        seriesIndex: Int? = null,
+        collection: String? = null,
+        collectionIndex: Int? = null,
+    ) = BookListItem(
+        id = id,
+        title = title,
+        author = author,
+        isMultiFile = false,
+        fileCount = 1,
+        coverModel = null,
+        hasCustomCover = false,
+        series = series,
+        seriesIndex = seriesIndex,
+        collection = collection,
+        collectionIndex = collectionIndex,
+        genre = null,
+        language = null,
+        tags = emptyList(),
+        totalDurationMs = null,
+        timeLeftMs = null,
+        progress = null,
+        lastPlayedAt = null,
+        started = false,
+        finishedOverride = null,
+        downloadOnPlayOverride = null,
+        downloadStatus = null,
+        downloadedFiles = 0,
+        hidden = false,
+    )
+
+    // ── rule one: a series with no collection is its own collection ──────────────────────────
+
+    @Test
+    fun `a series with no collection stands in as its own`() {
+        val b = book("1", series = "The Expanse", author = "Corey")
+        assertEquals("The Expanse", b.effectiveCollection())
+    }
+
+    @Test
+    fun `a real collection wins over the series`() {
+        val b = book("1", series = "Rincewind", collection = "Discworld")
+        assertEquals("Discworld", b.effectiveCollection())
+    }
+
+    @Test
+    fun `a standalone belongs to no collection at all`() {
+        assertEquals(null, book("1").effectiveCollection())
+    }
+
+    @Test
+    fun `the same collection name under two authors does not merge`() {
+        val a = book("1", author = "Adams", series = "Chronicles")
+        val b = book("2", author = "Baker", series = "Chronicles")
+        assertTrue(a.collectionKey() != b.collectionKey())
+    }
+
+    // ── the guarantee: an un-nested library is identical at both depths ──────────────────────
+
+    @Test
+    fun `The Expanse stacks at collection depth exactly as it does at series depth`() {
+        val books = listOf(
+            book("1", title = "Leviathan Wakes", author = "Corey", series = "The Expanse", seriesIndex = 1),
+            book("2", title = "Caliban's War", author = "Corey", series = "The Expanse", seriesIndex = 2),
+        )
+        val atSeries = collapseIntoUnits(books, LibraryDepth.SERIES)
+        val atCollection = collapseIntoUnits(books, LibraryDepth.COLLECTION)
+
+        // One shelf either way, same name, same books in the same order — the whole non-conflict
+        // guarantee for a library that has never nested a folder.
+        assertEquals(1, atSeries.size)
+        assertEquals(1, atCollection.size)
+        val s = (atSeries.single() as SortUnit.Ser).series
+        val c = (atCollection.single() as SortUnit.Ser).series
+        assertEquals(s.name, c.name)
+        assertEquals(s.books.map { it.id }, c.books.map { it.id })
+        // …but it is not BADGED as a collection, because nobody made it one.
+        assertFalse(c.isCollection)
+    }
+
+    @Test
+    fun `flat depth leaves every book loose`() {
+        val books = listOf(
+            book("1", series = "The Expanse", author = "Corey"),
+            book("2", series = "The Expanse", author = "Corey"),
+        )
+        val units = collapseIntoUnits(books, LibraryDepth.FLAT)
+        assertEquals(2, units.size)
+        assertTrue(units.all { it is SortUnit.Solo })
+    }
+
+    // ── Discworld: one collection, several threads ───────────────────────────────────────────
+
+    private val discworld = listOf(
+        book("c", title = "Sourcery", series = "Rincewind", seriesIndex = 3, collection = "Discworld", collectionIndex = 5),
+        book("a", title = "The Colour of Magic", series = "Rincewind", seriesIndex = 1, collection = "Discworld", collectionIndex = 1),
+        book("b", title = "Mort", series = "Death", seriesIndex = 1, collection = "Discworld", collectionIndex = 4),
+        book("d", title = "Pyramids", collection = "Discworld", collectionIndex = 7),
+    )
+
+    @Test
+    fun `at collection depth Discworld is one shelf in publication order`() {
+        val units = collapseIntoUnits(discworld, LibraryDepth.COLLECTION)
+        assertEquals(1, units.size)
+        val shelf = (units.single() as SortUnit.Ser).series
+        assertEquals("Discworld", shelf.name)
+        assertTrue("a real parent must be badged as one", shelf.isCollection)
+        assertEquals(listOf("a", "b", "c", "d"), shelf.books.map { it.id })
+    }
+
+    @Test
+    fun `at series depth the threads stand alone and the unaffiliated book sits loose`() {
+        val units = collapseIntoUnits(discworld, LibraryDepth.SERIES)
+        val shelves = units.filterIsInstance<SortUnit.Ser>().map { it.series.name }.sorted()
+        val loose = units.filterIsInstance<SortUnit.Solo>().map { it.book.id }
+        assertEquals(listOf("Death", "Rincewind"), shelves)
+        assertEquals(listOf("d"), loose)
+    }
+
+    // ── rule two: an index is what makes a collection also a series ──────────────────────────
+
+    @Test
+    fun `a numbered collection reads as a series too`() {
+        assertTrue(discworld.collectionHasReadingOrder())
+    }
+
+    @Test
+    fun `an unnumbered collection is a parent and nothing more`() {
+        val loose = listOf(
+            book("1", series = "Thrawn", collection = "Star Wars Legends"),
+            book("2", series = "Rogue Squadron", collection = "Star Wars Legends"),
+        )
+        assertFalse(loose.collectionHasReadingOrder())
+    }
+
+    @Test
+    fun `a series standing in for itself never counts as having a collection order`() {
+        // Otherwise every ordinary numbered series in the library would answer yes to a question
+        // that is only meaningful about a real parent.
+        val expanse = listOf(book("1", series = "The Expanse", seriesIndex = 1, author = "Corey"))
+        assertFalse(expanse.collectionHasReadingOrder())
+    }
+
+    @Test
+    fun `unnumbered members sort after numbered ones rather than among them`() {
+        val mixed = listOf(
+            book("z", title = "Zzz", collection = "C"),
+            book("n", title = "Aaa", collection = "C", collectionIndex = 2),
+        )
+        assertEquals(listOf("n", "z"), mixed.sortedWith(inCollectionOrder).map { it.id })
+    }
+
+    // ── the stored preference ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `the old stacked preference lands on series, not collection`() {
+        // A saved preference must not silently deepen under somebody who never asked for it.
+        assertEquals(LibraryDepth.SERIES, LibraryDepth.from("stacked"))
+    }
+
+    @Test
+    fun `an unknown or absent preference falls back to series`() {
+        assertEquals(LibraryDepth.SERIES, LibraryDepth.from(null))
+        assertEquals(LibraryDepth.SERIES, LibraryDepth.from("nonsense-from-a-later-build"))
+    }
+
+    @Test
+    fun `each depth round-trips through its key`() {
+        LibraryDepth.entries.forEach { assertEquals(it, LibraryDepth.from(it.key)) }
+    }
+}

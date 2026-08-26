@@ -2,13 +2,16 @@ package com.geozelot.homer.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
-import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
@@ -20,6 +23,21 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Adds collections: a parent grouping above the series, and a position within it.
+ *
+ * Both nullable with no default, so every existing row reads as "no collection" and renders exactly
+ * as it did before — which is the whole non-conflict guarantee for libraries that have none.
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE books ADD COLUMN collection TEXT")
+        connection.execSQL("ALTER TABLE books ADD COLUMN collectionIndex INTEGER")
+        connection.execSQL("ALTER TABLE book_overrides ADD COLUMN collection TEXT")
+        connection.execSQL("ALTER TABLE book_overrides ADD COLUMN collectionIndex INTEGER")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -28,12 +46,11 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HomerDatabase =
         Room.databaseBuilder(context, HomerDatabase::class.java, HomerDatabase.NAME)
-            // NO MIGRATIONS, deliberately. Schema 1 is 2.0.0's baseline: the seventeen migrations
-            // that got the 1.x line here were deleted with the rest of the v1 path, because 1.x is
-            // withdrawn when 2.0 lands and nothing in the wild will ever need them again.
-            //
-            // The FIRST schema change after 2.0.0 ships adds a Migration(1, 2) here. Until then
-            // this list is empty on purpose and an empty list is not an oversight.
+            // Schema 1 was 2.0.0's baseline: the seventeen migrations that got the 1.x line here
+            // were deleted with the rest of the v1 path, because 1.x was withdrawn when 2.0 landed.
+            // From 2.0.0 onwards every step carries a real migration — the released version is
+            // somebody's actual library now, and losing it is not a thing a version bump may do.
+            .addMigrations(MIGRATION_1_2)
             .apply {
                 // Destructive fallback for a MISSING FORWARD MIGRATION stays a DEBUG-ONLY
                 // convenience. In a release build that case must fail loudly instead of silently

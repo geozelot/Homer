@@ -18,6 +18,10 @@ data class BookOverrideEntity(
     val author: String?,
     val series: String?,
     val seriesIndex: Int?,
+    /** Corrected parent grouping; null means "no correction", not "no collection". */
+    val collection: String? = null,
+    /** Corrected position within the collection. */
+    val collectionIndex: Int? = null,
     /** Genre override (null = use the detected genre). */
     val genre: String? = null,
     /** Language override as an ISO 639-1 code (null = use the detected language). */

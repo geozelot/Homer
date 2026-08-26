@@ -793,14 +793,14 @@ private fun LibraryControlBar(
     searching: Boolean,
     sort: LibrarySort,
     shelving: LibraryShelving,
-    series: LibrarySeriesMode,
+    series: LibraryDepth,
     gridView: Boolean,
     /** Every language present. Empty or single means the chip below never appears. */
     languages: List<String>,
     languageFilter: String?,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
-    onSeriesChange: (LibrarySeriesMode) -> Unit,
+    onSeriesChange: (LibraryDepth) -> Unit,
     onLanguageChange: (String?) -> Unit,
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -850,7 +850,7 @@ private fun LibraryControlBar(
                     label = stringResource(series.label),
                     icon = Icons.Filled.Layers,
                     iconDescription = stringResource(R.string.home_chip_series, stringResource(series.label)),
-                    options = LibrarySeriesMode.values().toList(),
+                    options = LibraryDepth.entries.toList(),
                     selected = series,
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onSeriesChange,
@@ -1258,7 +1258,7 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
 @Immutable
 private data class RowContext(
     val shelving: LibraryShelving,
-    val series: LibrarySeriesMode,
+    val series: LibraryDepth,
     /** Whether the library holds more than one language — see [bookMeta]. */
     val mixedLanguages: Boolean = false,
 )
@@ -1289,7 +1289,7 @@ private fun bookMeta(
     if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
         book.language?.let { add(BookLanguage.shortLabel(it)) }
     }
-    if (ctx.series == LibrarySeriesMode.FLAT && book.series != null && book.seriesIndex != null) {
+    if (ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
         add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }
     book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }

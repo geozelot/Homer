@@ -80,6 +80,10 @@ data class BookListItem(
     val hasCustomCover: Boolean,
     val series: String?,
     val seriesIndex: Int?,
+    /** Parent grouping above the series, override applied; null for almost every book. */
+    val collection: String? = null,
+    /** Position within the collection; its presence means the collection also has a reading order. */
+    val collectionIndex: Int? = null,
     val genre: String?,
     /** ISO 639-1 code, override applied; null when nothing has established one. */
     val language: String?,
@@ -167,6 +171,14 @@ sealed interface LibraryEntry {
         val name: String,
         val author: String?,
         val books: List<BookListItem>,
+        /**
+         * Whether this shelf is a real COLLECTION — a parent grouping somebody expressed — rather
+         * than an ordinary series.
+         *
+         * False for a series standing in as its own collection, which is most of them: that
+         * fallback exists to keep a plain series stacked at collection depth, not to relabel it.
+         */
+        val isCollection: Boolean = false,
     ) : LibraryEntry
 }
 
@@ -195,7 +207,7 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
  *
  * SERIES used to live here and no longer does: collapsing a series into one card is a way of
  * DRAWING the list, not an axis to section it by, and it was the only value here that produced no
- * headers at all — which is why it read as doing nothing. It is [LibrarySeriesMode] now, an
+ * headers at all — which is why it read as doing nothing. It is [LibraryDepth] now, an
  * independent control, so a series stays stacked (or doesn't) whichever way the list is shelved.
  *
  * ITEM keeps the stored key "none" so nobody's saved preference resets; a stored "series" from
@@ -209,16 +221,6 @@ enum class LibraryShelving(val key: String, @StringRes val label: Int) {
 
     companion object {
         fun from(key: String?) = values().firstOrNull { it.key == key } ?: ITEM
-    }
-}
-
-/** Whether a multi-book series is drawn as one stacked shelf or as its books, loose in the list. */
-enum class LibrarySeriesMode(val key: String, @StringRes val label: Int) {
-    STACKED("stacked", R.string.series_stacked),
-    FLAT("flat", R.string.series_flat);
-
-    companion object {
-        fun from(key: String?) = values().firstOrNull { it.key == key } ?: STACKED
     }
 }
 
@@ -342,6 +344,8 @@ class HomeViewModel @Inject constructor(
                     hasCustomCover = book.customCoverPath != null,
                     series = book.series,
                     seriesIndex = book.seriesIndex,
+                    collection = book.collection,
+                    collectionIndex = book.collectionIndex,
                     genre = book.genre,
                     language = book.language,
                     tags = eff.tags,
@@ -382,9 +386,9 @@ class HomeViewModel @Inject constructor(
         .map(LibraryShelving::from)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryShelving.ITEM)
 
-    val seriesMode: StateFlow<LibrarySeriesMode> = librarySettings.seriesMode
-        .map(LibrarySeriesMode::from)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibrarySeriesMode.STACKED)
+    val seriesMode: StateFlow<LibraryDepth> = librarySettings.seriesMode
+        .map(LibraryDepth::from)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryDepth.SERIES)
 
     /**
      * Every language the library actually holds, so nothing about languages is offered until there
@@ -1072,7 +1076,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setShelfMode(shelving.key) }
     }
 
-    fun setSeriesMode(mode: LibrarySeriesMode) {
+    fun setSeriesMode(mode: LibraryDepth) {
         viewModelScope.launch { librarySettings.setSeriesMode(mode.key) }
     }
 
@@ -1145,7 +1149,7 @@ private data class Arrangement(
     val query: String,
     val sort: LibrarySort,
     val shelving: LibraryShelving,
-    val series: LibrarySeriesMode,
+    val series: LibraryDepth,
 )
 
 /** A storage-folder change awaiting the user's decision when the target already holds a library. */
@@ -1161,16 +1165,12 @@ private fun buildEntries(
     books: List<BookListItem>,
     sort: LibrarySort,
     shelving: LibraryShelving,
-    series: LibrarySeriesMode,
+    series: LibraryDepth,
 ): List<LibraryEntry> {
     // Collapsing follows the series control alone now. It used to be decided by the shelving, so
     // "by genre" silently flattened every series while "by author" kept them stacked — nobody
     // chose that, it fell out of one expression.
-    val units = if (series == LibrarySeriesMode.STACKED) {
-        collapseIntoUnits(books)
-    } else {
-        books.map { SortUnit.Solo(it) }
-    }
+    val units = collapseIntoUnits(books, series)
     val ordered = units.sortedWith(unitComparator(sort))
 
     return when (shelving) {
@@ -1234,17 +1234,37 @@ private val inSeriesOrder: Comparator<BookListItem> =
  * indistinguishable from a standalone book — which hid the fact that it belongs to something, and
  * meant the shelf silently appeared the day a second volume arrived.
  */
-internal fun collapseIntoUnits(books: List<BookListItem>): List<SortUnit> {
-    val bySeries = books.filter { it.series != null }.groupBy { "${it.author.orEmpty()}|${it.series}" }
+internal fun collapseIntoUnits(
+    books: List<BookListItem>,
+    depth: LibraryDepth = LibraryDepth.SERIES,
+): List<SortUnit> {
+    if (depth == LibraryDepth.FLAT) return books.map { SortUnit.Solo(it) }
+
+    // At COLLECTION depth the grouping key is the collection — which falls back to the series for
+    // the overwhelming majority of books that are in no collection. That fallback is what keeps an
+    // ordinary series stacked at this depth instead of coming apart merely because nobody nested
+    // it inside anything, and it is why a library with no collections looks identical either way.
+    val collectionDepth = depth == LibraryDepth.COLLECTION
+    val keyOf: (BookListItem) -> String? =
+        if (collectionDepth) BookListItem::collectionKey else { b -> b.series?.let { "${b.author.orEmpty()}|$it" } }
+    val nameOf: (BookListItem) -> String? =
+        if (collectionDepth) BookListItem::effectiveCollection else BookListItem::series
+    val order = if (collectionDepth) inCollectionOrder else inSeriesOrder
+
+    val grouped = books.filter { keyOf(it) != null }.groupBy { keyOf(it)!! }
     val consumed = HashSet<String>()
     val units = mutableListOf<SortUnit>()
-    for ((key, members) in bySeries) {
+    for ((key, members) in grouped) {
         units += SortUnit.Ser(
             LibraryEntry.Series(
                 key = key,
-                name = members.first().series!!,
+                name = nameOf(members.first())!!,
                 author = members.first().author,
-                books = members.sortedWith(inSeriesOrder),
+                books = members.sortedWith(order),
+                // Named only when it is a real parent. A collection that exists purely because a
+                // series fell back to being its own is not a collection anybody made, and drawing
+                // it as one would put a badge on every series in the library.
+                isCollection = collectionDepth && members.any { it.collection != null },
             ),
         )
         members.forEach { consumed += it.id }

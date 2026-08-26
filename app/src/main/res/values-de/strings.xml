@@ -148,8 +148,9 @@
     <string name="shelve_author">Autor</string>
     <string name="shelve_genre">Genre</string>
     <string name="shelve_language">Sprache</string>
-    <string name="series_stacked">Gestapelt</string>
-    <string name="series_flat">Einzeln</string>
+    <string name="depth_collection">Reihen</string>
+    <string name="depth_series">Serien</string>
+    <string name="depth_flat">Einzeln</string>
     <string name="sort_recent">Zuletzt gehört</string>
     <string name="sort_title">Titel</string>
     <string name="sort_author">Autor</string>

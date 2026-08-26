@@ -152,6 +152,11 @@ internal fun planWrites(
             // filenames saying something else.
             language = source?.language ?: book.book.language,
             chapterTier = source?.chapterTier ?: book.book.chapterTier,
+            // `collection` is deliberately NOT carried — it comes from the folder, so moving a book
+            // out of Discworld/ has to re-parent it. `collectionIndex` is the opposite: nothing in
+            // a folder name says a book is Discworld #5, so a rescan that dropped it would quietly
+            // undo an ordering somebody established.
+            collectionIndex = source?.collectionIndex ?: book.book.collectionIndex,
             totalDurationMs = total,
         )
         files += merged

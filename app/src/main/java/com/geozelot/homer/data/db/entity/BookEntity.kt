@@ -26,6 +26,23 @@ data class BookEntity(
     val author: String?,
     val series: String?,
     val seriesIndex: Int?,
+    /**
+     * A parent grouping ABOVE the series — Discworld over Rincewind — or null, which is almost
+     * everything.
+     *
+     * A collection is not a bigger series: a series says "read these in order", a collection says
+     * "these belong together". Detected from the folder above the series folder, so a library laid
+     * out as `Pratchett/Discworld/Rincewind/Book` expresses it without anybody tagging anything.
+     */
+    val collection: String? = null,
+    /**
+     * Position within [collection], when the collection has a reading order of its own.
+     *
+     * Its presence is what makes a collection ALSO a series: Discworld is 41 numbered novels as
+     * well as a parent of seven threads, and this is the number that carries the first reading.
+     * Null for a loose grouping that has no order to read it in.
+     */
+    val collectionIndex: Int? = null,
     /** Detected genre from embedded tags (filled lazily on first open); user-overridable. */
     val genre: String? = null,
     /**

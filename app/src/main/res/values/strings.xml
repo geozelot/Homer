@@ -149,8 +149,9 @@
     <string name="shelve_author">Author</string>
     <string name="shelve_genre">Genre</string>
     <string name="shelve_language">Language</string>
-    <string name="series_stacked">Stacked</string>
-    <string name="series_flat">Flat</string>
+    <string name="depth_collection">Collections</string>
+    <string name="depth_series">Series</string>
+    <string name="depth_flat">Flat</string>
     <string name="sort_recent">Recently played</string>
     <string name="sort_title">Title</string>
     <string name="sort_author">Author</string>
