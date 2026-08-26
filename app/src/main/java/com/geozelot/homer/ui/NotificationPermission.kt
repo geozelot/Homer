@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
 /**
@@ -36,25 +37,37 @@ fun NotificationPermissionRequest() {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !context.notificationsEnabled()
-        ) {
-            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        if (!context.mayPostNotifications()) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 
 /**
- * Whether Homer may post notifications.
+ * Whether the *permission* is held — which below Android 13 it always is, there being no such
+ * permission to hold.
  *
- * True below Android 13, where the permission does not exist and posting is always allowed. Note
- * this reads the *permission*, not whether the user has muted Homer's channels in system settings —
- * a muted channel is a deliberate choice and not something to nag about.
+ * Deliberately not [notificationsEnabled]: this is the question "would the dialog do anything",
+ * and the dialog cannot un-mute an app the user muted in system settings. Asking again there would
+ * be a prompt that resolves instantly and changes nothing.
  */
-fun Context.notificationsEnabled(): Boolean =
+private fun Context.mayPostNotifications(): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
+
+/**
+ * Whether anything Homer posts will actually be seen.
+ *
+ * Not the permission: `minSdk` is 26, and on everything below Android 13 there is no permission to
+ * read — but the user can still block Homer's notifications outright from system settings, and an
+ * app-level block silences exactly as much as a refused permission does. Reading the permission
+ * here would have reported "allowed" on every Android 8–12 device no matter what the user had
+ * chosen, and the settings row would have hidden its own way back at the same time.
+ *
+ * `areNotificationsEnabled` answers the question on both sides of the version gate: the app-level
+ * block from API 19, and the permission from 33 up.
+ */
+fun Context.notificationsEnabled(): Boolean =
+    NotificationManagerCompat.from(this).areNotificationsEnabled()
 
 /**
  * Opens Homer's own notification settings, for the user who refused and wants back in.

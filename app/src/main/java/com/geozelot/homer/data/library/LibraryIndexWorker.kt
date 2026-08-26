@@ -20,7 +20,9 @@ import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Foreground (data-sync) worker that drains the queue of requested [IndexPass]es, so the work
@@ -87,10 +89,43 @@ class LibraryIndexWorker @AssistedInject constructor(
             IndexPass.BOOKS -> {
                 report(request.pass)
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
-                // Deep means a full crawl: every folder re-read rather than unchanged subtrees
-                // skipped on their ETag. Only a full crawl may stamp the marker that authorises
-                // another device to prune.
-                libraryRepository.scan(incremental = !request.deep)
+                // Re-posted as the crawl walks, on the same throttle as the other two passes.
+                //
+                // Not only for the progress, though a crawl of a large library sat on a static
+                // "Scanning library…" for minutes. A notification posted before the user has
+                // granted POST_NOTIFICATIONS is dropped and does not appear retroactively, and on a
+                // first run with a share account the crawl is enqueued in the same frame as the
+                // permission dialog — so the one post above could be made while the dialog was
+                // still on screen, and that crawl would then show nothing at all however long it
+                // ran. Re-posting means it appears as soon as the permission lands.
+                coroutineScope {
+                    val progress = launch {
+                        var lastNotifyMs = 0L
+                        libraryRepository.scanState.collect { state ->
+                            if (state !is ScanState.Scanning) return@collect
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotifyMs < PROGRESS_NOTIFY_INTERVAL_MS) return@collect
+                            lastNotifyMs = now
+                            setForegroundSafely(
+                                foregroundInfo(
+                                    text = "Scanning library…",
+                                    done = 0,
+                                    total = 0,
+                                    detail = "${state.booksFound} book(s) in ${state.directoriesVisited} folder(s)",
+                                ),
+                            )
+                            report(request.pass, books = state.booksFound)
+                        }
+                    }
+                    // Deep means a full crawl: every folder re-read rather than unchanged subtrees
+                    // skipped on their ETag. Only a full crawl may stamp the marker that authorises
+                    // another device to prune.
+                    try {
+                        libraryRepository.scan(incremental = !request.deep)
+                    } finally {
+                        progress.cancel()
+                    }
+                }
                 publish("Updating shared library…")
             }
 
