@@ -1306,10 +1306,28 @@ private fun bookMeta(
     }
 }.joinToString(" · ")
 
-// The stack fans diagonally up-right and is scaled so the whole stack fills the cell — the
-// same footprint as a single book card. STACK_SPREAD is the fraction of the cell the fan
-// spans; the covers are (1 - STACK_SPREAD) of the cell in each dimension.
-private const val STACK_SPREAD = 0.18f
+// ── the stack ────────────────────────────────────────────────────────────────
+//
+// One cover, with the EDGES of the books behind it showing to its right.
+//
+// It used to fan three full covers diagonally across the cell, which cost the front book a third
+// of its width and a third of its height to show two others at an angle you could not read
+// anyway. A stack of books on a shelf is mostly one spine and a hint of the ones behind, so that
+// is what this draws: the front cover nearly full size, and up to two sheets peeking out — far
+// more to the side than upward, because a diagonal of that depth is what ate the space.
+//
+// The sheets are not cover art. They are blank stock with a hairline edge, which is honest (they
+// are not standing in for any particular volume) and cheap (no second and third image load per
+// series cell, on a screen that may hold twenty of them).
+
+/** How far each sheet behind the front cover peeks out to the right. */
+private val StackStepX = 7.dp
+
+/** …and how far it rises. A quarter of the horizontal step: a hint of depth, not a diagonal. */
+private val StackStepY = 2.dp
+
+/** At most two sheets. A third is a pixel wide at this step and reads as a rendering artefact. */
+private const val STACK_MAX_HINTS = 2
 
 /** A series as a grid cell the same size as a book card: a diagonal stack filling the cell. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -1332,31 +1350,33 @@ private fun SeriesGridCard(
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
-            val covers = series.books.take(3)
-            val steps = (covers.size - 1).coerceAtLeast(1)
-            // Inset the stack so its covers never touch the card's outline.
+            // Inset the stack so it never touches the card's outline.
             val pad = 6.dp
-            val availW = maxWidth - pad * 2
-            val availH = maxHeight - pad * 2
-            val coverW = availW * (1f - STACK_SPREAD)
-            val coverH = coverW * 1.5f
-            val dx = (availW - coverW) / steps
-            val dy = (availH - coverH) / steps
-            // Deepest drawn first; the front book (depth 0) sits bottom-left, the rest fan
-            // up-right. Each cover gets a background-coloured outline so overlapping sheets
-            // read as separate books.
-            for (depth in covers.indices.reversed()) {
-                val book = covers[depth]
-                CoverArt(
-                    model = book.coverModel,
+            val hints = (series.books.size - 1).coerceIn(0, STACK_MAX_HINTS)
+            val coverW = maxWidth - pad * 2 - StackStepX * hints
+            val frontY = pad + StackStepY * hints
+
+            // Deepest first, so each sheet is overdrawn by the one in front of it.
+            for (i in hints downTo 1) {
+                Box(
                     modifier = Modifier
-                        .offset(x = pad + dx * depth, y = pad + dy * (steps - depth))
+                        .offset(x = pad + StackStepX * i, y = frontY - StackStepY * i)
                         .width(coverW)
                         .aspectRatio(1f / 1.5f)
                         .clip(RoundedCornerShape(9.dp))
-                        .border(1.5.dp, Ground, RoundedCornerShape(9.dp)),
+                        .background(Surface1)
+                        .border(1.dp, Line, RoundedCornerShape(9.dp)),
                 )
             }
+            CoverArt(
+                model = series.frontCover(),
+                modifier = Modifier
+                    .offset(x = pad, y = frontY)
+                    .width(coverW)
+                    .aspectRatio(1f / 1.5f)
+                    .clip(RoundedCornerShape(9.dp))
+                    .border(1.5.dp, Ground, RoundedCornerShape(9.dp)),
+            )
         }
         Box {
             GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current)) {
@@ -1689,17 +1709,28 @@ private fun SeriesShelfRow(
             modifier = Modifier.padding(SeriesListEnclosurePad),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Stacked-covers glyph (up to three, fanned rightward; last drawn sits on top).
+            // The same stack the grid card draws, at row scale: one cover with the edges of the
+            // books behind it showing to its right. It used to fan three real covers with the LAST
+            // drawn on top, so the cover a series row showed was its third volume's.
             Box(modifier = Modifier.size(width = 52.dp, height = 56.dp)) {
-                series.books.take(3).forEachIndexed { i, book ->
-                    CoverArt(
-                        model = book.coverModel,
+                val hints = (series.books.size - 1).coerceIn(0, STACK_MAX_HINTS)
+                for (i in hints downTo 1) {
+                    Box(
                         modifier = Modifier
-                            .offset(x = (i * 6).dp)
+                            .offset(x = (i * 5).dp, y = (hints - i).dp)
                             .size(width = 38.dp, height = 52.dp)
-                            .clip(RoundedCornerShape(6.dp)),
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Surface1)
+                            .border(1.dp, Line, RoundedCornerShape(6.dp)),
                     )
                 }
+                CoverArt(
+                    model = series.frontCover(),
+                    modifier = Modifier
+                        .offset(y = hints.dp)
+                        .size(width = 38.dp, height = 52.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                )
             }
             Column(
                 modifier = Modifier

@@ -101,3 +101,13 @@ enum class LibraryDepth(val key: String, @StringRes val label: Int) {
         }
     }
 }
+
+/**
+ * The cover a stacked shelf shows: the first volume that HAS one.
+ *
+ * Not simply the first volume. A series whose opening book was ripped without art used to put a
+ * blank plate at the front of the stack and hide the artwork of every volume behind it — the one
+ * case where the shelf had something to show and showed nothing. Falling back to null (rather than
+ * to the first book regardless) keeps the placeholder for a series where genuinely nothing has art.
+ */
+internal fun LibraryEntry.Series.frontCover(): Any? = books.firstNotNullOfOrNull { it.coverModel }
