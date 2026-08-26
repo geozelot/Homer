@@ -51,6 +51,7 @@ fun LibrarySetupPanel(
     isShare: Boolean,
     scanPending: Boolean,
     wifiOnly: Boolean,
+    readsOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // A crawl has been asked for and has not started — offline, or waiting for Wi-Fi. The shelf is
@@ -81,7 +82,7 @@ fun LibrarySetupPanel(
         is LibrarySetup.Choose -> Choose(setup.candidates, onAdopt, onNameFolder, isShare, modifier)
         LibrarySetup.NothingFound -> NameTheFolder(onAdopt, isShare, modifier)
         // A library that has been scanned and really is empty is a fact, not a question.
-        LibrarySetup.Ready -> EmptyShelf(modifier)
+        LibrarySetup.Ready -> EmptyShelf(readsOnly, modifier)
     }
 }
 
@@ -182,18 +183,29 @@ private fun SharingNote(isShare: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-/** The shelf really is empty, and a scan has already said so. */
+/**
+ * The shelf really is empty, and a scan has already said so — unless nothing here ever scans.
+ *
+ * [readsOnly] is a device reading an index it cannot write, which deliberately runs no crawl at all.
+ * Telling that user "Homer read that folder and found no audiobooks" is false twice over: nothing
+ * read the folder, and there is no other folder to try, because a share IS the library. What they
+ * are actually looking at is a maintainer that has not published yet.
+ */
 @Composable
-private fun EmptyShelf(modifier: Modifier = Modifier) {
+private fun EmptyShelf(readsOnly: Boolean, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(stringResource(R.string.home_empty_title), style = SerifTitle, color = Parchment)
+        Text(
+            stringResource(if (readsOnly) R.string.home_empty_reader_title else R.string.home_empty_title),
+            style = SerifTitle,
+            color = Parchment,
+        )
         Spacer(Modifier.height(8.dp))
         Text(
-            stringResource(R.string.home_empty_hint),
+            stringResource(if (readsOnly) R.string.home_empty_reader_hint else R.string.home_empty_hint),
             color = Muted,
             fontSize = 13.sp,
             textAlign = TextAlign.Center,

@@ -184,6 +184,8 @@
     <string name="home_no_matches_hint">Versuche einen anderen Titel, Autor, ein anderes Genre oder Schlagwort.</string>
     <string name="home_empty_title">Dein Regal ist leer</string>
     <string name="home_empty_hint">Homer hat den Ordner gelesen und keine Hörbücher darin gefunden. Probiere unter Einstellungen › Bibliothek einen anderen Ordner.</string>
+    <string name="home_empty_reader_title">Noch nichts geteilt</string>
+    <string name="home_empty_reader_hint">Diese Bibliothek wird von einem anderen Gerät gepflegt, das seine Bücher noch nicht veröffentlicht hat. Sie erscheinen hier, sobald es das tut — du musst nichts tun.</string>
     <string name="setup_looking">Suche nach deiner Bibliothek…</string>
     <string name="setup_adopting">Deine Bibliothek wird gelesen…</string>
     <string name="setup_choose_title">Welche ist deine Bibliothek?</string>

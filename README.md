@@ -152,13 +152,21 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **1.1** — stable for day-to-day listening — with **2.0 in beta**, tagged
-`v2.0.0-BETA`. That tag moves: each build replaces it rather than adding another, so there
-is one beta release to follow and the APK name carries the actual build (`homer-2.0.0-BETA.42.apk`).
+Homer is at **2.0**. Betas continue under the moving tag `v2.0.0-BETA`: that tag is replaced
+by each build rather than added to, so there is one beta release to follow and the APK name
+carries the actual build (`homer-2.0.0-BETA.55.apk`).
 
-2.0 reworks how the library is indexed and synced, and **changes the shared index format
-incompatibly** — a 2.0 device and a 1.x device cannot share a library. Existing shared
-catalogs are converted once, automatically.
+2.0 reworks how the library is indexed and synced. Two things to know before updating from 1.x:
+
+- **The shared index format changed incompatibly.** A 2.0 device and a 1.x device cannot share
+  a library, and nothing converts the old catalogue — a 2.0 device rebuilds it from the library
+  itself. Update every device that shares a library at roughly the same time.
+- **The local database is rebuilt from scratch.** 2.0 resets the schema baseline and carries no
+  migrations from the 1.x line, so updating discards the on-device database. Almost everything in
+  it is restored on the next sync — resume positions, metadata edits, chapter cuts, the shelf
+  itself — and already-downloaded files are re-adopted from disk rather than fetched again.
+  **Bookmarks are device-local and are not restored.** Note them down first if you want to keep
+  them.
 
 It's a personal, self-hosted project; a few advanced features (share-link libraries, the
 shared library index, M4B chapter text-tracks, certificate pinning) are best-effort and

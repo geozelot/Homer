@@ -190,6 +190,8 @@
     <string name="home_no_matches_hint">Try a different title, author, genre or tag.</string>
     <string name="home_empty_title">Your shelf is empty</string>
     <string name="home_empty_hint">Homer read that folder and found no audiobooks in it. Try a different folder under Settings \u203a Library.</string>
+    <string name="home_empty_reader_title">Nothing shared yet</string>
+    <string name="home_empty_reader_hint">This library is kept by another device, which has not published its books yet. They will appear here as soon as it does — there is nothing for you to fix.</string>
     <!-- First run: what replaces an empty shelf. The sweep that found these folders is the same
          one the Library page runs; it just happens before the shelf is shown rather than after. -->
     <string name="setup_looking">Looking for your library\u2026</string>

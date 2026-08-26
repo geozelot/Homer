@@ -170,6 +170,9 @@ fun HomeScreen(
     val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
     val indexQueued by viewModel.indexQueued.collectAsStateWithLifecycle()
     val wifiOnlyDownloads by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
+    // A device reading an index somebody else keeps: it never crawls, so an empty shelf here means
+    // "not published yet", not "no audiobooks found".
+    val readsSharedIndex by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
@@ -321,6 +324,7 @@ fun HomeScreen(
                         isShare = libraryIsShare,
                         scanPending = IndexPass.BOOKS in indexQueued,
                         wifiOnly = wifiOnlyDownloads,
+                        readsOnly = readsSharedIndex,
                         modifier = Modifier.weight(1f),
                     )
             }

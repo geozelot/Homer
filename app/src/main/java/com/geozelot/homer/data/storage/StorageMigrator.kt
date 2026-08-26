@@ -5,9 +5,12 @@ import android.util.Log
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverCache
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -96,13 +99,11 @@ class StorageMigrator @Inject constructor(
             var done = 0
             var failures = 0
             for (rel in downloadRels) {
-                runCatching { copyThenDeleteSource(source, target, rel, overwrite) }
-                    .onFailure { failures++; Log.w(TAG, "skipped $rel", it) }
+                if (!copyOne(source, target, rel, overwrite)) failures++
                 report("Moving downloads", ++done, total, onProgress)
             }
             for (job in coverJobs) {
-                runCatching { copyThenDeleteSource(source, target, job.rel, overwrite) }
-                    .onFailure { failures++; Log.w(TAG, "skipped ${job.rel}", it) }
+                if (!copyOne(source, target, job.rel, overwrite)) failures++
                 report("Moving covers", ++done, total, onProgress)
             }
             if (failures > 0) Log.w(TAG, "$failures file(s) could not be moved to the new location")
@@ -212,6 +213,35 @@ class StorageMigrator @Inject constructor(
      * verifies it landed, then removes it from [source]. If the source file isn't there, nothing
      * is copied and — crucially — the target's existing copy is left untouched.
      */
+    /**
+     * Copies one file, reporting success, and letting a cancellation through.
+     *
+     * `runCatching` was wrong here twice over. It catches `Throwable`, and `CancellationException`
+     * is one — so cancelling a move did not stop it: every remaining file entered the loop, threw at
+     * its first suspension point, and was counted as a file that "could not be moved". A library of
+     * ten thousand files produced ten thousand warnings and a failure count that described the
+     * cancellation rather than the library, and the un-cancellable part of the work carried on to
+     * the end. Per-file tolerance is still the point — one name the target volume rejects must not
+     * abort the move — so everything else is still caught and counted.
+     */
+    private suspend fun copyOne(
+        source: StorageArea,
+        target: StorageArea,
+        rel: String,
+        overwrite: Boolean,
+    ): Boolean {
+        coroutineContext.ensureActive()
+        return try {
+            copyThenDeleteSource(source, target, rel, overwrite)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "skipped $rel", e)
+            false
+        }
+    }
+
     private suspend fun copyThenDeleteSource(source: StorageArea, target: StorageArea, rel: String, overwrite: Boolean) {
         if (overwrite || !target.exists(rel)) {
             val input = source.openInputStream(rel) ?: return // nothing at source → don't touch target

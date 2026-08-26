@@ -35,12 +35,28 @@ object DatabaseModule {
             // The FIRST schema change after 2.0.0 ships adds a Migration(1, 2) here. Until then
             // this list is empty on purpose and an empty list is not an oversight.
             .apply {
-                // Destructive fallback is a DEBUG-ONLY convenience. In a release build a missing
-                // migration (or an APK downgrade to an older schema) must fail loudly instead of
-                // silently wiping every table — positions, bookmarks, overrides, downloads — which
-                // is exactly the data-loss class this app has been bitten by before.
+                // Destructive fallback for a MISSING FORWARD MIGRATION stays a DEBUG-ONLY
+                // convenience. In a release build that case must fail loudly instead of silently
+                // wiping every table — positions, bookmarks, overrides, downloads — which is exactly
+                // the data-loss class this app has been bitten by before.
                 if (BuildConfig.DEBUG) fallbackToDestructiveMigration(dropAllTables = true)
             }
+            // A DOWNGRADE is a different question, and this one is answered on purpose.
+            //
+            // 1.1.0 shipped schema 17 in this same `homer.db`; 2.0.0 resets the baseline to 1. Room
+            // refuses a downgrade unless told what to do, so without this an existing 1.x install
+            // that updates would throw "Cannot downgrade database from version 17 to 1" the first
+            // time anything touched a DAO — a crash at launch, on every launch, with nothing on
+            // screen to explain it and no way out but clearing app data.
+            //
+            // Recreating it empty is survivable in a way it would not be for a forward migration,
+            // because almost everything in there is a cache of something authoritative elsewhere:
+            // positions come back from the server manifest, overrides and chapter cuts from
+            // corrections.json, the shelf from structure/derived (or a crawl), and downloads are
+            // re-adopted from the files already on disk by LocalMirror.adoptDownloads(). Plain
+            // bookmarks are the one thing that is only ever local — they do not survive, and the
+            // 2.0.0 notes say so.
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 
     @Provides
