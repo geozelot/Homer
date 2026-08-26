@@ -2,24 +2,17 @@ package com.geozelot.homer.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,50 +29,59 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,21 +95,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -120,16 +122,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.DownloadStatus
-import com.geozelot.homer.data.storage.StorageMigrator
-import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.metadata.BookLanguage
+import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
+import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
@@ -785,7 +787,6 @@ private val SectionLabelLargeSize = 14.sp
  * The prose summary that used to sit beneath is gone: the header carries the count, and the chips
  * already say what they are set to, so it was restating both in a full sentence.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LibraryControlBar(
     count: Int,
@@ -821,28 +822,34 @@ private fun LibraryControlBar(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // FlowRow for the chips, not a weighted Row: equal weights cap every chip at a third
-            // of the width, so a short one strands allowance a long one is truncating for. Here
-            // each takes the width it needs and they wrap only when they genuinely do not fit —
-            // into whatever the toggle leaves, since the toggle holds the trailing edge.
+            // A single row that SCROLLS rather than wraps. FlowRow let the chips fall onto a
+            // second line on a narrower screen, which moved everything below them and made the
+            // header a different height on different devices. Overflow is now horizontal, so the
+            // control bar is exactly one chip tall everywhere — and with the category words
+            // replaced by glyphs there is rarely anything to scroll.
             // Resolved through the context because `labelOf` is a plain lambda, not a composable.
             val controlContext = LocalContext.current
-            FlowRow(
-                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_shelve, stringResource(shelving.label)),
-                    value = stringResource(shelving.label),
+                    label = stringResource(shelving.label),
+                    icon = Icons.Filled.Category,
+                    iconDescription = stringResource(R.string.home_chip_shelve, stringResource(shelving.label)),
                     options = LibraryShelving.values().toList(),
                     selected = shelving,
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onShelfChange,
                 )
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_series, stringResource(series.label)),
-                    value = stringResource(series.label),
+                    label = stringResource(series.label),
+                    icon = Icons.Filled.Layers,
+                    iconDescription = stringResource(R.string.home_chip_series, stringResource(series.label)),
                     options = LibrarySeriesMode.values().toList(),
                     selected = series,
                     labelOf = { controlContext.getString(it.label) },
@@ -850,8 +857,9 @@ private fun LibraryControlBar(
                 )
                 // Only the sorts that still do something — see LibrarySort.offeredFor.
                 DropdownChip(
-                    label = stringResource(R.string.home_chip_sort, stringResource(sort.label)),
-                    value = stringResource(sort.label),
+                    label = stringResource(sort.label),
+                    icon = Icons.AutoMirrored.Filled.Sort,
+                    iconDescription = stringResource(R.string.home_chip_sort, stringResource(sort.label)),
                     options = LibrarySort.offeredFor(shelving),
                     selected = sort,
                     labelOf = { controlContext.getString(it.label) },
@@ -867,8 +875,9 @@ private fun LibraryControlBar(
                     }
                     val selected = languageFilter?.takeIf { it in languages }
                     DropdownChip(
-                        label = stringResource(R.string.home_chip_language, labelOf(selected)),
-                        value = labelOf(selected),
+                        label = labelOf(selected),
+                        icon = Icons.Filled.Language,
+                        iconDescription = stringResource(R.string.home_chip_language, labelOf(selected)),
                         // Null leads, so clearing the filter is the first thing under the thumb
                         // rather than the last.
                         options = listOf<String?>(null) + languages,
