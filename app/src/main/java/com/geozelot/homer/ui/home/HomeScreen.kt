@@ -967,7 +967,6 @@ private fun ViewToggleButton(
     }
 }
 
-
 /** Books across the visible entries — the count while a search is narrowing the library. */
 private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
     when (entry) {
@@ -1181,20 +1180,30 @@ private fun BookGridCard(
         ) {
             CoverArt(model = book.coverModel, modifier = Modifier.fillMaxSize())
             if (book.isDownloaded) {
-                DownloadBadge(modifier = Modifier.align(Alignment.TopEnd).padding(7.dp))
+                OfflineBadge(CoverCorner.TOP_END, modifier = Modifier.align(Alignment.TopEnd))
             }
-            if (showRing) {
-                ProgressRing(
-                    progress = book.progress ?: 0f,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(7.dp)
-                        .size(24.dp),
-                )
+            // The length, where the progress ring used to be. A ring said the same thing the bar
+            // below the cover now says, and said it in a corner that could hold a fact the card
+            // had nowhere else to put.
+            book.totalDurationMs?.let {
+                CoverBadge(CoverCorner.BOTTOM_END, modifier = Modifier.align(Alignment.BottomEnd)) {
+                    BadgeText(formatCompactDuration(it))
+                }
             }
         }
+        // Under the cover rather than on it, exactly as the listening strip has always drawn it —
+        // so "how far in am I" looks the same wherever a book appears.
+        if (showRing) {
+            ProgressBar(
+                fraction = book.progress ?: 0f,
+                modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
+            )
+        }
         Box {
-            GridCardText(title = book.title, meta = bookMeta(book, ctx, LocalContext.current)) {
+            GridCardText(
+                title = book.title,
+                meta = bookMeta(book, ctx, LocalContext.current, withDuration = false),
+            ) {
                 menuOpen = true
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
@@ -1279,7 +1288,17 @@ private fun bookMeta(
     ctx: RowContext,
     context: android.content.Context,
     withStatus: Boolean = false,
+    /**
+     * False where the cover already carries the length — the grid card, whose bottom-right corner
+     * now says it. Repeating it two lines below would spend one of the meta line's two lines
+     * restating what is on screen an inch above.
+     */
+    withDuration: Boolean = true,
 ): String = buildList {
+    // The length leads. It is the one number a reader scans a list FOR — "have I got an hour for
+    // this" — and it was last, after the author and the genre they can already see from the shelf
+    // they are standing on.
+    if (withDuration) book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
@@ -1292,7 +1311,6 @@ private fun bookMeta(
     if (ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
         add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }
-    book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
     addAll(book.tags)
     if (withStatus) {
         when {
@@ -1377,6 +1395,17 @@ private fun SeriesGridCard(
                     .clip(RoundedCornerShape(9.dp))
                     .border(1.5.dp, Ground, RoundedCornerShape(9.dp)),
             )
+            VolumeCountBadge(series.books.size, modifier = Modifier.align(Alignment.TopStart))
+            // The count comes along only when it is not all of them: "12 of 12 downloaded" is
+            // said better by the icon alone.
+            val downloaded = series.books.count { it.isDownloaded }
+            if (downloaded > 0) {
+                OfflineBadge(
+                    CoverCorner.TOP_END,
+                    count = downloaded.takeIf { it < series.books.size }?.toString(),
+                    modifier = Modifier.align(Alignment.TopEnd),
+                )
+            }
         }
         Box {
             GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current)) {
@@ -1387,13 +1416,15 @@ private fun SeriesGridCard(
     }
 }
 
+/**
+ * The two lines under a stacked shelf's cover.
+ *
+ * The volume count and the downloaded count used to lead here and are now drawn on the cover
+ * itself, so this carries what the cover cannot: the author, and how long the whole shelf runs.
+ */
 private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String =
-    // The grid card reserves two lines, so the length gets one of its own rather than trailing the
-    // episode count as it does on the narrower shelf row.
     buildString {
-        append(context.resources.getQuantityString(R.plurals.home_series_book_count, series.books.size, series.books.size))
-        val downloaded = series.books.count { it.isDownloaded }
-        if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
+        append(series.author ?: context.getString(R.string.unknown_author))
         seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
     }
 
@@ -1599,20 +1630,32 @@ private fun BookListRow(
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box {
-            CoverArt(
-                model = book.coverModel,
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-            )
-            if (book.isDownloaded) {
-                DownloadBadge(
+        // The row's cover keeps the round badge rather than the grid's cut-to-the-edge areas: at
+        // 46dp a slanted quadrilateral with a glyph in it is mush, and the corner it would anchor
+        // to is a third of the cover.
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box {
+                CoverArt(
+                    model = book.coverModel,
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(0.dp)
-                        .size(16.dp),
-                    iconSize = 9.dp,
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
+                if (book.isDownloaded) {
+                    DownloadBadge(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(0.dp)
+                            .size(16.dp),
+                        iconSize = 9.dp,
+                    )
+                }
+            }
+            // Same bar, same place, whatever view a book appears in.
+            if (book.started && book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished) {
+                ProgressBar(
+                    fraction = book.progress ?: 0f,
+                    modifier = Modifier.width(46.dp).padding(top = 4.dp),
                 )
             }
         }
@@ -1664,7 +1707,6 @@ private fun BookListRow(
         }
     }
 }
-
 
 /** Line height of a list row's title; the reserved block is two of these. */
 private val ListRowTitleLineHeight = 16.sp
@@ -1791,34 +1833,6 @@ private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
         // Decorative: the badge sits inside a card/row that TalkBack already reads out, and an
         // extra "Downloaded" node in the middle of it only interrupts the title.
         Icon(Icons.Filled.DownloadDone, contentDescription = null, tint = Sage, modifier = Modifier.size(iconSize))
-    }
-}
-
-@Composable
-private fun ProgressRing(progress: Float, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(Studio.copy(alpha = 0.72f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(modifier = Modifier.size(24.dp).padding(5.dp)) {
-            val stroke = 3.dp.toPx()
-            drawArc(
-                color = Parchment.copy(alpha = 0.18f),
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                style = Stroke(width = stroke),
-            )
-            drawArc(
-                color = Amber,
-                startAngle = -90f,
-                sweepAngle = 360f * progress.coerceIn(0f, 1f),
-                useCenter = false,
-                style = Stroke(width = stroke, cap = StrokeCap.Round),
-            )
-        }
     }
 }
 
