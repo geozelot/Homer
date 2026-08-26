@@ -111,3 +111,16 @@ enum class LibraryDepth(val key: String, @StringRes val label: Int) {
  * to the first book regardless) keeps the placeholder for a series where genuinely nothing has art.
  */
 internal fun LibraryEntry.Series.frontCover(): Any? = books.firstNotNullOfOrNull { it.coverModel }
+
+/**
+ * Whether this book has progress worth drawing a bar for.
+ *
+ * Two guards beyond "progress is non-null". A book at 0% has not been started and a bar of nothing
+ * is noise on every unread card in the library; a book at 99.5% has effectively finished and a bar
+ * indistinguishable from full is worse than none. `started` is checked as well as the fraction
+ * because marking a book completed RESETS it to position 0, which is perfectly measurable — so
+ * progress comes back as 0f rather than null, and the card went on drawing a bar for a book that
+ * had just been cleared.
+ */
+internal fun BookListItem.hasVisibleProgress(): Boolean =
+    started && !finished && progress?.let { it > 0.01f && it < 0.995f } == true

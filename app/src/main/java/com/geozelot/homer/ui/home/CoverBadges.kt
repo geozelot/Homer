@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -142,11 +143,22 @@ internal fun OfflineBadge(corner: CoverCorner, count: String? = null, modifier: 
     }
 }
 
-/** How many volumes a stacked shelf holds. */
+/**
+ * How many volumes a stacked shelf holds, and whether it is a collection or a plain series.
+ *
+ * The glyph is the only thing that distinguishes a Discworld card from a Rincewind card once both
+ * are drawn as one stack, so it carries the difference: a shelf of books for a parent grouping, a
+ * single book for a series.
+ */
 @Composable
-internal fun VolumeCountBadge(count: Int, corner: CoverCorner = CoverCorner.TOP_START, modifier: Modifier = Modifier) {
+internal fun VolumeCountBadge(
+    count: Int,
+    isCollection: Boolean = false,
+    corner: CoverCorner = CoverCorner.TOP_START,
+    modifier: Modifier = Modifier,
+) {
     CoverBadge(corner, modifier) {
-        BadgeIcon(Icons.Filled.MenuBook)
+        BadgeIcon(if (isCollection) Icons.Filled.LibraryBooks else Icons.Filled.MenuBook)
         BadgeText(count.toString())
     }
 }

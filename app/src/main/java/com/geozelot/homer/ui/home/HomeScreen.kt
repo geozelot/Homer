@@ -1160,7 +1160,7 @@ private fun BookGridCard(
     actions: BookActions,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val showRing = book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished
+    val showProgress = book.hasVisibleProgress()
 
     Column(
         modifier = Modifier
@@ -1193,7 +1193,7 @@ private fun BookGridCard(
         }
         // Under the cover rather than on it, exactly as the listening strip has always drawn it —
         // so "how far in am I" looks the same wherever a book appears.
-        if (showRing) {
+        if (showProgress) {
             ProgressBar(
                 fraction = book.progress ?: 0f,
                 modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
@@ -1395,7 +1395,11 @@ private fun SeriesGridCard(
                     .clip(RoundedCornerShape(9.dp))
                     .border(1.5.dp, Ground, RoundedCornerShape(9.dp)),
             )
-            VolumeCountBadge(series.books.size, modifier = Modifier.align(Alignment.TopStart))
+            VolumeCountBadge(
+                series.books.size,
+                isCollection = series.isCollection,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
             // The count comes along only when it is not all of them: "12 of 12 downloaded" is
             // said better by the icon alone.
             val downloaded = series.books.count { it.isDownloaded }
@@ -1652,7 +1656,7 @@ private fun BookListRow(
                 }
             }
             // Same bar, same place, whatever view a book appears in.
-            if (book.started && book.progress?.let { it > 0.01f && it < 0.995f } == true && !book.finished) {
+            if (book.hasVisibleProgress()) {
                 ProgressBar(
                     fraction = book.progress ?: 0f,
                     modifier = Modifier.width(46.dp).padding(top = 4.dp),
