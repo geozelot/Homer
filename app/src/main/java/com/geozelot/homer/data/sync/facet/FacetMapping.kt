@@ -30,6 +30,8 @@ object FacetMapping {
         author = book.author,
         series = book.series,
         seriesIndex = book.seriesIndex,
+        collection = book.collection,
+        collectionIndex = book.collectionIndex,
         contentHash = book.contentHash,
         coverFilePath = book.coverFilePath,
         isMultiFile = book.isMultiFile,
@@ -135,6 +137,10 @@ object FacetMapping {
         author = structure.author,
         series = structure.series,
         seriesIndex = structure.seriesIndex,
+        collection = structure.collection,
+        // Kept when the facet has none, unlike `collection` beside it: an index is somebody's
+        // ordering, and an older build republishing the index without the field must not erase it.
+        collectionIndex = structure.collectionIndex ?: existing?.collectionIndex,
         genre = derived?.genre ?: existing?.genre,
         language = derived?.language ?: existing?.language,
         relativePath = id,

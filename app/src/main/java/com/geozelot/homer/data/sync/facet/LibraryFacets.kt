@@ -95,6 +95,15 @@ data class StructureBook(
     val series: String? = null,
     val seriesIndex: Int? = null,
     /**
+     * The parent grouping above the series, and the position in it.
+     *
+     * Structural rather than derived: the collection is read from the folder the book sits in, the
+     * same place the series comes from, so it is a fact about the library's shape. Defaulted so an
+     * index written by an older build reads back as "no collection" rather than failing to parse.
+     */
+    val collection: String? = null,
+    val collectionIndex: Int? = null,
+    /**
      * The path-independent fingerprint. Shared because it is derived from the files, and a device
      * that adopts a book without it can never recognise that book again once its folder is
      * renamed — orphaning the position and bookmarks permanently.
