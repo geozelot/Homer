@@ -269,7 +269,14 @@
     </plurals>
 
     <!-- Settings: hub -->
-    <string name="set_library_title">Bibliothek</string>
+    <string name="set_cat_library">DEINE BIBLIOTHEK</string>
+    <string name="set_cat_device">AUF DIESEM GERÄT</string>
+    <string name="set_cat_app">HOMER SELBST</string>
+    <string name="set_sync_title">Sync</string>
+    <string name="set_upkeep_title">Pflege</string>
+    <string name="set_upkeep_summary_done">Alles gelesen und vermessen</string>
+    <string name="set_upkeep_summary_todo">%1$d ohne Cover · %2$d nicht vermessen</string>
+    <string name="set_upkeep_reader_summary">Wird von einem anderen Gerät gepflegt</string>
     <string name="set_source_summary">Woher deine Bücher kommen</string>
     <string name="set_source_summary_books">%1$s · %2$s</string>
     <string name="set_device_title">Auf diesem Gerät</string>

@@ -178,9 +178,22 @@ fun SettingsNavRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     summary: String? = null,
+    enabled: Boolean = true,
 ) {
-    SettingsRow(label = label, summary = summary, onClick = onClick, modifier = modifier) {
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted)
+    SettingsRow(
+        label = label,
+        summary = summary,
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier,
+    ) {
+        // The chevron dims with the row. Left at full strength it reads as a live affordance on a
+        // row that will not respond to it.
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = if (enabled) Muted else Faint,
+        )
     }
 }
 

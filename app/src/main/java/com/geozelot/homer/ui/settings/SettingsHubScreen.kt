@@ -17,6 +17,7 @@ import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsNavRow
+import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Faint
 
@@ -37,6 +38,7 @@ fun SettingsHubScreen(
     viewModel: HomeViewModel,
     onBack: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenUpkeep: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenPlayback: () -> Unit,
     onOpenPrivacy: () -> Unit,
@@ -49,28 +51,51 @@ fun SettingsHubScreen(
     val customStorageUri by viewModel.customStorageUri.collectAsStateWithLifecycle()
     val customStoragePath by viewModel.customStoragePath.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
+    val readsOnly by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
+    val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
+    val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
 
     SettingsScaffold(stringResource(R.string.settings_title), onBack, modifier) {
-        // Where the books come from, what Homer has read about them, and what is shared.
+        // Three categories, because the eight rows underneath answer three different questions:
+        // what the library IS, what this phone does with it, and what Homer itself does. Flat, they
+        // read as a list to search through; grouped, the right one is usually obvious.
+        SettingsSectionHeader(stringResource(R.string.set_cat_library))
         SettingsNavRow(
-            label = stringResource(R.string.set_library_title),
+            label = stringResource(R.string.set_sync_title),
             summary = sourceSummary(account, libraryIsShare, bookCount),
             onClick = onOpenLibrary,
         )
+        // Disabled rather than hidden for a reader: the page is not theirs to act on, but the fact
+        // that upkeep exists and is somebody else's job is worth being able to see.
+        SettingsNavRow(
+            label = stringResource(R.string.set_upkeep_title),
+            summary = upkeepSummary(readsOnly, artless, unmeasured),
+            enabled = !readsOnly,
+            onClick = onOpenUpkeep,
+        )
+
+        SettingsDivider()
+
+        SettingsSectionHeader(stringResource(R.string.set_cat_device))
         // "What's stored here" — downloads and covers on this phone.
         SettingsNavRow(
             label = stringResource(R.string.set_device_title),
             summary = storageSummary(customStoragePath, customStorageUri),
             onClick = onOpenDevice,
         )
-
-        SettingsDivider()
-
         SettingsNavRow(
             label = stringResource(R.string.set_playback_title),
             summary = stringResource(R.string.set_playback_summary, seekSeconds),
             onClick = onOpenPlayback,
         )
+
+        SettingsDivider()
+
+        SettingsSectionHeader(stringResource(R.string.set_cat_app))
+        // A row rather than a page: one setting does not earn a screen of its own, and this is the
+        // one place in settings a reader will look for it. Not persisted by Homer — the platform
+        // owns the choice, and Android 13+ shows the same setting in system settings.
+        LanguageRow()
         SettingsNavRow(
             label = stringResource(R.string.set_privacy_title),
             summary = stringResource(R.string.set_privacy_summary),
@@ -81,13 +106,6 @@ fun SettingsHubScreen(
             summary = stringResource(R.string.set_about_summary),
             onClick = onOpenAbout,
         )
-
-        SettingsDivider()
-
-        // A row rather than a page: one setting does not earn a screen of its own, and this is the
-        // one place in settings a reader will look for it. Not persisted by Homer — the platform
-        // owns the choice, and Android 13+ shows the same setting in system settings.
-        LanguageRow()
 
         Text(
             stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
@@ -129,6 +147,18 @@ private fun LanguageRow() {
  */
 private fun languageLabel(context: Context, language: AppLanguage): String =
     if (language == AppLanguage.SYSTEM) context.getString(R.string.set_language_system) else language.label
+
+/**
+ * What upkeep has left to do, or whose job it is.
+ *
+ * A reader is told the state rather than a count of work, because none of it is theirs to start.
+ */
+@Composable
+private fun upkeepSummary(readsOnly: Boolean, artless: Int, unmeasured: Int): String = when {
+    readsOnly -> stringResource(R.string.set_upkeep_reader_summary)
+    artless == 0 && unmeasured == 0 -> stringResource(R.string.set_upkeep_summary_done)
+    else -> stringResource(R.string.set_upkeep_summary_todo, artless, unmeasured)
+}
 
 /** The library source in one line: the share or account it comes from, plus how much is in it. */
 @Composable

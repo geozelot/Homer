@@ -281,7 +281,14 @@
     </plurals>
 
     <!-- Settings: hub -->
-    <string name="set_library_title">Library</string>
+    <string name="set_cat_library">YOUR LIBRARY</string>
+    <string name="set_cat_device">ON THIS DEVICE</string>
+    <string name="set_cat_app">HOMER ITSELF</string>
+    <string name="set_sync_title">Sync</string>
+    <string name="set_upkeep_title">Upkeep</string>
+    <string name="set_upkeep_summary_done">Everything has been read and measured</string>
+    <string name="set_upkeep_summary_todo">%1$d without artwork · %2$d unmeasured</string>
+    <string name="set_upkeep_reader_summary">Kept by whoever maintains this library</string>
     <string name="set_source_summary">Where your books come from</string>
     <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
     <string name="set_source_summary_books">%1$s · %2$s</string>

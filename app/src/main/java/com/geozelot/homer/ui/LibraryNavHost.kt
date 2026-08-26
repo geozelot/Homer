@@ -26,7 +26,8 @@ import com.geozelot.homer.ui.login.LoginScreen
 import com.geozelot.homer.ui.player.PlayerScreen
 import com.geozelot.homer.ui.settings.AboutSettingsScreen
 import com.geozelot.homer.ui.settings.DeviceStorageScreen
-import com.geozelot.homer.ui.settings.LibraryScreen
+import com.geozelot.homer.ui.settings.LibrarySyncScreen
+import com.geozelot.homer.ui.settings.LibraryUpkeepScreen
 import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
 import com.geozelot.homer.ui.settings.PrivacySettingsScreen
 import com.geozelot.homer.ui.settings.SettingsHubScreen
@@ -41,6 +42,7 @@ private const val ROUTE_LINK_SYNC = "link_sync"
 private const val ROUTE_STORAGE_BROWSER = "storage_browser"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_LIBRARY = "settings/library"
+private const val ROUTE_SETTINGS_UPKEEP = "settings/upkeep"
 private const val ROUTE_SETTINGS_DEVICE = "settings/device"
 private const val ROUTE_SETTINGS_PLAYBACK = "settings/playback"
 private const val ROUTE_SETTINGS_PRIVACY = "settings/privacy"
@@ -94,6 +96,7 @@ fun LibraryNavHost() {
                 viewModel = navController.libraryViewModel(entry),
                 onBack = { navController.popBackStack() },
                 onOpenLibrary = { navController.navigate(ROUTE_SETTINGS_LIBRARY) },
+                onOpenUpkeep = { navController.navigate(ROUTE_SETTINGS_UPKEEP) },
                 onOpenDevice = { navController.navigate(ROUTE_SETTINGS_DEVICE) },
                 onOpenPlayback = { navController.navigate(ROUTE_SETTINGS_PLAYBACK) },
                 onOpenPrivacy = { navController.navigate(ROUTE_SETTINGS_PRIVACY) },
@@ -101,9 +104,15 @@ fun LibraryNavHost() {
             )
         }
         composable(ROUTE_SETTINGS_LIBRARY) { entry ->
-            LibraryScreen(
+            LibrarySyncScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onLinkSyncAccount = { navController.navigate(ROUTE_LINK_SYNC) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(ROUTE_SETTINGS_UPKEEP) { entry ->
+            LibraryUpkeepScreen(
+                viewModel = navController.libraryViewModel(entry),
                 onBack = { navController.popBackStack() },
             )
         }
