@@ -7,6 +7,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.R
+import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.SignOut
@@ -146,7 +147,16 @@ sealed interface LibraryEntry {
      * activity recreation a language change causes, so a heading whose words were baked in would
      * still be in the old language afterwards.
      */
-    data class Header(val title: String, @StringRes val titleRes: Int? = null) : LibraryEntry
+    data class Header(
+        val title: String,
+        @StringRes val titleRes: Int? = null,
+        /**
+         * An ISO language code whose NAME is the heading — resolved when the row draws, for the
+         * same reason [titleRes] is. `title` keeps the code, so the header's identity (and the
+         * grid's duplicate-title key) does not move when the interface language does.
+         */
+        val languageCode: String? = null,
+    ) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
 
     // Annotated on the class as well as the interface: stability is inferred per concrete type,
@@ -1176,7 +1186,18 @@ private fun buildEntries(
         // Shelved rather than only filtered: on a mixed library, seeing German and English as two
         // shelves is more use than hiding one of them.
         LibraryShelving.LANGUAGE ->
-            sectioned(ordered, "No language", R.string.home_shelf_no_language) { unit ->
+            sectioned(
+                units = ordered,
+                fallback = "No language",
+                fallbackRes = R.string.home_shelf_no_language,
+                // Ordered by the NAME the reader will see, not by the code behind it: sorting on
+                // the code puts GERMAN above ENGLISH on an English interface. Read from the default
+                // locale here rather than passed in, so the ordering can lag a language change until
+                // the list next rebuilds — a stale ORDER being a great deal less wrong than the
+                // stale TEXT that baking the label in would produce.
+                sortBy = { BookLanguage.displayName(it) },
+                asLanguage = true,
+            ) { unit ->
                 when (unit) {
                     is SortUnit.Solo -> unit.book.language
                     is SortUnit.Ser -> seriesLanguage(unit.series.books)
@@ -1293,16 +1314,24 @@ private fun sectioned(
     units: List<SortUnit>,
     fallback: String,
     @StringRes fallbackRes: Int,
+    sortBy: (String) -> String = { it },
+    asLanguage: Boolean = false,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
     val byKey = units.groupBy(keyOf)
-    val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.lowercase() }))
+    val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.let(sortBy)?.lowercase() }))
     return buildList {
         for (key in keys) {
             // `title` stays the English fallback even when `titleRes` replaces it on screen: it is
             // also the header's identity for the duplicate-title key in the grid, which must not
             // change with the interface language.
-            add(LibraryEntry.Header(key ?: fallback, titleRes = if (key == null) fallbackRes else null))
+            add(
+                LibraryEntry.Header(
+                    title = key ?: fallback,
+                    titleRes = if (key == null) fallbackRes else null,
+                    languageCode = key.takeIf { asLanguage },
+                ),
+            )
             byKey.getValue(key).forEach { add(it.toEntry()) }
         }
     }

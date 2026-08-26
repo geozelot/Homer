@@ -91,8 +91,22 @@ object BookLanguage {
      * The platform's table, not one of Homer's: it already knows every language's name in every
      * locale, and duplicating a slice of that here would be a second thing to translate.
      */
-    fun displayName(code: String): String =
-        Locale.forLanguageTag(code).displayLanguage.ifBlank { code.uppercase() }
+    fun displayName(code: String): String = displayName(code, Locale.getDefault())
+
+    /**
+     * The language's name, written in [locale] — "Deutsch" to a German interface, "German" to an
+     * English one.
+     *
+     * Takes the locale rather than reading the default because the caller that matters is a
+     * composable, and a shelf heading has to re-resolve when the interface language changes. The
+     * list it labels is built by a ViewModel that SURVIVES the activity recreation a language change
+     * causes, so anything baked in at build time would still be in the old language afterwards —
+     * the same reason headings carry a string resource rather than a string.
+     */
+    fun displayName(code: String, locale: Locale): String =
+        Locale.forLanguageTag(code).getDisplayLanguage(locale)
+            .ifBlank { code.uppercase(Locale.ROOT) }
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
 
     /** The short marker a library row shows — the code itself, upper-cased. */
     fun shortLabel(code: String): String = code.uppercase(Locale.ROOT)

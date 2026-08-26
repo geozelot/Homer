@@ -107,6 +107,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -642,7 +643,7 @@ private fun LazyGridScope.libraryContent(
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
                 key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
-            ) { SectionLabelRow(entry.titleRes?.let { stringResource(it) } ?: entry.title) }
+            ) { SectionLabelRow(headerLabel(entry)) }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
@@ -743,6 +744,22 @@ private fun LazyGridScope.libraryContent(
  * drops them back to the in-list size along with the listening panel, since every pixel the pinned
  * block holds on to is a pixel of library the user can't see.
  */
+/**
+ * A shelf heading's words, resolved at DRAW time.
+ *
+ * Three sources, in order: a string resource for the "no author"/"no genre" fallbacks, a language
+ * name for the language shelving, and otherwise the key itself (an author, a genre). None of them
+ * may be baked into the entry — the ViewModel that builds the list survives the activity recreation
+ * a language change causes, so a heading resolved at build time would still be in the old language.
+ */
+@Composable
+private fun headerLabel(entry: LibraryEntry.Header): String = when {
+    entry.titleRes != null -> stringResource(entry.titleRes)
+    entry.languageCode != null ->
+        BookLanguage.displayName(entry.languageCode, LocalConfiguration.current.locales[0])
+    else -> entry.title
+}
+
 @Composable
 private fun SectionLabelRow(
     text: String,
@@ -844,8 +861,9 @@ private fun LibraryControlBar(
                 // "German" and nothing else, which is a control that cannot do anything.
                 if (languages.size > 1) {
                     val all = stringResource(R.string.home_language_all)
+                    val uiLocale = LocalConfiguration.current.locales[0]
                     val labelOf = { code: String? ->
-                        code?.let { BookLanguage.displayName(it) } ?: all
+                        code?.let { BookLanguage.displayName(it, uiLocale) } ?: all
                     }
                     val selected = languageFilter?.takeIf { it in languages }
                     DropdownChip(
