@@ -165,6 +165,8 @@
         <item quantity="one">%1$d Buch</item>
         <item quantity="other">%1$d Bücher</item>
     </plurals>
+    <string name="home_cd_collapse_listening">Aktuell gehört zuklappen</string>
+    <string name="home_cd_expand_listening">Aktuell gehört aufklappen</string>
     <string name="home_cd_collapse_series">Serie zuklappen</string>
     <string name="home_meta_percent_bare">%1$d%%</string>
 

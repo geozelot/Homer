@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.home
 
+import com.geozelot.homer.data.db.entity.DownloadStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -58,11 +59,14 @@ class LibraryFilterTest {
     }
 
     @Test
-    fun `two values on the same facet are an OR`() {
+    fun `two values on a multi-valued facet are an AND`() {
+        val both = book("b", tags = listOf("Klassiker", "Gelesen"))
+        val one = book("o", tags = listOf("Klassiker"))
         val f = LibraryFilter()
-            .plus(FilterToken(FilterFacet.AUTHOR, "Pratchett"))
-            .plus(FilterToken(FilterFacet.AUTHOR, "Gaiman"))
-        assertEquals(listOf("1", "2"), all.filter { f.matches(it) }.map { it.id })
+            .plus(FilterToken(FilterFacet.TAG, "Klassiker"))
+            .plus(FilterToken(FilterFacet.TAG, "Gelesen"))
+        assertTrue(f.matches(both))
+        assertFalse("one of the two tags must not be enough", f.matches(one))
     }
 
     @Test
@@ -75,12 +79,14 @@ class LibraryFilterTest {
     }
 
     @Test
-    fun `ANDing two values of a single-valued facet is empty, which is why within-facet is OR`() {
-        // Stated as a test because it is the reason the rule exists: a book has one author.
+    fun `two values of a single-valued facet leave nothing, which is the accepted cost of AND`() {
+        // Pinned as a test because it is the price of the rule, not an oversight: no book has two
+        // authors, so two author pills is an empty shelf. If this ever needs to widen again, this
+        // is the test that says so out loud.
         val f = LibraryFilter()
             .plus(FilterToken(FilterFacet.AUTHOR, "Pratchett"))
             .plus(FilterToken(FilterFacet.AUTHOR, "Gaiman"))
-        assertTrue("OR must not produce an empty shelf here", all.any { f.matches(it) })
+        assertTrue("AND on one axis must be empty", all.none { f.matches(it) })
     }
 
     @Test
@@ -144,15 +150,24 @@ class LibraryFilterTest {
     }
 
     @Test
-    fun `two states OR together like two authors do`() {
-        val started = book("s", author = "X").copy(started = true, progress = 0.5f)
-        val books = all + started
+    fun `two states AND together, which is what makes them worth combining`() {
+        // A book IS several states at once, so this is the combination AND was wanted for:
+        // downloaded-and-started is the "on my commute, half read" shelf.
+        val onTheTrain = book("s").copy(
+            started = true,
+            progress = 0.5f,
+            downloadStatus = DownloadStatus.DONE,
+            downloadedFiles = 1,
+        )
         val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.STATE, BookState.DOWNLOADED.key))
+            .plus(FilterToken(FilterFacet.STATE, BookState.STARTED.key))
+        assertTrue(f.matches(onTheTrain))
+        // And the mutually exclusive pair now leaves nothing, which is the honest answer.
+        val exclusive = LibraryFilter()
             .plus(FilterToken(FilterFacet.STATE, BookState.UNSTARTED.key))
             .plus(FilterToken(FilterFacet.STATE, BookState.STARTED.key))
-        // Every book is one or the other, so ORing them leaves the whole shelf — ANDing would
-        // leave nothing, which is the reading a facet-per-state would have forced.
-        assertEquals(books.size, books.count { f.matches(it) })
+        assertTrue(all.none { exclusive.matches(it) })
     }
 
     @Test

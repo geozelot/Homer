@@ -51,6 +51,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -87,6 +88,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -288,6 +290,26 @@ fun HomeScreen(
         // ListeningShelf for why the collapse went. Its LazyRow state is hoisted so the horizontal
         // scroll position survives scrolling the library and is not reset by the item being disposed.
         val shelfRowState = rememberLazyListState()
+        // Expanded until something says otherwise, and only ever folded BY something — see
+        // ListeningShelf. rememberSaveable so a rotation does not silently unfold it again.
+        var listeningExpanded by rememberSaveable { mutableStateOf(true) }
+        var foldedOnFirstScroll by rememberSaveable { mutableStateOf(false) }
+        val libraryScrolled by remember(gridState) {
+            derivedStateOf {
+                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
+            }
+        }
+        // Latched: the first scroll folds it, and after that scrolling is the reader's business.
+        // Without the latch, expanding it while scrolled down would fold straight back up.
+        LaunchedEffect(libraryScrolled) {
+            if (libraryScrolled && !foldedOnFirstScroll) {
+                foldedOnFirstScroll = true
+                listeningExpanded = false
+            }
+        }
+        // Every time search opens, not just the first — opening the box is the clearest statement
+        // there is that the reader is looking for something other than what is on this strip.
+        LaunchedEffect(searching) { if (searching) listeningExpanded = false }
         // The shelf STAYS while search is open. Hiding it was meant to give the results more room
         // and instead undid the whole point of moving search into the control bar: dropping it and
         // its divider out of this Column pulled everything below UP by the panel's height, so
@@ -307,6 +329,8 @@ fun HomeScreen(
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = listeningShelf,
+                expanded = listeningExpanded,
+                onToggle = { listeningExpanded = !listeningExpanded },
                 rowState = shelfRowState,
                 onOpen = onBookClick,
                 actions = actions,
@@ -958,43 +982,56 @@ private fun LibraryControlBar(
                     // away. Search does a different KIND of thing from the three chips beside it,
                     // and a gap is what separates a group from its neighbour rather than making it
                     // the first member of one.
-                    .padding(start = 6.dp)
+                    .padding(start = 12.dp)
                     .horizontalScroll(rememberScrollState())
                     .padding(end = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DropdownChip(
-                    label = stringResource(shelving.label),
-                    icon = Icons.Filled.Category,
-                    iconDescription = stringResource(R.string.home_chip_shelve, stringResource(shelving.label)),
-                    options = LibraryShelving.values().toList(),
-                    selected = shelving,
-                    labelOf = { controlContext.getString(it.label) },
-                    onSelect = onShelfChange,
-                    pillHeight = ControlPillHeight,
-                )
-                DropdownChip(
-                    label = stringResource(series.label),
-                    icon = Icons.Filled.Layers,
-                    iconDescription = stringResource(R.string.home_chip_series, stringResource(series.label)),
-                    options = LibraryDepth.entries.toList(),
-                    selected = series,
-                    labelOf = { controlContext.getString(it.label) },
-                    onSelect = onSeriesChange,
-                    pillHeight = ControlPillHeight,
-                )
-                // Only the sorts that still do something — see LibrarySort.offeredFor.
-                DropdownChip(
-                    label = stringResource(sort.label),
-                    icon = Icons.AutoMirrored.Filled.Sort,
-                    iconDescription = stringResource(R.string.home_chip_sort, stringResource(sort.label)),
-                    options = LibrarySort.offeredFor(shelving),
-                    selected = sort,
-                    labelOf = { controlContext.getString(it.label) },
-                    onSelect = onSortChange,
-                    pillHeight = ControlPillHeight,
-                )
+                // Shelve, depth and sort are ONE control in three parts — they all answer "how
+                // is this list arranged" — so they share a band the way the view toggle's halves
+                // do, instead of standing as three separate pills with gaps between them. Each
+                // chip drops its own outline and fill; the band draws them once for all three.
+                Row(
+                    modifier = Modifier.controlGroupPill(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DropdownChip(
+                        label = stringResource(shelving.label),
+                        icon = Icons.Filled.Category,
+                        iconDescription = stringResource(R.string.home_chip_shelve, stringResource(shelving.label)),
+                        options = LibraryShelving.values().toList(),
+                        selected = shelving,
+                        labelOf = { controlContext.getString(it.label) },
+                        onSelect = onShelfChange,
+                        pillHeight = ControlPillHeight,
+                        flat = true,
+                    )
+                    ControlGroupSeam()
+                    DropdownChip(
+                        label = stringResource(series.label),
+                        icon = Icons.Filled.Layers,
+                        iconDescription = stringResource(R.string.home_chip_series, stringResource(series.label)),
+                        options = LibraryDepth.entries.toList(),
+                        selected = series,
+                        labelOf = { controlContext.getString(it.label) },
+                        onSelect = onSeriesChange,
+                        pillHeight = ControlPillHeight,
+                        flat = true,
+                    )
+                    ControlGroupSeam()
+                    // Only the sorts that still do something — see LibrarySort.offeredFor.
+                    DropdownChip(
+                        label = stringResource(sort.label),
+                        icon = Icons.AutoMirrored.Filled.Sort,
+                        iconDescription = stringResource(R.string.home_chip_sort, stringResource(sort.label)),
+                        options = LibrarySort.offeredFor(shelving),
+                        selected = sort,
+                        labelOf = { controlContext.getString(it.label) },
+                        onSelect = onSortChange,
+                        pillHeight = ControlPillHeight,
+                        flat = true,
+                    )
+                }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1009,6 +1046,50 @@ private fun LibraryControlBar(
             onClear = onClearFilter,
         )
     }
+}
+
+/**
+ * The one band a run of adjacent controls is drawn inside.
+ *
+ * PAINTED behind rather than applied with `Modifier.border`, because a real border wraps the layout
+ * — and the layout has to stay 48dp tall to keep every segment tappable. Drawing it lets the band be
+ * chip-height while the tap targets stay full size, which is the same split [DropdownChip] makes
+ * with its own pill inside a 48dp box.
+ *
+ * Shared by the view toggle and by the shelve/depth/sort chips, so "these three belong together" is
+ * said the same way in both places and cannot drift into two slightly different pills.
+ */
+private fun Modifier.controlGroupPill(): Modifier = drawBehind {
+    val h = ControlPillHeight.toPx()
+    val top = (size.height - h) / 2f
+    val stroke = 1.dp.toPx()
+    val radius = CornerRadius(8.dp.toPx())
+    drawRoundRect(Surface1, Offset(0f, top), Size(size.width, h), radius)
+    drawRoundRect(
+        color = Line,
+        topLeft = Offset(stroke / 2f, top + stroke / 2f),
+        size = Size(size.width - stroke, h - stroke),
+        cornerRadius = radius,
+        style = Stroke(stroke),
+    )
+}
+
+/**
+ * The seam between two segments of a [controlGroupPill].
+ *
+ * The view toggle needs none — two glyphs, one of them lit amber, and it is obvious which is which.
+ * Three segments each carrying an icon AND a word do need one, or the band reads as a single
+ * run-on phrase. Inset from the band's edges so it is a seam inside the pill rather than a second
+ * outline crossing it.
+ */
+@Composable
+private fun ControlGroupSeam() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(ControlPillHeight - 10.dp)
+            .background(Line),
+    )
 }
 
 /**
@@ -1038,7 +1119,9 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
                 // what the list CONTAINS; the accent is what the rest of the app uses to mean
                 // live, and this is the chip worth finding without looking for it.
                 .border(1.dp, Amber, RoundedCornerShape(8.dp))
-                .padding(horizontal = 9.dp),
+                // Wider than a glyph needs. It is the control that opens the box, so it gets a
+                // little more presence than the chips that merely rearrange the list.
+                .padding(horizontal = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -1061,14 +1144,14 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
  * slot, its own 56dp minimum and its own padding, none of which fit inside a 28dp pill. What is
  * wanted here is a chip somebody can type into.
  *
- * No back arrow. The row it lives in did not move to make space for it, so there is nothing to
- * navigate back FROM — it is closed by the X on an empty field, a tap on the library, or the back
- * gesture.
+ * A back arrow leads, where the magnifier used to. The magnifier was decoration: the field is
+ * plainly a field, it was opened from a magnifier one tap ago, and it spent the one slot at the head
+ * of the pill saying what the reader had just done rather than offering them a way out. Closing had
+ * been left to the X, a tap on the library, or the back gesture — none of them visible.
  *
- * The X is two-stage, which is what a text field's X means everywhere else: with something typed it
- * empties the field and keeps it open, and only on an already-empty field does it close the search.
- * A single-purpose X threw away three words because one of them had a typo. Its label follows what
- * it will actually do, rather than saying "Clear" while closing.
+ * Which frees the X to mean the one thing an X in a text field means everywhere else: clear the
+ * text. It no longer has to double as the close button, so it is drawn only when there is something
+ * to clear, and its label is simply true.
  */
 @Composable
 private fun InlineSearchField(
@@ -1089,17 +1172,12 @@ private fun InlineSearchField(
                 .height(ControlPillHeight)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Surface2)
-                .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
-                .padding(start = 9.dp),
+                .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Filled.Search,
-                contentDescription = null,
-                tint = Amber,
-                modifier = Modifier.size(16.dp),
-            )
-            Box(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+            // Holds the arrow's width open, the same way the trailing spacer does for the X.
+            Spacer(modifier = Modifier.width(LeadingActionWidth))
+            Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
                     Text(
                         stringResource(R.string.home_search_placeholder),
@@ -1120,34 +1198,52 @@ private fun InlineSearchField(
             // otherwise tapping the last word of a query would clear it instead of placing a cursor.
             Spacer(modifier = Modifier.width(TrailingActionWidth))
         }
-        // The X's target, OUTSIDE the 28dp pill so it can be a real one.
-        //
-        // The glyph belongs inside the pill, but a 16dp clickable is not a control anybody can hit;
-        // the row is 48dp and only the pill is short, so the target takes the row's full height and
-        // the same 44dp width the view-toggle segments use, with the glyph drawn centred inside it.
+        // Both targets sit OUTSIDE the 28dp pill so they can be real ones. The glyphs belong inside
+        // it, but a 16dp clickable is not a control anybody can hit; the row is 48dp and only the
+        // pill is short, so each target takes the row's full height with its glyph centred in it.
         // Exactly the split DropdownChip makes: chip-height paint, full-height touch.
-        val hasQuery = query.isNotEmpty()
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(width = TrailingActionWidth, height = 48.dp)
-                .clickable { if (hasQuery) onQueryChange("") else onClose() },
+                .align(Alignment.CenterStart)
+                .size(width = LeadingActionWidth, height = 48.dp)
+                .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Filled.Close,
-                // Says what the next tap does, not what the icon usually means.
-                contentDescription = stringResource(
-                    if (hasQuery) R.string.action_clear else R.string.home_cd_close_search,
-                ),
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.home_cd_close_search),
                 tint = Muted,
                 modifier = Modifier.size(16.dp),
             )
         }
+        // Only when there is something to clear. An X on an empty field is a control that either
+        // does nothing or does something else — and "something else" is what it used to do.
+        if (query.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .size(width = TrailingActionWidth, height = 48.dp)
+                    .clickable { onQueryChange("") },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.action_clear),
+                    tint = Muted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 
-/** The X's slot in the search pill — the 44dp the view toggle's own segments settled on. */
+/**
+ * The arrow's slot at the head of the search pill, and the X's at its tail.
+ *
+ * Both 44dp, the width the view toggle's own segments settled on. The trailing one is reserved even
+ * while the X is hidden, so the text does not reflow the moment a first character is typed.
+ */
+private val LeadingActionWidth = 44.dp
 private val TrailingActionWidth = 44.dp
 
 /**
@@ -1161,20 +1257,7 @@ private val TrailingActionWidth = 44.dp
 @Composable
 private fun ViewToggleGroup(gridView: Boolean, onToggleView: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.drawBehind {
-            val h = ControlPillHeight.toPx()
-            val top = (size.height - h) / 2f
-            val stroke = 1.dp.toPx()
-            val radius = CornerRadius(8.dp.toPx())
-            drawRoundRect(Surface1, Offset(0f, top), Size(size.width, h), radius)
-            drawRoundRect(
-                color = Line,
-                topLeft = Offset(stroke / 2f, top + stroke / 2f),
-                size = Size(size.width - stroke, h - stroke),
-                cornerRadius = radius,
-                style = Stroke(stroke),
-            )
-        },
+        modifier = Modifier.controlGroupPill(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ViewToggleButton(Icons.Filled.GridView, selected = gridView, desc = stringResource(R.string.home_cd_grid_view)) {
@@ -1236,23 +1319,34 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
 /**
  * The Currently-listening shelf, pinned above the library list.
  *
- * ONE size, always. It used to draw full 132dp cover cards at rest and shrink to a strip of bare
- * covers once the library was scrolled, which cost more than it bought: the panel owned a third of
- * the screen before you had scrolled anything, and the resize itself was the worse half — a filtered
- * shelf one row taller than the viewport would grow the panel, push that row out of reach, and leave
- * the books you were reaching for permanently half-visible. A shelf that changes size in response to
- * scrolling is a shelf you cannot scroll to the bottom of.
+ * Two states, and the reader owns the transition.
  *
- * So it is fixed, and small: the header stays at its compact size, and the item is sized just above
- * what the collapsed strip used to be — see [ListeningCoverFraction] — with the title and the time
- * left underneath, which is what the strip had to drop when it shrank and is the whole reason a
- * cover-only row was hard to use.
+ * The panel used to resize ITSELF as the library scrolled under it, which is the thing that made it
+ * unusable: a filtered shelf one row taller than the viewport would grow the panel, push that row
+ * out of reach, and leave the books being reached for permanently half-visible. A shelf that
+ * changes size in response to scrolling cannot be scrolled to the bottom of.
  *
- * [rowState] is hoisted by the caller so the horizontal position survives scrolling the library.
+ * So the size still changes, but never on its own initiative except to get OUT of the way:
+ *
+ *  - **Collapsing is automatic, expanding never is.** It folds itself away on the first scroll into
+ *    the library, and again whenever search opens, because in both cases the reader has just said
+ *    they are looking at something else. It never unfolds itself — that is a tap on the header, and
+ *    only ever a tap on the header.
+ *  - **Once, for the scroll.** The first-scroll collapse is latched, so expanding it again while
+ *    still scrolled down does not have it immediately fold back up under the reader's finger.
+ *
+ * Collapsed, it is covers and progress bars at the size a list row uses, and they are NOT tappable:
+ * the only thing a tap can do in that state is open the panel back up, which is what stops a strip
+ * of thumbnails being a row of 46dp mystery buttons.
+ *
+ * [rowState] is hoisted by the caller so the horizontal position survives both the fold and
+ * scrolling the library.
  */
 @Composable
 private fun ListeningShelf(
     books: List<BookListItem>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     rowState: LazyListState,
     onOpen: (String) -> Unit,
     actions: BookActions,
@@ -1270,14 +1364,32 @@ private fun ListeningShelf(
                 // that happen to sit together.
                 .background(Surface0),
         ) {
-            Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
-                SectionLabelRow(
-                    stringResource(R.string.home_section_listening, books.size),
-                    topPadding = 8.dp,
-                    bottomPadding = 2.dp,
-                    // Small, unlike the library header below it. That one titles the list being
-                    // scrolled; this titles a strip that is deliberately not the subject.
-                    large = false,
+            // The header IS the control. Nothing else folds the panel, and nothing else unfolds it,
+            // so the one row that names the strip is also the one row that owns its size.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = LibraryGridPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    SectionLabelRow(
+                        stringResource(R.string.home_section_listening, books.size),
+                        topPadding = 8.dp,
+                        bottomPadding = 2.dp,
+                        // Small, unlike the library header below it. That one titles the list being
+                        // scrolled; this titles a strip that is deliberately not the subject.
+                        large = false,
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.home_cd_collapse_listening else R.string.home_cd_expand_listening,
+                    ),
+                    tint = Muted,
+                    modifier = Modifier.size(18.dp),
                 )
             }
             LazyRow(
@@ -1285,16 +1397,60 @@ private fun ListeningShelf(
                 horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
                 // Padding on the row (not the parent) so cards bleed off the edge while scrolling
                 // instead of stopping at a hard margin.
-                contentPadding = PaddingValues(horizontal = LibraryGridPadding, vertical = 6.dp),
+                contentPadding = PaddingValues(
+                    horizontal = LibraryGridPadding,
+                    vertical = if (expanded) 6.dp else 4.dp,
+                ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 items(books, key = { "cont:${it.id}" }) { book ->
-                    ListeningItem(book, coverWidth, onOpen, actions)
+                    if (expanded) {
+                        ListeningItem(book, coverWidth, onOpen, actions)
+                    } else {
+                        ListeningFolded(book)
+                    }
                 }
             }
         }
     }
 }
+
+/**
+ * A book in the FOLDED strip: its cover at a list row's size, with its progress under it.
+ *
+ * Deliberately inert. A tap here does nothing — the panel is folded, and the only thing a tap can
+ * mean in that state is "open it back up", which the header handles. A 46dp thumbnail that opened a
+ * book would be a mystery button, and one sitting in a strip the reader has just folded away is a
+ * mystery button they are likely to hit by accident.
+ */
+@Composable
+private fun ListeningFolded(book: BookListItem) {
+    Column(
+        // Not clickable, but still named — otherwise the folded strip is a row of unlabelled images
+        // to a screen reader, and the cover art is deliberately decorative.
+        modifier = Modifier
+            .width(ListeningFoldedCover)
+            .semantics { contentDescription = book.title },
+    ) {
+        CoverArt(
+            model = book.coverModel,
+            modifier = Modifier
+                .size(ListeningFoldedCover)
+                .clip(RoundedCornerShape(6.dp))
+                // Same hairline every other cover in the app carries.
+                .border(1.dp, Line, RoundedCornerShape(6.dp)),
+        )
+        ProgressBar(
+            fraction = book.progress ?: 0f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 3.dp),
+        )
+    }
+}
+
+/** The folded cover, at exactly the size [BookListRow] draws its own. */
+private val ListeningFoldedCover = 46.dp
 
 /**
  * How much smaller than a grid cover a listening item is.

@@ -447,9 +447,10 @@ private fun ReaderContents(bookCount: Int, artless: Int, unmeasured: Int) {
  * One job in the queue: what it knows, and the one thing that would close the gap.
  *
  * The action is drawn to [PassActionWidth] — one width shared by all four passes — with its label
- * against the LEFT of it. Sized to its own word, each button was a different width at the trailing
- * edge of its row, so the four of them made a ragged column that had to be read one row at a time.
- * Equal width settles the box edges; left-anchoring the label settles the words too.
+ * CENTRED in it. Sized to its own word, each button was a different width at the trailing edge of
+ * its row, so the four of them made a ragged column that had to be read one row at a time. Equal
+ * width settles the box edges, which was the whole problem; left-anchoring the label as well made
+ * the words line up at the cost of every button looking like text that had slipped.
  *
  * The spinner takes the same slot rather than replacing the button with something narrower, so
  * starting a pass no longer makes the row twitch.
@@ -475,7 +476,7 @@ private fun PassRow(
                     contentPadding = SettingsActionPadding,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(action, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                    Text(action)
                 }
             }
         }

@@ -14,11 +14,15 @@ import java.text.Normalizer
  *
  * Combining rule, chosen once so it never has to be argued per facet:
  *
- *  - **AND across facets.** `language:de author:Pratchett` is German books by Pratchett. Each facet
- *    you add narrows.
- *  - **OR within a facet.** `author:Pratchett author:Gaiman` is either of them. Two values on the
- *    same axis is the only reading that is ever useful — a book has one author, so ANDing them
- *    would guarantee an empty shelf.
+ *  - **AND, everywhere.** Every pill narrows. `language:de author:Pratchett` is German books by
+ *    Pratchett, and `tag:Klassiker tag:Gelesen` is books carrying BOTH tags. One rule for every
+ *    combination, so a pill always means the same thing: fewer books than before.
+ *  - **The cost, accepted deliberately.** Two values on a SINGLE-valued axis now leave nothing —
+ *    `author:Pratchett author:Gaiman` is empty, because no book has two authors. Within-facet used
+ *    to be OR precisely to avoid that. It was traded away because OR made a pill ambiguous: adding
+ *    one could widen or narrow depending on which axis it landed on, and "downloaded AND started"
+ *    was unsayable while being the more useful of the two readings. An empty shelf at least states
+ *    its own cause, and the count beside Clear says how many of how many.
  *  - **AND with the text.** Committed tokens stay in force while the free text narrows what is
  *    left, rather than replacing them.
  *
@@ -133,13 +137,13 @@ data class LibraryFilter(
 
     fun withText(value: String): LibraryFilter = copy(text = value)
 
-    /** Whether [book] survives every committed facet and the free text. */
+    /** Whether [book] survives every committed token and the free text. */
     fun matches(book: BookListItem): Boolean {
-        // Grouped by facet so the OR-within / AND-across rule falls out of the structure rather
-        // than out of a chain of conditions somebody has to read carefully.
-        for ((facet, group) in tokens.groupBy { it.facet }) {
-            val values = book.valuesFor(facet)
-            if (group.none { token -> values.any { it.equals(token.value, ignoreCase = true) } }) return false
+        // A flat AND over every token — no grouping by facet any more, because there is no longer a
+        // within-facet rule for the grouping to express. Every pill is one more condition.
+        for (token in tokens) {
+            val values = book.valuesFor(token.facet)
+            if (values.none { it.equals(token.value, ignoreCase = true) }) return false
         }
         val needle = text.trim()
         return needle.isEmpty() || book.matchesText(needle)

@@ -288,6 +288,12 @@ fun <T> DropdownChip(
      * natural size since it was written and this is a control-bar problem.
      */
     pillHeight: Dp? = null,
+    /**
+     * Drops the chip's own outline and fill, for a chip that is a SEGMENT of a shared band rather
+     * than a pill in its own right — see the library control bar's shelve/depth/sort group. Three
+     * outlined pills butted together draw three borders where the group wants one.
+     */
+    flat: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -304,8 +310,15 @@ fun <T> DropdownChip(
                 modifier = Modifier
                     .then(if (pillHeight != null) Modifier.height(pillHeight) else Modifier)
                     .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, Line, RoundedCornerShape(8.dp))
-                    .background(Surface1)
+                    .then(
+                        if (flat) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                                .background(Surface1)
+                        },
+                    )
                     // With the height pinned, the vertical padding would fight it — the 24sp line
                     // box already fills a 28dp pill on its own.
                     .padding(
