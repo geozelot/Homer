@@ -62,23 +62,7 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_GRID_VIEW] = value }
     }
 
-    /**
-     * Show only books in this language, or null for all of them.
-     *
-     * Persisted, because it is a way of using a mixed library rather than a momentary action — a
-     * German reader with a handful of English books wants the German shelf to still be there
-     * tomorrow. Validated against the languages actually present on read, so a filter naming a
-     * language that has since gone cannot empty the shelf.
-     */
-    val languageFilter: Flow<String?> =
-        context.settingsDataStore.data.map { it[KEY_LANGUAGE_FILTER] }
-
-    suspend fun setLanguageFilter(code: String?) {
-        context.settingsDataStore.edit {
-            if (code == null) it.remove(KEY_LANGUAGE_FILTER) else it[KEY_LANGUAGE_FILTER] = code
-        }
-    }
-
+    
     /** Library sort key: "author" | "title" | "recent" | "duration". */
     val sortMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_SORT_MODE] ?: "author" }
@@ -262,7 +246,9 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_LAST_COVER_SWEEP_ETAG)
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
-            // Names a language from a library this device no longer has.
+            // Nothing writes this any more — the language filter became a filter token, which is
+            // held for the process rather than stored. Cleared here so an install that HAD one
+            // does not carry it around for ever as a preference nothing reads.
             it.remove(KEY_LANGUAGE_FILTER)
         }
     }

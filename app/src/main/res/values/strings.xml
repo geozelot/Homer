@@ -164,8 +164,6 @@
     <string name="home_chip_series">Series · %1$s</string>
     <string name="home_chip_sort">Sort · %1$s</string>
     <!-- Only offered while the library actually holds more than one language. -->
-    <string name="home_chip_language">Language · %1$s</string>
-    <string name="home_language_all">All</string>
     <string name="home_meta_series_position">Book %1$d</string>
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is
          unreachable. Same for the skip-interval seconds below, whose options start at 5. -->
@@ -539,4 +537,12 @@
     </plurals>
     <string name="details_bookmarks_none">No bookmarks in this book yet. Add them from the player.</string>
     <string name="details_bookmark_untitled">Bookmark</string>
+    <string name="filter_facet_author">Author</string>
+    <string name="filter_facet_series">Series</string>
+    <string name="filter_facet_collection">Collection</string>
+    <string name="filter_facet_genre">Genre</string>
+    <string name="filter_facet_language">Language</string>
+    <string name="filter_facet_tag">Tag</string>
+    <string name="filter_count">%1$d of %2$d</string>
+    <string name="filter_clear_all">Clear</string>
 </resources>

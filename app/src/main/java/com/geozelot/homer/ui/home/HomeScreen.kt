@@ -171,7 +171,9 @@ fun HomeScreen(
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val languages by viewModel.languages.collectAsStateWithLifecycle()
-    val languageFilter by viewModel.languageFilter.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val filterCount by viewModel.filterCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
     val indexQueued by viewModel.indexQueued.collectAsStateWithLifecycle()
@@ -247,6 +249,16 @@ fun HomeScreen(
             onSettings = onOpenSettings,
         )
 
+        // Under the field it belongs to, above everything the filter acts on. Committing a
+        // suggestion clears the text that produced it, which is what makes this disappear.
+        if (searching) {
+            FilterSuggestions(
+                suggestions = suggestions,
+                modifier = Modifier.padding(horizontal = LibraryGridPadding),
+                onPick = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
+            )
+        }
+
         // The Currently-listening shelf is pinned here — above the scrolling library rather than being its
         // first item — and shrinks to a slim strip once the user scrolls into the library. Its
         // LazyRow state is hoisted so the horizontal scroll position survives collapsing and is
@@ -293,6 +305,16 @@ fun HomeScreen(
                 // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
                 // is what these controls are pointed at.
                 HorizontalDivider(color = Line.copy(alpha = 0.45f))
+                // The pills sit ABOVE the chips in their own row, so committing a filter grows the
+                // header downward and never reflows the chip row beside it.
+                FilterPills(
+                    tokens = filter.tokens,
+                    shown = filterCount.first,
+                    total = filterCount.second,
+                    onRemove = viewModel::removeFilterToken,
+                    onClear = viewModel::clearFilter,
+                    modifier = Modifier.padding(horizontal = LibraryGridPadding),
+                )
                 LibraryControlBar(
                     count = if (filtering) entries.bookCount() else bookCount,
                     searching = filtering,
@@ -300,12 +322,9 @@ fun HomeScreen(
                     shelving = shelfMode,
                     series = seriesMode,
                     gridView = gridView,
-                    languages = languages,
-                    languageFilter = languageFilter,
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
-                    onLanguageChange = viewModel::setLanguageFilter,
                     onToggleView = viewModel::setGridView,
                     modifier = Modifier.padding(horizontal = LibraryGridPadding),
                 )
@@ -835,12 +854,9 @@ private fun LibraryControlBar(
     series: LibraryDepth,
     gridView: Boolean,
     /** Every language present. Empty or single means the chip below never appears. */
-    languages: List<String>,
-    languageFilter: String?,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
-    onLanguageChange: (String?) -> Unit,
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -904,27 +920,6 @@ private fun LibraryControlBar(
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onSortChange,
                 )
-                // Only once there is a choice. On a single-language library this chip would offer
-                // "German" and nothing else, which is a control that cannot do anything.
-                if (languages.size > 1) {
-                    val all = stringResource(R.string.home_language_all)
-                    val uiLocale = LocalConfiguration.current.locales[0]
-                    val labelOf = { code: String? ->
-                        code?.let { BookLanguage.displayName(it, uiLocale) } ?: all
-                    }
-                    val selected = languageFilter?.takeIf { it in languages }
-                    DropdownChip(
-                        label = labelOf(selected),
-                        icon = Icons.Filled.Language,
-                        iconDescription = stringResource(R.string.home_chip_language, labelOf(selected)),
-                        // Null leads, so clearing the filter is the first thing under the thumb
-                        // rather than the last.
-                        options = listOf<String?>(null) + languages,
-                        selected = selected,
-                        labelOf = labelOf,
-                        onSelect = onLanguageChange,
-                    )
-                }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }

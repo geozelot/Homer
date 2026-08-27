@@ -161,8 +161,6 @@
     <string name="home_chip_shelve">Regal · %1$s</string>
     <string name="home_chip_series">Serie · %1$s</string>
     <string name="home_chip_sort">Sortierung · %1$s</string>
-    <string name="home_chip_language">Sprache · %1$s</string>
-    <string name="home_language_all">Alle</string>
     <string name="home_meta_series_position">Band %1$d</string>
     <plurals name="home_series_book_count">
         <item quantity="one">%1$d Buch</item>
@@ -516,4 +514,12 @@
     </plurals>
     <string name="details_bookmarks_none">Noch keine Lesezeichen in diesem Buch. Du kannst sie im Player setzen.</string>
     <string name="details_bookmark_untitled">Lesezeichen</string>
+    <string name="filter_facet_author">Autor</string>
+    <string name="filter_facet_series">Serie</string>
+    <string name="filter_facet_collection">Reihe</string>
+    <string name="filter_facet_genre">Genre</string>
+    <string name="filter_facet_language">Sprache</string>
+    <string name="filter_facet_tag">Schlagwort</string>
+    <string name="filter_count">%1$d von %2$d</string>
+    <string name="filter_clear_all">Zurücksetzen</string>
 </resources>

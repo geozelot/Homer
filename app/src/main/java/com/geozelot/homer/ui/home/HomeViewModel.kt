@@ -366,8 +366,6 @@ class HomeViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     /**
      * The active sort, clamped to what the current shelving actually offers.
@@ -402,43 +400,53 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * The filter as it can actually be applied: null unless the language is still present.
+     * Everything the input box is currently asking for: committed facet tokens, plus free text.
      *
-     * Validated rather than trusted. A stored filter naming a language that has since been
-     * re-tagged away would otherwise empty the shelf, with the only clue being a chip the reader has
-     * to notice and reset.
+     * Deliberately NOT persisted. A filter you have forgotten is a library that looks broken, and
+     * the previous language filter — which was stored — needed a validation pass purely to stop a
+     * saved value naming a language nobody had any more from silently emptying the shelf. Held for
+     * the process and cleared with it, that whole class of problem does not arise.
      */
-    private val effectiveLanguageFilter: Flow<String?> =
-        combine(librarySettings.languageFilter, bookDao.observeLanguages()) { filter, present ->
-            filter?.takeIf { it in present }
-        }
+    private val _filter = MutableStateFlow(LibraryFilter())
+    val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
 
-    /** What the filter chip shows. */
-    val languageFilter: StateFlow<String?> = librarySettings.languageFilter
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /** The free-text half of [filter], for the input box's own value. */
+    val searchQuery: StateFlow<String> = _filter.map { it.text }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
-    fun setLanguageFilter(code: String?) {
-        viewModelScope.launch { librarySettings.setLanguageFilter(code) }
+    /** What the box would offer for what is typed, read off the loaded shelf rather than an index. */
+    val suggestions: StateFlow<List<FilterSuggestion>> =
+        combine(books, _filter) { list, filter -> suggest(list, filter.text, filter.tokens) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** How many books the filter leaves, and how many there are — the "41 of 313" line. */
+    val filterCount: StateFlow<Pair<Int, Int>> =
+        combine(books, _filter) { list, filter ->
+            (if (filter.isEmpty) list.size else list.count { filter.matches(it) }) to list.size
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
+
+    fun addFilterToken(token: FilterToken) {
+        // Committing a suggestion consumes the text that produced it: leaving it behind would go on
+        // narrowing the very shelf the new pill just selected.
+        _filter.value = _filter.value.plus(token).withText("")
     }
 
-    /** Library list, filtered by query and language, ordered by [sortMode], sectioned by [shelfMode]. */
+    fun removeFilterToken(token: FilterToken) {
+        _filter.value = _filter.value.minus(token)
+    }
+
+    fun clearFilter() {
+        _filter.value = LibraryFilter()
+    }
+
+    /** Library list, filtered by [filter], ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, _searchQuery, sortMode, shelfMode, seriesMode) { list, query, sort, shelving, series ->
-            Arrangement(list, query, sort, shelving, series)
-        }
-            // A sixth input, and combine's typed overloads stop at five. The filter has to run
-            // BEFORE the grouping — it changes which books are on which shelf — so the building
-            // happens in this stage rather than the one above.
-            .combine(effectiveLanguageFilter) { a, language ->
-                var filtered = a.books
-                if (language != null) filtered = filtered.filter { it.language == language }
-                if (a.query.isNotBlank()) {
-                    val needle = a.query.trim().lowercase()
-                    filtered = filtered.filter { it.matchesQuery(needle) }
-                }
-                buildEntries(filtered, a.sort, a.shelving, a.series)
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        combine(books, _filter, sortMode, shelfMode, seriesMode) { list, filter, sort, shelving, series ->
+            // Filtering runs BEFORE the grouping: it changes which books are on which shelf, so a
+            // shelf that loses its last book has to disappear rather than stand there empty.
+            val filtered = if (filter.isEmpty) list else list.filter { filter.matches(it) }
+            buildEntries(filtered, sort, shelving, series)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The currently-playing book as its live library row, so the docked mini-player shows an
@@ -890,7 +898,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSearchQuery(query: String) {
-        _searchQuery.value = query
+        _filter.value = _filter.value.withText(query)
     }
 
     /** Saves metadata corrections + hidden flag; blank fields revert to detection. */
@@ -1374,11 +1382,4 @@ private fun sectioned(
     }
 }
 
-/** Case-insensitive match across title, author, series, genre and tags. */
-private fun BookListItem.matchesQuery(needle: String): Boolean =
-    title.contains(needle, ignoreCase = true) ||
-        author?.contains(needle, ignoreCase = true) == true ||
-        series?.contains(needle, ignoreCase = true) == true ||
-        genre?.contains(needle, ignoreCase = true) == true ||
-        tags.any { it.contains(needle, ignoreCase = true) }
 
