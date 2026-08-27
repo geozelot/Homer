@@ -138,4 +138,36 @@ class PathTemplateTest {
         assertEquals("Discworld", got?.get(TemplateField.COLLECTION))
         assertEquals("Sourcery", got?.get(TemplateField.TITLE))
     }
+
+    // ── arbitrary depth ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a library nested five deep keeps every field`() {
+        // The positional rules counted from both ends and ignored the middle. Without a
+        // multi-segment wildcard this path would match no default and lose everything.
+        val got = PathTemplate.parseFirst(
+            "Pratchett/Audiobooks/Discworld/Rincewind/Sourcery",
+            PathTemplate.DEFAULTS,
+        )
+        assertEquals("Pratchett", got?.get(TemplateField.AUTHOR))
+        assertEquals("Discworld", got?.get(TemplateField.COLLECTION))
+        assertEquals("Rincewind", got?.get(TemplateField.SERIES))
+        assertEquals("Sourcery", got?.get(TemplateField.TITLE))
+    }
+
+    @Test
+    fun `the multi-segment wildcard also matches nothing at all`() {
+        val got = PathTemplate.parseFirst("Pratchett/Discworld/Rincewind/Sourcery", PathTemplate.DEFAULTS)
+        assertEquals("Discworld", got?.get(TemplateField.COLLECTION))
+        assertEquals("Rincewind", got?.get(TemplateField.SERIES))
+    }
+
+    @Test
+    fun `a three-segment path still falls through to the three-field default`() {
+        // The deep template needs four levels, so this must not be claimed by it with an empty
+        // collection — it is a plain author/series/title library.
+        val got = PathTemplate.parseFirst("Pratchett/Rincewind/Sourcery", PathTemplate.DEFAULTS)
+        assertEquals(null, got?.get(TemplateField.COLLECTION))
+        assertEquals("Rincewind", got?.get(TemplateField.SERIES))
+    }
 }

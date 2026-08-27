@@ -42,6 +42,14 @@ class BookDetector @Inject constructor() {
         folderImages: Map<String, List<DavResource>>,
         libraryRoot: String,
         now: Long,
+        /**
+         * The patterns a path is read through, most specific first.
+         *
+         * Defaults to the conventional layout, which is what every library that has never said
+         * otherwise gets. A caller supplying its own puts them BEFORE these, so a pattern written
+         * for a folder beats the convention for that folder.
+         */
+        templates: List<PathTemplate> = PathTemplate.DEFAULTS,
     ): List<Detected> {
         val root = libraryRoot.trim('/')
         // Group audio folders by the book they belong to: a part folder folds into its
@@ -60,7 +68,7 @@ class BookDetector @Inject constructor() {
         }
         Log.i(TAG, "buildBooks: grouped ${folders.size} folders into ${byBook.size} books")
         return byBook.map { (bookPath, members) ->
-            buildBook(bookPath, members, folderImages[bookPath].orEmpty(), root, now)
+            buildBook(bookPath, members, folderImages[bookPath].orEmpty(), root, now, templates)
         }
     }
 
@@ -70,6 +78,7 @@ class BookDetector @Inject constructor() {
         bookFolderImages: List<DavResource>,
         root: String,
         now: Long,
+        templates: List<PathTemplate>,
     ): Detected {
         // The book's own direct-audio folder (if any) leads, then part folders in
         // natural order.
@@ -102,19 +111,18 @@ class BookDetector @Inject constructor() {
 
         val relToRoot = strip(bookPath)
         val segments = relToRoot.split('/').filter { it.isNotEmpty() }
-        val title = segments.lastOrNull() ?: bookPath.substringAfterLast('/')
-        // Top-level folder under the library root is the author; the folder directly above the
-        // book is the series (e.g. "Harry Potter - Heptalogie"); anything between THAT and the
-        // author is the collection — a parent grouping like Discworld over Rincewind.
-        //
-        // The collection segment used to be discarded, which quietly made the wrong call on a
-        // nested library: `Pratchett/Discworld/Rincewind/Book` came out as the Rincewind series
-        // with Discworld lost entirely. Only the one level is read; a library nested deeper than
-        // author/collection/series/book keeps its series and collection and ignores the rest,
-        // because two levels is what the shelf can draw.
-        val author = if (segments.size >= 2) segments.first() else null
-        val series = if (segments.size >= 3) segments[segments.size - 2] else null
-        val collection = if (segments.size >= 4) segments[segments.size - 3] else null
+        // Read through templates rather than by counting segments in place. The rules are the same
+        // ones — author at the top, then the last three levels — but written down in
+        // PathTemplate.DEFAULTS instead of compiled into this expression, which is what lets a
+        // library whose folders do not follow the convention supply its own and be read correctly
+        // rather than guessed at.
+        val parsed = PathTemplate.parseFirst(relToRoot, templates).orEmpty()
+        val title = parsed[TemplateField.TITLE]
+            ?: segments.lastOrNull()
+            ?: bookPath.substringAfterLast('/')
+        val author = parsed[TemplateField.AUTHOR]
+        val series = parsed[TemplateField.SERIES]
+        val collection = parsed[TemplateField.COLLECTION]
         val cover = images.minByOrNull { coverRank(it.name) }?.path?.let(::strip)
 
         val fileEntities = orderedAudio.mapIndexed { index, resource ->

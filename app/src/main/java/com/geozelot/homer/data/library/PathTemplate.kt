@@ -56,14 +56,27 @@ class PathTemplate private constructor(
             val trimmed = template.trim().trim('/')
             if (trimmed.isEmpty()) return null
             val fields = mutableListOf<TemplateField>()
-            val pattern = StringBuilder("")
+            val pattern = StringBuilder()
             var cursor = 0
             for (m in PLACEHOLDER.findAll(trimmed)) {
                 pattern.append(Regex.escape(trimmed.substring(cursor, m.range.first)))
                 val name = m.groupValues[1]
+                if (name == "**") {
+                    // Any number of whole segments, including none. This is what lets one template
+                    // describe a library nested arbitrarily deep, the way the positional rules it
+                    // replaces always did — they counted from both ends and did not care what was
+                    // in the middle. Written to consume the following slash as well, so the
+                    // template reads `{author}/{**}/{series}/{title}` rather than needing the
+                    // author's slash to be optional.
+                    pattern.append("(?:[^/]+/)*?")
+                    // …and swallow the literal slash the template puts after it, since this
+                    // alternative already ends on one.
+                    cursor = m.range.last + if (trimmed.getOrNull(m.range.last + 1) == '/') 2 else 1
+                    continue
+                }
                 if (name == "*") {
-                    // Absorbs anything, captures nothing — the "there is something here I do not
-                    // care about" wildcard.
+                    // One segment, absorbed and not captured — "there is something here I do not
+                    // care about".
                     pattern.append("[^/]+?")
                 } else {
                     val field = TemplateField.from(name) ?: return null
@@ -85,7 +98,11 @@ class PathTemplate private constructor(
          * the same `segments.size >= 3` / `>= 2` ladder the detector compiled in, written down.
          */
         val DEFAULTS: List<PathTemplate> = listOfNotNull(
-            compile("{author}/{collection}/{series}/{title}"),
+            // Four or more segments: author first, then anything, then the last three levels. The
+            // positional rules counted from both ends and ignored the middle, and `{**}` is how
+            // that survives being written as a pattern — without it a library nested five deep
+            // would match no default at all and lose every field.
+            compile("{author}/{**}/{collection}/{series}/{title}"),
             compile("{author}/{series}/{title}"),
             compile("{author}/{title}"),
             compile("{title}"),
