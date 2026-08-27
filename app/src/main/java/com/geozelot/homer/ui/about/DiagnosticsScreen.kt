@@ -19,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifTitle
@@ -75,12 +75,12 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             Text(stringResource(R.string.diag_title), style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(log)) }) { Text(stringResource(R.string.action_copy)) }
-            TextButton(onClick = {
+            HomerTextButton(onClick = { clipboard.setText(AnnotatedString(log)) }) { Text(stringResource(R.string.action_copy)) }
+            HomerTextButton(onClick = {
                 val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log)
                 context.startActivity(Intent.createChooser(intent, context.getString(R.string.diag_share_chooser)))
             }) { Text(stringResource(R.string.action_share)) }
-            TextButton(onClick = { reloadKey++ }) { Text(stringResource(R.string.action_refresh)) }
+            HomerTextButton(onClick = { reloadKey++ }) { Text(stringResource(R.string.action_refresh)) }
         }
         Text(
             stringResource(R.string.diag_warning),

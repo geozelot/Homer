@@ -141,7 +141,6 @@
     <!-- Home: library content -->
     <string name="home_section_listening">Gerade am Hören · %1$d</string>
     <string name="home_section_library">Bibliothek · %1$d</string>
-    <string name="home_section_results">Ergebnisse · %1$d</string>
     <string name="home_cd_grid_view">Rasteransicht</string>
     <string name="home_cd_list_view">Listenansicht</string>
     <string name="shelve_item">Einzeln</string>
@@ -575,4 +574,5 @@
     <string name="filter_state_in_series">In einer Serie</string>
     <string name="filter_state_unmeasured">Noch keine Länge</string>
     <string name="filter_state_no_cover">Kein Cover</string>
+    <string name="home_section_library_filtered">Bibliothek · %1$d von %2$d</string>
 </resources>

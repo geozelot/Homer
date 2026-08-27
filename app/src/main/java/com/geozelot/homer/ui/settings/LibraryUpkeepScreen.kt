@@ -12,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +32,7 @@ import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.CrawlSummary
 import com.geozelot.homer.ui.components.ConfirmDialog
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
@@ -165,7 +165,7 @@ fun LibraryUpkeepScreen(
             // asked for, which is why this is a plain Stop and not a pause.
             if (indexActive) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = viewModel::stopIndexing) {
+                    HomerTextButton(onClick = viewModel::stopIndexing) {
                         Text(stringResource(R.string.sync_stop), color = Amber, fontSize = 13.sp)
                     }
                 }
@@ -454,7 +454,7 @@ private fun PassRow(
         if (busy) {
             RowSpinner()
         } else {
-            TextButton(onClick = onAction, enabled = actionEnabled, contentPadding = SettingsActionPadding) {
+            HomerTextButton(onClick = onAction, enabled = actionEnabled, contentPadding = SettingsActionPadding) {
                 Text(action)
             }
         }
@@ -541,7 +541,7 @@ private fun WorklistDialog(
                             )
                         }
                         actionLabel?.let { label ->
-                            TextButton(
+                            HomerTextButton(
                                 onClick = { onAction(book.id) },
                                 contentPadding = SettingsActionPadding,
                             ) { Text(label, color = Amber, fontSize = 12.sp) }
@@ -551,7 +551,7 @@ private fun WorklistDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
         },
     )
 }

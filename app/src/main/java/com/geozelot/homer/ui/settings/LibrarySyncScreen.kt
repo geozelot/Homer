@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +28,7 @@ import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.DiscoveredLibraryCard
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsCard
 import com.geozelot.homer.ui.components.SettingsDivider
@@ -158,11 +158,11 @@ fun LibrarySyncScreen(
                 },
             ) {
                 if (sync != null) {
-                    TextButton(onClick = viewModel::unlinkSyncAccount, contentPadding = SettingsActionPadding) {
+                    HomerTextButton(onClick = viewModel::unlinkSyncAccount, contentPadding = SettingsActionPadding) {
                         Text(stringResource(R.string.settings_sync_stop))
                     }
                 } else {
-                    TextButton(onClick = onLinkSyncAccount, contentPadding = SettingsActionPadding) {
+                    HomerTextButton(onClick = onLinkSyncAccount, contentPadding = SettingsActionPadding) {
                         Text(stringResource(R.string.settings_sync_link))
                     }
                 }
@@ -182,7 +182,7 @@ fun LibrarySyncScreen(
 
         SettingsDivider()
 
-        TextButton(onClick = { confirmSignOut = true }, contentPadding = SettingsActionPadding) {
+        HomerTextButton(onClick = { confirmSignOut = true }, contentPadding = SettingsActionPadding) {
             Text(stringResource(R.string.set_sign_out), color = Danger)
         }
     }
@@ -296,7 +296,7 @@ private fun DiscoveredLibraries(
         if (discovering) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
         } else {
-            TextButton(onClick = onRediscover, contentPadding = SettingsActionPadding) {
+            HomerTextButton(onClick = onRediscover, contentPadding = SettingsActionPadding) {
                 Text(stringResource(R.string.sync_rediscover))
             }
         }

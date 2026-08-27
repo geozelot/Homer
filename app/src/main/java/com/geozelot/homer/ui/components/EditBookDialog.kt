@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Line
@@ -218,26 +218,26 @@ fun EditBookDialog(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = {
+                    HomerTextButton(onClick = {
                         pickCover.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                         )
                     }) { Text(if (book.hasCustomCover) stringResource(R.string.edit_change_cover) else stringResource(R.string.edit_choose_cover)) }
                     if (book.hasCustomCover) {
-                        TextButton(onClick = onClearCover) { Text(stringResource(R.string.edit_clear_cover)) }
+                        HomerTextButton(onClick = onClearCover) { Text(stringResource(R.string.edit_clear_cover)) }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            HomerTextButton(onClick = {
                 onSave(title, author, series, index, collection, genre, language, tags, hidden, playMode)
             }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onReset) { Text(stringResource(R.string.action_reset)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+                HomerTextButton(onClick = onReset) { Text(stringResource(R.string.action_reset)) }
+                HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )

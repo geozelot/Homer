@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
@@ -182,7 +182,7 @@ fun FolderPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onPick(here) }) {
+            HomerTextButton(onClick = { onPick(here) }) {
                 Text(
                     stringResource(R.string.folder_picker_use),
                     color = Amber,
@@ -191,7 +191,7 @@ fun FolderPickerDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Muted) }
         },
     )
 }

@@ -140,7 +140,6 @@
          scrolls, so the counts are where the eye already is. -->
     <string name="home_section_listening">Currently listening · %1$d</string>
     <string name="home_section_library">Library · %1$d</string>
-    <string name="home_section_results">Results · %1$d</string>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
     <!-- The library's three arrangement controls. Resources, not Kotlin constants, or every
@@ -598,4 +597,5 @@
     <string name="filter_state_in_series">In a series</string>
     <string name="filter_state_unmeasured">No length yet</string>
     <string name="filter_state_no_cover">No cover</string>
+    <string name="home_section_library_filtered">Library · %1$d of %2$d</string>
 </resources>

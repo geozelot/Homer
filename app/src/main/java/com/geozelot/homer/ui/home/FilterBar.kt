@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Faint
@@ -95,16 +97,14 @@ fun FilterPills(
         // never scrolls away itself. A reader who has filtered themselves into an empty shelf must
         // always be able to see the way out of it.
         Column(horizontalAlignment = Alignment.End) {
-            Text(
-                stringResource(R.string.filter_clear_all),
-                color = Amber,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable(onClick = onClear)
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-            )
+            HomerTextButton(onClick = onClear, contentPadding = SettingsActionPadding) {
+                Text(
+                    stringResource(R.string.filter_clear_all),
+                    color = Amber,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Text(
                 stringResource(R.string.filter_count, shown, total),
                 color = Muted,

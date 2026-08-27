@@ -64,7 +64,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -106,6 +105,7 @@ import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.HomerSwitch
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -951,7 +951,7 @@ private fun CustomSpeedDialog(initial: Float, onConfirm: (Float) -> Unit, onDism
             }
         },
         confirmButton = {
-            TextButton(
+            HomerTextButton(
                 onClick = {
                     text.replace(',', '.').toFloatOrNull()
                         ?.let { onConfirm(it.coerceIn(MIN_SPEED, MAX_SPEED)) }
@@ -959,7 +959,7 @@ private fun CustomSpeedDialog(initial: Float, onConfirm: (Float) -> Unit, onDism
                 },
             ) { Text(stringResource(R.string.action_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 
@@ -1070,14 +1070,14 @@ private fun BookmarksDialog(
                                 )
                                 Text(formatTime(bookmark.positionMs), color = Muted, fontSize = 12.sp)
                             }
-                            TextButton(onClick = { onDelete(bookmark) }) { Text(stringResource(R.string.action_remove)) }
+                            HomerTextButton(onClick = { onDelete(bookmark) }) { Text(stringResource(R.string.action_remove)) }
                         }
                     }
                 }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 
@@ -1132,7 +1132,7 @@ private fun ChapterPickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 

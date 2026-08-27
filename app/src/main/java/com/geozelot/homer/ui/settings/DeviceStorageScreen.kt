@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +25,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.ConfirmDialog
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
@@ -94,15 +94,15 @@ fun DeviceStorageScreen(
             modifier = Modifier.padding(top = 2.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { folderPicker.launch(null) }, contentPadding = SettingsActionPadding) {
+            HomerTextButton(onClick = { folderPicker.launch(null) }, contentPadding = SettingsActionPadding) {
                 Text(stringResource(R.string.set_device_choose_folder))
             }
-            TextButton(onClick = onOpenStorageBrowser, contentPadding = SettingsActionPadding) {
+            HomerTextButton(onClick = onOpenStorageBrowser, contentPadding = SettingsActionPadding) {
                 Text(stringResource(R.string.settings_storage_browse))
             }
             if (custom != null) {
                 // Reverting moves every downloaded file back into app storage, so it asks first.
-                TextButton(
+                HomerTextButton(
                     onClick = { confirmUseAppStorage = true },
                     contentPadding = SettingsActionPadding,
                 ) { Text(stringResource(R.string.settings_storage_use_app)) }

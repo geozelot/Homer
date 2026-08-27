@@ -17,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.library.TemplateApplier
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsNote
@@ -115,7 +115,7 @@ fun TemplatesScreen(
             )
         }
 
-        TextButton(onClick = { viewModel.setTemplateDraft(draft + "") }) {
+        HomerTextButton(onClick = { viewModel.setTemplateDraft(draft + "") }) {
             Icon(Icons.Filled.Add, contentDescription = null, tint = Amber, modifier = Modifier.size(16.dp))
             Text(
                 stringResource(R.string.set_templates_add),
@@ -150,7 +150,7 @@ fun TemplatesScreen(
         SettingsDivider()
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = viewModel::applyTemplates, enabled = dirty) {
+            HomerTextButton(onClick = viewModel::applyTemplates, enabled = dirty) {
                 Text(
                     stringResource(R.string.set_templates_apply),
                     color = if (dirty) Amber else Faint,
@@ -158,7 +158,7 @@ fun TemplatesScreen(
                 )
             }
             if (dirty) {
-                TextButton(onClick = viewModel::discardTemplateDraft) {
+                HomerTextButton(onClick = viewModel::discardTemplateDraft) {
                     Text(stringResource(R.string.action_reset), color = Muted)
                 }
             }

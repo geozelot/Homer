@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -455,4 +456,54 @@ fun ConfirmDialog(
 }
 
 /** Padding for the flat text buttons that carry secondary settings actions. */
-val SettingsActionPadding = PaddingValues(horizontal = 4.dp)
+/**
+ * Padding for an action sitting at the trailing edge of a settings row.
+ *
+ * Tighter than [HomerButtonPadding] because it has a row's own padding around it already — but no
+ * longer 4dp-horizontal-and-nothing-vertical, which was fine for a bare word and draws a box
+ * clamped against the letters now that these carry a border.
+ */
+val SettingsActionPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+
+/**
+ * A text button that looks like a button.
+ *
+ * Homer's actions were bare tinted words — Save, Publish, Reset, Clear, Use this folder. A word that
+ * does something and a word that merely says something looked identical, so every one of them had to
+ * be recognised by position and remembered rather than seen. A hairline border and a chip's corner
+ * radius are enough to make it read as pressable without turning a settings page into a wall of
+ * filled buttons.
+ *
+ * The same hairline the cards, chips and dividers use, so it reads as one more piece of the same
+ * surface rather than a control bolted onto it. Mirrors [TextButton]'s own signature exactly, so
+ * every call site was a rename.
+ */
+@Composable
+fun HomerTextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    contentPadding: PaddingValues = HomerButtonPadding,
+    content: @Composable RowScope.() -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        shape = RoundedCornerShape(8.dp),
+        // Faint, and fainter still when disabled: a disabled control should not draw the same
+        // outline as a live one and then decline to do anything.
+        border = BorderStroke(1.dp, if (enabled) Line else Line.copy(alpha = 0.5f)),
+        contentPadding = contentPadding,
+        content = content,
+    )
+}
+
+/**
+ * Tighter than Material's default.
+ *
+ * The stock 24dp horizontal padding was sized for a filled button with a shadow around it; on a
+ * bordered one it puts a visible box a thumb's width wider than the word inside it, and two of them
+ * side by side in a dialog no longer fit.
+ */
+val HomerButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)

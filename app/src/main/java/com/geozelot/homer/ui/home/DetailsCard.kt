@@ -21,7 +21,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +35,7 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.metadata.BookLanguage
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
@@ -202,10 +202,10 @@ fun BookDetailsCard(
             }
         },
         confirmButton = {
-            TextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
+            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
         },
     )
 }
@@ -325,10 +325,10 @@ fun SeriesDetailsCard(
             }
         },
         confirmButton = {
-            TextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
+            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
         },
     )
 }
@@ -427,7 +427,7 @@ fun LibraryBookmarksDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
         },
     )
 }

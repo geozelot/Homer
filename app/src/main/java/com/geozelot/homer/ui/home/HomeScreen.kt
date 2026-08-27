@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -81,7 +82,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -108,6 +108,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -119,6 +120,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -138,9 +140,11 @@ import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberDeep
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Ground
@@ -928,8 +932,11 @@ private fun LibraryControlBar(
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(start = 2.dp, bottom = 6.dp)) {
         SectionLabelRow(
+            // Always "Library". It titles the same region whatever is filtered, and renaming it to
+            // "Results" made the shelf look like a different place rather than the same one with
+            // less on it. The COUNT carries that instead.
             if (searching) {
-                stringResource(R.string.home_section_results, count)
+                stringResource(R.string.home_section_library_filtered, shown, total)
             } else {
                 stringResource(R.string.home_section_library, count)
             },
@@ -939,24 +946,16 @@ private fun LibraryControlBar(
             // anything that collapses — it titles the list being scrolled, so it holds its size.
             large = true,
         )
-        // Under the header, above the controls: the pills belong to the list, not to the box that
-        // made them, so they stay put when the search field closes.
-        FilterPills(
-            tokens = tokens,
-            shown = shown,
-            total = total,
-            onRemove = onRemoveToken,
-            onClear = onClearFilter,
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Open, the field takes the whole row. The chips are not squeezed alongside it — at
-            // this width one of the two would be useless, and what somebody is doing while typing
-            // is typing.
+            // Open, the field REPLACES the chips in place — same row, same height, no back arrow.
+            // It used to be a full OutlinedTextField, half again as tall as the row it sat in, so
+            // opening search shunted the whole library down the screen and closing it shunted it
+            // back. A control that moves everything else to appear is a control you brace for.
             if (searchOpen) {
-                SearchField(
+                InlineSearchField(
                     query = query,
                     onQueryChange = onQueryChange,
                     onClose = onCloseSearch,
@@ -964,16 +963,10 @@ private fun LibraryControlBar(
                 )
                 return@Row
             }
-            // The one control that changes what the list CONTAINS, so it leads and is drawn a shade
-            // stronger than the chips beside it, which only change how it is arranged.
-            IconButton(onClick = onOpenSearch, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.home_cd_search),
-                    tint = if (tokens.isEmpty()) Parchment else Amber,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            // Drawn as a chip like its neighbours, but filled rather than outlined: it is the only
+            // control here that changes what the list CONTAINS — the others only rearrange it — and
+            // the fill is what says so at a glance. Amber once anything is filtered.
+            SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
             // A single row that SCROLLS rather than wraps. FlowRow let the chips fall onto a
             // second line on a narrower screen, which moved everything below them and made the
             // header a different height on different devices. Overflow is now horizontal, so the
@@ -1020,11 +1013,126 @@ private fun LibraryControlBar(
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
+        // BELOW the controls, not above them. Above, they pushed the chips away from the header
+        // every time one was added; below, the bar keeps its place and the pills grow into the gap
+        // before the list.
+        FilterPills(
+            tokens = tokens,
+            shown = shown,
+            total = total,
+            onRemove = onRemoveToken,
+            onClear = onClearFilter,
+        )
     }
 }
 
 /** Height of the toggle's visible pill — the same as a [DropdownChip]'s, which it sits beside. */
 private val ViewTogglePillHeight = 28.dp
+
+/**
+ * The search control, drawn as a filled chip.
+ *
+ * Filled where the chips beside it are outlined, because it does a different KIND of thing: the
+ * others choose how the list is arranged, this one chooses what is in it. Same pill height as every
+ * other control on the row, so the bar is one consistent band rather than a line of mismatched
+ * boxes.
+ */
+@Composable
+private fun SearchChip(active: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            // Chip-height pill inside a full-height tap target, the same split DropdownChip makes.
+            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .height(ViewTogglePillHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (active) AmberSoft else Surface2)
+                .border(1.dp, if (active) AmberDeep else Line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 9.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = stringResource(R.string.home_cd_search),
+                tint = if (active) Amber else Parchment,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The search field, sized and shaped as one of the chips it replaces.
+ *
+ * A [BasicTextField] rather than an OutlinedTextField: the Material field carries its own label
+ * slot, its own 56dp minimum and its own padding, none of which fit inside a 28dp pill. What is
+ * wanted here is a chip somebody can type into.
+ *
+ * No back arrow. The row it lives in did not move to make space for it, so there is nothing to
+ * navigate back FROM — closing it is the X, a tap on the library, or the back gesture.
+ */
+@Composable
+private fun InlineSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Box(
+        modifier = modifier.sizeIn(minHeight = 48.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ViewTogglePillHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Surface2)
+                .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
+                .padding(start = 9.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = Amber,
+                modifier = Modifier.size(16.dp),
+            )
+            Box(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                if (query.isEmpty()) {
+                    Text(
+                        stringResource(R.string.home_search_placeholder),
+                        color = Faint,
+                        fontSize = 12.sp,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = TextStyle(color = Parchment, fontSize = 12.sp),
+                    cursorBrush = SolidColor(Amber),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+            }
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.action_clear),
+                tint = Muted,
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(onClick = onClose),
+            )
+        }
+    }
+}
 
 /**
  * Grid / list, drawn to the same height as the chips next to it.
@@ -2294,10 +2402,10 @@ private fun SeriesEditDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name, author, genre, collection) }) {
+            HomerTextButton(onClick = { onSave(name, author, genre, collection) }) {
                 Text(stringResource(R.string.action_save))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }

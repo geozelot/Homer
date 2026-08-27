@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -19,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.storage.StorageMigrator
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
@@ -54,11 +54,11 @@ private fun StorageConflictDialog(onLoad: () -> Unit, onReplace: () -> Unit, onC
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.home_storage_conflict_title)) },
         text = { Text(stringResource(R.string.home_storage_conflict_body)) },
-        confirmButton = { TextButton(onClick = onLoad) { Text(stringResource(R.string.home_storage_load)) } },
+        confirmButton = { HomerTextButton(onClick = onLoad) { Text(stringResource(R.string.home_storage_load)) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onReplace) { Text(stringResource(R.string.home_storage_replace)) }
-                TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+                HomerTextButton(onClick = onReplace) { Text(stringResource(R.string.home_storage_replace)) }
+                HomerTextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )

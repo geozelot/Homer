@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.DiscoveredLibrary
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Line
@@ -73,7 +73,7 @@ fun DiscoveredLibraryCard(
             modifier = Modifier.padding(top = 3.dp),
         )
         if (!library.isCurrentRoot) {
-            TextButton(
+            HomerTextButton(
                 onClick = { onUse(library.relativePath) },
                 contentPadding = SettingsActionPadding,
             ) { Text(actionLabel) }

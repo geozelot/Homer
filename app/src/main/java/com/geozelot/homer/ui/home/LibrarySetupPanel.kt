@@ -13,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.ui.components.DiscoveredLibraryCard
+import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Muted
@@ -128,7 +128,7 @@ private fun Choose(
         }
         // The way out. Every library is invisible to the sweep until Homer has read it once, so a
         // list with no way past it would strand exactly the person setting up their first library.
-        TextButton(onClick = onNameFolder, contentPadding = SettingsActionPadding) {
+        HomerTextButton(onClick = onNameFolder, contentPadding = SettingsActionPadding) {
             Text(stringResource(R.string.setup_none_of_these), color = Amber, fontSize = 13.sp)
         }
         SharingNote(isShare, Modifier.padding(top = 12.dp))
