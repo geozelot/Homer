@@ -51,6 +51,7 @@ import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -61,6 +62,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -440,13 +442,21 @@ class HomeViewModel @Inject constructor(
     /** What the box would offer for what is typed, read off the loaded shelf rather than an index. */
     val suggestions: StateFlow<List<FilterSuggestion>> =
         combine(books, _filterText, _filterTokens) { list, text, tokens -> suggest(list, text, tokens) }
+            // OFF the main thread. `viewModelScope` is Main.immediate, so without this the whole
+            // library was walked once per facet per keystroke on the frame the keystroke arrived —
+            // and matching now folds accents and can measure an edit distance, so what used to be a
+            // cheap `contains` is no longer something to do while a frame is waiting.
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** How many books the filter leaves, and how many there are — the "41 of 313" line. */
     val filterCount: StateFlow<Pair<Int, Int>> =
         combine(books, filter) { list, active ->
             (if (active.isEmpty) list.size else list.count { active.matches(it) }) to list.size
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
+        }
+            // Walks the library with the same matcher as `entries` — same reason.
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     fun addFilterToken(token: FilterToken) {
         // Committing a suggestion consumes the text that produced it: leaving it behind would go on
@@ -471,7 +481,12 @@ class HomeViewModel @Inject constructor(
             // shelf that loses its last book has to disappear rather than stand there empty.
             val filtered = if (filter.isEmpty) list else list.filter { filter.matches(it) }
             buildEntries(filtered, sort, shelving, series)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }
+            // Filtering AND grouping the whole library, per keystroke, was running on
+            // Main.immediate. Both are pure functions of their inputs and the result is a plain
+            // list, so there is nothing here that wants the main thread — see `suggestions`.
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The currently-playing book as its live library row, so the docked mini-player shows an

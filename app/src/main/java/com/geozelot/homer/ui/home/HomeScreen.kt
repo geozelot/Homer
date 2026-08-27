@@ -105,6 +105,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
@@ -128,6 +131,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Velocity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -280,7 +284,94 @@ fun HomeScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    // Held as the MutableState rather than only as a `by` delegate, because the nested-scroll
+    // connection below is inside `remember` and has to write to the SAME state object across
+    // recompositions. Capturing a delegated local in a remembered lambda captures the first
+    // one, and the panel would stop responding after the first recomposition.
+    val listeningExpandedState = rememberSaveable { mutableStateOf(true) }
+    var listeningExpanded by listeningExpandedState
+    var foldedOnFirstScroll by rememberSaveable { mutableStateOf(false) }
+    val libraryScrolled by remember(gridState) {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
+        }
+    }
+    // Pulling DOWN on a library that is already at its top opens the panel back up.
+    //
+    // Deliberately not the first upward gesture. That one is the reader travelling back to the
+    // top of the list and it has to be allowed to just do that — a gesture that both scrolls to
+    // the top AND unfolds the panel would leave them somewhere they did not ask to be. So a
+    // gesture that STARTS anywhere below the top is blocked outright for its whole duration,
+    // however far past the top it carries, and only the next one counts.
+    //
+    // The threshold exists because `available.y` also picks up the residue of a fling settling
+    // against the top; a stray pixel or two must not count as a pull.
+    val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
+    val listeningPull = remember(gridState, listeningExpandedState) {
+        object : NestedScrollConnection {
+            /** Accumulated downward slack this gesture, once it is eligible to count. */
+            var pulled = 0f
+
+            /** Set when a gesture begins below the top; cleared when the gesture ends. */
+            var blocked = false
+
+            private fun atTop() =
+                gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // The first delta of a gesture decides whether the whole gesture may count.
+                if (pulled == 0f && !blocked && !atTop()) blocked = true
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                // A FINGER only. A fling settling against the top delivers slack here too, so
+                // without this a hard flick back to the top would unfold the panel by itself —
+                // which is the one thing this panel is not allowed to do.
+                if (source != NestedScrollSource.Drag) return Offset.Zero
+                if (blocked || listeningExpandedState.value) return Offset.Zero
+                when {
+                    // Slack left over after the list took what it could: it is at the top.
+                    available.y > 0f -> {
+                        pulled += available.y
+                        if (pulled >= pullToExpandPx) {
+                            listeningExpandedState.value = true
+                            pulled = 0f
+                        }
+                    }
+                    // Reversed mid-gesture — that was not a pull.
+                    available.y < 0f -> pulled = 0f
+                }
+                return Offset.Zero
+            }
+
+            // onPOSTFling, not onPreFling. Pre-fling runs at the START of the fling, i.e. still
+            // inside the gesture that was blocked — clearing the block there would re-arm it for
+            // that gesture's own fling phase and undo the whole point of the block.
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                pulled = 0f
+                blocked = false
+                return Velocity.Zero
+            }
+        }
+    }
+    // Latched: the first scroll folds it, and after that scrolling is the reader's business.
+    // Without the latch, expanding it while scrolled down would fold straight back up.
+    LaunchedEffect(libraryScrolled) {
+        if (libraryScrolled && !foldedOnFirstScroll) {
+            foldedOnFirstScroll = true
+            listeningExpanded = false
+        }
+    }
+    // Every time search opens, not just the first — opening the box is the clearest statement
+    // there is that the reader is looking for something other than what is on this strip.
+    LaunchedEffect(searching) { if (searching) listeningExpanded = false }
+
+    Column(modifier = modifier.fillMaxSize().nestedScroll(listeningPull)) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
         Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
@@ -292,24 +383,6 @@ fun HomeScreen(
         val shelfRowState = rememberLazyListState()
         // Expanded until something says otherwise, and only ever folded BY something — see
         // ListeningShelf. rememberSaveable so a rotation does not silently unfold it again.
-        var listeningExpanded by rememberSaveable { mutableStateOf(true) }
-        var foldedOnFirstScroll by rememberSaveable { mutableStateOf(false) }
-        val libraryScrolled by remember(gridState) {
-            derivedStateOf {
-                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
-            }
-        }
-        // Latched: the first scroll folds it, and after that scrolling is the reader's business.
-        // Without the latch, expanding it while scrolled down would fold straight back up.
-        LaunchedEffect(libraryScrolled) {
-            if (libraryScrolled && !foldedOnFirstScroll) {
-                foldedOnFirstScroll = true
-                listeningExpanded = false
-            }
-        }
-        // Every time search opens, not just the first — opening the box is the clearest statement
-        // there is that the reader is looking for something other than what is on this strip.
-        LaunchedEffect(searching) { if (searching) listeningExpanded = false }
         // The shelf STAYS while search is open. Hiding it was meant to give the results more room
         // and instead undid the whole point of moving search into the control bar: dropping it and
         // its divider out of this Column pulled everything below UP by the panel's height, so
@@ -1328,16 +1401,20 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
  *
  * So the size still changes, but never on its own initiative except to get OUT of the way:
  *
- *  - **Collapsing is automatic, expanding never is.** It folds itself away on the first scroll into
+ *  - **Folding is automatic; unfolding is always asked for.** It folds away on the first scroll into
  *    the library, and again whenever search opens, because in both cases the reader has just said
- *    they are looking at something else. It never unfolds itself — that is a tap on the header, and
- *    only ever a tap on the header.
- *  - **Once, for the scroll.** The first-scroll collapse is latched, so expanding it again while
- *    still scrolled down does not have it immediately fold back up under the reader's finger.
+ *    they are looking at something else. It never unfolds on its own.
+ *  - **Once, for the scroll.** The first-scroll fold is latched, so expanding it again while still
+ *    scrolled down does not have it immediately fold back up under the reader's finger.
+ *  - **Folded, the whole panel is the button.** A tap anywhere on it opens it. Nothing inside is
+ *    tappable in that state, so the covers are part of the target instead of dead space beside the
+ *    header — which also means a 46dp thumbnail can never open a book the reader could not identify.
+ *  - **Or pull it open**, by dragging down on a library already at its top. See the nested-scroll
+ *    connection in HomeScreen: the first upward gesture is the reader travelling back to the top and
+ *    is left alone; the next one unfolds.
  *
- * Collapsed, it is covers and progress bars at the size a list row uses, and they are NOT tappable:
- * the only thing a tap can do in that state is open the panel back up, which is what stops a strip
- * of thumbnails being a row of 46dp mystery buttons.
+ * Expanded, the panel itself is NOT clickable — the covers open books, the header folds it, and a
+ * panel-wide tap would steal from the first or undo the second.
  *
  * [rowState] is hoisted by the caller so the horizontal position survives both the fold and
  * scrolling the library.
@@ -1362,14 +1439,26 @@ private fun ListeningShelf(
                 // A flat, quiet surface, and the exact tone the band's wash starts from, so the
                 // whole pinned block reads as one raised region rather than two tinted strips
                 // that happen to sit together.
-                .background(Surface0),
+                .background(Surface0)
+                // FOLDED, the whole panel is one button that opens it — nothing inside it is
+                // tappable, so the covers are part of the target rather than dead space beside the
+                // header. EXPANDED it must not be clickable at all: the covers open books then, and
+                // a panel-wide tap would either steal those taps or collapse the thing the reader
+                // was aiming into.
+                .then(
+                    if (expanded) Modifier else Modifier.clickable(onClick = onToggle),
+                ),
         ) {
             // The header IS the control. Nothing else folds the panel, and nothing else unfolds it,
             // so the one row that names the strip is also the one row that owns its size.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggle)
+                    // Only while expanded. Folded, the panel above already owns every tap, and a
+                    // second clickable inside it would just draw its own ripple over the first.
+                    .then(
+                        if (expanded) Modifier.clickable(onClick = onToggle) else Modifier,
+                    )
                     .padding(horizontal = LibraryGridPadding),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1448,6 +1537,15 @@ private fun ListeningFolded(book: BookListItem) {
         )
     }
 }
+
+/**
+ * How far the library has to be pulled past its top to unfold the panel.
+ *
+ * Not a hair-trigger: `available.y` also carries the residue of a fling settling against the top, so
+ * a couple of stray pixels must not read as a deliberate pull. Not a haul either — this is a reveal,
+ * not a drag handle.
+ */
+private val ListeningPullToExpand = 64.dp
 
 /** The folded cover, at exactly the size [BookListRow] draws its own. */
 private val ListeningFoldedCover = 46.dp

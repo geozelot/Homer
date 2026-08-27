@@ -193,13 +193,13 @@ internal fun BookListItem.matchesText(needle: String): Boolean {
 /**
  * One typed word against one field.
  *
- * Three chances, cheapest first, because this runs for every word against every field of every book
+ * Two chances, cheapest first, because this runs for every word against every field of every book
  * on every keystroke:
  *
- *  1. **Substring.** Carries every prefix and every mid-word fragment — `pratch`, `welt`.
- *  2. **A word of the field starting with the term.** Redundant with (1) today, kept because it is
- *     what the ranking in [suggest] means by a good match and the two should not drift apart.
- *  3. **Edit distance against a single word of the field**, and only for terms long enough that one
+ *  1. **Substring.** Carries every prefix and every mid-word fragment — `pratch`, `welt`. A word of
+ *     the field that STARTS with the term is a substring too, so that case needs no pass of its own
+ *     here; it earns a better RANK in [suggest], which is a different question from matching.
+ *  2. **Edit distance against a single word of the field**, and only for terms long enough that one
  *     wrong letter is a typo rather than a different word. `pratchet` finds Pratchett; `maerchen`
  *     finds Märchen, which matters here because folding an umlaut to its base letter (ä→a) and
  *     spelling it out (ä→ae) are both things a German reader will type.
@@ -301,6 +301,18 @@ internal fun wordsOf(folded: String): List<String> {
  * its own, since ae for a is exactly one insertion.
  */
 internal fun fold(value: String): String {
+    // Plain ASCII has nothing to decompose and nothing to strip, and it is most of what most
+    // libraries hold, so it skips the normaliser entirely rather than allocating twice over to
+    // discover there was no work to do.
+    var plain = true
+    for (ch in value) {
+        if (ch.code > 0x7F) {
+            plain = false
+            break
+        }
+    }
+    if (plain) return value.lowercase()
+
     val expanded = if (value.indexOf('\u00df') >= 0) value.replace("\u00df", "ss") else value
     val decomposed = Normalizer.normalize(expanded, Normalizer.Form.NFD)
     val out = StringBuilder(decomposed.length)
@@ -353,31 +365,50 @@ internal fun suggest(
     val terms = queryTerms(needle)
     val lastTerm = terms.last()
 
+    // One fold per DISTINCT value, not one per book. The same author is folded once however many
+    // books carry it, which on a shelf of three hundred is the difference between a few dozen
+    // normalisations per keystroke and a few thousand.
+    val foldCache = HashMap<String, String>()
+    fun foldedOf(value: String) = foldCache.getOrPut(value) { fold(value) }
+
     val counts = LinkedHashMap<Pair<FilterFacet, String>, Int>()
     for (book in books) {
         for (facet in FilterFacet.entries) {
             for (value in book.valuesFor(facet)) {
-                val folded = fold(value)
-                if (terms.none { termMatches(folded, it) }) continue
+                if (terms.none { termMatches(foldedOf(value), it) }) continue
                 if (facet to value.lowercase() in taken) continue
                 counts[facet to value] = (counts[facet to value] ?: 0) + 1
             }
         }
     }
+    // Ranked BEFORE sorting, not inside the comparator. `compareBy` calls its selectors on every
+    // comparison, so ranking in there re-folded and re-split each value O(n log n) times — for the
+    // one list that is rebuilt on every keystroke.
+    //
+    // Ranking is on WORD prefixes as well as the string's own start: "Die Hexen" is what somebody
+    // typing `hexen` means, and whole-string prefix alone scored it below every value that merely
+    // contained the word, because the series happens to begin with an article.
     return counts.entries
-        .map { (key, count) -> FilterSuggestion(key.first, key.second, count) }
+        .map { (key, count) ->
+            val value = key.second
+            Ranked(
+                suggestion = FilterSuggestion(key.first, value, count),
+                rank = suggestionRank(foldedOf(value), terms, lastTerm),
+            )
+        }
         .sortedWith(
             compareBy(
-                // Ranked on WORD prefixes, not the string's own start: "Die Hexen" is what somebody
-                // typing `hexen` means, and `value.startsWith` scored it below every value that
-                // merely contained the word because the series happens to begin with an article.
-                { suggestionRank(it.value, terms, lastTerm) },
-                { -it.count },
-                { it.value.lowercase() },
+                { it.rank },
+                { -it.suggestion.count },
+                { it.suggestion.value.lowercase() },
             ),
         )
         .take(limit)
+        .map { it.suggestion }
 }
+
+/** A suggestion with its rank already worked out — see [suggest]. */
+private class Ranked(val suggestion: FilterSuggestion, val rank: Int)
 
 /**
  * How well a value answers what was typed: 0 best, 4 worst.
@@ -391,8 +422,7 @@ internal fun suggest(
  *  - **The last word beats the earlier ones.** It is the one still being typed; the earlier words of
  *    a multi-word query have usually already found whatever they were for.
  */
-private fun suggestionRank(value: String, terms: List<String>, lastTerm: String): Int {
-    val folded = fold(value)
+private fun suggestionRank(folded: String, terms: List<String>, lastTerm: String): Int {
     val words = wordsOf(folded)
     if (folded.startsWith(lastTerm)) return 0
     if (words.any { it.startsWith(lastTerm) }) return 1

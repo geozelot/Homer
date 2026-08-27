@@ -371,6 +371,17 @@ class LibraryFilterTest {
     }
 
     @Test
+    fun `the ascii fast path in folding agrees with the slow one`() {
+        // Pure ASCII skips the normaliser entirely, so it has to be shown doing nothing else.
+        for (v in listOf("Sourcery", "LE ANDERSON", "no-cover", "Book 01 - Part 2", "")) {
+            assertEquals(v.lowercase(), fold(v))
+        }
+        // And the two paths must converge: one accented letter takes the slow route and lands in
+        // the same place the fast route would have.
+        assertEquals(fold("Sourcery"), fold("S\u00f6urcery"))
+    }
+
+    @Test
     fun `query terms split on any whitespace without a regex`() {
         assertEquals(listOf("pratchett", "hexen"), queryTerms("Pratchett\tHexen"))
         assertEquals(emptyList<String>(), queryTerms("   "))
