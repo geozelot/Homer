@@ -225,4 +225,155 @@ class LibraryFilterTest {
         assertNull(FilterToken.decode("narrator:Briggs"))
         assertNull(FilterToken.decode("author:"))
     }
+
+    // ── multi-word free text ─────────────────────────────────────────────────────────────────
+    //
+    // The case this was all built for: words that live in DIFFERENT fields. Before, a query only
+    // worked if every word of it sat in one field, so this whole block was unanswerable.
+
+    private val hexen = book(
+        "h1",
+        "Total Verhext",
+        author = "Terry Pratchett",
+        series = "Die Hexen",
+        collection = "Scheibenwelt",
+        genre = "Fantasy",
+    )
+    private val wache = book(
+        "w1",
+        "Helle Barden",
+        author = "Terry Pratchett",
+        series = "Die Wache",
+        collection = "Scheibenwelt",
+        genre = "Fantasy",
+    )
+
+    @Test
+    fun `words spanning two fields both have to land`() {
+        val filter = LibraryFilter(text = "pratchett hexen")
+        assertTrue(filter.matches(hexen))
+        // Same author, same collection, different series — the second word has nowhere to land.
+        assertFalse(filter.matches(wache))
+    }
+
+    @Test
+    fun `word order does not matter`() {
+        assertTrue(LibraryFilter(text = "hexen pratchett").matches(hexen))
+    }
+
+    @Test
+    fun `a word matching nothing rejects the book even when the others match`() {
+        assertFalse(LibraryFilter(text = "pratchett hexen gaiman").matches(hexen))
+    }
+
+    @Test
+    fun `the collection is reachable alongside the author`() {
+        assertTrue(LibraryFilter(text = "scheibenwelt pratchett").matches(wache))
+    }
+
+    @Test
+    fun `extra whitespace is not a word`() {
+        assertTrue(LibraryFilter(text = "   pratchett    hexen  ").matches(hexen))
+    }
+
+    @Test
+    fun `a single word still behaves as it always did`() {
+        assertTrue(LibraryFilter(text = "verhext").matches(hexen))
+        assertTrue(LibraryFilter(text = "welt").matches(hexen))
+        assertFalse(LibraryFilter(text = "gaiman").matches(hexen))
+    }
+
+    // ── forgiving in the two ways that come up ───────────────────────────────────────────────
+
+    @Test
+    fun `one slipped letter still finds the book`() {
+        assertTrue(LibraryFilter(text = "pratchet").matches(hexen))
+        assertTrue(LibraryFilter(text = "pratchettt").matches(hexen))
+    }
+
+    @Test
+    fun `a short word gets no fuzz, because at three letters it would match half the shelf`() {
+        // "hex" is a real prefix and must work; "hax" is one letter out but too short to forgive.
+        assertTrue(LibraryFilter(text = "hex").matches(hexen))
+        assertFalse(LibraryFilter(text = "hax").matches(hexen))
+    }
+
+    @Test
+    fun `a genuinely different word is still rejected`() {
+        assertFalse(LibraryFilter(text = "pratchesque").matches(hexen))
+        assertFalse(LibraryFilter(text = "wache").matches(hexen))
+    }
+
+    private val maerchen = book("m1", "Deutsche M\u00e4rchen", author = "Gr\u00fcnwald", series = "Stra\u00dfenfeger")
+
+    @Test
+    fun `an accent need not be typed`() {
+        assertTrue(LibraryFilter(text = "marchen").matches(maerchen))
+        assertTrue(LibraryFilter(text = "grunwald").matches(maerchen))
+    }
+
+    @Test
+    fun `an accent may be typed`() {
+        assertTrue(LibraryFilter(text = "m\u00e4rchen").matches(maerchen))
+    }
+
+    @Test
+    fun `the spelled-out umlaut is picked up by the edit distance`() {
+        assertTrue(LibraryFilter(text = "maerchen").matches(maerchen))
+    }
+
+    @Test
+    fun `eszett answers to ss both ways`() {
+        assertTrue(LibraryFilter(text = "strassenfeger").matches(maerchen))
+        assertTrue(LibraryFilter(text = "stra\u00dfenfeger").matches(maerchen))
+    }
+
+    @Test
+    fun `the language code is not searchable, because two letters match everything`() {
+        // Asserted on the field list rather than through a query: almost any German title contains
+        // "de" somewhere (Planetenwan-DE-rer did), so a query is the one way NOT to test this.
+        assertFalse(german.searchFields().contains("de"))
+        assertTrue(german.searchFields().contains("SciFi"))
+    }
+
+    // ── the edit-distance helper itself ──────────────────────────────────────────────────────
+
+    @Test
+    fun `edit distance counts the three operations and abandons early`() {
+        assertTrue(editDistanceAtMost("hexen", "hexen", 0))
+        assertTrue(editDistanceAtMost("hexen", "hexe", 1))
+        assertTrue(editDistanceAtMost("hexen", "hexer", 1))
+        assertTrue(editDistanceAtMost("hexen", "hexden", 1))
+        assertFalse(editDistanceAtMost("hexen", "wache", 2))
+        assertFalse(editDistanceAtMost("hexen", "hexen-und-mehr", 2))
+    }
+
+    @Test
+    fun `folding is idempotent and lower-cases`() {
+        assertEquals("marchen", fold("M\u00e4rchen"))
+        assertEquals("marchen", fold(fold("M\u00e4rchen")))
+        assertEquals("strasse", fold("Stra\u00dfe"))
+    }
+
+    @Test
+    fun `query terms split on any whitespace without a regex`() {
+        assertEquals(listOf("pratchett", "hexen"), queryTerms("Pratchett\tHexen"))
+        assertEquals(emptyList<String>(), queryTerms("   "))
+    }
+
+    // ── what the box offers for a multi-word query ───────────────────────────────────────────
+
+    @Test
+    fun `a second word still gets suggestions, which is what went silent before`() {
+        val offered = suggest(listOf(hexen, wache), "pratchett hexen", emptyList())
+        assertTrue(offered.any { it.facet == FilterFacet.SERIES && it.value == "Die Hexen" })
+        assertTrue(offered.any { it.facet == FilterFacet.AUTHOR && it.value == "Terry Pratchett" })
+    }
+
+    @Test
+    fun `a word inside a value outranks one that merely contains it`() {
+        // "Die Hexen" does not START with "hexen" — the WORD does, and that is what ranking means.
+        val offered = suggest(listOf(hexen, wache), "hexen", emptyList())
+        assertEquals("Die Hexen", offered.first().value)
+    }
 }

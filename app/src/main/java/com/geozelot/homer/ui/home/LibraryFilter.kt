@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import androidx.annotation.StringRes
 import com.geozelot.homer.R
+import java.text.Normalizer
 
 /**
  * What the library's one input box means.
@@ -145,14 +146,165 @@ data class LibraryFilter(
     }
 }
 
-/** Free-text match, across everything a token could have been placed on plus the title. */
-internal fun BookListItem.matchesText(needle: String): Boolean =
-    title.contains(needle, ignoreCase = true) ||
-        author?.contains(needle, ignoreCase = true) == true ||
-        series?.contains(needle, ignoreCase = true) == true ||
-        collection?.contains(needle, ignoreCase = true) == true ||
-        genre?.contains(needle, ignoreCase = true) == true ||
-        tags.any { it.contains(needle, ignoreCase = true) }
+/**
+ * Everything free text is matched against — the token axes plus the title.
+ *
+ * Language is deliberately absent. It is stored as a two-letter code, and two letters match
+ * something in almost every library by accident.
+ */
+internal fun BookListItem.searchFields(): List<String> = buildList {
+    add(title)
+    author?.let { add(it) }
+    series?.let { add(it) }
+    // The EFFECTIVE collection, so text search agrees with what a collection token would have
+    // matched — a plain series standing in as its own collection answers to that name either way.
+    effectiveCollection()?.let { add(it) }
+    genre?.let { add(it) }
+    addAll(tags)
+}
+
+/**
+ * Free-text match: every WORD typed has to land somewhere, not the whole string in one field.
+ *
+ * The old rule was a single `contains` of the entire query against each field in turn, which meant
+ * a query only ever worked if every word of it sat in the SAME field. `pratchett hexen` could not
+ * match anything at all — the author holds one word, the series holds the other — and the reader
+ * had no way to know that a query spanning two facets was the one shape the box could not answer.
+ *
+ * So: AND across the typed words, OR across the fields. Each word must be found in at least one
+ * field, but they need not agree on which. That is the same shape as the committed-token rule one
+ * level up (AND across facets, OR within), which is what makes typing and committing feel like the
+ * same operation rather than two.
+ *
+ * Each word matches by [termMatches], which is forgiving in the two ways that actually come up in
+ * a library: accents, and one slipped letter.
+ */
+internal fun BookListItem.matchesText(needle: String): Boolean {
+    val terms = queryTerms(needle)
+    if (terms.isEmpty()) return true
+    val fields = searchFields().map { fold(it) }
+    return terms.all { term -> fields.any { field -> termMatches(field, term) } }
+}
+
+/**
+ * One typed word against one field.
+ *
+ * Three chances, cheapest first, because this runs for every word against every field of every book
+ * on every keystroke:
+ *
+ *  1. **Substring.** Carries every prefix and every mid-word fragment — `pratch`, `welt`.
+ *  2. **A word of the field starting with the term.** Redundant with (1) today, kept because it is
+ *     what the ranking in [suggest] means by a good match and the two should not drift apart.
+ *  3. **Edit distance against a single word of the field**, and only for terms long enough that one
+ *     wrong letter is a typo rather than a different word. `pratchet` finds Pratchett; `maerchen`
+ *     finds Märchen, which matters here because folding an umlaut to its base letter (ä→a) and
+ *     spelling it out (ä→ae) are both things a German reader will type.
+ *
+ * Terms of three characters or fewer get no fuzz at all. At that length an edit distance of one
+ * reaches most of the alphabet, and the substring pass already covers what a short term is for.
+ */
+internal fun termMatches(foldedField: String, foldedTerm: String): Boolean {
+    if (foldedTerm.isEmpty()) return true
+    if (foldedField.contains(foldedTerm)) return true
+    val tolerance = when {
+        foldedTerm.length <= 3 -> return false
+        foldedTerm.length <= 6 -> 1
+        else -> 2
+    }
+    for (word in wordsOf(foldedField)) {
+        // Length alone rules most words out before the matrix is ever built.
+        if (kotlin.math.abs(word.length - foldedTerm.length) > tolerance) continue
+        if (editDistanceAtMost(word, foldedTerm, tolerance)) return true
+    }
+    return false
+}
+
+/**
+ * Levenshtein distance, but only ever asked whether it is within [max].
+ *
+ * Two rolling rows rather than a full matrix, and it abandons a row whose best cell already exceeds
+ * the tolerance — for the common case of two words that are simply different, that is a handful of
+ * comparisons rather than a product of their lengths.
+ */
+internal fun editDistanceAtMost(a: String, b: String, max: Int): Boolean {
+    if (a == b) return true
+    if (kotlin.math.abs(a.length - b.length) > max) return false
+    var previous = IntArray(b.length + 1) { it }
+    var current = IntArray(b.length + 1)
+    for (i in 1..a.length) {
+        current[0] = i
+        var rowBest = current[0]
+        for (j in 1..b.length) {
+            val substitution = previous[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1
+            current[j] = minOf(current[j - 1] + 1, previous[j] + 1, substitution)
+            if (current[j] < rowBest) rowBest = current[j]
+        }
+        // Nothing later in the matrix can come back under the tolerance once a whole row is over it.
+        if (rowBest > max) return false
+        val swap = previous
+        previous = current
+        current = swap
+    }
+    return previous[b.length] <= max
+}
+
+/**
+ * The words a query was typed as.
+ *
+ * Split on whitespace by hand rather than with a regex. Unit tests here run on the JVM's
+ * `java.util.regex` and the app runs on Android's ICU-backed engine, which is stricter — a pattern
+ * that passes every test can still throw on a device, and this file is on the path of every scan
+ * and every keystroke. See the notes on the template patterns for the time that took the app down.
+ */
+internal fun queryTerms(query: String): List<String> {
+    val terms = ArrayList<String>()
+    val word = StringBuilder()
+    for (ch in query) {
+        if (ch.isWhitespace()) {
+            if (word.isNotEmpty()) { terms.add(fold(word.toString())); word.setLength(0) }
+        } else {
+            word.append(ch)
+        }
+    }
+    if (word.isNotEmpty()) terms.add(fold(word.toString()))
+    return terms
+}
+
+/** The words of an already-folded value, on the same no-regex rule as [queryTerms]. */
+internal fun wordsOf(folded: String): List<String> {
+    val words = ArrayList<String>()
+    val word = StringBuilder()
+    for (ch in folded) {
+        if (ch.isLetterOrDigit()) {
+            word.append(ch)
+        } else if (word.isNotEmpty()) {
+            words.add(word.toString()); word.setLength(0)
+        }
+    }
+    if (word.isNotEmpty()) words.add(word.toString())
+    return words
+}
+
+/**
+ * Case and accents removed, so what is typed need not carry either.
+ *
+ * NFD splits a letter from its accent and the combining marks are then dropped, which turns ä into
+ * a and é into e. ß is spelled out separately because it does not decompose — it is one letter with
+ * no accent to remove — and a reader who types `strasse` should still find Straße.
+ *
+ * Deliberately NOT the German ä→ae convention: folding to the base letter keeps one rule for every
+ * language in the library, and [termMatches]'s edit-distance pass picks up the spelled-out form on
+ * its own, since ae for a is exactly one insertion.
+ */
+internal fun fold(value: String): String {
+    val expanded = if (value.indexOf('\u00df') >= 0) value.replace("\u00df", "ss") else value
+    val decomposed = Normalizer.normalize(expanded, Normalizer.Form.NFD)
+    val out = StringBuilder(decomposed.length)
+    for (ch in decomposed) {
+        if (Character.getType(ch) != Character.NON_SPACING_MARK.toInt()) out.append(ch)
+    }
+    return out.toString().lowercase()
+}
 
 /** A value the input box can offer to turn into a token. */
 data class FilterSuggestion(val facet: FilterFacet, val value: String, val count: Int)
@@ -189,11 +341,20 @@ internal fun suggest(
             .filter { it.count > 0 }
     }
 
+    // The same words, matched the same way as the free text — see matchesText. Offering only values
+    // that contain the WHOLE query meant the box went silent the moment a second word was typed:
+    // `pratchett hexen` matched no single value, so the one thing worth committing out of that
+    // query — the series — was never offered. A value earns its place by answering ANY of the
+    // words, since each word is a different facet's worth of the question.
+    val terms = queryTerms(needle)
+    val lastTerm = terms.last()
+
     val counts = LinkedHashMap<Pair<FilterFacet, String>, Int>()
     for (book in books) {
         for (facet in FilterFacet.entries) {
             for (value in book.valuesFor(facet)) {
-                if (!value.contains(needle, ignoreCase = true)) continue
+                val folded = fold(value)
+                if (terms.none { termMatches(folded, it) }) continue
                 if (facet to value.lowercase() in taken) continue
                 counts[facet to value] = (counts[facet to value] ?: 0) + 1
             }
@@ -203,10 +364,35 @@ internal fun suggest(
         .map { (key, count) -> FilterSuggestion(key.first, key.second, count) }
         .sortedWith(
             compareBy(
-                { !it.value.startsWith(needle, ignoreCase = true) },
+                // Ranked on WORD prefixes, not the string's own start: "Die Hexen" is what somebody
+                // typing `hexen` means, and `value.startsWith` scored it below every value that
+                // merely contained the word because the series happens to begin with an article.
+                { suggestionRank(it.value, terms, lastTerm) },
                 { -it.count },
                 { it.value.lowercase() },
             ),
         )
         .take(limit)
+}
+
+/**
+ * How well a value answers what was typed: 0 best, 4 worst.
+ *
+ * Two independent gradients, in this order:
+ *
+ *  - **Whole-value prefix beats word prefix beats neither.** Typing `Anders`, "Anderson" is a better
+ *    answer than "Le Anderson" even though the latter has more books — what you typed begins it. But
+ *    "Le Anderson" still beats a value that merely contains the letters somewhere, which is the tier
+ *    that did not exist before and is what "Die Hexen" needs to be offered for `hexen`.
+ *  - **The last word beats the earlier ones.** It is the one still being typed; the earlier words of
+ *    a multi-word query have usually already found whatever they were for.
+ */
+private fun suggestionRank(value: String, terms: List<String>, lastTerm: String): Int {
+    val folded = fold(value)
+    val words = wordsOf(folded)
+    if (folded.startsWith(lastTerm)) return 0
+    if (words.any { it.startsWith(lastTerm) }) return 1
+    if (terms.any { folded.startsWith(it) }) return 2
+    if (terms.any { term -> words.any { it.startsWith(term) } }) return 3
+    return 4
 }

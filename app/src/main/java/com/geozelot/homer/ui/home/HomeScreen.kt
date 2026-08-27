@@ -1,7 +1,6 @@
 package com.geozelot.homer.ui.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -86,7 +85,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -285,17 +283,11 @@ fun HomeScreen(
         // the controls for the list already live — it acts on the library, not on the app.
         Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
 
-        // The Currently-listening shelf is pinned here — above the scrolling library rather than being its
-        // first item — and shrinks to a slim strip once the user scrolls into the library. Its
-        // LazyRow state is hoisted so the horizontal scroll position survives collapsing and is
-        // no longer reset by the item being disposed. derivedStateOf keeps the collapse flag from
-        // recomposing on every scroll pixel.
+        // The Currently-listening shelf is pinned here — above the scrolling library rather than
+        // being its first item — and is now ONE fixed size whatever the library does beneath it; see
+        // ListeningShelf for why the collapse went. Its LazyRow state is hoisted so the horizontal
+        // scroll position survives scrolling the library and is not reset by the item being disposed.
         val shelfRowState = rememberLazyListState()
-        val shelfCollapsed by remember(gridState) {
-            derivedStateOf {
-                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
-            }
-        }
         // The shelf STAYS while search is open. Hiding it was meant to give the results more room
         // and instead undid the whole point of moving search into the control bar: dropping it and
         // its divider out of this Column pulled everything below UP by the panel's height, so
@@ -315,7 +307,6 @@ fun HomeScreen(
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = listeningShelf,
-                collapsed = shelfCollapsed,
                 rowState = shelfRowState,
                 onOpen = onBookClick,
                 actions = actions,
@@ -665,13 +656,6 @@ private val LibraryGridSpacing = 12.dp
 
 /** The grid's horizontal content padding. */
 private val LibraryGridPadding = 16.dp
-
-/**
- * The collapsed listening strip's cover as a fraction of a grid cover's width. The strip is a
- * recognise-and-tap affordance while the library scrolls under it, so the cover is sized to be
- * identifiable rather than readable — tune this one number if it wants to be bigger or smaller.
- */
-private const val ListeningSlimCoverFraction = 2.5f
 
 /**
  * Width of one grid cell at [totalWidth] — the LazyVerticalGrid's own arithmetic, factored out so
@@ -1250,23 +1234,33 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
 // ── Currently-listening shelf ─────────────────────────────────────────────────────────
 
 /**
- * The Currently-listening shelf, pinned above the library list. Shows full cover cards at rest and collapses
- * to a slim strip of rows once the library is scrolled, so it stays reachable without eating the
- * screen. [rowState] is hoisted by the caller so the horizontal position survives both the
- * collapse and scrolling the library.
+ * The Currently-listening shelf, pinned above the library list.
+ *
+ * ONE size, always. It used to draw full 132dp cover cards at rest and shrink to a strip of bare
+ * covers once the library was scrolled, which cost more than it bought: the panel owned a third of
+ * the screen before you had scrolled anything, and the resize itself was the worse half — a filtered
+ * shelf one row taller than the viewport would grow the panel, push that row out of reach, and leave
+ * the books you were reaching for permanently half-visible. A shelf that changes size in response to
+ * scrolling is a shelf you cannot scroll to the bottom of.
+ *
+ * So it is fixed, and small: the header stays at its compact size, and the item is sized just above
+ * what the collapsed strip used to be — see [ListeningCoverFraction] — with the title and the time
+ * left underneath, which is what the strip had to drop when it shrank and is the whole reason a
+ * cover-only row was hard to use.
+ *
+ * [rowState] is hoisted by the caller so the horizontal position survives scrolling the library.
  */
 @Composable
 private fun ListeningShelf(
     books: List<BookListItem>,
-    collapsed: Boolean,
     rowState: LazyListState,
     onOpen: (String) -> Unit,
     actions: BookActions,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        // The collapsed strip is sized against a real grid cover rather than a literal dp, so it
-        // stays proportional on every screen width: half a cover, same 2:3 proportions.
-        val slimCoverWidth = gridCellWidth(maxWidth) / ListeningSlimCoverFraction
+        // Sized against a real grid cover rather than a literal dp, so it stays proportional on
+        // every screen width instead of drifting when the grid's padding or column count changes.
+        val coverWidth = gridCellWidth(maxWidth) / ListeningCoverFraction
 
         Column(
             modifier = Modifier
@@ -1274,17 +1268,16 @@ private fun ListeningShelf(
                 // A flat, quiet surface, and the exact tone the band's wash starts from, so the
                 // whole pinned block reads as one raised region rather than two tinted strips
                 // that happen to sit together.
-                .background(Surface0)
-                .animateContentSize(),
+                .background(Surface0),
         ) {
-            // Stays put when the strip collapses. It used to disappear, which left a row of bare
-            // covers under the top bar with nothing saying what they were.
             Box(modifier = Modifier.padding(horizontal = LibraryGridPadding)) {
                 SectionLabelRow(
                     stringResource(R.string.home_section_listening, books.size),
-                    topPadding = if (collapsed) 8.dp else 12.dp,
-                    bottomPadding = if (collapsed) 2.dp else 8.dp,
-                    large = !collapsed,
+                    topPadding = 8.dp,
+                    bottomPadding = 2.dp,
+                    // Small, unlike the library header below it. That one titles the list being
+                    // scrolled; this titles a strip that is deliberately not the subject.
+                    large = false,
                 )
             }
             LazyRow(
@@ -1292,18 +1285,11 @@ private fun ListeningShelf(
                 horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
                 // Padding on the row (not the parent) so cards bleed off the edge while scrolling
                 // instead of stopping at a hard margin.
-                contentPadding = PaddingValues(
-                    horizontal = LibraryGridPadding,
-                    vertical = if (collapsed) 6.dp else 0.dp,
-                ),
+                contentPadding = PaddingValues(horizontal = LibraryGridPadding, vertical = 6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 items(books, key = { "cont:${it.id}" }) { book ->
-                    if (collapsed) {
-                        ListeningSlim(book, coverWidth = slimCoverWidth, onOpen = onOpen)
-                    } else {
-                        ListeningCard(book, onOpen, actions)
-                    }
+                    ListeningItem(book, coverWidth, onOpen, actions)
                 }
             }
         }
@@ -1311,50 +1297,38 @@ private fun ListeningShelf(
 }
 
 /**
- * A book in the COLLAPSED listening strip: just the cover, with its progress bar directly beneath.
+ * How much smaller than a grid cover a listening item is.
  *
- * No title and no time left. The strip exists to be recognised and tapped mid-scroll, and at this
- * size a cover does that on its own — a title would only be a truncated echo of the one on the
- * card the strip collapsed from, and it forced the item into a wide row that fitted three books
- * across where this fits six.
+ * **This is the one number to turn if the panel wants to be taller or shorter.** The collapsed strip
+ * used 2.5; this is a little above it, per the brief, and the panel's whole height follows from it
+ * because the cover is 2:3 and everything else on the item is a fixed line of text.
+ *
+ * It is a trade: narrower keeps the panel out of the library's way, and wider gives the title room
+ * before it ellipsises. At this width a title gets roughly a dozen characters.
  */
-@Composable
-private fun ListeningSlim(book: BookListItem, coverWidth: Dp, onOpen: (String) -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(coverWidth)
-            .clip(RoundedCornerShape(6.dp))
-            .clickable { onOpen(book.id) }
-            // Nothing inside carries text any more, and the cover art is deliberately decorative,
-            // so without this the strip is a row of unlabelled buttons to a screen reader.
-            .semantics { contentDescription = book.title },
-    ) {
-        CoverArt(
-            model = book.coverModel,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f / 1.5f)
-                .clip(RoundedCornerShape(5.dp))
-                // Same hairline the grid cards carry, so a cover reads as a cover everywhere.
-                .border(1.dp, Line, RoundedCornerShape(5.dp)),
-        )
-        ProgressBar(
-            fraction = book.progress ?: 0f,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-        )
-    }
-}
+private const val ListeningCoverFraction = 1.8f
 
+/**
+ * One book on the listening shelf: cover, progress, title, time left.
+ *
+ * Single-line title and meta on purpose. At this width two lines would fit about six characters
+ * each, so a wrapped title is less readable than an ellipsised one — and a fixed line count keeps
+ * every item in the row exactly the same height, which is what stops the strip going ragged when one
+ * title is long.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ListeningCard(book: BookListItem, onOpen: (String) -> Unit, actions: BookActions) {
+private fun ListeningItem(
+    book: BookListItem,
+    coverWidth: Dp,
+    onOpen: (String) -> Unit,
+    actions: BookActions,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         Column(
             modifier = Modifier
-                .width(132.dp)
+                .width(coverWidth)
                 .combinedClickable(
                     onClick = { onOpen(book.id) },
                     onLongClick = { menuOpen = true },
@@ -1365,24 +1339,27 @@ private fun ListeningCard(book: BookListItem, onOpen: (String) -> Unit, actions:
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f / 1.5f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, Line, RoundedCornerShape(10.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    // Same hairline the grid cards carry, so a cover reads as a cover everywhere.
+                    .border(1.dp, Line, RoundedCornerShape(8.dp)),
             )
             ProgressBar(
                 fraction = book.progress ?: 0f,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 9.dp, bottom = 6.dp),
+                    .padding(top = 5.dp, bottom = 4.dp),
             )
             Text(
                 book.title,
                 color = Parchment,
-                fontSize = 12.5.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                lineHeight = 15.sp,
-                maxLines = 2,
+                lineHeight = 13.sp,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // The time left is what this shelf is FOR — it is the "where was I" panel — so it wins
+            // the one remaining line. The author only stands in when there is no position yet.
             val timeLeftMs = book.timeLeftMs
             val meta = when {
                 timeLeftMs == null -> book.author ?: stringResource(R.string.unknown_author)
@@ -1392,15 +1369,17 @@ private fun ListeningCard(book: BookListItem, onOpen: (String) -> Unit, actions:
             Text(
                 text = meta,
                 color = Muted,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 1.dp),
             )
         }
         BookMenu(book, menuOpen, actions) { menuOpen = false }
     }
 }
+
 
 @Composable
 private fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
@@ -1523,20 +1502,34 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
         // title and two of meta make this panel taller than the button was, so the dots sat against
         // the title with dead strip beneath them — and the part of the footer that looked like it
         // should open the menu did nothing.
+        //
+        // The GLYPH spans it too, which `Icon` cannot do: a 24dp vector painted with ContentScale.Fit
+        // into a tall narrow box fits by its width and stays a 24dp square in the middle, so
+        // stretching the button left the dots their original size and the affordance still read as
+        // small. Three drawn dots take the height honestly.
+        val moreLabel = stringResource(R.string.action_more)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .sizeIn(minWidth = 32.dp, minHeight = 48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onMenu),
+                .clickable(onClick = onMenu)
+                // Carried here because the Canvas below is a drawing, not an Icon, and has no
+                // description of its own to lend the button.
+                .semantics { contentDescription = moreLabel },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Filled.MoreVert,
-                contentDescription = stringResource(R.string.action_more),
-                tint = Faint,
-                modifier = Modifier.size(18.dp),
-            )
+            Canvas(modifier = Modifier.fillMaxHeight().width(18.dp)) {
+                val radius = 1.7.dp.toPx()
+                // Inset by a dot's diameter so the outer two sit inside the footer rather than
+                // half-way off its edges.
+                val top = radius * 2
+                val bottom = size.height - radius * 2
+                val x = size.width / 2f
+                for (y in listOf(top, (top + bottom) / 2f, bottom)) {
+                    drawCircle(color = Faint, radius = radius, center = Offset(x, y))
+                }
+            }
         }
     }
 }
@@ -1572,11 +1565,19 @@ private fun bookMeta(
      * restating what is on screen an inch above.
      */
     withDuration: Boolean = true,
+    /**
+     * True in LIST view, where the cover no longer carries a corner badge for it. False on the grid
+     * card, whose cover does — saying it in both places would put the same fact twice on one card.
+     */
+    withOffline: Boolean = false,
 ): String = buildList {
     // The length leads. It is the one number a reader scans a list FOR — "have I got an hour for
     // this" — and it was last, after the author and the genre they can already see from the shelf
     // they are standing on.
     if (withDuration) book.totalDurationMs?.takeIf { it > 0 }?.let { add(formatCompactDuration(it)) }
+    // Then whether this device HAS it, which is the other half of "can I listen to this now" and so
+    // belongs beside the length rather than after the tags. Same slot in seriesMeta — see there.
+    if (withOffline && book.isDownloaded) add(context.getString(R.string.details_offline))
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
@@ -1915,16 +1916,33 @@ private fun seriesMeta(
     ctx: RowContext,
     context: android.content.Context,
 ): String = buildList {
+    // Same running order as a book row — length, then what this device has of it, then who wrote it
+    // — so a shelf and a book sitting next to each other in the same list read the same way round.
+    // The author used to lead here and trail there, which is the sort of thing nobody can name but
+    // everybody has to re-read.
+    //
+    // The first two came off the cover: at 38x52 the corner badges were a smudge. See SeriesShelfRow.
+    seriesTotalMs(series)?.let { add(formatCompactDuration(it)) }
+    add(
+        context.resources.getQuantityString(
+            R.plurals.home_series_book_count,
+            series.books.size,
+            series.books.size,
+        ),
+    )
+    val downloaded = series.books.count { it.isDownloaded }
+    when {
+        downloaded == 0 -> Unit
+        // "Offline" unqualified only when the WHOLE shelf is here; a partial count has to say so,
+        // or a series with one downloaded volume claims to be listenable on a train.
+        downloaded == series.books.size -> add(context.getString(R.string.details_offline))
+        else -> add(context.getString(R.string.details_offline_some, downloaded, series.books.size))
+    }
     // Dropped when the author is the heading overhead, exactly as bookMeta drops it — see
-    // seriesCardMeta. buildList rather than buildString because the separator now has to survive
-    // the first part going missing; appending " · " ahead of the length left a row starting with a
-    // dot the moment the author was suppressed.
+    // seriesCardMeta.
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(series.author ?: context.getString(R.string.unknown_author))
     }
-    // Whole-series length: a book row shows its own, so a shelf that hid the sum was the one place
-    // the number went missing.
-    seriesTotalMs(series)?.let { add(formatCompactDuration(it)) }
 }.joinToString(" · ")
 
 /** A series' length, but only once EVERY episode is measured — a partial sum understates it. */
@@ -1989,15 +2007,6 @@ private fun BookListRow(
                         .size(46.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
-                // The same cut corner the grid uses, at the compact size — bottom-right, where it
-                // sits under the thumb's line of travel rather than over the artwork's top third.
-                if (book.isDownloaded) {
-                    OfflineBadge(
-                        CoverCorner.BOTTOM_END,
-                        modifier = Modifier.align(Alignment.BottomEnd),
-                        compact = true,
-                    )
-                }
             }
             // Same bar, same place, whatever view a book appears in.
             if (book.hasVisibleProgress()) {
@@ -2039,7 +2048,7 @@ private fun BookListRow(
                 )
             }
             Text(
-                text = bookMeta(book, ctx, LocalContext.current, withStatus = true),
+                text = bookMeta(book, ctx, LocalContext.current, withStatus = true, withOffline = true),
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -2123,22 +2132,11 @@ private fun SeriesShelfRow(
                         .size(width = 38.dp, height = 52.dp)
                         .clip(RoundedCornerShape(6.dp)),
                 ) {
+                    // No corner badges here. At 38x52 a cut corner with a glyph in it is a smudge,
+                    // and two of them cover a third of the artwork to say what the line beside it
+                    // has room to say in words. The corners stay in GRID view, where the cover is
+                    // big enough to carry them and there is no room for a second line of text.
                     CoverArt(model = series.frontCover(), modifier = Modifier.fillMaxSize())
-                    VolumeCountBadge(
-                        series.books.size,
-                        isCollection = series.isCollection,
-                        modifier = Modifier.align(Alignment.TopStart),
-                        compact = true,
-                    )
-                    val downloaded = series.books.count { it.isDownloaded }
-                    if (downloaded > 0) {
-                        OfflineBadge(
-                            CoverCorner.BOTTOM_END,
-                            count = downloaded.takeIf { it < series.books.size }?.toString(),
-                            modifier = Modifier.align(Alignment.BottomEnd),
-                            compact = true,
-                        )
-                    }
                 }
             }
             Column(
