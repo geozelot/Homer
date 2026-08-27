@@ -126,6 +126,11 @@ fun BookDetailsCard(
     book: BookListItem,
     onEdit: () -> Unit,
     onFilter: (FilterToken) -> Unit,
+    /**
+     * Opens the template editor seeded for this book's folder — null where there is nothing to
+     * seed, which is a reader device whose patterns are somebody else's to write.
+     */
+    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -179,6 +184,21 @@ fun BookDetailsCard(
                 // key every shared facet uses. When something is wrong with a book this is the
                 // first thing worth seeing, and it was visible nowhere in the app.
                 Fact(stringResource(R.string.details_location), book.id)
+
+                // …and if what is wrong is how that path was READ, this is the way out. Seeded from
+                // here rather than authored from nothing: the folder is this book's and the shape is
+                // whichever pattern is already matching, which is the one that needs changing.
+                onReadFolderDifferently?.let { open ->
+                    Text(
+                        stringResource(R.string.details_read_folder),
+                        color = Amber,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = open)
+                            .padding(top = 10.dp),
+                    )
+                }
             }
         },
         confirmButton = {

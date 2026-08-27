@@ -541,4 +541,5 @@
     <string name="set_templates_scope_all">die ganze Bibliothek</string>
     <string name="set_templates_pattern">Muster</string>
     <string name="set_templates_scope_desc">Ein Ordner grenzt ein Muster auf die Bücher darunter ein und wird gegen den ganzen Pfad geprüft — ein Muster für „Imports“ beginnt also weiterhin oben in der Bibliothek. Muster für engere Ordner werden zuerst probiert. Bleibt der Ordner leer, gilt das Muster überall.</string>
+    <string name="details_read_folder">Diesen Ordner anders lesen…</string>
 </resources>

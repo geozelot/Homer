@@ -157,6 +157,7 @@ import com.geozelot.homer.ui.theme.Surface2
 fun HomeScreen(
     onBookClick: (String) -> Unit,
     onBookClickAt: (String, Long) -> Unit,
+    onOpenTemplates: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -181,6 +182,7 @@ fun HomeScreen(
     // A device reading an index somebody else keeps: it never crawls, so an empty shelf here means
     // "not published yet", not "no audiobooks found".
     val readsSharedIndex by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
+    val maintainsLibrary by viewModel.maintainsLibrary.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
@@ -440,6 +442,11 @@ fun HomeScreen(
             book = book,
             onEdit = { detailsId = null; editingId = book.id },
             onFilter = { detailsId = null; searching = false; viewModel.addFilterToken(it) },
+            onReadFolderDifferently = if (maintainsLibrary) {
+                { detailsId = null; viewModel.seedTemplateFor(book.id); onOpenTemplates() }
+            } else {
+                null
+            },
             onDismiss = { detailsId = null },
         )
     }

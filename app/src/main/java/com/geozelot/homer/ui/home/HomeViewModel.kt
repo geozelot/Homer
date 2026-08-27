@@ -31,6 +31,7 @@ import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.BookLanguage
@@ -1144,6 +1145,33 @@ class HomeViewModel @Inject constructor(
 
     fun setTemplateDraft(lines: List<String>) {
         _templateDraft.value = lines
+    }
+
+    /**
+     * Starts a template for the folder [bookId] sits in, seeded with the pattern currently reading
+     * it.
+     *
+     * Authoring a template from nothing is the miserable part of this feature: you have to work out
+     * both the scope and the shape before you can see whether either is right. Coming from a book,
+     * both are known — the folder is the book's own, and the shape is whichever pattern Homer is
+     * already matching, which is by definition the one that needs changing.
+     *
+     * Prepended, because a narrower scope has to be tried before a broader one, and idempotent: the
+     * same seed twice is one row, not two identical ones.
+     */
+    fun seedTemplateFor(bookId: String) {
+        viewModelScope.launch {
+            val scope = bookId.trim('/').substringBeforeLast('/', "")
+            val current = ScopedTemplate.parseFirst(bookId, templateApplier.activeTemplates())
+            // Whichever template matched is the one to start from; with nothing matching, the
+            // conventional shape for a path of this depth is the least surprising blank slate.
+            val shape = ScopedTemplate.DEFAULTS.firstOrNull { it.parse(bookId) != null }?.template?.source
+                ?: "{author}/{title}"
+            val seeded = if (scope.isBlank()) shape else "$scope\t$shape"
+            val existing = templateDraft.value
+            _templateDraft.value = if (seeded in existing) existing else listOf(seeded) + existing
+            Log.i(TAG_STORAGE, "seeded a template for '$scope' from ${current?.size ?: 0} matched field(s)")
+        }
     }
 
     /** Stores the draft and re-derives every book under it. */

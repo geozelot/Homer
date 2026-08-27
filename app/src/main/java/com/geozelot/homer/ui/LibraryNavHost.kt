@@ -82,6 +82,7 @@ fun LibraryNavHost() {
                     entry.navigateOnce(navController, "player/${Uri.encode(bookId)}?at=$atMs")
                 },
                 onOpenSettings = { entry.navigateOnce(navController, ROUTE_SETTINGS) },
+                onOpenTemplates = { entry.navigateOnce(navController, ROUTE_SETTINGS_TEMPLATES) },
             )
         }
         composable(

@@ -564,4 +564,5 @@
     <string name="set_templates_scope_all">the whole library</string>
     <string name="set_templates_pattern">Pattern</string>
     <string name="set_templates_scope_desc">A folder narrows a pattern to the books under it, and is matched against the whole path — so a pattern for “Imports” still starts at the top of the library. Patterns for narrower folders are tried first. Leave the folder blank and the pattern applies everywhere.</string>
+    <string name="details_read_folder">Read this folder differently…</string>
 </resources>
