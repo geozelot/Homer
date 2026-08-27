@@ -7,17 +7,18 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.R
-import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.SignOut
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.download.DownloadStorage
@@ -31,20 +32,22 @@ import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
 import com.geozelot.homer.data.storage.StorageMigrationManager
 import com.geozelot.homer.data.storage.StorageMigrator
+import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.CrawlSummary
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
-import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -55,7 +58,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
  * A library row: enough to render without touching the DB entity in the UI.
@@ -237,6 +239,7 @@ class HomeViewModel @Inject constructor(
     private val downloadManager: DownloadManager,
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
+    private val bookmarkDao: BookmarkDao,
     private val bookDao: BookDao,
     private val crawlDirDao: CrawlDirDao,
     private val bookEditor: BookEditor,
@@ -1074,6 +1077,20 @@ class HomeViewModel @Inject constructor(
         // No sort correction here on purpose — `sortMode` clamps on read, which covers a stored
         // pair this write path would never see, and keeps the user's choice for later.
         viewModelScope.launch { librarySettings.setShelfMode(shelving.key) }
+    }
+
+    /**
+     * One book's bookmarks, for the library's own bookmark list.
+     *
+     * Read straight from the DAO rather than held in a StateFlow: the list is opened from a menu on
+     * one card at a time, and keeping every book's bookmarks warm for the one that might be tapped
+     * is a subscription per book on the shelf.
+     */
+    fun bookmarksFor(bookId: String): Flow<List<BookmarkEntity>> = bookmarkDao.observeForBook(bookId)
+
+    /** Removes a bookmark from the library-side list. */
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch { bookmarkDao.deleteById(id) }
     }
 
     fun setSeriesMode(mode: LibraryDepth) {

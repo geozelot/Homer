@@ -483,4 +483,37 @@
     <string name="set_update_err_signature">Diese Version ist mit einem anderen Schlüssel signiert als dieser Build, daher würde Android sie ablehnen. Das ist normal, wenn du diese Kopie selbst gebaut hast — installiere die Release-APK stattdessen von Hand.</string>
     <string name="set_update_err_notallowed">Homer braucht deine Erlaubnis, Apps zu installieren.</string>
     <string name="set_update_err_installfailed">Die Installation ist nicht fertig geworden.</string>
+    <string name="details_series">Serie</string>
+    <string name="details_series_at">%1$s, Nr. %2$d</string>
+    <string name="details_collection">Reihe</string>
+    <string name="details_author">Autor</string>
+    <string name="details_genre">Genre</string>
+    <string name="details_language">Sprache</string>
+    <string name="details_tags">Schlagwörter</string>
+    <string name="details_length">Länge</string>
+    <string name="details_length_unknown">Noch nicht vermessen</string>
+    <string name="details_files">Dateien</string>
+    <string name="details_progress">Fortschritt</string>
+    <string name="details_progress_unstarted">Nicht begonnen</string>
+    <string name="details_progress_started">Begonnen</string>
+    <string name="details_offline">Offline</string>
+    <string name="details_offline_none">Nicht heruntergeladen</string>
+    <string name="details_offline_all">Heruntergeladen</string>
+    <string name="details_offline_some">%1$d von %2$d heruntergeladen</string>
+    <string name="details_location">Ordner</string>
+    <string name="details_volumes">Bände</string>
+    <string name="details_subseries">Enthält</string>
+    <string name="details_started">Begonnen</string>
+    <string name="details_started_none">Keines begonnen</string>
+    <string name="details_started_some">%1$d von %2$d begonnen</string>
+    <string name="details_kind_series">Serie</string>
+    <string name="details_kind_collection">Reihe</string>
+    <string name="menu_details">Details</string>
+    <string name="menu_bookmarks">Lesezeichen</string>
+    <plurals name="details_file_count">
+        <item quantity="one">%d Datei</item>
+        <item quantity="other">%d Dateien</item>
+    </plurals>
+    <string name="details_bookmarks_none">Noch keine Lesezeichen in diesem Buch. Du kannst sie im Player setzen.</string>
+    <string name="details_bookmark_untitled">Lesezeichen</string>
 </resources>

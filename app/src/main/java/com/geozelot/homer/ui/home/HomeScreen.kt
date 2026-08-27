@@ -52,6 +52,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
@@ -154,6 +156,7 @@ import com.geozelot.homer.ui.theme.Surface2
 @Composable
 fun HomeScreen(
     onBookClick: (String) -> Unit,
+    onBookClickAt: (String, Long) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -187,6 +190,9 @@ fun HomeScreen(
     // live row is re-derived from `entries` below on each recomposition.
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailsId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailsSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var bookmarksId by rememberSaveable { mutableStateOf<String?>(null) }
     // rememberSaveable so a rotation doesn't drop the user out of search: `searching` used to be
     // lost while the query stayed in the ViewModel, leaving the library filtered with no search
     // field to clear it.
@@ -209,6 +215,9 @@ fun HomeScreen(
             onDownload = viewModel::download,
             onRemove = viewModel::deleteDownload,
             onEdit = { editingId = it.id },
+            onDetails = { detailsId = it.id },
+            onDetailsSeries = { detailsSeriesKey = it.expandKey },
+            onBookmarks = { bookmarksId = it.id },
             onSetHidden = viewModel::setHidden,
             onMarkCompleted = viewModel::markCompleted,
             onEditSeries = { editingSeriesKey = it.expandKey },
@@ -397,6 +406,33 @@ fun HomeScreen(
         )
     }
 
+    // Details re-derives from the live list like the edit dialogs, so an edit made from inside it
+    // is reflected the moment it lands rather than on the next open.
+    entries.findBook(detailsId)?.let { book ->
+        BookDetailsCard(
+            book = book,
+            onEdit = { detailsId = null; editingId = book.id },
+            onDismiss = { detailsId = null },
+        )
+    }
+    entries.findSeries(detailsSeriesKey)?.let { series ->
+        SeriesDetailsCard(
+            series = series,
+            onEdit = { detailsSeriesKey = null; editingSeriesKey = series.expandKey },
+            onDismiss = { detailsSeriesKey = null },
+        )
+    }
+    entries.findBook(bookmarksId)?.let { book ->
+        val marks by viewModel.bookmarksFor(book.id).collectAsStateWithLifecycle(emptyList())
+        LibraryBookmarksDialog(
+            book = book,
+            bookmarks = marks,
+            onOpenAt = { ms -> bookmarksId = null; onBookClickAt(book.id, ms) },
+            onDelete = viewModel::deleteBookmark,
+            onDismiss = { bookmarksId = null },
+        )
+    }
+
     entries.findSeries(editingSeriesKey)?.let { series ->
         SeriesEditDialog(
             series = series,
@@ -461,6 +497,9 @@ private class BookActions(
     val onDownload: (String) -> Unit,
     val onRemove: (String) -> Unit,
     val onEdit: (BookListItem) -> Unit,
+    val onDetails: (BookListItem) -> Unit,
+    val onDetailsSeries: (LibraryEntry.Series) -> Unit,
+    val onBookmarks: (BookListItem) -> Unit,
     val onSetHidden: (String, Boolean) -> Unit,
     val onMarkCompleted: (String) -> Unit,
     val onEditSeries: (LibraryEntry.Series) -> Unit,
@@ -1592,7 +1631,7 @@ private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Con
 }
 
 /** A series' length, but only once EVERY episode is measured — a partial sum understates it. */
-private fun seriesTotalMs(series: LibraryEntry.Series): Long? {
+internal fun seriesTotalMs(series: LibraryEntry.Series): Long? {
     val measured = series.books.mapNotNull { it.totalDurationMs?.takeIf { d -> d > 0 } }
     return if (measured.size == series.books.size && measured.isNotEmpty()) measured.sum() else null
 }
@@ -1843,7 +1882,7 @@ private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
 // ── Cover art (title-forward placeholder) ─────────────────────────────────────
 
 @Composable
-private fun CoverArt(model: Any?, modifier: Modifier = Modifier) {
+internal fun CoverArt(model: Any?, modifier: Modifier = Modifier) {
     Box(modifier) {
         if (model != null) {
             CoverImage(model = model, modifier = Modifier.fillMaxSize())
@@ -1881,17 +1920,35 @@ private fun BookMenu(
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         // No "Play" item: it was the first and most prominent entry in every menu and did nothing
         // but close the menu. Tapping the card itself opens the book.
-        if (book.started) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.mark_completed)) },
-                leadingIcon = { Icon(Icons.Filled.Check, null, tint = Muted) },
-                onClick = { actions.onMarkCompleted(book.id); onDismiss() },
-            )
-        }
+        //
+        // Three groups, hairline-separated: what you can LOOK at, what changes the book's state,
+        // and offline. Edit is no longer here — it lives at the foot of Details, where the fields
+        // it edits are on screen to be read first.
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.action_edit)) }, // hide/unhide lives in the edit dialog
-            leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
-            onClick = { actions.onEdit(book); onDismiss() },
+            text = { Text(stringResource(R.string.menu_details)) },
+            leadingIcon = { Icon(Icons.Filled.Info, null, tint = Muted) },
+            onClick = { actions.onDetails(book); onDismiss() },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_bookmarks)) },
+            leadingIcon = { Icon(Icons.Filled.Bookmarks, null, tint = Muted) },
+            onClick = { actions.onBookmarks(book); onDismiss() },
+        )
+
+        HorizontalDivider()
+
+        // Greyed rather than absent for an unstarted book. It used to vanish, which moved every
+        // item below it up and put a different action under the finger that reached for one.
+        DropdownMenuItem(
+            text = {
+                Text(
+                    stringResource(R.string.mark_completed),
+                    color = if (book.started) Parchment else Faint,
+                )
+            },
+            leadingIcon = { Icon(Icons.Filled.Check, null, tint = if (book.started) Muted else Faint) },
+            enabled = book.started,
+            onClick = { actions.onMarkCompleted(book.id); onDismiss() },
         )
 
         HorizontalDivider()
@@ -1955,9 +2012,9 @@ private fun SeriesMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.action_edit)) },
-            leadingIcon = { Icon(Icons.Filled.Edit, null, tint = Muted) },
-            onClick = { actions.onEditSeries(series); onDismiss() },
+            text = { Text(stringResource(R.string.menu_details)) },
+            leadingIcon = { Icon(Icons.Filled.Info, null, tint = Muted) },
+            onClick = { actions.onDetailsSeries(series); onDismiss() },
         )
 
         HorizontalDivider()

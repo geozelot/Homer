@@ -125,6 +125,11 @@ import kotlin.math.abs
 @Composable
 fun PlayerScreen(
     bookId: String,
+    /**
+     * Where to start, in ms — or -1 to resume wherever the book was left, which is every arrival
+     * but one. Set when the library opens a book AT a bookmark.
+     */
+    startAtMs: Long = -1L,
     onBack: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
@@ -151,6 +156,13 @@ fun PlayerScreen(
 
     // Start playback when the screen opens for this book.
     LaunchedEffect(bookId) { viewModel.play(bookId) }
+
+    // …and then, if the library sent us to a bookmark, go there. Keyed on the position as well as
+    // the book so returning to the same book at a different bookmark seeks again, and applied
+    // after `play` rather than instead of it: the seek needs a prepared player to land on.
+    LaunchedEffect(bookId, startAtMs) {
+        if (startAtMs >= 0) viewModel.seekTo(startAtMs)
+    }
 
     // The screen's three parts as slots, so the tall and short layouts below can arrange the very
     // same content without threading every piece of state through two more composables.

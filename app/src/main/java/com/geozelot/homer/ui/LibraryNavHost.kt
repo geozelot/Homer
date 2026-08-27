@@ -40,6 +40,7 @@ private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_DIAGNOSTICS = "diagnostics"
 private const val ROUTE_LINK_SYNC = "link_sync"
 private const val ROUTE_STORAGE_BROWSER = "storage_browser"
+private const val ARG_AT_MS = "at"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_LIBRARY = "settings/library"
 private const val ROUTE_SETTINGS_UPKEEP = "settings/upkeep"
@@ -72,18 +73,32 @@ fun LibraryNavHost() {
                 onBookClick = { bookId ->
                     entry.navigateOnce(navController, "player/${Uri.encode(bookId)}")
                 },
+                // Opening a book AT a position, which is what tapping a bookmark in the library
+                // does. A query argument rather than a second route: it is the same destination,
+                // and a player reached with no position is the overwhelmingly common case.
+                onBookClickAt = { bookId, atMs ->
+                    entry.navigateOnce(navController, "player/${Uri.encode(bookId)}?at=$atMs")
+                },
                 onOpenSettings = { entry.navigateOnce(navController, ROUTE_SETTINGS) },
             )
         }
         composable(
-            route = "player/{$ARG_BOOK_ID}",
-            arguments = listOf(navArgument(ARG_BOOK_ID) { type = NavType.StringType }),
+            route = "player/{$ARG_BOOK_ID}?at={$ARG_AT_MS}",
+            arguments = listOf(
+                navArgument(ARG_BOOK_ID) { type = NavType.StringType },
+                // -1 means "wherever the book was left", which is every arrival but a bookmark's.
+                navArgument(ARG_AT_MS) { type = NavType.LongType; defaultValue = -1L },
+            ),
             // The player slides up from the bottom (like expanding the mini-player) and back down.
             enterTransition = { slideInVertically(tween(300)) { it } },
             popExitTransition = { slideOutVertically(tween(300)) { it } },
         ) { entry ->
             val bookId = entry.arguments?.getString(ARG_BOOK_ID).orEmpty()
-            PlayerScreen(bookId = bookId, onBack = { navController.popBackStack() })
+            PlayerScreen(
+                bookId = bookId,
+                startAtMs = entry.arguments?.getLong(ARG_AT_MS) ?: -1L,
+                onBack = { navController.popBackStack() },
+            )
         }
 
         // ── Settings ─────────────────────────────────────────────────────────
