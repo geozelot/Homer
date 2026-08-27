@@ -66,10 +66,41 @@ It crawls your library folder over **WebDAV** into a local **Room** index, strea
 with **Media3/ExoPlayer** over an authenticated OkHttp data source, and keeps cross-device
 state in a small `.homer` JSON file in your own Nextcloud storage.
 
+### How your library should be laid out
+
+Homer reads a book's author, series and title out of its **folder path**. It expects, in order:
+
+```
+Author/Series/Book Title/…audio files
+Author/Book Title/…audio files
+Book Title/…audio files
+```
+
+Anything between the author and the series folder is ignored, so `Author/Audiobooks/Series/Book`
+works too. A book is any folder that directly contains audio; folders named for a disc — `CD 2`,
+`Teil 3`, or just `02` — fold into the book above them. Files inside a book are ordered
+numerically, so `Chapter 2` precedes `Chapter 10`.
+
+**Nothing else is inferred from where a book sits.** A series *index* comes from a tag or from a
+pattern you write; a **collection** — a parent grouping like Discworld over Rincewind — is never
+guessed from folder depth and is only ever something you state.
+
+If your library is laid out some other way, say so rather than reorganising it: *Settings → Upkeep →
+Reading folder names* takes patterns like
+
+```
+{author}/{title} ({series} {index})
+{author}/{**}/{series}/{title}
+```
+
+with a folder picker for scoping a pattern to one part of the library, and a preview over real books
+before anything is written. Books that no pattern could read are listed under *Upkeep → Books Homer
+could not read*.
+
 A crawl reads names, sizes and ETags — one cheap request per folder. A book's *length* is
 different: it needs a ranged read of every audio file, so Homer measures a book the first
 time you open it rather than doing the whole library up front. If you want them all at
-once, *Library source → Measure lengths* does that deliberately, on request.
+once, *Settings → Upkeep → Measure lengths* does that deliberately, on request.
 
 **Playback in the background is up to your phone, not to Homer.** Homer runs playback as a
 foreground service and holds a wake lock while a book is playing, which is everything

@@ -46,10 +46,16 @@ object BookLanguage {
         Lang("de", listOf("deu", "ger"), listOf("german", "deutsch"), listOf("kapitel", "teil", "hoerbuch", "horbuch")),
         Lang("en", listOf("eng"), listOf("english"), listOf("chapter", "audiobook", "unabridged")),
         Lang("fr", listOf("fra", "fre"), listOf("french", "francais"), listOf("chapitre")),
+        // "capitulo" is deliberately listed for BOTH Spanish and Portuguese, which is what makes
+        // byChapterWord drop it: the word cannot tell them apart, so it decides nothing.
         Lang("es", listOf("spa"), listOf("spanish", "espanol"), listOf("capitulo")),
         Lang("it", listOf("ita"), listOf("italian", "italiano"), listOf("capitolo")),
         Lang("nl", listOf("nld", "dut"), listOf("dutch", "nederlands"), listOf("hoofdstuk")),
-        Lang("pt", listOf("por"), listOf("portuguese", "portugues"), listOf("capitulos")),
+        // Listed with the same word as Spanish ON PURPOSE. It used to carry the plural
+        // "capitulos", which no file is ever named after, so it never fired — and the singular went
+        // to Spanish alone, making every Portuguese book Spanish. Both claim it, so neither gets it,
+        // and Portuguese is still detected from a tag or an explicit `[pt]` / "portugues".
+        Lang("pt", listOf("por"), listOf("portuguese", "portugues"), listOf("capitulo")),
         Lang("sv", listOf("swe"), listOf("swedish", "svenska")),
         Lang("da", listOf("dan"), listOf("danish", "dansk")),
         Lang("no", listOf("nor", "nob", "nno"), listOf("norwegian", "norsk"), listOf("kapittel")),
@@ -82,7 +88,24 @@ object BookLanguage {
     private val byCode = TABLE.associateBy { it.code }
     private val byIso3 = TABLE.flatMap { l -> l.iso3.map { it to l } }.toMap()
     private val byName = TABLE.flatMap { l -> l.names.map { it to l } }.toMap()
-    private val byChapterWord = TABLE.flatMap { l -> l.chapterWords.map { it to l } }.toMap()
+    /**
+     * Chapter words, minus any word more than one language claims.
+     *
+     * Spanish and Portuguese both call a chapter "capítulo", which folds to the same token — and
+     * `toMap` silently let whichever entry came second win, so every Portuguese book named
+     * `Capítulo 03.mp3` was detected as SPANISH. A word two languages share is not evidence for
+     * either of them, and the design elsewhere prefers no answer to a wrong one: an unknown code is
+     * rejected rather than passed through, precisely so the shelf never claims something it cannot
+     * support.
+     *
+     * Computed rather than hand-pruned, so a future table edit that introduces a collision drops out
+     * of tier 2 by itself instead of quietly handing one language another's books.
+     */
+    private val byChapterWord = TABLE
+        .flatMap { l -> l.chapterWords.map { it to l } }
+        .groupBy({ it.first }, { it.second })
+        .filterValues { claimants -> claimants.distinctBy { it.code }.size == 1 }
+        .mapValues { (_, claimants) -> claimants.first() }
 
     /**
      * A language's name in the reader's own language — "Deutsch" in a German interface, "German" in

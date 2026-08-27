@@ -181,7 +181,7 @@
     <string name="home_no_matches">Keine Treffer</string>
     <string name="home_no_matches_hint">Versuche einen anderen Titel, Autor, ein anderes Genre oder Schlagwort.</string>
     <string name="home_empty_title">Dein Regal ist leer</string>
-    <string name="home_empty_hint">Homer hat den Ordner gelesen und keine Hörbücher darin gefunden. Probiere unter Einstellungen › Bibliothek einen anderen Ordner.</string>
+    <string name="home_empty_hint">Homer hat den Ordner gelesen und keine Hörbücher darin gefunden. Probiere unter Einstellungen › Sync einen anderen Ordner.</string>
     <string name="home_empty_reader_title">Noch nichts geteilt</string>
     <string name="home_empty_reader_hint">Diese Bibliothek wird von einem anderen Gerät gepflegt, das seine Bücher noch nicht veröffentlicht hat. Sie erscheinen hier, sobald es das tut — du musst nichts tun.</string>
     <string name="setup_looking">Suche nach deiner Bibliothek…</string>
@@ -526,7 +526,7 @@
     <string name="set_templates_patterns_header">MUSTER</string>
     <string name="set_templates_lead">Homer liest Autor, Serie und Titel aus dem Ordnerpfad eines Buchs. Für die übliche Ablage — Autor / Serie / Buch — brauchst du hier nichts. Füge ein Muster nur für anders aufgebaute Ordner hinzu; deine werden zuerst probiert, und für alles andere gilt weiterhin die übliche Ablage.</string>
     <string name="set_templates_add">Muster hinzufügen</string>
-    <string name="set_templates_fields">Verfügbar: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. {*} steht für einen Ordner, der dich nicht interessiert, {**} für beliebig viele. Alles andere wird genau so gelesen — „{title} ({series} {index})“ passt auf „Sourcery (Rincewind 2)“.</string>
+    <string name="set_templates_fields">Verfügbar: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. {*} steht für einen Ordner, der dich nicht interessiert, {**} für beliebig viele. Alles andere wird genau so gelesen — „{title} ({series} {index})“ passt auf „Sourcery (Rincewind 2)“.\n\nOhne Muster werden nur Autor, Serie und Titel gelesen. Eine Reihe wird nie aus der Ordnertiefe erraten — frag hier danach, oder setze sie an einer Serie oder einem Buch.</string>
     <string name="set_templates_preview_header">WAS PASSIEREN WÜRDE</string>
     <string name="set_templates_preview_lead">Echte Bücher aus deiner Bibliothek, die betroffenen zuerst. Bis zum Anwenden wird nichts geschrieben.</string>
     <string name="set_templates_preview_empty">Nichts zur Vorschau — die Bibliothek wurde noch nicht gelesen.</string>

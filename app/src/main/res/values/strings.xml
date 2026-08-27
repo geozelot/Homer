@@ -187,7 +187,7 @@
     <string name="home_no_matches">No matches</string>
     <string name="home_no_matches_hint">Try a different title, author, genre or tag.</string>
     <string name="home_empty_title">Your shelf is empty</string>
-    <string name="home_empty_hint">Homer read that folder and found no audiobooks in it. Try a different folder under Settings \u203a Library.</string>
+    <string name="home_empty_hint">Homer read that folder and found no audiobooks in it. Try a different folder under Settings \u203a Sync.</string>
     <string name="home_empty_reader_title">Nothing shared yet</string>
     <string name="home_empty_reader_hint">This library is kept by another device, which has not published its books yet. They will appear here as soon as it does — there is nothing for you to fix.</string>
     <!-- First run: what replaces an empty shelf. The sweep that found these folders is the same
@@ -549,7 +549,7 @@
     <string name="set_templates_patterns_header">PATTERNS</string>
     <string name="set_templates_lead">Homer reads a book\'s author, series and title out of its folder path. The usual layout — Author / Series / Book — needs nothing here. Add a pattern only for folders laid out some other way; yours are tried first, and the usual layout still applies to everything they do not match.</string>
     <string name="set_templates_add">Add a pattern</string>
-    <string name="set_templates_fields">Available: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. Use {*} for one folder you do not care about and {**} for any number of them. Everything else is matched exactly, so “{title} ({series} {index})” reads “Sourcery (Rincewind 2)”.</string>
+    <string name="set_templates_fields">Available: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. Use {*} for one folder you do not care about and {**} for any number of them. Everything else is matched exactly, so “{title} ({series} {index})” reads “Sourcery (Rincewind 2)”.\n\nOnly the author, series and title are read without a pattern. A collection is never guessed from how deep a book sits — ask for one here, or set it on a series or a book.</string>
     <string name="set_templates_preview_header">WHAT IT WOULD DO</string>
     <string name="set_templates_preview_lead">Real books from your library, the ones that would change first. Nothing is written until you apply.</string>
     <string name="set_templates_preview_empty">Nothing to preview — your library has not been read yet.</string>

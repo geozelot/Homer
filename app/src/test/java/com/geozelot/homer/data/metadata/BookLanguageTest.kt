@@ -101,8 +101,13 @@ class BookLanguageTest {
         )
         assertEquals("en", BookLanguage.fromNames("The Hobbit", listOf("Chapter 01.mp3")))
         assertEquals("fr", BookLanguage.fromNames("Le Hobbit", listOf("Chapitre 01.mp3")))
-        assertEquals("es", BookLanguage.fromNames("El Hobbit", listOf("Capitulo 01.mp3")))
-        assertEquals("es", BookLanguage.fromNames("El Hobbit", listOf("Capítulo 01.mp3")))
+        // NOT Spanish. "capítulo" is the Portuguese word too, spelled identically, so the file
+        // name alone cannot tell them apart — and it used to answer "Spanish" for both, shelving
+        // every Portuguese library under the wrong language and publishing that to everyone
+        // sharing it. A deliberate trade: Spanish loses chapter-word detection so that Portuguese
+        // stops being actively mislabelled. Both are still detected from a tag or an explicit token.
+        assertNull(BookLanguage.fromNames("El Hobbit", listOf("Capitulo 01.mp3")))
+        assertNull(BookLanguage.fromNames("El Hobbit", listOf("Capítulo 01.mp3")))
         assertEquals("it", BookLanguage.fromNames("Lo Hobbit", listOf("Capitolo 01.mp3")))
     }
 
@@ -150,5 +155,27 @@ class BookLanguageTest {
         // this pins that they stay out of it.
         assertNull(BookLanguage.fromNames("The Hobbit", listOf("Part 01.mp3", "Part 02.mp3")))
         assertNull(BookLanguage.fromNames("Band 1", listOf("01.mp3")))
+    }
+
+    // ── words two languages share ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a chapter word two languages share decides nothing`() {
+        // Spanish and Portuguese both call it "capítulo". It used to go to Spanish alone, so every
+        // Portuguese book named "Capítulo 03.mp3" was shelved as Spanish — a wrong answer where the
+        // design prefers none.
+        assertNull(BookLanguage.fromNames("Algum Livro", listOf("Capítulo 01.mp3", "Capítulo 02.mp3")))
+    }
+
+    @Test
+    fun `an explicit token still identifies the language the shared word cannot`() {
+        assertEquals("pt", BookLanguage.fromNames("Algum Livro [pt]", listOf("Capítulo 01.mp3")))
+        assertEquals("es", BookLanguage.fromNames("Algún Libro (espanol)", listOf("Capítulo 01.mp3")))
+    }
+
+    @Test
+    fun `an unshared chapter word still works`() {
+        assertEquals("de", BookLanguage.fromNames("Irgendwas", listOf("Kapitel 01.mp3")))
+        assertEquals("fr", BookLanguage.fromNames("Quelque chose", listOf("Chapitre 01.mp3")))
     }
 }
