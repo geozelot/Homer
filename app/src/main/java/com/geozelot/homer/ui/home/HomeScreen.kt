@@ -743,21 +743,33 @@ private fun LazyGridScope.libraryContent(
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
                             ExpandedSeriesHeader(series = entry, onCollapse = { close(entry) })
                         }
-                        val rows = entry.books.chunked(LibraryGridColumns)
+                        // An opened COLLECTION breaks into its threads; an opened plain series is
+                        // one run, exactly as before. See `expandedRows`.
+                        val rows = entry.expandedRows(LibraryGridColumns)
                         itemsIndexed(
                             rows,
                             span = { _, _ -> GridItemSpan(maxLineSpan) },
                             // First id in the row: unique across the library (a book sits in one
-                            // series) and stable while the row's membership holds.
-                            key = { _, row -> "sep:${row.first().id}" },
+                            // series) and stable while the row's membership holds. A sub-heading
+                            // keys on its own label, which is unique within the shelf.
+                            key = { _, row ->
+                                when (row) {
+                                    is ShelfRow.SubHeader -> "sesub:$shelfKey:${row.label}"
+                                    is ShelfRow.Books -> "sep:${row.books.first().id}"
+                                }
+                            },
                         ) { index, row ->
-                            ExpandedSeriesRow(
-                                books = row,
-                                last = index == rows.lastIndex,
-                                ctx = ctx,
-                                onOpen = onBookClick,
-                                actions = actions,
-                            )
+                            val last = index == rows.lastIndex
+                            when (row) {
+                                is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = last)
+                                is ShelfRow.Books -> ExpandedSeriesRow(
+                                    books = row.books,
+                                    last = last,
+                                    ctx = ctx,
+                                    onOpen = onBookClick,
+                                    actions = actions,
+                                )
+                            }
                         }
                     } else {
                         item(key = shelfKey) {
@@ -781,12 +793,25 @@ private fun LazyGridScope.libraryContent(
                         )
                     }
                     if (shelfOpen) {
+                        // One book per row here, so the same split produces one Books row each and
+                        // the sub-headings land between the threads.
+                        val listRows = entry.expandedRows(columns = 1)
                         itemsIndexed(
-                            entry.books,
+                            listRows,
                             span = { _, _ -> GridItemSpan(maxLineSpan) },
-                            key = { _, book -> "ep:${book.id}" },
-                        ) { index, book ->
-                            val last = index == entry.books.lastIndex
+                            key = { _, row ->
+                                when (row) {
+                                    is ShelfRow.SubHeader -> "epsub:$shelfKey:${row.label}"
+                                    is ShelfRow.Books -> "ep:${row.books.first().id}"
+                                }
+                            },
+                        ) { index, row ->
+                            val last = index == listRows.lastIndex
+                            if (row is ShelfRow.SubHeader) {
+                                ExpandedSubHeader(row.label, last = last)
+                                return@itemsIndexed
+                            }
+                            val book = (row as ShelfRow.Books).books.first()
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1604,6 +1629,32 @@ private fun ExpandedSeriesHeader(
  * individual grid cells because the enclosure has to be drawn by the items themselves — and a row
  * is still lazy, so at most [LibraryGridColumns] cards compose at once instead of the whole series.
  */
+/**
+ * A sub-series heading inside an opened collection.
+ *
+ * Draws its own slice of the same enclosure the books around it draw, so the shelf stays one
+ * bordered card rather than breaking into pieces at every heading. Quieter and smaller than a shelf
+ * heading in the library proper — it labels a thread inside a card that is already titled, and at
+ * the same weight the two would compete.
+ */
+@Composable
+private fun ExpandedSubHeader(label: String, last: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .seriesEnclosure(top = false, bottom = last)
+            .padding(horizontal = SeriesListEnclosurePad)
+            .padding(bottom = if (last) SeriesListEnclosurePad else 0.dp),
+    ) {
+        Text(
+            label.uppercase(),
+            style = SectionLabel,
+            color = Faint,
+            modifier = Modifier.padding(start = 2.dp, top = 10.dp, bottom = 4.dp),
+        )
+    }
+}
+
 @Composable
 private fun ExpandedSeriesRow(
     books: List<BookListItem>,

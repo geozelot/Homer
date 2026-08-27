@@ -185,4 +185,64 @@ class CollectionsTest {
     fun `each depth round-trips through its key`() {
         LibraryDepth.entries.forEach { assertEquals(it, LibraryDepth.from(it.key)) }
     }
+
+    // ── how an opened shelf breaks up ────────────────────────────────────────────────────────
+
+    @Test
+    fun `an opened plain series is a flat run of rows, as it always was`() {
+        val shelf = (collapseIntoUnits(
+            listOf(
+                book("1", series = "The Expanse", author = "Corey", seriesIndex = 1),
+                book("2", series = "The Expanse", author = "Corey", seriesIndex = 2),
+                book("3", series = "The Expanse", author = "Corey", seriesIndex = 3),
+            ),
+            LibraryDepth.SERIES,
+        ).single() as SortUnit.Ser).series
+
+        val rows = shelf.expandedRows(columns = 2)
+        // No headings: labelling a series with its own name inside a card already titled that
+        // would be saying the same word twice.
+        assertTrue(rows.none { it is ShelfRow.SubHeader })
+        assertEquals(2, rows.size)
+    }
+
+    @Test
+    fun `an opened collection is grouped by thread, in the order the collection reads`() {
+        val shelf = (collapseIntoUnits(discworld, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        val rows = shelf.expandedRows(columns = 3)
+
+        // Rincewind before Death because Rincewind's first book is Discworld #1 — publication
+        // order, not alphabetical.
+        assertEquals(
+            listOf("Rincewind", "Death"),
+            rows.filterIsInstance<ShelfRow.SubHeader>().map { it.label },
+        )
+    }
+
+    @Test
+    fun `books belonging to no thread come last, under no heading`() {
+        val shelf = (collapseIntoUnits(discworld, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        val rows = shelf.expandedRows(columns = 3)
+        // They are not a group, they are what is left — so no "Other" heading is invented for them.
+        val lastBooks = rows.filterIsInstance<ShelfRow.Books>().last().books
+        assertEquals(listOf("d"), lastBooks.map { it.id })
+        assertEquals(2, rows.filterIsInstance<ShelfRow.SubHeader>().size)
+    }
+
+    @Test
+    fun `every book survives the split`() {
+        val shelf = (collapseIntoUnits(discworld, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        for (columns in 1..4) {
+            val emitted = shelf.expandedRows(columns).filterIsInstance<ShelfRow.Books>().flatMap { it.books }
+            assertEquals("columns=$columns", discworld.size, emitted.size)
+        }
+    }
+
+    @Test
+    fun `a row never holds more books than there are columns`() {
+        val shelf = (collapseIntoUnits(discworld, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        // Chunked per thread rather than across the whole shelf, so a thread's last row is short
+        // and the next thread starts on a fresh one instead of sharing it.
+        assertTrue(shelf.expandedRows(2).filterIsInstance<ShelfRow.Books>().all { it.books.size <= 2 })
+    }
 }

@@ -124,3 +124,51 @@ internal fun LibraryEntry.Series.frontCover(): Any? = books.firstNotNullOfOrNull
  */
 internal fun BookListItem.hasVisibleProgress(): Boolean =
     started && !finished && progress?.let { it > 0.01f && it < 0.995f } == true
+
+/**
+ * One piece of an opened shelf: either a sub-series heading, or some of its books.
+ *
+ * An opened COLLECTION is not a flat list — Discworld is seven threads and a handful of novels
+ * belonging to none of them, and forty-one titles in a single run says nothing about which is which.
+ * An opened plain series IS a flat list, and produces exactly one [Books] run per row, which is what
+ * it produced before any of this existed.
+ */
+sealed interface ShelfRow {
+    /** The name of a sub-series inside a collection. */
+    data class SubHeader(val label: String) : ShelfRow
+
+    /** As many books as fit one row of the view drawing it. */
+    data class Books(val books: List<BookListItem>) : ShelfRow
+}
+
+/**
+ * How an opened shelf breaks into rows, [columns] books at a time.
+ *
+ * A plain series gets no headings at all: it has one thread and labelling it with its own name
+ * inside a card already titled that would be saying the same word twice.
+ *
+ * Inside a collection, the threads come in the order the collection reads — by the first book of
+ * each, so a numbered collection lists its threads in publication order rather than alphabetically —
+ * and the books belonging to no thread come last under no heading, because they are not a group,
+ * they are what is left.
+ */
+internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
+    val perRow = columns.coerceAtLeast(1)
+    if (!isCollection) return books.chunked(perRow).map { ShelfRow.Books(it) }
+
+    val threads = LinkedHashMap<String, MutableList<BookListItem>>()
+    val loose = mutableListOf<BookListItem>()
+    // `books` is already in collection order, so first-seen IS the order the collection reads.
+    for (book in books) {
+        val thread = book.series
+        if (thread == null) loose += book else threads.getOrPut(thread) { mutableListOf() } += book
+    }
+
+    return buildList {
+        for ((thread, members) in threads) {
+            add(ShelfRow.SubHeader(thread))
+            members.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
+        }
+        loose.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
+    }
+}
