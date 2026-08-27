@@ -33,6 +33,16 @@ enum class FilterFacet(val key: String, @StringRes val label: Int) {
     GENRE("genre", R.string.filter_facet_genre),
     LANGUAGE("language", R.string.filter_facet_language),
     TAG("tag", R.string.filter_facet_tag),
+
+    /**
+     * A book's STATE rather than its metadata — downloaded, started, finished, edited.
+     *
+     * One facet holding several named states rather than one facet each, because they combine the
+     * way the others do: two states OR together ("downloaded or started"), and adding a state
+     * narrows against the metadata facets. A facet per state would make "downloaded AND started"
+     * the reading, which is the less useful one and cannot express the other.
+     */
+    STATE("is", R.string.filter_facet_state),
     ;
 
     companion object {
@@ -58,6 +68,38 @@ data class FilterToken(val facet: FilterFacet, val value: String) {
     }
 }
 
+/**
+ * The states a book can be filtered on, and how to tell.
+ *
+ * [key] is what a token stores and what the suggestion list offers, so it is deliberately a plain
+ * lower-case word rather than an enum name: `is:downloaded` reads as something a person wrote.
+ */
+enum class BookState(val key: String, @StringRes val label: Int, val holds: (BookListItem) -> Boolean) {
+    DOWNLOADED("downloaded", R.string.filter_state_downloaded, { it.isDownloaded }),
+    STARTED("started", R.string.filter_state_started, { it.started && !it.finished }),
+    FINISHED("finished", R.string.filter_state_finished, { it.finished }),
+
+    /** Never opened. Not the same as "not finished" — this is the unread shelf. */
+    UNSTARTED("unstarted", R.string.filter_state_unstarted, { !it.started && !it.finished }),
+
+    /** Carries a correction somebody made, which is how you find what you have already fixed. */
+    EDITED("edited", R.string.filter_state_edited, { it.hasEdits }),
+
+    /** In a series or a collection — the counterpart of a standalone. */
+    IN_SERIES("series", R.string.filter_state_in_series, { it.series != null || it.collection != null }),
+
+    /** Length unknown, so it has never been measured. The books a measure pass would work on. */
+    UNMEASURED("unmeasured", R.string.filter_state_unmeasured, { it.totalDurationMs == null }),
+
+    /** No artwork resolved — the books a cover pass would work on. */
+    NO_COVER("no-cover", R.string.filter_state_no_cover, { it.coverModel == null }),
+    ;
+
+    companion object {
+        fun from(key: String): BookState? = entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
+    }
+}
+
 /** The values a book presents on one axis. Author and series are single; tags are many. */
 internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (facet) {
     FilterFacet.AUTHOR -> listOfNotNull(author)
@@ -68,6 +110,9 @@ internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (fa
     FilterFacet.GENRE -> listOfNotNull(genre)
     FilterFacet.LANGUAGE -> listOfNotNull(language)
     FilterFacet.TAG -> tags
+    // Every state that currently holds. A book is "downloaded" and "started" at once, and listing
+    // both is what lets two state tokens OR together like two authors do.
+    FilterFacet.STATE -> BookState.entries.filter { it.holds(this) }.map { it.key }
 }
 
 /**
@@ -130,8 +175,19 @@ internal fun suggest(
     limit: Int = 8,
 ): List<FilterSuggestion> {
     val needle = typed.trim()
-    if (needle.isEmpty()) return emptyList()
     val taken = committed.map { it.facet to it.value.lowercase() }.toSet()
+
+    // Nothing typed: offer the STATES. They are the one axis whose values a reader cannot guess by
+    // typing something they already know — you can type an author's name, but "which word does this
+    // app use for downloaded" is unanswerable, and the keys are English so typing the German for it
+    // matches nothing. Offered as a short fixed menu the moment the box opens, and only the states
+    // that would actually leave something behind.
+    if (needle.isEmpty()) {
+        return BookState.entries
+            .filter { FilterFacet.STATE to it.key !in taken }
+            .map { state -> FilterSuggestion(FilterFacet.STATE, state.key, books.count(state.holds)) }
+            .filter { it.count > 0 }
+    }
 
     val counts = LinkedHashMap<Pair<FilterFacet, String>, Int>()
     for (book in books) {

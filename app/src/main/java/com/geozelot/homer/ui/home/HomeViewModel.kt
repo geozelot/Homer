@@ -34,6 +34,7 @@ import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -98,6 +99,8 @@ data class BookListItem(
     val language: String?,
     /** User tags (from the override layer); empty if none. */
     val tags: List<String>,
+    /** Whether somebody has corrected any of this book's fields — the `is:edited` filter. */
+    val hasEdits: Boolean = false,
     val totalDurationMs: Long?,
     /** Remaining time from the saved position; null if not started or not yet measured. */
     val timeLeftMs: Long?,
@@ -136,6 +139,8 @@ private const val FINISHED_TOLERANCE_MS = 15_000L
 private data class EffectiveBook(
     val book: BookEntity,
     val hidden: Boolean,
+    /** Whether the override carries any metadata correction — not just a hidden flag or a tag. */
+    val hasEdits: Boolean,
     val tags: List<String>,
     val finishedOverride: Boolean?,
     val downloadOnPlayOverride: Boolean?,
@@ -317,6 +322,7 @@ class HomeViewModel @Inject constructor(
                     EffectiveBook(
                         book = effective,
                         hidden = override?.hidden == true,
+                        hasEdits = override != null && override.hasMetadataEdit(),
                         tags = override?.tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
                         finishedOverride = override?.finished,
                         downloadOnPlayOverride = override?.downloadOnPlay,
@@ -360,6 +366,7 @@ class HomeViewModel @Inject constructor(
                     genre = book.genre,
                     language = book.language,
                     tags = eff.tags,
+                    hasEdits = eff.hasEdits,
                     totalDurationMs = total,
                     timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
                     progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,

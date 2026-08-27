@@ -23,3 +23,15 @@ fun BookEntity.applyOverride(override: BookOverrideEntity?): BookEntity =
             language = override.language ?: language,
         )
     }
+
+/**
+ * Whether this override actually corrects a bibliographic field.
+ *
+ * Not "is there a row": a row also exists to carry the hidden flag, a per-book play mode, or as the
+ * all-null tombstone that a cleared correction leaves behind. Counting those as edits would put
+ * every book somebody had ever hidden on the `is:edited` shelf.
+ */
+fun BookOverrideEntity.hasMetadataEdit(): Boolean =
+    title != null || author != null || series != null || seriesIndex != null ||
+        collection != null || collectionIndex != null || genre != null || language != null ||
+        tags != null

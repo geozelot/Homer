@@ -566,4 +566,13 @@
     <string name="set_templates_preview_scoped">Bücher unter „%1$s“, für die das bearbeitete Muster gilt. Bis zum Anwenden wird nichts geschrieben.</string>
     <string name="lib_corrections_all_shared">%1$s · alles geteilt</string>
     <string name="lib_corrections_pending">%1$s warten auf das Teilen</string>
+    <string name="filter_facet_state">Ist</string>
+    <string name="filter_state_downloaded">Heruntergeladen</string>
+    <string name="filter_state_started">Begonnen</string>
+    <string name="filter_state_finished">Abgeschlossen</string>
+    <string name="filter_state_unstarted">Nicht begonnen</string>
+    <string name="filter_state_edited">Bearbeitet</string>
+    <string name="filter_state_in_series">In einer Serie</string>
+    <string name="filter_state_unmeasured">Noch keine Länge</string>
+    <string name="filter_state_no_cover">Kein Cover</string>
 </resources>

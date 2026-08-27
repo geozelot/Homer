@@ -589,4 +589,13 @@
     <string name="set_templates_preview_scoped">Books under “%1$s”, which the pattern you are editing applies to. Nothing is written until you apply.</string>
     <string name="lib_corrections_all_shared">%1$s · everything is shared</string>
     <string name="lib_corrections_pending">%1$s waiting to be shared</string>
+    <string name="filter_facet_state">Is</string>
+    <string name="filter_state_downloaded">Downloaded</string>
+    <string name="filter_state_started">Started</string>
+    <string name="filter_state_finished">Finished</string>
+    <string name="filter_state_unstarted">Not started</string>
+    <string name="filter_state_edited">Edited</string>
+    <string name="filter_state_in_series">In a series</string>
+    <string name="filter_state_unmeasured">No length yet</string>
+    <string name="filter_state_no_cover">No cover</string>
 </resources>

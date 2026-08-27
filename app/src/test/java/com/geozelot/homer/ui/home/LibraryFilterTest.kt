@@ -121,8 +121,46 @@ class LibraryFilterTest {
     // ── suggestions ──────────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `nothing typed offers nothing`() {
-        assertTrue(suggest(all, "", emptyList()).isEmpty())
+    fun `nothing typed offers the states, which cannot be guessed at`() {
+        // You can type an author's name; you cannot guess which word the app uses for "downloaded",
+        // and the keys are English so typing the German matches nothing. So the states are a short
+        // fixed menu the moment the box opens.
+        val offered = suggest(all, "", emptyList())
+        assertTrue(offered.isNotEmpty())
+        assertTrue(offered.all { it.facet == FilterFacet.STATE })
+    }
+
+    @Test
+    fun `a state nothing is in is not offered`() {
+        // None of these are downloaded, so offering "Downloaded" would be offering an empty shelf.
+        assertTrue(suggest(all, "", emptyList()).none { it.value == BookState.DOWNLOADED.key })
+        assertTrue(suggest(all, "", emptyList()).any { it.value == BookState.UNSTARTED.key })
+    }
+
+    @Test
+    fun `a state already committed is not offered again`() {
+        val committed = listOf(FilterToken(FilterFacet.STATE, BookState.UNSTARTED.key))
+        assertTrue(suggest(all, "", committed).none { it.value == BookState.UNSTARTED.key })
+    }
+
+    @Test
+    fun `two states OR together like two authors do`() {
+        val started = book("s", author = "X").copy(started = true, progress = 0.5f)
+        val books = all + started
+        val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.STATE, BookState.UNSTARTED.key))
+            .plus(FilterToken(FilterFacet.STATE, BookState.STARTED.key))
+        // Every book is one or the other, so ORing them leaves the whole shelf — ANDing would
+        // leave nothing, which is the reading a facet-per-state would have forced.
+        assertEquals(books.size, books.count { f.matches(it) })
+    }
+
+    @Test
+    fun `a state narrows against a metadata facet`() {
+        val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.STATE, BookState.UNSTARTED.key))
+            .plus(FilterToken(FilterFacet.GENRE, "SciFi"))
+        assertEquals(listOf("3"), all.filter { f.matches(it) }.map { it.id })
     }
 
     @Test

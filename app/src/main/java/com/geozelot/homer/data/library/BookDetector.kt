@@ -203,7 +203,13 @@ class BookDetector @Inject constructor() {
             base == "cover" -> 0
             base == "folder" -> 1
             base == "front" -> 2
-            base.contains("cover") -> 3
+            // What other software leaves behind: Windows Media Player writes AlbumArt.jpg and a
+            // small variant beside it, and various rippers write poster/thumb. Ranked below the
+            // three conventional names but well above an arbitrary image, because a folder whose
+            // only picture is AlbumArt.jpg has a cover and Homer used to show none.
+            base == "albumart" || base == "album" -> 4
+            base == "poster" || base == "thumb" || base == "thumbnail" -> 5
+            base.contains("cover") || base.startsWith("albumart") -> 6
             else -> 10
         }
     }
@@ -214,12 +220,24 @@ class BookDetector @Inject constructor() {
         /** Chapter tier is resolved in P3 (embedded/sidecar/none); 0 = not yet determined. */
         const val CHAPTER_TIER_UNDETERMINED = 0
 
-        // A part/disc/volume marker followed by a number, matched ANYWHERE in the
-        // folder name (handles "CD4", "Eden CD 6", "… - Teil 2"). A word boundary
-        // before the keyword avoids matching inside words, and the required trailing
-        // digit keeps "… - CD Version" or "… Band 6" from being treated as parts.
+        // A part/disc marker followed by a number, matched ANYWHERE in the folder name (handles
+        // "CD4", "Eden CD 6", "… - Teil 2"). A word boundary before the keyword avoids matching
+        // inside words, and the required trailing digit keeps "… - CD Version" from being treated
+        // as a part.
+        //
+        // **`folge` is deliberately absent.** It is German for an EPISODE — one whole work in a
+        // series, exactly like `Band`, which the commit that introduced this list excluded for that
+        // very reason. Included here it folded every episode of a radio-drama series into a single
+        // book: `Die Drei Fragezeichen/Folge 1`, `/Folge 2` … became one entry holding forty
+        // episodes' files, with forty titles lost and their listening positions merged into one.
+        //
+        // The two mistakes are not symmetrical, which is what settles the ambiguous cases. Failing
+        // to fold a real part leaves two visible entries somebody can see and fix; folding two real
+        // books together destroys information silently. So only markers that unambiguously name a
+        // subdivision of one work belong here, and `teil`/`part`/`vol`/`volume` stay only because a
+        // book split into "Teil 1"/"Teil 2" is at least as common as a series numbered that way.
         private val PART_REGEX = Regex(
-            "\\b(teil|part|cd|dvd|disc|disk|vol|volume|folge)[\\s._#-]*\\d+",
+            "\\b(teil|part|cd|dvd|disc|disk|vol|volume)[\\s._#-]*\\d+",
             RegexOption.IGNORE_CASE,
         )
 

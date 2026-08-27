@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -109,6 +111,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -240,28 +244,30 @@ fun HomeScreen(
 
     val gridState = rememberLazyGridState()
 
-    Column(modifier = modifier.fillMaxSize()) {
-        TopBar(
-            searching = searching,
-            query = searchQuery,
-            onQueryChange = viewModel::setSearchQuery,
-            onOpenSearch = { searching = true },
-            onCloseSearch = {
-                searching = false
-                viewModel.setSearchQuery("")
-            },
-            onSettings = onOpenSettings,
-        )
-
-        // Under the field it belongs to, above everything the filter acts on. Committing a
-        // suggestion clears the text that produced it, which is what makes this disappear.
-        if (searching) {
-            FilterSuggestions(
-                suggestions = suggestions,
-                modifier = Modifier.padding(horizontal = LibraryGridPadding),
-                onPick = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
-            )
+    // Tapping the library or the top bar closes the field and drops the keyboard. Without this the
+    // only way out was the field's own X or the back gesture, so scrolling the library with a
+    // keyboard over half of it was a state you could get into and not obviously get out of.
+    //
+    // Applied to those two regions rather than to the whole screen: the control bar holds the field
+    // itself and the suggestion list, and a screen-wide gesture would close the box on the tap that
+    // opened it and swallow every suggestion.
+    //
+    // `pointerInput` with an awaitEachGesture pass rather than `clickable`: this must not swallow
+    // the tap. A tap on a book while the keyboard is up should open that book AND dismiss, which is
+    // what watching the gesture in the Initial pass and never consuming it gives.
+    val dismissSearch = Modifier.pointerInput(searching) {
+        if (!searching) return@pointerInput
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            searching = false
+            viewModel.setSearchQuery("")
         }
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        // The wordmark and settings only. Search moved down to the control bar, where the rest of
+        // the controls for the list already live — it acts on the library, not on the app.
+        Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
 
         // The Currently-listening shelf is pinned here — above the scrolling library rather than being its
         // first item — and shrinks to a slim strip once the user scrolls into the library. Its
@@ -312,16 +318,6 @@ fun HomeScreen(
                 // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
                 // is what these controls are pointed at.
                 HorizontalDivider(color = Line.copy(alpha = 0.45f))
-                // The pills sit ABOVE the chips in their own row, so committing a filter grows the
-                // header downward and never reflows the chip row beside it.
-                FilterPills(
-                    tokens = filter.tokens,
-                    shown = filterCount.first,
-                    total = filterCount.second,
-                    onRemove = viewModel::removeFilterToken,
-                    onClear = viewModel::clearFilter,
-                    modifier = Modifier.padding(horizontal = LibraryGridPadding),
-                )
                 LibraryControlBar(
                     count = if (filtering) entries.bookCount() else bookCount,
                     searching = filtering,
@@ -329,12 +325,31 @@ fun HomeScreen(
                     shelving = shelfMode,
                     series = seriesMode,
                     gridView = gridView,
+                    tokens = filter.tokens,
+                    shown = filterCount.first,
+                    total = filterCount.second,
+                    query = searchQuery,
+                    searchOpen = searching,
+                    onQueryChange = viewModel::setSearchQuery,
+                    onOpenSearch = { searching = true },
+                    onCloseSearch = { searching = false; viewModel.setSearchQuery("") },
+                    onRemoveToken = viewModel::removeFilterToken,
+                    onClearFilter = viewModel::clearFilter,
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
                     onToggleView = viewModel::setGridView,
                     modifier = Modifier.padding(horizontal = LibraryGridPadding),
                 )
+                // Under the field it belongs to, and INSIDE the region the dismiss gesture spares
+                // — a suggestion you tap has to commit rather than merely closing the box.
+                if (searching) {
+                    FilterSuggestions(
+                        suggestions = suggestions,
+                        modifier = Modifier.padding(horizontal = LibraryGridPadding),
+                        onPick = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
+                    )
+                }
                 HorizontalDivider(color = Line)
             }
         }
@@ -375,7 +390,8 @@ fun HomeScreen(
                 state = gridState,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .then(dismissSearch),
                 contentPadding = PaddingValues(
                     start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
                 ),
@@ -563,14 +579,7 @@ private class BookActions(
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(
-    searching: Boolean,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onOpenSearch: () -> Unit,
-    onCloseSearch: () -> Unit,
-    onSettings: () -> Unit,
-) {
+private fun TopBar(onSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -579,19 +588,9 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        if (searching) {
-            SearchField(
-                query = query,
-                onQueryChange = onQueryChange,
-                onClose = onCloseSearch,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
+        run {
             Wordmark(stringResource(R.string.app_name))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onOpenSearch) {
-                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.home_cd_search), tint = Muted)
-                }
                 // Straight to settings. This was an overflow menu holding exactly one item ever
                 // since the library folder, sync and storage became their own destinations — two
                 // taps and a popup to reach the only thing in it.
@@ -910,7 +909,17 @@ private fun LibraryControlBar(
     shelving: LibraryShelving,
     series: LibraryDepth,
     gridView: Boolean,
-    /** Every language present. Empty or single means the chip below never appears. */
+    /** Committed filters, drawn between the header and the chips. */
+    tokens: List<FilterToken>,
+    shown: Int,
+    total: Int,
+    query: String,
+    searchOpen: Boolean,
+    onQueryChange: (String) -> Unit,
+    onOpenSearch: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onRemoveToken: (FilterToken) -> Unit,
+    onClearFilter: () -> Unit,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
@@ -930,10 +939,41 @@ private fun LibraryControlBar(
             // anything that collapses — it titles the list being scrolled, so it holds its size.
             large = true,
         )
+        // Under the header, above the controls: the pills belong to the list, not to the box that
+        // made them, so they stay put when the search field closes.
+        FilterPills(
+            tokens = tokens,
+            shown = shown,
+            total = total,
+            onRemove = onRemoveToken,
+            onClear = onClearFilter,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Open, the field takes the whole row. The chips are not squeezed alongside it — at
+            // this width one of the two would be useless, and what somebody is doing while typing
+            // is typing.
+            if (searchOpen) {
+                SearchField(
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    onClose = onCloseSearch,
+                    modifier = Modifier.weight(1f),
+                )
+                return@Row
+            }
+            // The one control that changes what the list CONTAINS, so it leads and is drawn a shade
+            // stronger than the chips beside it, which only change how it is arranged.
+            IconButton(onClick = onOpenSearch, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = stringResource(R.string.home_cd_search),
+                    tint = if (tokens.isEmpty()) Parchment else Amber,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             // A single row that SCROLLS rather than wraps. FlowRow let the chips fall onto a
             // second line on a narrower screen, which moved everything below them and made the
             // header a different height on different devices. Overflow is now horizontal, so the
