@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -19,6 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +71,25 @@ fun TemplatesScreen(
     val draft by viewModel.templateDraft.collectAsStateWithLifecycle()
     val dirty by viewModel.templateDraftDirty.collectAsStateWithLifecycle()
     val preview by viewModel.templatePreview.collectAsStateWithLifecycle()
+    val paths by viewModel.libraryPaths.collectAsStateWithLifecycle()
+
+    // Which row's folder is being picked, by index — null when the picker is closed.
+    var picking by remember { mutableStateOf<Int?>(null) }
+
+    picking?.let { index ->
+        val line = draft.getOrNull(index).orEmpty()
+        FolderPickerDialog(
+            bookIds = paths,
+            initialPath = if ('\t' in line) line.substringBefore('\t') else "",
+            onPick = { chosen ->
+                val pattern = line.substringAfter('\t')
+                val joined = if (chosen.isBlank()) pattern else "$chosen\t$pattern"
+                viewModel.setTemplateDraft(draft.toMutableList().also { it[index] = joined })
+                picking = null
+            },
+            onDismiss = { picking = null },
+        )
+    }
 
     SettingsScaffold(stringResource(R.string.set_templates_title), onBack, modifier) {
         SettingsSectionHeader(stringResource(R.string.set_templates_patterns_header))
@@ -79,6 +102,7 @@ fun TemplatesScreen(
             TemplateRow(
                 scope = scope,
                 pattern = pattern,
+                onBrowse = { picking = index },
                 onEdit = { newScope, newPattern ->
                     val joined = if (newScope.isBlank()) newPattern else "${newScope.trim('/')}\t$newPattern"
                     viewModel.setTemplateDraft(draft.toMutableList().also { it[index] = joined })
@@ -144,6 +168,7 @@ fun TemplatesScreen(
 private fun TemplateRow(
     scope: String,
     pattern: String,
+    onBrowse: () -> Unit,
     onEdit: (scope: String, pattern: String) -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -169,6 +194,19 @@ private fun TemplateRow(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.sp,
                     )
+                },
+                // Browsable, because a scope has to match the stored path EXACTLY: one guessed
+                // capital or stray space and the rule silently covers no books, with nothing on
+                // screen to say why.
+                trailingIcon = {
+                    IconButton(onClick = onBrowse) {
+                        Icon(
+                            Icons.Filled.FolderOpen,
+                            contentDescription = stringResource(R.string.folder_picker_title),
+                            tint = Muted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 },
                 textStyle = mono,
                 modifier = Modifier.fillMaxWidth(),

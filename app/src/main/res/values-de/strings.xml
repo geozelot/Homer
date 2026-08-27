@@ -560,4 +560,9 @@
     <string name="details_reading_order">Reihenfolge</string>
     <string name="details_reading_order_yes">Nummeriert — kann durchgelesen werden</string>
     <string name="details_reading_order_no">Eine Gruppierung ohne eigene Reihenfolge</string>
+    <string name="folder_picker_title">Ordner wählen</string>
+    <string name="folder_picker_root">Die ganze Bibliothek</string>
+    <string name="folder_picker_up">Eine Ebene höher</string>
+    <string name="folder_picker_leaf">Keine Ordner darin.</string>
+    <string name="folder_picker_use">Diesen Ordner verwenden</string>
 </resources>

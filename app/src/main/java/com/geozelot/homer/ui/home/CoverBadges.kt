@@ -104,19 +104,19 @@ internal fun CoverBadge(
 ) {
     // The padding is asymmetric on purpose: the slanted side needs room the square sides do not,
     // or the content collides with the diagonal.
-    val slantPad = 9.dp
+    val slantPad = 11.dp
     Box(
         modifier = modifier
             .clip(cutShape(corner))
             .background(BadgeScrim)
             .padding(
-                start = if (corner == CoverCorner.TOP_END) slantPad else 6.dp,
-                end = if (corner == CoverCorner.TOP_START) slantPad else 6.dp,
-                top = 3.dp,
-                bottom = 3.dp,
+                start = if (corner == CoverCorner.TOP_END) slantPad else 7.dp,
+                end = if (corner == CoverCorner.TOP_START) slantPad else 7.dp,
+                top = 4.dp,
+                bottom = 4.dp,
             ),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             content()
         }
     }
@@ -124,14 +124,14 @@ internal fun CoverBadge(
 
 /** A glyph sized for cover furniture. */
 @Composable
-internal fun BadgeIcon(icon: ImageVector, tint: Color = Parchment, size: Dp = 11.dp) {
+internal fun BadgeIcon(icon: ImageVector, tint: Color = Parchment, size: Dp = 13.dp) {
     Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size))
 }
 
 /** A short string sized for cover furniture — a duration, a volume count. */
 @Composable
 internal fun BadgeText(text: String, color: Color = Parchment) {
-    Text(text, color = color, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp)
+    Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 13.sp)
 }
 
 /** "Downloaded", in the one colour Homer uses to mean it. */

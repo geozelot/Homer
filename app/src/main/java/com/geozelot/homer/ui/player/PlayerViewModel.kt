@@ -208,6 +208,7 @@ class PlayerViewModel @Inject constructor(
                 author = eff.author,
                 series = eff.series,
                 seriesIndex = eff.seriesIndex,
+                collection = eff.collection,
                 genre = eff.genre,
                 language = eff.language,
                 tags = ov?.tags?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
@@ -263,6 +264,7 @@ class PlayerViewModel @Inject constructor(
         author: String,
         series: String,
         seriesIndex: String,
+        collection: String,
         genre: String,
         language: String,
         tags: String,
@@ -272,7 +274,8 @@ class PlayerViewModel @Inject constructor(
         val id = bookId.value ?: return
         viewModelScope.launch {
             bookEditor.saveOverride(
-                id, title, author, series, seriesIndex, genre, language, tags, hidden, downloadOnPlay,
+                id, title, author, series, seriesIndex, collection, genre, language, tags, hidden,
+                downloadOnPlay,
             )
         }
     }

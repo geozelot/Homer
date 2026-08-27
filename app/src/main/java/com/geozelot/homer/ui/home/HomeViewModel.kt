@@ -925,6 +925,7 @@ class HomeViewModel @Inject constructor(
         author: String,
         series: String,
         seriesIndex: String,
+        collection: String,
         genre: String,
         language: String,
         tags: String,
@@ -933,7 +934,8 @@ class HomeViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             bookEditor.saveOverride(
-                bookId, title, author, series, seriesIndex, genre, language, tags, hidden, downloadOnPlay,
+                bookId, title, author, series, seriesIndex, collection, genre, language, tags, hidden,
+                downloadOnPlay,
             )
         }
     }
@@ -1210,6 +1212,16 @@ class HomeViewModel @Inject constructor(
             .mapLatest { lines -> templateApplier.preview(TemplateApplier.templatesFrom(lines)) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * Every book's folder path, for the template editor's folder picker.
+     *
+     * Off the raw list: the picker browses the library's SHAPE, and a hidden book still occupies a
+     * folder that a rule may need to name.
+     */
+    val libraryPaths: StateFlow<List<String>> = libraryRepository.books
+        .map { books -> books.map { it.id } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun setTemplateDraft(lines: List<String>) {
         _templateDraft.value = lines
     }
@@ -1226,9 +1238,10 @@ class HomeViewModel @Inject constructor(
      * Prepended, because a narrower scope has to be tried before a broader one, and idempotent: the
      * same seed twice is one row, not two identical ones.
      */
-    fun seedTemplateFor(bookId: String) {
+    fun seedTemplateFor(bookId: String, scopeOverride: String? = null) {
         viewModelScope.launch {
-            val scope = bookId.trim('/').substringBeforeLast('/', "")
+            // A shelf passes the folder its books share; a single book uses its own.
+            val scope = scopeOverride?.trim('/') ?: bookId.trim('/').substringBeforeLast('/', "")
             // The pattern actually IN FORCE for this book, which is the one that needs changing —
             // the user's own if one matches, and only then the conventional default. Seeding from
             // DEFAULTS regardless would hand somebody who already has a pattern for this folder a

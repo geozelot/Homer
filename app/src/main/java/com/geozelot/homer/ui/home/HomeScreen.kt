@@ -419,9 +419,10 @@ fun HomeScreen(
     entries.findBook(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, genre, language, tags, hidden, downloadOnPlay ->
+            onSave = { title, author, series, index, collection, genre, language, tags, hidden, downloadOnPlay ->
                 viewModel.saveOverride(
-                    book.id, title, author, series, index, genre, language, tags, hidden, downloadOnPlay,
+                    book.id, title, author, series, index, collection, genre, language, tags, hidden,
+                    downloadOnPlay,
                 )
                 editingId = null
             },
@@ -455,6 +456,19 @@ fun HomeScreen(
             series = series,
             onEdit = { detailsSeriesKey = null; editingSeriesKey = series.expandKey },
             onFilter = { detailsSeriesKey = null; searching = false; viewModel.addFilterToken(it) },
+            onReadFolderDifferently = if (maintainsLibrary) {
+                {
+                    detailsSeriesKey = null
+                    // The shape is read from a member book, the scope from what they all share.
+                    viewModel.seedTemplateFor(
+                        bookId = series.books.first().id,
+                        scopeOverride = series.commonFolder(),
+                    )
+                    onOpenTemplates()
+                }
+            } else {
+                null
+            },
             onDismiss = { detailsSeriesKey = null },
         )
     }
@@ -520,6 +534,7 @@ private fun BookListItem.toEditable() = EditableBook(
     author = author,
     series = series,
     seriesIndex = seriesIndex,
+    collection = collection,
     genre = genre,
     language = language,
     tags = tags,

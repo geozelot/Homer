@@ -583,4 +583,9 @@
     <string name="details_reading_order">Order</string>
     <string name="details_reading_order_yes">Numbered — can be read straight through</string>
     <string name="details_reading_order_no">A grouping, with no order of its own</string>
+    <string name="folder_picker_title">Pick a folder</string>
+    <string name="folder_picker_root">The whole library</string>
+    <string name="folder_picker_up">Up one level</string>
+    <string name="folder_picker_leaf">No folders inside this one.</string>
+    <string name="folder_picker_use">Use this folder</string>
 </resources>

@@ -181,3 +181,18 @@ internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
  * would resolve a cover per hidden book on every library change.
  */
 data class WorklistBook(val id: String, val title: String, val author: String?)
+
+/**
+ * The deepest folder every book on this shelf sits under, or "" when they share nothing.
+ *
+ * What a shelf-level template should be scoped to. A series usually lives in one folder, so this is
+ * usually that folder; a series scattered across several — or a collection spanning them — walks
+ * back up to the level they do share, rather than picking one member's folder and quietly writing a
+ * rule that misses the rest.
+ */
+internal fun LibraryEntry.Series.commonFolder(): String {
+    val folders = books.map { it.id.trim('/').substringBeforeLast('/', "").split('/') }
+    if (folders.isEmpty()) return ""
+    val shared = folders.reduce { a, b -> a.zip(b).takeWhile { (x, y) -> x == y }.map { it.first } }
+    return shared.joinToString("/")
+}

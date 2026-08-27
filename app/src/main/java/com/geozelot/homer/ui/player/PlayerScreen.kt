@@ -383,9 +383,10 @@ fun PlayerScreen(
         editableBook?.let { editable ->
             EditBookDialog(
                 book = editable,
-                onSave = { title, author, series, index, genre, language, tags, hidden, downloadOnPlay ->
+                onSave = { title, author, series, index, collection, genre, language, tags, hidden, downloadOnPlay ->
                     viewModel.saveOverride(
-                        title, author, series, index, genre, language, tags, hidden, downloadOnPlay,
+                        title, author, series, index, collection, genre, language, tags, hidden,
+                        downloadOnPlay,
                     )
                     showEditDialog = false
                 },

@@ -216,6 +216,8 @@ fun SeriesDetailsCard(
     series: LibraryEntry.Series,
     onEdit: () -> Unit,
     onFilter: (FilterToken) -> Unit,
+    /** Opens the template editor scoped to the folder this shelf's books share. Null for a reader. */
+    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -302,6 +304,24 @@ fun SeriesDetailsCard(
                         }
                     },
                 )
+
+                FactDivider()
+
+                // Scoped to the folder the shelf's books SHARE, which is the level a rule about
+                // them belongs at — a whole series or collection read wrongly is the case a
+                // template is most worth writing for.
+                Fact(stringResource(R.string.details_location), series.commonFolder().ifBlank { "/" })
+                onReadFolderDifferently?.let { open ->
+                    Text(
+                        stringResource(R.string.details_read_folder),
+                        color = Amber,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = open)
+                            .padding(top = 10.dp),
+                    )
+                }
             }
         },
         confirmButton = {

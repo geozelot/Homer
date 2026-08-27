@@ -51,10 +51,37 @@ class TemplateApplier @Inject constructor(
      * written — this is the pass that has to run before Apply is worth offering, since applying
      * rewrites metadata across a whole library in one action.
      */
-    suspend fun preview(templates: List<ScopedTemplate>, limit: Int = 12): List<Preview> {
+    suspend fun preview(templates: List<ScopedTemplate>, limit: Int = PREVIEW_SAMPLE): List<Preview> {
         val books = bookDao.getAll()
         val previews = books.map { Preview(it.id, it, apply(it, templates)) }
-        return previews.sortedBy { it.before.sameFieldsAs(it.after) }.take(limit)
+        val changed = previews.filterNot { it.before.sameFieldsAs(it.after) }
+        // Changed books first, then unchanged ones to fill the sample out — and SPREAD across the
+        // library in both halves. Taking them in table order gave five examples from one series,
+        // because a template that affects one folder affects all of it and those rows sit together:
+        // five rows about the same book in five different orders, saying nothing about the rest of
+        // the library the pattern also has to be right about.
+        return (spread(changed, limit) + spread(previews - changed.toSet(), limit)).take(limit)
+    }
+
+    /**
+     * Picks from [rows] one folder at a time, so a sample of five comes from five different places.
+     *
+     * Round-robin over the parent folders rather than a random sample: deterministic, so the preview
+     * does not reshuffle under the reader on every keystroke, and it guarantees breadth rather than
+     * merely making narrowness unlikely.
+     */
+    private fun spread(rows: List<Preview>, limit: Int): List<Preview> {
+        if (rows.size <= limit) return rows
+        val byFolder = rows.groupBy { it.id.trim('/').substringBeforeLast('/', "") }
+        val queues = byFolder.values.map { it.toMutableList() }
+        val out = mutableListOf<Preview>()
+        while (out.size < limit && queues.any { it.isNotEmpty() }) {
+            for (queue in queues) {
+                if (out.size == limit) break
+                if (queue.isNotEmpty()) out += queue.removeAt(0)
+            }
+        }
+        return out
     }
 
     /**
@@ -78,6 +105,9 @@ class TemplateApplier @Inject constructor(
     companion object {
         private const val TAG = "HomerTemplate"
         private const val WRITE_CHUNK = 200
+
+        /** How many example books the editor shows. Five fits on screen beside the patterns. */
+        const val PREVIEW_SAMPLE = 5
 
         /**
          * Which books a re-derive would write, and what they would become.

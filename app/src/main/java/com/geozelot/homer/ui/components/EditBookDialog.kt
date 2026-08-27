@@ -76,6 +76,8 @@ data class EditableBook(
     val author: String?,
     val series: String?,
     val seriesIndex: Int?,
+    /** Parent grouping above the series. Editable per book, so a STANDALONE can join one. */
+    val collection: String?,
     val genre: String?,
     val language: String?,
     val tags: List<String>,
@@ -98,6 +100,7 @@ fun EditBookDialog(
         author: String,
         series: String,
         index: String,
+        collection: String,
         genre: String,
         language: String,
         tags: String,
@@ -119,6 +122,7 @@ fun EditBookDialog(
     var title by rememberSaveable { mutableStateOf(book.title) }
     var author by rememberSaveable { mutableStateOf(book.author.orEmpty()) }
     var series by rememberSaveable { mutableStateOf(book.series.orEmpty()) }
+    var collection by rememberSaveable { mutableStateOf(book.collection.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
     var genre by rememberSaveable { mutableStateOf(book.genre.orEmpty()) }
     var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
@@ -159,6 +163,16 @@ fun EditBookDialog(
                     label = { Text(stringResource(R.string.edit_field_series_index)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                // Per book as well as per series, because a book with no series at all can still
+                // belong to a collection — a Discworld novel in none of its threads is exactly that,
+                // and the series dialog cannot reach it.
+                OutlinedTextField(
+                    value = collection,
+                    onValueChange = { collection = it },
+                    label = { Text(stringResource(R.string.edit_field_collection)) },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
@@ -217,7 +231,7 @@ fun EditBookDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(title, author, series, index, genre, language, tags, hidden, playMode)
+                onSave(title, author, series, index, collection, genre, language, tags, hidden, playMode)
             }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
