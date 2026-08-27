@@ -61,18 +61,35 @@ import com.geozelot.homer.ui.theme.SerifTitle
  * reflected the moment it lands.
  */
 
-/** One labelled fact. Absent facts are not rendered — an empty row is a worse answer than no row. */
+/**
+ * One labelled fact. Absent facts are not rendered — an empty row is a worse answer than no row.
+ *
+ * A fact that names a filterable axis is tappable, and tapping it filters the library to it. This is
+ * what turns Details from a read-only panel into part of organising: you notice a book is Fantasy,
+ * and the way to see the rest of your Fantasy is the word you are already looking at. Amber, because
+ * everywhere else in Homer amber means "this does something".
+ */
 @Composable
-private fun Fact(label: String, value: String?) {
+private fun Fact(label: String, value: String?, onTap: (() -> Unit)? = null) {
     if (value.isNullOrBlank()) return
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .padding(vertical = 5.dp),
+    ) {
         Text(
             label,
             color = Faint,
             fontSize = 11.sp,
             modifier = Modifier.width(96.dp).padding(end = 10.dp, top = 1.dp),
         )
-        Text(value, color = Parchment, fontSize = 13.sp, lineHeight = 18.sp)
+        Text(
+            value,
+            color = if (onTap != null) Amber else Parchment,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+        )
     }
 }
 
@@ -108,6 +125,7 @@ private fun DetailsHeader(cover: Any?, title: String, subtitle: String?) {
 fun BookDetailsCard(
     book: BookListItem,
     onEdit: () -> Unit,
+    onFilter: (FilterToken) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -121,10 +139,24 @@ fun BookDetailsCard(
 
                 FactDivider()
 
-                Fact(stringResource(R.string.details_series), book.seriesLine(context))
-                Fact(stringResource(R.string.details_collection), book.collectionLine(context))
-                Fact(stringResource(R.string.details_genre), book.genre)
-                Fact(stringResource(R.string.details_language), book.language?.let { BookLanguage.displayName(it, locale) })
+                // The VALUE filtered on is the stored one, not the rendered one: the language row
+                // reads "German" and filters on `de`.
+                Fact(stringResource(R.string.details_author), book.author) {
+                    book.author?.let { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
+                }
+                Fact(stringResource(R.string.details_series), book.seriesLine(context)) {
+                    book.series?.let { onFilter(FilterToken(FilterFacet.SERIES, it)) }
+                }
+                Fact(stringResource(R.string.details_collection), book.collectionLine(context)) {
+                    book.collection?.let { onFilter(FilterToken(FilterFacet.COLLECTION, it)) }
+                }
+                Fact(stringResource(R.string.details_genre), book.genre) {
+                    book.genre?.let { onFilter(FilterToken(FilterFacet.GENRE, it)) }
+                }
+                Fact(
+                    stringResource(R.string.details_language),
+                    book.language?.let { BookLanguage.displayName(it, locale) },
+                ) { book.language?.let { onFilter(FilterToken(FilterFacet.LANGUAGE, it)) } }
                 Fact(stringResource(R.string.details_tags), book.tags.takeIf { it.isNotEmpty() }?.joinToString(" · "))
 
                 FactDivider()
@@ -163,6 +195,7 @@ fun BookDetailsCard(
 fun SeriesDetailsCard(
     series: LibraryEntry.Series,
     onEdit: () -> Unit,
+    onFilter: (FilterToken) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -182,7 +215,9 @@ fun SeriesDetailsCard(
 
                 FactDivider()
 
-                Fact(stringResource(R.string.details_author), series.author)
+                Fact(stringResource(R.string.details_author), series.author) {
+                    series.author?.let { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
+                }
                 Fact(
                     stringResource(R.string.details_volumes),
                     pluralStringResource(R.plurals.home_series_book_count, series.books.size, series.books.size),

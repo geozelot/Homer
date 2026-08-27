@@ -439,6 +439,7 @@ fun HomeScreen(
         BookDetailsCard(
             book = book,
             onEdit = { detailsId = null; editingId = book.id },
+            onFilter = { detailsId = null; searching = false; viewModel.addFilterToken(it) },
             onDismiss = { detailsId = null },
         )
     }
@@ -446,6 +447,7 @@ fun HomeScreen(
         SeriesDetailsCard(
             series = series,
             onEdit = { detailsSeriesKey = null; editingSeriesKey = series.expandKey },
+            onFilter = { detailsSeriesKey = null; searching = false; viewModel.addFilterToken(it) },
             onDismiss = { detailsSeriesKey = null },
         )
     }
