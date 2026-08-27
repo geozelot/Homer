@@ -206,7 +206,9 @@ fun HomeScreen(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf<String>() }
 
-    // Back should leave search rather than leave the app with the library still filtered.
+    // Back closes the field and drops what was typed. Committed pills SURVIVE it: they are a
+    // deliberate state with their own row and their own Clear, so throwing them away here would
+    // undo work the reader can see, on a gesture that means "put the keyboard away".
     BackHandler(enabled = searching) {
         searching = false
         viewModel.setSearchQuery("")
@@ -289,9 +291,12 @@ fun HomeScreen(
         // scroll back to the top to reach them was the wrong way round. The listening strip above
         // collapses to make room for them; these stay put.
         if (entries.isNotEmpty()) {
-            // `searching` alone means the field is open, not that anything is filtered — labelling
-            // the untouched library "309 results" before a character is typed.
-            val filtering = searching && searchQuery.isNotBlank()
+            // "Filtered" now means either half of the box is doing something: text being typed, OR
+            // a committed pill. Keyed on the open field alone it labelled an untouched library "309
+            // results" before a character was typed; keyed on the text alone it went on claiming
+            // the full count while a pill above it said "41 of 313" — two numbers on one screen
+            // disagreeing about the list between them.
+            val filtering = !filter.isEmpty
             // The library's header and controls are pinned chrome, not part of the list they act
             // on. The wash runs dark to light down the band, so it lifts away from the listening
             // panel above and is at its brightest along the edge where the list begins. It starts
@@ -342,8 +347,11 @@ fun HomeScreen(
                         indexActivity = indexActivity,
                         modifier = Modifier.weight(1f),
                     )
-                searching && searchQuery.isNotBlank() ->
-                    EmptyResults(modifier = Modifier.weight(1f))
+                // Any active filter, pills included. Keyed on the typed text alone, a pill
+                // combination that matched nothing fell through to the SETUP panel and told the
+                // reader their shelf was empty and to try a different folder — the third time that
+                // wrong empty state has turned up, and this time reachable in two taps.
+                !filter.isEmpty -> EmptyResults(modifier = Modifier.weight(1f))
                 // Not "your shelf is empty" any more: on a first run this is where the library
                 // gets found, chosen or named. Only a scanned-and-genuinely-empty library still
                 // reads as empty, which is the one case where it is true.
