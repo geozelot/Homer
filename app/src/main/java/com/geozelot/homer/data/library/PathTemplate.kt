@@ -42,8 +42,22 @@ class PathTemplate private constructor(
     override fun toString(): String = source
 
     companion object {
-        /** `{name}`, and nothing else — a brace that opens and never closes is a typo, not a pattern. */
-        private val PLACEHOLDER = Regex("""\{([a-zA-Z*]+)}""")
+        /**
+         * `{name}`, and nothing else — a brace that opens and never closes is a typo, not a pattern.
+         *
+         * **Both braces are escaped, and the closing one is not optional.** Android's
+         * `java.util.regex` is backed by ICU, which REJECTS a lone `}` outright; the JVM's engine
+         * accepts it as a literal. So the unescaped form compiles perfectly in unit tests and throws
+         * `PatternSyntaxException` on a device — and because this is a companion-object `val`, that
+         * throw came out as `ExceptionInInitializerError` and took the whole class down with it, so
+         * opening the template editor (or running any scan) killed the app.
+         *
+         * No JVM test can catch that difference, which is why [PLACEHOLDER_SOURCE] is exposed and
+         * asserted on as a plain string instead.
+         */
+        internal const val PLACEHOLDER_SOURCE = """\{([a-zA-Z*]+)\}"""
+
+        private val PLACEHOLDER = Regex(PLACEHOLDER_SOURCE)
 
         /**
          * Compiles [template], or returns null if it names a field this build does not have.

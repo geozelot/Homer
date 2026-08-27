@@ -3,6 +3,7 @@ package com.geozelot.homer.data.library
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -169,5 +170,38 @@ class PathTemplateTest {
         val got = PathTemplate.parseFirst("Pratchett/Rincewind/Sourcery", PathTemplate.DEFAULTS)
         assertEquals(null, got?.get(TemplateField.COLLECTION))
         assertEquals("Rincewind", got?.get(TemplateField.SERIES))
+    }
+
+    // ── the engine difference no JVM test can exercise ───────────────────────────────────────
+
+    @Test
+    fun `every brace in the placeholder pattern is escaped`() {
+        // Android's java.util.regex is ICU-backed and REJECTS a lone `}`; the JVM accepts it as a
+        // literal. So `\{([a-zA-Z*]+)}` compiled fine in every test here and threw
+        // PatternSyntaxException on a device — and being a companion val, that surfaced as
+        // ExceptionInInitializerError and killed the app the moment anything touched this class.
+        //
+        // The compiled Regex cannot be asserted on, because this JVM is exactly the engine that
+        // does not mind. The SOURCE can: every brace must carry a backslash.
+        val src = PathTemplate.PLACEHOLDER_SOURCE
+        src.forEachIndexed { i, c ->
+            if (c == '{' || c == '}') {
+                assertTrue(
+                    "unescaped '$c' at $i in \"$src\" — ICU will reject this on a device",
+                    i > 0 && src[i - 1] == '\\',
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the placeholder still matches what it is supposed to`() {
+        // Escaping must not have changed what it means.
+        assertNotNull(PathTemplate.compile("{author}/{title}"))
+        assertEquals(
+            "Pratchett",
+            PathTemplate.compile("{author}/{title}")?.parse("Pratchett/Sourcery")
+                ?.get(TemplateField.AUTHOR),
+        )
     }
 }
