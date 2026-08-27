@@ -1,0 +1,121 @@
+package com.geozelot.homer.data.library
+
+/**
+ * A pattern that reads a book's fields out of its path.
+ *
+ * `{author}/{series}/{title}` is the convention [BookDetector] has always hardcoded; written down
+ * as a template it stops being a special case and becomes the default entry in a list the user can
+ * add to. That is the point of the whole feature: a library whose folders do not follow the
+ * convention — or one that carries the sub-series in brackets in the title, as `Sourcery (Rincewind
+ * 2)` does — can say so, instead of Homer guessing and being wrong in a way nothing can correct.
+ *
+ * **Wildcards, never regular expressions.** The user writes `{field}` and literal text; the literals
+ * between the fields are what pin it down. Regex is what this replaces, so it never appears: a
+ * pattern that will not compile is a typo somebody can see, not a character class they cannot.
+ *
+ * A text field matches within ONE path segment — it will not swallow a `/`. Without that
+ * `{author}/{title}` would match a three-segment path with the title eating two of them, and a
+ * library would silently parse one level too shallow.
+ */
+class PathTemplate private constructor(
+    val source: String,
+    private val regex: Regex,
+    private val fields: List<TemplateField>,
+) {
+    /**
+     * What [path] says under this template, or null if it does not fit the shape.
+     *
+     * Null rather than a partial map: a template that matched half a path would fill some fields
+     * from the path and leave others at whatever they were, which is the hardest kind of wrong
+     * result to notice.
+     */
+    fun parse(path: String): Map<TemplateField, String>? {
+        val match = regex.matchEntire(path.trim('/')) ?: return null
+        val out = LinkedHashMap<TemplateField, String>()
+        // groupValues[0] is the whole match, so the fields start at 1 and stay in template order.
+        fields.forEachIndexed { i, field ->
+            match.groupValues.getOrNull(i + 1)?.trim()?.takeIf { it.isNotEmpty() }?.let { out[field] = it }
+        }
+        return out
+    }
+
+    override fun toString(): String = source
+
+    companion object {
+        /** `{name}`, and nothing else — a brace that opens and never closes is a typo, not a pattern. */
+        private val PLACEHOLDER = Regex("""\{([a-zA-Z*]+)}""")
+
+        /**
+         * Compiles [template], or returns null if it names a field this build does not have.
+         *
+         * Null rather than ignoring the unknown field: a template mentioning `{narrator}` was
+         * written by somebody expecting narrators to be read, and quietly treating it as literal
+         * text would match nothing and look like the template simply did not work.
+         */
+        fun compile(template: String): PathTemplate? {
+            val trimmed = template.trim().trim('/')
+            if (trimmed.isEmpty()) return null
+            val fields = mutableListOf<TemplateField>()
+            val pattern = StringBuilder("")
+            var cursor = 0
+            for (m in PLACEHOLDER.findAll(trimmed)) {
+                pattern.append(Regex.escape(trimmed.substring(cursor, m.range.first)))
+                val name = m.groupValues[1]
+                if (name == "*") {
+                    // Absorbs anything, captures nothing — the "there is something here I do not
+                    // care about" wildcard.
+                    pattern.append("[^/]+?")
+                } else {
+                    val field = TemplateField.from(name) ?: return null
+                    fields += field
+                    pattern.append(if (field.numeric) "(\\d+)" else "([^/]+?)")
+                }
+                cursor = m.range.last + 1
+            }
+            pattern.append(Regex.escape(trimmed.substring(cursor)))
+            if (fields.isEmpty()) return null
+            return runCatching { PathTemplate(trimmed, Regex(pattern.toString()), fields) }.getOrNull()
+        }
+
+        /**
+         * The rules [BookDetector] has always applied, in the order it applied them.
+         *
+         * Most specific first, because the first template that fits wins and `{author}/{title}`
+         * would otherwise claim a path that `{author}/{series}/{title}` describes properly. This is
+         * the same `segments.size >= 3` / `>= 2` ladder the detector compiled in, written down.
+         */
+        val DEFAULTS: List<PathTemplate> = listOfNotNull(
+            compile("{author}/{collection}/{series}/{title}"),
+            compile("{author}/{series}/{title}"),
+            compile("{author}/{title}"),
+            compile("{title}"),
+        )
+
+        /**
+         * The first template in [templates] that [path] fits, and what it says.
+         *
+         * Order is the whole contract: the caller's own templates come before [DEFAULTS], so a
+         * pattern somebody wrote for a folder beats the convention for that folder.
+         */
+        fun parseFirst(path: String, templates: List<PathTemplate>): Map<TemplateField, String>? =
+            templates.firstNotNullOfOrNull { it.parse(path) }
+    }
+}
+
+/** A field a template can pull out of a path. */
+enum class TemplateField(val key: String, val numeric: Boolean = false) {
+    AUTHOR("author"),
+    TITLE("title"),
+    SERIES("series"),
+    INDEX("index", numeric = true),
+    COLLECTION("collection"),
+    COLLECTION_INDEX("collectionIndex", numeric = true),
+    GENRE("genre"),
+    LANGUAGE("language"),
+    YEAR("year", numeric = true),
+    ;
+
+    companion object {
+        fun from(key: String): TemplateField? = entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
+    }
+}
