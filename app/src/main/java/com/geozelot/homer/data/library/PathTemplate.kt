@@ -112,12 +112,19 @@ class PathTemplate private constructor(
          * the same `segments.size >= 3` / `>= 2` ladder the detector compiled in, written down.
          */
         val DEFAULTS: List<PathTemplate> = listOfNotNull(
-            // Four or more segments: author first, then anything, then the last three levels. The
-            // positional rules counted from both ends and ignored the middle, and `{**}` is how
-            // that survives being written as a pattern — without it a library nested five deep
-            // would match no default at all and lose every field.
-            compile("{author}/{**}/{collection}/{series}/{title}"),
-            compile("{author}/{series}/{title}"),
+            // Three or more segments: author first, title last, series directly above it, and
+            // anything in between ignored. `{**}` is how the positional rule survives being written
+            // as a pattern — it counted from both ends and did not care about the middle, so
+            // without it a library nested five deep would match no default and lose every field.
+            //
+            // **No default reads a COLLECTION.** It used to take the folder above the series, which
+            // inferred a parent grouping from depth alone — and a library laid out
+            // `Author/Genre/Series/Book` silently acquired "Fantasy" as a collection, behaving like
+            // a parent nobody had asked for. A collection is a claim about what these books ARE,
+            // not about how deep they sit, so it is now only ever something stated: by a template,
+            // by assigning a series to one, or by editing a book. Guessing it is cheap to get wrong
+            // and silent when it is.
+            compile("{author}/{**}/{series}/{title}"),
             compile("{author}/{title}"),
             compile("{title}"),
         )

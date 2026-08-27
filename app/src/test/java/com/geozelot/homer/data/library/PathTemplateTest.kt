@@ -110,15 +110,36 @@ class PathTemplateTest {
             PathTemplate.parseFirst("Pratchett/Rincewind/Sourcery", d)?.get(TemplateField.SERIES),
         )
         assertEquals(
-            "Discworld",
-            PathTemplate.parseFirst("Pratchett/Discworld/Rincewind/Sourcery", d)
-                ?.get(TemplateField.COLLECTION),
-        )
-        assertEquals(
             "Sourcery",
             PathTemplate.parseFirst("Pratchett/Sourcery", d)?.get(TemplateField.TITLE),
         )
         assertEquals("Sourcery", PathTemplate.parseFirst("Sourcery", d)?.get(TemplateField.TITLE))
+    }
+
+    @Test
+    fun `no default ever reads a collection, however deep the library`() {
+        // A collection is a claim about what these books ARE, not about how deep they sit. Inferring
+        // one from depth gave `Author/Genre/Series/Book` libraries "Fantasy" as a parent grouping
+        // nobody had asked for, silently. It is stated now — by a template, or by hand.
+        for (path in listOf(
+            "Pratchett/Discworld/Rincewind/Sourcery",
+            "Pratchett/Audiobooks/Discworld/Rincewind/Sourcery",
+            "Pratchett/Rincewind/Sourcery",
+        )) {
+            assertNull(path, PathTemplate.parseFirst(path, PathTemplate.DEFAULTS)?.get(TemplateField.COLLECTION))
+        }
+    }
+
+    @Test
+    fun `a collection still comes from a template that asks for one`() {
+        val mine = PathTemplate.compile("{author}/{collection}/{series}/{title}")!!
+        assertEquals(
+            "Discworld",
+            PathTemplate.parseFirst(
+                "Pratchett/Discworld/Rincewind/Sourcery",
+                listOf(mine) + PathTemplate.DEFAULTS,
+            )?.get(TemplateField.COLLECTION),
+        )
     }
 
     @Test
@@ -143,33 +164,26 @@ class PathTemplateTest {
     // ── arbitrary depth ──────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `a library nested five deep keeps every field`() {
-        // The positional rules counted from both ends and ignored the middle. Without a
+    fun `a library nested five deep still finds its author, series and title`() {
+        // The positional rule counted from both ends and ignored the middle. Without a
         // multi-segment wildcard this path would match no default and lose everything.
         val got = PathTemplate.parseFirst(
             "Pratchett/Audiobooks/Discworld/Rincewind/Sourcery",
             PathTemplate.DEFAULTS,
         )
         assertEquals("Pratchett", got?.get(TemplateField.AUTHOR))
-        assertEquals("Discworld", got?.get(TemplateField.COLLECTION))
         assertEquals("Rincewind", got?.get(TemplateField.SERIES))
         assertEquals("Sourcery", got?.get(TemplateField.TITLE))
     }
 
     @Test
     fun `the multi-segment wildcard also matches nothing at all`() {
-        val got = PathTemplate.parseFirst("Pratchett/Discworld/Rincewind/Sourcery", PathTemplate.DEFAULTS)
-        assertEquals("Discworld", got?.get(TemplateField.COLLECTION))
-        assertEquals("Rincewind", got?.get(TemplateField.SERIES))
-    }
-
-    @Test
-    fun `a three-segment path still falls through to the three-field default`() {
-        // The deep template needs four levels, so this must not be claimed by it with an empty
-        // collection — it is a plain author/series/title library.
-        val got = PathTemplate.parseFirst("Pratchett/Rincewind/Sourcery", PathTemplate.DEFAULTS)
-        assertEquals(null, got?.get(TemplateField.COLLECTION))
-        assertEquals("Rincewind", got?.get(TemplateField.SERIES))
+        // Three segments and five must both land on the same three fields.
+        val deep = PathTemplate.parseFirst("Pratchett/Discworld/Rincewind/Sourcery", PathTemplate.DEFAULTS)
+        val flat = PathTemplate.parseFirst("Pratchett/Rincewind/Sourcery", PathTemplate.DEFAULTS)
+        assertEquals("Rincewind", deep?.get(TemplateField.SERIES))
+        assertEquals("Rincewind", flat?.get(TemplateField.SERIES))
+        assertEquals("Sourcery", deep?.get(TemplateField.TITLE))
     }
 
     // ── the engine difference no JVM test can exercise ───────────────────────────────────────
