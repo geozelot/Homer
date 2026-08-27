@@ -560,4 +560,8 @@
     <string name="set_templates_apply_desc">Rewrites what was detected for every book that changes. Your own per-book edits are kept — they sit on top of whatever a pattern reads.</string>
     <string name="set_upkeep_organising_header">ORGANISING</string>
     <string name="set_templates_summary">Patterns for folders that are not laid out Author / Series / Book</string>
+    <string name="set_templates_scope">Folder (optional)</string>
+    <string name="set_templates_scope_all">the whole library</string>
+    <string name="set_templates_pattern">Pattern</string>
+    <string name="set_templates_scope_desc">A folder narrows a pattern to the books under it, and is matched against the whole path — so a pattern for “Imports” still starts at the top of the library. Patterns for narrower folders are tried first. Leave the folder blank and the pattern applies everywhere.</string>
 </resources>

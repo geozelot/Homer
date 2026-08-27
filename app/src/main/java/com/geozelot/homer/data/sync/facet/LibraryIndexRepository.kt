@@ -10,14 +10,17 @@ import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
-import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
+import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.DeviceIdentity
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -35,8 +38,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * The shared library index: pulling the three facets into the database, and pushing this device's
@@ -183,6 +184,7 @@ class LibraryIndexRepository @Inject constructor(
             books = (overrides.keys + cuts.keys).mapNotNull { id ->
                 FacetMapping.correctionOf(overrides[id], cuts[id].orEmpty(), deviceId)?.let { id to it }
             }.toMap(),
+            templates = localTemplateRules(deviceId),
         )
         report(
             LibraryFacets.CORRECTIONS_FILE,
@@ -250,6 +252,10 @@ class LibraryIndexRepository @Inject constructor(
             val anyChanged = structureRead is FacetStore.Load.Present ||
                 derivedRead is FacetStore.Load.Present ||
                 correctionsRead is FacetStore.Load.Present
+            // Before applying: a template the index carries changes what the fields MEAN, so
+            // adopting it after would parse this pull under the old rules and the next one under
+            // the new.
+            adoptTemplates(corrections)
             if (anyChanged) apply(structure, derived, corrections)
             true
         } catch (e: CancellationException) {
@@ -423,7 +429,7 @@ class LibraryIndexRepository @Inject constructor(
                 books = structure,
             ),
             derived = DerivedFacet(books = derived),
-            corrections = CorrectionsFacet(books = corrections),
+            corrections = CorrectionsFacet(books = corrections, templates = localTemplateRules(deviceId)),
         )
     }
 
@@ -488,6 +494,45 @@ class LibraryIndexRepository @Inject constructor(
     private fun noteCrawl(structure: StructureFacet) {
         val marker = structure.lastFullCrawl ?: return
         if (marker.at > (remoteCrawl.value?.at ?: Long.MIN_VALUE)) remoteCrawl.value = marker
+    }
+
+    /**
+     * This device's path templates, grouped by the folder they apply to.
+     *
+     * The stamp is the moment they were last stored rather than "now": re-publishing an unchanged
+     * set must not make it outrank somebody else's newer edit to the same folder simply because
+     * this device happened to sync last.
+     */
+    private suspend fun localTemplateRules(deviceId: String): Map<String, TemplateRule> {
+        val stored = librarySettings.pathTemplates.first()
+        if (stored.isEmpty()) return emptyMap()
+        val editedAt = librarySettings.pathTemplatesEditedAt.first()
+        return stored.mapNotNull { ScopedTemplate.decode(it) }
+            .groupBy { it.scope }
+            .mapValues { (_, group) ->
+                TemplateRule(patterns = group.map { it.template.source }, editedAt = editedAt, by = deviceId)
+            }
+    }
+
+    /**
+     * Takes on the templates the shared index carries, when they are newer than this device's.
+     *
+     * Whole-set rather than per-scope: the stored form is one ordered list, and the order is part of
+     * what a template set means. A device that has never written one adopts whatever is published,
+     * which is the point — one person sorts the library out and everybody else's shelf agrees.
+     */
+    private suspend fun adoptTemplates(corrections: CorrectionsFacet) {
+        if (corrections.templates.isEmpty()) return
+        val newest = corrections.templates.values.maxOfOrNull { it.editedAt } ?: return
+        if (newest <= librarySettings.pathTemplatesEditedAt.first()) return
+        val lines = corrections.templates.entries
+            // Narrowest scope first, so a folder's own pattern is tried before a library-wide one.
+            .sortedByDescending { it.key.length }
+            .flatMap { (scope, rule) ->
+                rule.patterns.map { if (scope.isBlank()) it else "$scope\t$it" }
+            }
+        librarySettings.setPathTemplates(lines, editedAt = newest)
+        Log.i(TAG, "adopted ${lines.size} path template(s) from the shared index")
     }
 
     private fun <T> FacetStore.Load<T>.valueOr(empty: T): T = (this as? FacetStore.Load.Present)?.value ?: empty

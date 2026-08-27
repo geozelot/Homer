@@ -49,7 +49,7 @@ class BookDetector @Inject constructor() {
          * otherwise gets. A caller supplying its own puts them BEFORE these, so a pattern written
          * for a folder beats the convention for that folder.
          */
-        templates: List<PathTemplate> = PathTemplate.DEFAULTS,
+        templates: List<ScopedTemplate> = ScopedTemplate.DEFAULTS,
     ): List<Detected> {
         val root = libraryRoot.trim('/')
         // Group audio folders by the book they belong to: a part folder folds into its
@@ -78,7 +78,7 @@ class BookDetector @Inject constructor() {
         bookFolderImages: List<DavResource>,
         root: String,
         now: Long,
-        templates: List<PathTemplate>,
+        templates: List<ScopedTemplate>,
     ): Detected {
         // The book's own direct-audio folder (if any) leads, then part folders in
         // natural order.
@@ -116,7 +116,7 @@ class BookDetector @Inject constructor() {
         // PathTemplate.DEFAULTS instead of compiled into this expression, which is what lets a
         // library whose folders do not follow the convention supply its own and be read correctly
         // rather than guessed at.
-        val parsed = PathTemplate.parseFirst(relToRoot, templates).orEmpty()
+        val parsed = ScopedTemplate.parseFirst(relToRoot, templates).orEmpty()
         val title = parsed[TemplateField.TITLE]
             ?: segments.lastOrNull()
             ?: bookPath.substringAfterLast('/')

@@ -73,9 +73,16 @@ fun TemplatesScreen(
         SettingsExplanation(stringResource(R.string.set_templates_lead))
 
         draft.forEachIndexed { index, line ->
+            // The stored line is `scope\tpattern`, or just the pattern when it applies everywhere.
+            val scope = if ('\t' in line) line.substringBefore('\t') else ""
+            val pattern = line.substringAfter('\t')
             TemplateRow(
-                value = line,
-                onEdit = { new -> viewModel.setTemplateDraft(draft.toMutableList().also { it[index] = new }) },
+                scope = scope,
+                pattern = pattern,
+                onEdit = { newScope, newPattern ->
+                    val joined = if (newScope.isBlank()) newPattern else "${newScope.trim('/')}\t$newPattern"
+                    viewModel.setTemplateDraft(draft.toMutableList().also { it[index] = joined })
+                },
                 onRemove = { viewModel.setTemplateDraft(draft.toMutableList().also { it.removeAt(index) }) },
             )
         }
@@ -91,6 +98,7 @@ fun TemplatesScreen(
         }
 
         SettingsNote(stringResource(R.string.set_templates_fields))
+        SettingsNote(stringResource(R.string.set_templates_scope_desc))
 
         SettingsDivider()
 
@@ -122,28 +130,61 @@ fun TemplatesScreen(
     }
 }
 
-/** One editable pattern. Monospaced, because the braces and the literals between them are the point. */
+/**
+ * One editable rule: which folder it applies to, and the pattern.
+ *
+ * Monospaced, because the braces and the literals between them are the point. The two are stored as
+ * one tab-separated line, which is why neither field can contain a tab and why the split happens
+ * here rather than being something the user has to type.
+ *
+ * The folder is optional and blank means the whole library, which is the common case — so it sits
+ * above the pattern in smaller type rather than demanding an answer first.
+ */
 @Composable
 private fun TemplateRow(
-    value: String,
-    onEdit: (String) -> Unit,
+    scope: String,
+    pattern: String,
+    onEdit: (scope: String, pattern: String) -> Unit,
     onRemove: () -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onEdit,
-            singleLine = true,
-            placeholder = {
-                Text("{author}/{title}", color = Faint, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            },
-            textStyle = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
-                color = Parchment,
-            ),
-            modifier = Modifier.weight(1f),
-        )
+    val mono = androidx.compose.ui.text.TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        color = Parchment,
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            OutlinedTextField(
+                value = scope,
+                onValueChange = { onEdit(it, pattern) },
+                singleLine = true,
+                label = { Text(stringResource(R.string.set_templates_scope), fontSize = 11.sp) },
+                placeholder = {
+                    Text(
+                        stringResource(R.string.set_templates_scope_all),
+                        color = Faint,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                    )
+                },
+                textStyle = mono,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = pattern,
+                onValueChange = { onEdit(scope, it) },
+                singleLine = true,
+                label = { Text(stringResource(R.string.set_templates_pattern), fontSize = 11.sp) },
+                placeholder = {
+                    Text("{author}/{title}", color = Faint, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                },
+                textStyle = mono,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            )
+        }
         IconButton(onClick = onRemove) {
             Icon(
                 Icons.Filled.Close,

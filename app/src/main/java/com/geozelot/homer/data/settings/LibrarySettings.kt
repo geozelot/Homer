@@ -152,11 +152,22 @@ class LibrarySettings @Inject constructor(
                 ?: emptyList()
         }
 
-    suspend fun setPathTemplates(templates: List<String>) {
+    /**
+     * When the templates were last deliberately set.
+     *
+     * Published alongside them, and compared against what the shared index carries — which is what
+     * decides whether this device adopts somebody else's set or keeps its own. Zero when nobody here
+     * has ever written one, so any published set wins.
+     */
+    val pathTemplatesEditedAt: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_PATH_TEMPLATES_AT] ?: 0L }
+
+    suspend fun setPathTemplates(templates: List<String>, editedAt: Long = System.currentTimeMillis()) {
         context.settingsDataStore.edit { prefs ->
             val cleaned = templates.map { it.trim() }.filter { it.isNotEmpty() }
             if (cleaned.isEmpty()) prefs.remove(KEY_PATH_TEMPLATES)
             else prefs[KEY_PATH_TEMPLATES] = cleaned.joinToString("\n")
+            prefs[KEY_PATH_TEMPLATES_AT] = editedAt
         }
     }
 
@@ -289,6 +300,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SERIES_MODE = stringPreferencesKey("library_series_mode")
         val KEY_PATH_TEMPLATES = stringPreferencesKey("library_path_templates")
+        val KEY_PATH_TEMPLATES_AT = longPreferencesKey("library_path_templates_at")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")

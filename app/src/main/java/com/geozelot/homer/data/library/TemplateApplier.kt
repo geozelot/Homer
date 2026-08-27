@@ -41,7 +41,7 @@ class TemplateApplier @Inject constructor(
     data class Preview(val id: String, val before: BookEntity, val after: BookEntity)
 
     /** The user's templates, in order, ahead of the conventional defaults. */
-    suspend fun activeTemplates(): List<PathTemplate> = templatesFrom(librarySettings.pathTemplates.first())
+    suspend fun activeTemplates(): List<ScopedTemplate> = templatesFrom(librarySettings.pathTemplates.first())
 
     /**
      * What [templates] would make of the first [limit] books, changed ones first.
@@ -51,7 +51,7 @@ class TemplateApplier @Inject constructor(
      * written — this is the pass that has to run before Apply is worth offering, since applying
      * rewrites metadata across a whole library in one action.
      */
-    suspend fun preview(templates: List<PathTemplate>, limit: Int = 12): List<Preview> {
+    suspend fun preview(templates: List<ScopedTemplate>, limit: Int = 12): List<Preview> {
         val books = bookDao.getAll()
         val previews = books.map { Preview(it.id, it, apply(it, templates)) }
         return previews.sortedBy { it.before.sameFieldsAs(it.after) }.take(limit)
@@ -64,7 +64,7 @@ class TemplateApplier @Inject constructor(
      * two of them should be two row updates, not three hundred, or every book's `updatedAt` moves
      * and the shared index republishes the lot.
      */
-    suspend fun applyAll(templates: List<PathTemplate> = emptyList()): Result {
+    suspend fun applyAll(templates: List<ScopedTemplate> = emptyList()): Result {
         val active = templates.ifEmpty { activeTemplates() }
         val books = bookDao.getAll()
         val updated = books.mapNotNull { book ->
@@ -81,9 +81,9 @@ class TemplateApplier @Inject constructor(
         private const val TAG = "HomerTemplate"
         private const val WRITE_CHUNK = 200
 
-        /** [raw] lines compiled, dropping the ones that do not — then the defaults behind them. */
-        fun templatesFrom(raw: List<String>): List<PathTemplate> =
-            raw.mapNotNull { PathTemplate.compile(it) } + PathTemplate.DEFAULTS
+        /** [raw] lines decoded, dropping the ones that do not compile — then the defaults behind them. */
+        fun templatesFrom(raw: List<String>): List<ScopedTemplate> =
+            raw.mapNotNull { ScopedTemplate.decode(it) } + ScopedTemplate.DEFAULTS
 
         /**
          * One book, re-read.
@@ -94,8 +94,8 @@ class TemplateApplier @Inject constructor(
          * folder names. The title falls back to the book's own, never to nothing — a book with no title
          * is unreachable on the shelf.
          */
-        fun apply(book: BookEntity, templates: List<PathTemplate>): BookEntity {
-            val parsed = PathTemplate.parseFirst(book.id, templates) ?: return book
+        fun apply(book: BookEntity, templates: List<ScopedTemplate>): BookEntity {
+            val parsed = ScopedTemplate.parseFirst(book.id, templates) ?: return book
             return book.copy(
                 title = parsed[TemplateField.TITLE] ?: book.title,
                 author = parsed[TemplateField.AUTHOR] ?: book.author,

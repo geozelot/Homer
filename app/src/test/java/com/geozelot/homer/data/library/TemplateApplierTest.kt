@@ -45,7 +45,7 @@ class TemplateApplierTest {
         updatedAt = 0,
     )
 
-    private fun templates(vararg raw: String) = raw.mapNotNull { PathTemplate.compile(it) }
+    private fun templates(vararg raw: String) = raw.mapNotNull { ScopedTemplate.of(it) }
 
     // ── the trap this class exists for ───────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ class TemplateApplierTest {
         val before = book("Pratchett/Sourcery (Discworld)")
         val after = TemplateApplier.apply(
             before,
-            templates("{author}/{title} ({collection})") + PathTemplate.DEFAULTS,
+            templates("{author}/{title} ({collection})") + ScopedTemplate.DEFAULTS,
         )
         assertEquals("Discworld", after.collection)
         assertEquals("Sourcery", after.title)
@@ -155,12 +155,62 @@ class TemplateApplierTest {
     fun `a line that does not compile is dropped and the rest survive`() {
         // A typo must not take the working templates down with it.
         val active = TemplateApplier.templatesFrom(listOf("{author}/{narrator}/{title}", "{author}/{title}"))
-        assertEquals(PathTemplate.DEFAULTS.size + 1, active.size)
+        assertEquals(ScopedTemplate.DEFAULTS.size + 1, active.size)
     }
 
     @Test
     fun `the defaults always sit behind the user's own`() {
         val active = TemplateApplier.templatesFrom(emptyList())
-        assertEquals(PathTemplate.DEFAULTS.size, active.size)
+        assertEquals(ScopedTemplate.DEFAULTS.size, active.size)
+    }
+
+    // ── scoping ──────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a scoped template only touches books inside its folder`() {
+        val inside = book("Imports/German/Sourcery")
+        val outside = book("Pratchett/Sourcery", title = "kept", author = "kept")
+        val scoped = listOf(ScopedTemplate("Imports", PathTemplate.compile("{*}/{language}/{title}")!!))
+
+        assertEquals("Sourcery", TemplateApplier.apply(inside, scoped).title)
+        assertEquals("kept", TemplateApplier.apply(outside, scoped).title)
+    }
+
+    @Test
+    fun `a scope does not claim a sibling folder that merely starts the same way`() {
+        val t = ScopedTemplate("Pratchett", PathTemplate.compile("{author}/{title}")!!)
+        assertTrue(t.covers("Pratchett/Sourcery"))
+        assertFalse(t.covers("PratchettAnthologies/Sourcery"))
+    }
+
+    @Test
+    fun `an empty scope is the whole library`() {
+        assertTrue(ScopedTemplate.of("{title}")!!.covers("anything/at/all"))
+    }
+
+    @Test
+    fun `the pattern still addresses the whole path, scope included`() {
+        // The scope SELECTS rather than strips: stripping would lose every field the shortened
+        // pattern no longer mentions, since the first matching template is the only one that runs.
+        val b = book("Imports/Pratchett/Sourcery")
+        val scoped = listOf(ScopedTemplate("Imports", PathTemplate.compile("{*}/{author}/{title}")!!))
+        val after = TemplateApplier.apply(b, scoped)
+        assertEquals("Pratchett", after.author)
+        assertEquals("Sourcery", after.title)
+    }
+
+    @Test
+    fun `a scoped template round-trips through its stored form`() {
+        val t = ScopedTemplate("Imports/German", PathTemplate.compile("{author}/{title}")!!)
+        val back = ScopedTemplate.decode(t.encode())
+        assertEquals(t.scope, back?.scope)
+        assertEquals(t.template.source, back?.template?.source)
+    }
+
+    @Test
+    fun `an unscoped template round-trips without growing a separator`() {
+        val t = ScopedTemplate.of("{author}/{title}")!!
+        assertFalse('\t' in t.encode())
+        assertEquals("", ScopedTemplate.decode(t.encode())?.scope)
     }
 }

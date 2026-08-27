@@ -136,6 +136,20 @@ object FacetMerge {
                 else -> l
             }
         }
-        return CorrectionsFacet(books = merged)
+        // Templates take the same rule, per SCOPE rather than per book: two people editing
+        // different folders' patterns keep both, and two editing the same folder's resolve newest-
+        // wins, which is what "one deliberate act" means for everything else in this facet.
+        val rules = LinkedHashMap<String, TemplateRule>(local.templates.size + remote.templates.size)
+        for (scope in local.templates.keys + remote.templates.keys) {
+            val l = local.templates[scope]
+            val r = remote.templates[scope]
+            rules[scope] = when {
+                l == null -> r!!
+                r == null -> l
+                r.editedAt > l.editedAt -> r
+                else -> l
+            }
+        }
+        return CorrectionsFacet(books = merged, templates = rules)
     }
 }

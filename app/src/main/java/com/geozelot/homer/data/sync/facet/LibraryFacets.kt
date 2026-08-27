@@ -187,6 +187,34 @@ data class DerivedChapter(val startMs: Long, val title: String? = null)
 data class CorrectionsFacet(
     val version: Int = LibraryFacets.SCHEMA_VERSION,
     val books: Map<String, BookCorrection> = emptyMap(),
+    /**
+     * Path templates, keyed by the folder they apply to (empty key = the whole library).
+     *
+     * Here rather than in a fourth facet because a template IS a correction — it is a person saying
+     * what these folders mean — and it therefore wants the rule this facet already has: newest edit
+     * wins per key. A fourth file would have needed a fourth merge rule for the same semantics.
+     *
+     * Keyed by scope rather than listed, so two people editing different folders' patterns do not
+     * overwrite each other; two people editing the SAME folder's do, newest winning, which is what
+     * "one deliberate act" means everywhere else in this facet.
+     *
+     * Defaulted, so an index written by 2.0.0 reads back as "no templates" rather than failing.
+     */
+    val templates: Map<String, TemplateRule> = emptyMap(),
+)
+
+/**
+ * One folder's patterns, and when somebody last said so.
+ *
+ * A list rather than a single pattern: a folder can need more than one — a scope with two layouts
+ * in it is ordinary — and they are tried in the order written.
+ */
+@Serializable
+data class TemplateRule(
+    val patterns: List<String> = emptyList(),
+    val editedAt: Long = 0,
+    /** Which device published it, for the same reason a correction records one. */
+    val by: String? = null,
 )
 
 /**

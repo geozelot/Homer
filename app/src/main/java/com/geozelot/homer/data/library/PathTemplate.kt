@@ -136,3 +136,64 @@ enum class TemplateField(val key: String, val numeric: Boolean = false) {
         fun from(key: String): TemplateField? = entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
     }
 }
+
+/**
+ * A [PathTemplate] restricted to one folder of the library.
+ *
+ * [scope] is a library-relative folder prefix, or empty for the whole library. A book is a candidate
+ * only when its id sits inside that folder — so "the German imports are laid out differently" is
+ * expressible without the pattern having to be true of everything else.
+ *
+ * **The scope SELECTS; it does not strip.** The pattern is matched against the whole
+ * library-relative path, scope segments included, so `{author}` still means the top folder. Stripping
+ * the scope first would read better — a short pattern for a deep folder — and would quietly lose
+ * every field the pattern no longer mentions: a scoped `{series}/{title}` under `Pratchett/Discworld`
+ * would leave those books with no author at all, because the first matching template is the only one
+ * that runs. Repeating the scope in the pattern is a small cost against that.
+ */
+data class ScopedTemplate(val scope: String, val template: PathTemplate) {
+    /** [path]'s fields under this template, or null if the scope excludes it or the shape does not fit. */
+    fun parse(path: String): Map<TemplateField, String>? {
+        val clean = path.trim('/')
+        if (!covers(clean)) return null
+        return template.parse(clean)
+    }
+
+    /** Whether [path] is inside this template's folder. */
+    fun covers(path: String): Boolean {
+        val s = scope.trim('/')
+        if (s.isEmpty()) return true
+        // The trailing slash matters: scope "Pratchett" must not claim "PratchettAnthologies/x".
+        return path.equals(s, ignoreCase = true) || path.startsWith("$s/", ignoreCase = true)
+    }
+
+    /** The stored form. Tab-separated because a tab cannot occur in a path or be typed into the field. */
+    fun encode(): String = if (scope.isBlank()) template.source else "$scope\t${template.source}"
+
+    companion object {
+        /** The whole library, unscoped. */
+        fun of(pattern: String): ScopedTemplate? =
+            PathTemplate.compile(pattern)?.let { ScopedTemplate("", it) }
+
+        fun decode(raw: String): ScopedTemplate? {
+            val (scope, pattern) = if ('\t' in raw) {
+                raw.substringBefore('\t').trim() to raw.substringAfter('\t').trim()
+            } else {
+                "" to raw.trim()
+            }
+            return PathTemplate.compile(pattern)?.let { ScopedTemplate(scope.trim('/'), it) }
+        }
+
+        /** The conventional layout, applying everywhere. */
+        val DEFAULTS: List<ScopedTemplate> = PathTemplate.DEFAULTS.map { ScopedTemplate("", it) }
+
+        /**
+         * The first template that both covers [path] and fits it.
+         *
+         * A narrower scope earlier in the list wins, which is why the caller's own templates are
+         * ordered ahead of [DEFAULTS] rather than merged into them.
+         */
+        fun parseFirst(path: String, templates: List<ScopedTemplate>): Map<TemplateField, String>? =
+            templates.firstNotNullOfOrNull { it.parse(path) }
+    }
+}
