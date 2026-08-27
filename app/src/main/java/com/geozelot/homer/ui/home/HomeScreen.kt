@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -136,6 +138,7 @@ import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
@@ -293,13 +296,25 @@ fun HomeScreen(
                 gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
             }
         }
-        val pinnedShelf = if (searching) emptyList() else listeningShelf
-        if (pinnedShelf.isNotEmpty() && entries.isNotEmpty()) {
+        // The shelf STAYS while search is open. Hiding it was meant to give the results more room
+        // and instead undid the whole point of moving search into the control bar: dropping it and
+        // its divider out of this Column pulled everything below UP by the panel's height, so
+        // opening search hoisted the library header to where the listening panel had been. The
+        // control bar never moved a pixel by itself — the thing above it vanished. A control that
+        // relocates the screen to appear is the one thing the inline field was built to stop being.
+        //
+        // `filtering` and not `entries.isNotEmpty()` for the same reason: a query that matches
+        // nothing emptied `entries`, which tore down the shelf AND the control bar below it — so
+        // typing one character too many closed the field being typed into, took the pills and their
+        // Clear with it, and left "No matches" with no way back to the library but the back gesture.
+        // The bar is the way out of a filter and has to outlive the filter finding nothing.
+        val libraryPresent = entries.isNotEmpty() || !filter.isEmpty
+        if (listeningShelf.isNotEmpty() && libraryPresent) {
             // Closes the top bar off from the panel below it — without it the wordmark row and the
             // listening shelf ran together as one undifferentiated block.
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
-                books = pinnedShelf,
+                books = listeningShelf,
                 collapsed = shelfCollapsed,
                 rowState = shelfRowState,
                 onOpen = onBookClick,
@@ -311,7 +326,7 @@ fun HomeScreen(
         // grid's first two items: they are the controls for what is being scrolled, so having to
         // scroll back to the top to reach them was the wrong way round. The listening strip above
         // collapses to make room for them; these stay put.
-        if (entries.isNotEmpty()) {
+        if (libraryPresent) {
             // "Filtered" now means either half of the box is doing something: text being typed, OR
             // a committed pill. Keyed on the open field alone it labelled an untouched library "309
             // results" before a character was typed; keyed on the text alone it went on claiming
@@ -735,7 +750,7 @@ private fun LazyGridScope.libraryContent(
                         // separate lazy item drawing its own slice of the enclosure that wraps the
                         // whole shelf. See `seriesEnclosure`.
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
-                            ExpandedSeriesHeader(series = entry, onCollapse = { close(entry) })
+                            ExpandedSeriesHeader(series = entry, ctx = ctx, onCollapse = { close(entry) })
                         }
                         // An opened COLLECTION breaks into its threads; an opened plain series is
                         // one run, exactly as before. See `expandedRows`.
@@ -769,6 +784,7 @@ private fun LazyGridScope.libraryContent(
                         item(key = shelfKey) {
                             SeriesGridCard(
                                 series = entry,
+                                ctx = ctx,
                                 onOpen = { open(entry) },
                                 actions = actions,
                             )
@@ -781,6 +797,7 @@ private fun LazyGridScope.libraryContent(
                     item(span = { GridItemSpan(maxLineSpan) }, key = shelfKey) {
                         SeriesShelfRow(
                             series = entry,
+                            ctx = ctx,
                             expanded = shelfOpen,
                             onToggle = { if (shelfOpen) close(entry) else open(entry) },
                             actions = actions,
@@ -953,6 +970,11 @@ private fun LibraryControlBar(
             Row(
                 modifier = Modifier
                     .weight(1f)
+                    // BEFORE the scroll, so it is a viewport inset and not content that scrolls
+                    // away. Search does a different KIND of thing from the three chips beside it,
+                    // and a gap is what separates a group from its neighbour rather than making it
+                    // the first member of one.
+                    .padding(start = 6.dp)
                     .horizontalScroll(rememberScrollState())
                     .padding(end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -966,6 +988,7 @@ private fun LibraryControlBar(
                     selected = shelving,
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onShelfChange,
+                    pillHeight = ControlPillHeight,
                 )
                 DropdownChip(
                     label = stringResource(series.label),
@@ -975,6 +998,7 @@ private fun LibraryControlBar(
                     selected = series,
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onSeriesChange,
+                    pillHeight = ControlPillHeight,
                 )
                 // Only the sorts that still do something — see LibrarySort.offeredFor.
                 DropdownChip(
@@ -985,6 +1009,7 @@ private fun LibraryControlBar(
                     selected = sort,
                     labelOf = { controlContext.getString(it.label) },
                     onSelect = onSortChange,
+                    pillHeight = ControlPillHeight,
                 )
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
@@ -1001,9 +1026,6 @@ private fun LibraryControlBar(
         )
     }
 }
-
-/** Height of the toggle's visible pill — the same as a [DropdownChip]'s, which it sits beside. */
-private val ViewTogglePillHeight = 28.dp
 
 /**
  * The search control, drawn as a filled chip.
@@ -1024,17 +1046,24 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .height(ViewTogglePillHeight)
+                .height(ControlPillHeight)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (active) AmberSoft else Surface2)
-                .border(1.dp, if (active) AmberDeep else Line, RoundedCornerShape(8.dp))
+                // Amber whether or not anything is filtered. The hairline every other control
+                // wears said "one more of these" about the one control on the row that changes
+                // what the list CONTAINS; the accent is what the rest of the app uses to mean
+                // live, and this is the chip worth finding without looking for it.
+                .border(1.dp, Amber, RoundedCornerShape(8.dp))
                 .padding(horizontal = 9.dp),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Filled.Search,
                 contentDescription = stringResource(R.string.home_cd_search),
-                tint = if (active) Amber else Parchment,
+                // Muted, the same as the glyphs in the chips beside it. Parchment is the primary
+                // TEXT tone and read as plain white next to them, which made the icon the loudest
+                // thing on the row while the border around it was the quietest.
+                tint = if (active) Amber else Muted,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -1073,7 +1102,7 @@ private fun InlineSearchField(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(ViewTogglePillHeight)
+                .height(ControlPillHeight)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Surface2)
                 .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
@@ -1149,7 +1178,7 @@ private val TrailingActionWidth = 44.dp
 private fun ViewToggleGroup(gridView: Boolean, onToggleView: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.drawBehind {
-            val h = ViewTogglePillHeight.toPx()
+            val h = ControlPillHeight.toPx()
             val top = (size.height - h) / 2f
             val stroke = 1.dp.toPx()
             val radius = CornerRadius(8.dp.toPx())
@@ -1190,7 +1219,7 @@ private fun ViewToggleButton(
             // would put an amber block a head taller than the chips beside it.
             .drawBehind {
                 if (!selected) return@drawBehind
-                val h = ViewTogglePillHeight.toPx() - 2.dp.toPx()
+                val h = ControlPillHeight.toPx() - 2.dp.toPx()
                 drawRoundRect(
                     color = AmberSoft,
                     topLeft = Offset(1.dp.toPx(), (size.height - h) / 2f),
@@ -1463,7 +1492,11 @@ private fun BookGridCard(
  */
 @Composable
 private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth()) {
+    // IntrinsicSize.Min so the overflow button can match the footer instead of guessing at it. A
+    // Row is as tall as its tallest child, which makes `fillMaxHeight` on one of them circular;
+    // measuring the row's intrinsic height first breaks the cycle and gives the button something
+    // to fill.
+    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
@@ -1486,8 +1519,13 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // The full height of the footer, not a 48dp square floating at the top of it. Two lines of
+        // title and two of meta make this panel taller than the button was, so the dots sat against
+        // the title with dead strip beneath them — and the part of the footer that looked like it
+        // should open the menu did nothing.
         Box(
             modifier = Modifier
+                .fillMaxHeight()
                 .sizeIn(minWidth = 32.dp, minHeight = 48.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onMenu),
@@ -1592,6 +1630,7 @@ private const val STACK_MAX_HINTS = 2
 @Composable
 private fun SeriesGridCard(
     series: LibraryEntry.Series,
+    ctx: RowContext,
     onOpen: () -> Unit,
     actions: BookActions,
 ) {
@@ -1655,7 +1694,7 @@ private fun SeriesGridCard(
             }
         }
         Box {
-            GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current)) {
+            GridCardText(title = series.name, meta = seriesCardMeta(series, ctx, LocalContext.current)) {
                 menuOpen = true
             }
             SeriesMenu(series, menuOpen, actions) { menuOpen = false }
@@ -1668,9 +1707,22 @@ private fun SeriesGridCard(
  *
  * The volume count, the downloaded count and now the length are all drawn on the cover itself, so
  * the only thing left for the text is the one fact a corner cannot hold: who wrote it.
+ *
+ * Which means that shelved BY author there is nothing left to say — and saying it anyway is what
+ * [bookMeta] has always refused to do one row below. A shelf carried the author under every cover
+ * while the section heading above already named them, so the two views disagreed about the same
+ * rule. Empty is correct here: the card's meta line is `minLines = 2` either way, so nothing moves.
  */
-private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String =
-    series.author ?: context.getString(R.string.unknown_author)
+private fun seriesCardMeta(
+    series: LibraryEntry.Series,
+    ctx: RowContext,
+    context: android.content.Context,
+): String =
+    if (ctx.shelving == LibraryShelving.AUTHOR) {
+        ""
+    } else {
+        series.author ?: context.getString(R.string.unknown_author)
+    }
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -1745,6 +1797,7 @@ private fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier = 
 @Composable
 private fun ExpandedSeriesHeader(
     series: LibraryEntry.Series,
+    ctx: RowContext,
     onCollapse: () -> Unit,
 ) {
     Column(
@@ -1778,7 +1831,9 @@ private fun ExpandedSeriesHeader(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(seriesMeta(series, LocalContext.current), color = Muted, fontSize = 11.5.sp)
+                seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
+                    Text(it, color = Muted, fontSize = 11.5.sp)
+                }
             }
             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
         }
@@ -1855,12 +1910,22 @@ private fun ExpandedSeriesRow(
  * the length — the two facts that need words. Restating the counts here as well would put the same
  * number twice on one row, two centimetres apart.
  */
-private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
-    append(series.author ?: context.getString(R.string.unknown_author))
+private fun seriesMeta(
+    series: LibraryEntry.Series,
+    ctx: RowContext,
+    context: android.content.Context,
+): String = buildList {
+    // Dropped when the author is the heading overhead, exactly as bookMeta drops it — see
+    // seriesCardMeta. buildList rather than buildString because the separator now has to survive
+    // the first part going missing; appending " · " ahead of the length left a row starting with a
+    // dot the moment the author was suppressed.
+    if (ctx.shelving != LibraryShelving.AUTHOR) {
+        add(series.author ?: context.getString(R.string.unknown_author))
+    }
     // Whole-series length: a book row shows its own, so a shelf that hid the sum was the one place
     // the number went missing.
-    seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
-}
+    seriesTotalMs(series)?.let { add(formatCompactDuration(it)) }
+}.joinToString(" · ")
 
 /** A series' length, but only once EVERY episode is measured — a partial sum understates it. */
 internal fun seriesTotalMs(series: LibraryEntry.Series): Long? {
@@ -1870,6 +1935,7 @@ internal fun seriesTotalMs(series: LibraryEntry.Series): Long? {
 
 // ── List row ─────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookListRow(
     book: BookListItem,
@@ -1900,7 +1966,14 @@ private fun BookListRow(
                     Modifier
                 },
             )
-            .clickable { onOpen(book.id) }
+            // Long-press opens the menu, the same as the grid card and the series shelf. The 3-dot
+            // button stays — this is the shortcut, not a replacement for it — but list view was the
+            // one place where holding a row did nothing, so the gesture learned in grid view
+            // stopped working on switching.
+            .combinedClickable(
+                onClick = { onOpen(book.id) },
+                onLongClick = { menuOpen = true },
+            )
             .padding(if (bordered) SeriesListEnclosurePad else 6.dp)
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
@@ -1992,6 +2065,7 @@ private val ListRowTitleLineHeight = 16.sp
 @Composable
 private fun SeriesShelfRow(
     series: LibraryEntry.Series,
+    ctx: RowContext,
     expanded: Boolean,
     onToggle: () -> Unit,
     actions: BookActions,
@@ -2083,11 +2157,12 @@ private fun SeriesShelfRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = seriesMeta(series, LocalContext.current),
-                    color = Muted,
-                    fontSize = 11.5.sp,
-                )
+                // Skipped entirely when empty rather than drawn blank — shelved by author with an
+                // unmeasured series there is nothing left for it to say, and an empty Text still
+                // takes a line's height.
+                seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
+                    Text(text = it, color = Muted, fontSize = 11.5.sp)
+                }
             }
             // Chevron immediately left of the overflow button, so the two sit together at the trailing
             // edge and the overflow still lines up with the one on every book row. Leading it instead

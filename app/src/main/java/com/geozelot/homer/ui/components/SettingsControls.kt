@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -272,12 +274,26 @@ fun <T> DropdownChip(
      */
     icon: ImageVector? = null,
     iconDescription: String? = null,
+    /**
+     * Pins the pill to an exact height instead of letting it size to its content.
+     *
+     * For a chip standing on its own, content-sized is right. For a chip in a ROW of controls it is
+     * not: this pill came out around 34dp against the 28dp of the search chip and the view toggle
+     * beside it, so the library's control bar was three heights pretending to be a band.
+     *
+     * The 34dp is not the padding — it is [LocalTextStyle]. Material's `bodyLarge` carries
+     * `lineHeight = 24.sp` and the label overrides `fontSize` only, so an 11sp word is laid out in
+     * a 24dp-tall box and the 5dp padding sits outside THAT. Pinning the height is deliberately the
+     * fix rather than correcting the line height, because the settings pages have used this chip's
+     * natural size since it was written and this is a control-bar problem.
+     */
+    pillHeight: Dp? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
-        // The pill is ~26dp tall, well under the 48dp minimum touch target, so the tap area is
-        // expanded around it — inflating the pill itself would break its alignment with the 11sp
-        // label text it sits beside.
+        // The pill is well under the 48dp minimum touch target, so the tap area is expanded around
+        // it — inflating the pill itself would break its alignment with the 11sp label text it sits
+        // beside.
         Box(
             modifier = Modifier
                 .sizeIn(minHeight = 48.dp)
@@ -286,10 +302,18 @@ fun <T> DropdownChip(
         ) {
             Row(
                 modifier = Modifier
+                    .then(if (pillHeight != null) Modifier.height(pillHeight) else Modifier)
                     .clip(RoundedCornerShape(8.dp))
                     .border(1.dp, Line, RoundedCornerShape(8.dp))
                     .background(Surface1)
-                    .padding(start = if (icon != null) 7.dp else 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+                    // With the height pinned, the vertical padding would fight it — the 24sp line
+                    // box already fills a 28dp pill on its own.
+                    .padding(
+                        start = if (icon != null) 7.dp else 10.dp,
+                        end = 6.dp,
+                        top = if (pillHeight != null) 0.dp else 5.dp,
+                        bottom = if (pillHeight != null) 0.dp else 5.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 icon?.let {
@@ -320,6 +344,11 @@ fun <T> DropdownChip(
                     },
                     color = Muted,
                     fontSize = 11.sp,
+                    // Only when the height is pinned. Left inherited, the label's line box is
+                    // bodyLarge's 24sp — which is what made this pill 34dp in the first place, and
+                    // which at a 1.2x font scale would be TALLER than the pin and clip. Given a
+                    // line height in proportion to the 11sp text, the pin has room to spare.
+                    lineHeight = if (pillHeight != null) 14.sp else TextUnit.Unspecified,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -514,6 +543,14 @@ fun HomerTextButton(
  * side by side in a dialog no longer fit.
  */
 val HomerButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+/**
+ * The one height every control in the library's control bar is drawn to.
+ *
+ * Shared rather than repeated so the band cannot drift apart again: the dropdown chips, the search
+ * chip and the view toggle each used to carry their own idea of how tall a pill is.
+ */
+val ControlPillHeight = 28.dp
+
 
 /**
  * One width for a column of actions that do not share a row.
