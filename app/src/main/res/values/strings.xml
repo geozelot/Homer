@@ -547,4 +547,17 @@
     <string name="filter_clear_all">Clear</string>
     <string name="edit_field_collection">Collection</string>
     <string name="edit_field_collection_desc">A parent this whole series belongs to — Discworld over Rincewind. Leave blank unless the series is part of something bigger.</string>
+    <string name="set_templates_title">Reading folder names</string>
+    <string name="set_templates_patterns_header">PATTERNS</string>
+    <string name="set_templates_lead">Homer reads a book\'s author, series and title out of its folder path. The usual layout — Author / Series / Book — needs nothing here. Add a pattern only for folders laid out some other way; yours are tried first, and the usual layout still applies to everything they do not match.</string>
+    <string name="set_templates_add">Add a pattern</string>
+    <string name="set_templates_fields">Available: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. Use {*} for one folder you do not care about and {**} for any number of them. Everything else is matched exactly, so “{title} ({series} {index})” reads “Sourcery (Rincewind 2)”.</string>
+    <string name="set_templates_preview_header">WHAT IT WOULD DO</string>
+    <string name="set_templates_preview_lead">Real books from your library, the ones that would change first. Nothing is written until you apply.</string>
+    <string name="set_templates_preview_empty">Nothing to preview — your library has not been read yet.</string>
+    <string name="set_templates_no_change">No change</string>
+    <string name="set_templates_apply">Apply to the library</string>
+    <string name="set_templates_apply_desc">Rewrites what was detected for every book that changes. Your own per-book edits are kept — they sit on top of whatever a pattern reads.</string>
+    <string name="set_upkeep_organising_header">ORGANISING</string>
+    <string name="set_templates_summary">Patterns for folders that are not laid out Author / Series / Book</string>
 </resources>

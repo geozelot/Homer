@@ -31,6 +31,7 @@ import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
@@ -240,6 +241,7 @@ class HomeViewModel @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
     private val bookmarkDao: BookmarkDao,
+    private val templateApplier: TemplateApplier,
     private val bookDao: BookDao,
     private val crawlDirDao: CrawlDirDao,
     private val bookEditor: BookEditor,
@@ -1105,6 +1107,58 @@ class HomeViewModel @Inject constructor(
     /** Removes a bookmark from the library-side list. */
     fun deleteBookmark(id: Long) {
         viewModelScope.launch { bookmarkDao.deleteById(id) }
+    }
+
+    // ── path templates ───────────────────────────────────────────────────────────────────────
+
+    /**
+     * The templates being EDITED, which is not the same as the ones in force.
+     *
+     * A draft, so the preview can show what a half-written pattern would do without that pattern
+     * being applied to the library the moment a character lands in the field. Seeded from the stored
+     * list the first time it is read.
+     */
+    private val _templateDraft = MutableStateFlow<List<String>?>(null)
+
+    val templateDraft: StateFlow<List<String>> =
+        combine(_templateDraft, librarySettings.pathTemplates) { draft, stored -> draft ?: stored }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Whether the draft differs from what is stored — what Apply is enabled by. */
+    val templateDraftDirty: StateFlow<Boolean> =
+        combine(_templateDraft, librarySettings.pathTemplates) { draft, stored ->
+            draft != null && draft != stored
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * What the draft would make of a sample of the library — changed books first.
+     *
+     * Recomputed on every keystroke, which is affordable because it reads books already in memory
+     * and writes nothing. This is the pass that has to exist before Apply is offered at all: a
+     * silent mis-parse across a subtree is far worse than no feature.
+     */
+    val templatePreview: StateFlow<List<TemplateApplier.Preview>> =
+        templateDraft
+            .map { lines -> templateApplier.preview(TemplateApplier.templatesFrom(lines)) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun setTemplateDraft(lines: List<String>) {
+        _templateDraft.value = lines
+    }
+
+    /** Stores the draft and re-derives every book under it. */
+    fun applyTemplates() {
+        viewModelScope.launch {
+            val lines = templateDraft.value
+            librarySettings.setPathTemplates(lines)
+            templateApplier.applyAll(TemplateApplier.templatesFrom(lines))
+            _templateDraft.value = null
+        }
+    }
+
+    /** Throws the draft away, reverting the editor to what is stored. */
+    fun discardTemplateDraft() {
+        _templateDraft.value = null
     }
 
     fun setSeriesMode(mode: LibraryDepth) {

@@ -524,4 +524,17 @@
     <string name="filter_clear_all">Zurücksetzen</string>
     <string name="edit_field_collection">Reihe</string>
     <string name="edit_field_collection_desc">Eine übergeordnete Reihe, zu der diese ganze Serie gehört — Discworld über Rincewind. Leer lassen, wenn die Serie zu nichts Größerem gehört.</string>
+    <string name="set_templates_title">Ordnernamen lesen</string>
+    <string name="set_templates_patterns_header">MUSTER</string>
+    <string name="set_templates_lead">Homer liest Autor, Serie und Titel aus dem Ordnerpfad eines Buchs. Für die übliche Ablage — Autor / Serie / Buch — brauchst du hier nichts. Füge ein Muster nur für anders aufgebaute Ordner hinzu; deine werden zuerst probiert, und für alles andere gilt weiterhin die übliche Ablage.</string>
+    <string name="set_templates_add">Muster hinzufügen</string>
+    <string name="set_templates_fields">Verfügbar: {author} {title} {series} {index} {collection} {collectionIndex} {genre} {language} {year}. {*} steht für einen Ordner, der dich nicht interessiert, {**} für beliebig viele. Alles andere wird genau so gelesen — „{title} ({series} {index})“ passt auf „Sourcery (Rincewind 2)“.</string>
+    <string name="set_templates_preview_header">WAS PASSIEREN WÜRDE</string>
+    <string name="set_templates_preview_lead">Echte Bücher aus deiner Bibliothek, die betroffenen zuerst. Bis zum Anwenden wird nichts geschrieben.</string>
+    <string name="set_templates_preview_empty">Nichts zur Vorschau — die Bibliothek wurde noch nicht gelesen.</string>
+    <string name="set_templates_no_change">Keine Änderung</string>
+    <string name="set_templates_apply">Auf die Bibliothek anwenden</string>
+    <string name="set_templates_apply_desc">Überschreibt die erkannten Angaben jedes betroffenen Buchs. Deine eigenen Korrekturen bleiben — sie liegen über allem, was ein Muster liest.</string>
+    <string name="set_upkeep_organising_header">ORDNEN</string>
+    <string name="set_templates_summary">Muster für Ordner, die nicht Autor / Serie / Buch folgen</string>
 </resources>

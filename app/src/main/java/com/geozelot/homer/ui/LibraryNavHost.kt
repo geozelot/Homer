@@ -31,6 +31,7 @@ import com.geozelot.homer.ui.settings.LibraryUpkeepScreen
 import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
 import com.geozelot.homer.ui.settings.PrivacySettingsScreen
 import com.geozelot.homer.ui.settings.SettingsHubScreen
+import com.geozelot.homer.ui.settings.TemplatesScreen
 import com.geozelot.homer.ui.settings.StorageDialogsHost
 import com.geozelot.homer.ui.storage.StorageBrowserScreen
 
@@ -44,6 +45,7 @@ private const val ARG_AT_MS = "at"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_LIBRARY = "settings/library"
 private const val ROUTE_SETTINGS_UPKEEP = "settings/upkeep"
+private const val ROUTE_SETTINGS_TEMPLATES = "settings/upkeep/templates"
 private const val ROUTE_SETTINGS_DEVICE = "settings/device"
 private const val ROUTE_SETTINGS_PLAYBACK = "settings/playback"
 private const val ROUTE_SETTINGS_PRIVACY = "settings/privacy"
@@ -127,6 +129,13 @@ fun LibraryNavHost() {
         }
         composable(ROUTE_SETTINGS_UPKEEP) { entry ->
             LibraryUpkeepScreen(
+                viewModel = navController.libraryViewModel(entry),
+                onOpenTemplates = { navController.navigate(ROUTE_SETTINGS_TEMPLATES) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(ROUTE_SETTINGS_TEMPLATES) { entry ->
+            TemplatesScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onBack = { navController.popBackStack() },
             )

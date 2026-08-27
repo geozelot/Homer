@@ -31,6 +31,7 @@ import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
+import com.geozelot.homer.ui.components.SettingsNavRow
 import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
@@ -55,6 +56,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun LibraryUpkeepScreen(
     viewModel: HomeViewModel,
+    onOpenTemplates: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -158,6 +160,18 @@ fun LibraryUpkeepScreen(
         // The crawl marker qualifies everything above it, on either side of that branch: it is the
         // reason a book that has left the server may still be on the shelf.
         CrawlLine(lastFullCrawl, now, modifier = Modifier.padding(top = 10.dp))
+
+        // Not a reader's to change: a pattern rewrites what the shared index says about every
+        // book, which is the maintainer's half of the split.
+        if (!readsOnly) {
+            SettingsDivider()
+            SettingsSectionHeader(stringResource(R.string.set_upkeep_organising_header))
+            SettingsNavRow(
+                label = stringResource(R.string.set_templates_title),
+                summary = stringResource(R.string.set_templates_summary),
+                onClick = onOpenTemplates,
+            )
+        }
 
         SettingsDivider()
 
