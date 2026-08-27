@@ -925,8 +925,14 @@ class HomeViewModel @Inject constructor(
      * Applies a series-level edit (name + author) to every member book (see [BookEditor]).
      * Members re-group under the new series name; the change syncs like any override.
      */
-    fun saveSeriesOverride(bookIds: List<String>, series: String, author: String, genre: String) {
-        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author, genre) }
+    fun saveSeriesOverride(
+        bookIds: List<String>,
+        series: String,
+        author: String,
+        genre: String,
+        collection: String,
+    ) {
+        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author, genre, collection) }
     }
 
     /** Reverts a book to pure detection (see [BookEditor.clearOverride]). */

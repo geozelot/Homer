@@ -463,8 +463,8 @@ fun HomeScreen(
     entries.findSeries(editingSeriesKey)?.let { series ->
         SeriesEditDialog(
             series = series,
-            onSave = { name, author, genre ->
-                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author, genre)
+            onSave = { name, author, genre, collection ->
+                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author, genre, collection)
                 editingSeriesKey = null
             },
             onDismiss = { editingSeriesKey = null },
@@ -2106,7 +2106,7 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
 @Composable
 private fun SeriesEditDialog(
     series: LibraryEntry.Series,
-    onSave: (name: String, author: String, genre: String) -> Unit,
+    onSave: (name: String, author: String, genre: String, collection: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // rememberSaveable, like the book dialog: a rotation used to throw away what was typed.
@@ -2117,6 +2117,12 @@ private fun SeriesEditDialog(
     // that disagrees with itself starts empty and the user is choosing, not confirming.
     var genre by rememberSaveable {
         mutableStateOf(series.books.map { it.genre }.distinct().singleOrNull().orEmpty())
+    }
+    // Prefilled on the same rule as the genre, and for the same reason: a series that already
+    // disagrees with itself about its parent starts blank, so Save is a choice rather than an
+    // accidental vote for whichever member happened to be first.
+    var collection by rememberSaveable {
+        mutableStateOf(series.books.map { it.collection }.distinct().singleOrNull().orEmpty())
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2151,10 +2157,26 @@ private fun SeriesEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                OutlinedTextField(
+                    value = collection,
+                    onValueChange = { collection = it },
+                    label = { Text(stringResource(R.string.edit_field_collection)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Text(
+                    stringResource(R.string.edit_field_collection_desc),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name, author, genre) }) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = { onSave(name, author, genre, collection) }) {
+                Text(stringResource(R.string.action_save))
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )

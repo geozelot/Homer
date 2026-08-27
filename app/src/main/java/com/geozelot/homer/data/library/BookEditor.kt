@@ -94,16 +94,30 @@ class BookEditor @Inject constructor(
      * genre, and fixing it a book at a time on a twenty-volume series was the tedious way to do
      * something that is true of all of them.
      */
-    suspend fun saveSeriesOverride(bookIds: List<String>, series: String, author: String, genre: String) {
+    suspend fun saveSeriesOverride(
+        bookIds: List<String>,
+        series: String,
+        author: String,
+        genre: String,
+        /**
+         * The parent grouping every book in the series belongs to.
+         *
+         * Set here rather than per book because that is the shape of the decision: "Rincewind
+         * belongs to Discworld" is one thing somebody knows, and applying it a book at a time would
+         * be the same value typed forty-one times with forty-one chances to type it differently.
+         */
+        collection: String = "",
+    ) {
         val now = System.currentTimeMillis()
         val s = series.trim().ifBlank { null }
         val a = author.trim().ifBlank { null }
         val g = genre.trim().ifBlank { null }
+        val c = collection.trim().ifBlank { null }
         for (id in bookIds) {
             val existing = bookOverrideDao.findById(id)
             bookOverrideDao.upsert(
-                existing?.copy(series = s, author = a, genre = g, updatedAt = now)
-                    ?: blank(id).copy(series = s, author = a, genre = g),
+                existing?.copy(series = s, author = a, genre = g, collection = c, updatedAt = now)
+                    ?: blank(id).copy(series = s, author = a, genre = g, collection = c),
             )
         }
         homerSync.sync(force = true)

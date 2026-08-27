@@ -522,4 +522,6 @@
     <string name="filter_facet_tag">Schlagwort</string>
     <string name="filter_count">%1$d von %2$d</string>
     <string name="filter_clear_all">Zurücksetzen</string>
+    <string name="edit_field_collection">Reihe</string>
+    <string name="edit_field_collection_desc">Eine übergeordnete Reihe, zu der diese ganze Serie gehört — Discworld über Rincewind. Leer lassen, wenn die Serie zu nichts Größerem gehört.</string>
 </resources>
