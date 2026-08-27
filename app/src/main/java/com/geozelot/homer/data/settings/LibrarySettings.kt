@@ -132,6 +132,34 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_SHELF_MODE] = value }
     }
 
+    /**
+     * The user's own path templates, newest-authored first, one per line.
+     *
+     * Stored as text rather than parsed: a template that no longer compiles — because it names a
+     * field a later build renamed, or because it was mistyped — has to survive being loaded so the
+     * user can see and fix it. Dropping it at read time would make a typo look like the template
+     * vanishing.
+     *
+     * Scoped to the whole library rather than to a subtree. That is a deliberate simplification of
+     * the design: one ordered list, tried before the conventional defaults, covers "my library is
+     * laid out differently" and "my titles carry the sub-series in brackets", which are the cases
+     * that exist. Per-subtree scoping can be added without changing what is stored, since a scope
+     * would be a prefix on each line.
+     */
+    val pathTemplates: Flow<List<String>> =
+        context.settingsDataStore.data.map { prefs ->
+            prefs[KEY_PATH_TEMPLATES]?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?: emptyList()
+        }
+
+    suspend fun setPathTemplates(templates: List<String>) {
+        context.settingsDataStore.edit { prefs ->
+            val cleaned = templates.map { it.trim() }.filter { it.isNotEmpty() }
+            if (cleaned.isEmpty()) prefs.remove(KEY_PATH_TEMPLATES)
+            else prefs[KEY_PATH_TEMPLATES] = cleaned.joinToString("\n")
+        }
+    }
+
     /** Whether series are drawn stacked or flat: "stacked" | "flat". Independent of shelving. */
     val seriesMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_SERIES_MODE] ?: "stacked" }
@@ -260,6 +288,7 @@ class LibrarySettings @Inject constructor(
         val KEY_LANGUAGE_FILTER = stringPreferencesKey("library_language_filter")
         val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
         val KEY_SERIES_MODE = stringPreferencesKey("library_series_mode")
+        val KEY_PATH_TEMPLATES = stringPreferencesKey("library_path_templates")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
