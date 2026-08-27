@@ -90,6 +90,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -248,21 +249,30 @@ fun HomeScreen(
 
     val gridState = rememberLazyGridState()
 
-    // Tapping the library or the top bar closes the field and drops the keyboard. Without this the
-    // only way out was the field's own X or the back gesture, so scrolling the library with a
-    // keyboard over half of it was a state you could get into and not obviously get out of.
+    // With the field open, the rest of the library takes one tap to CLOSE it and does nothing else.
+    // That tap is consumed, so tapping a book dismisses the search rather than dismissing it and
+    // opening the book at once — which read as two things happening for one deliberate action, and
+    // left you in a player you had not asked for.
     //
-    // Applied to those two regions rather than to the whole screen: the control bar holds the field
-    // itself and the suggestion list, and a screen-wide gesture would close the box on the tap that
-    // opened it and swallow every suggestion.
+    // The whole gesture is swallowed, not just its first touch: a tap that turns into a drag would
+    // otherwise scroll a list it had just been refused permission to tap.
     //
-    // `pointerInput` with an awaitEachGesture pass rather than `clickable`: this must not swallow
-    // the tap. A tap on a book while the keyboard is up should open that book AND dismiss, which is
-    // what watching the gesture in the Initial pass and never consuming it gives.
-    val dismissSearch = Modifier.pointerInput(searching) {
-        if (!searching) return@pointerInput
+    // Keyed on `Unit` with the flag read through `rememberUpdatedState`, and the flag cleared only
+    // AFTER the gesture is drained. Keyed on `searching`, clearing it mid-gesture tore this block
+    // down and the remaining move events reached the list anyway.
+    val searchingNow by rememberUpdatedState(searching)
+    val dismissSearch = Modifier.pointerInput(Unit) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            // Not searching: leave the event entirely alone, so every ordinary tap behaves.
+            if (!searchingNow) return@awaitEachGesture
+            down.consume()
+            var pressed = true
+            while (pressed) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.forEach { it.consume() }
+                pressed = event.changes.any { it.pressed }
+            }
             searching = false
             viewModel.setSearchQuery("")
         }
