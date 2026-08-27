@@ -407,6 +407,7 @@ fun HomeScreen(
                 rowState = shelfRowState,
                 onOpen = onBookClick,
                 actions = actions,
+                modifier = dismissSearch,
             )
         }
 
@@ -1416,6 +1417,12 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
  * Expanded, the panel itself is NOT clickable — the covers open books, the header folds it, and a
  * panel-wide tap would steal from the first or undo the second.
  *
+ * All of which is subordinate to the search-dismiss gesture the caller hands in. While the box is
+ * open EVERY tap on this panel closes it and does nothing else, folded or not, because that is the
+ * rule for the whole screen and a panel that quietly unfolded instead would be the one place a tap
+ * meant something different. Handed in as a [modifier] and applied outside the clickables, so it
+ * consumes on the Initial pass before either of them is offered the gesture.
+ *
  * [rowState] is hoisted by the caller so the horizontal position survives both the fold and
  * scrolling the library.
  */
@@ -1427,8 +1434,9 @@ private fun ListeningShelf(
     rowState: LazyListState,
     onOpen: (String) -> Unit,
     actions: BookActions,
+    modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         // Sized against a real grid cover rather than a literal dp, so it stays proportional on
         // every screen width instead of drifting when the grid's padding or column count changes.
         val coverWidth = gridCellWidth(maxWidth) / ListeningCoverFraction
