@@ -21,6 +21,7 @@ import javax.inject.Singleton
 class LibraryRepository @Inject constructor(
     private val scanner: LibraryScanner,
     private val librarySettings: LibrarySettings,
+    private val templateApplier: TemplateApplier,
     private val bookDao: BookDao,
     private val audioFileDao: AudioFileDao,
 ) {
@@ -62,9 +63,22 @@ class LibraryRepository @Inject constructor(
         _scanState.value = ScanState.Scanning(0, 0)
         try {
             val root = librarySettings.libraryRoot.first()
-            val result = scanner.scan(root, incremental, System.currentTimeMillis()) { dirs, books ->
+            // Read once and used twice: the crawl parses what it discovers through them, and the
+            // re-derive below brings everything else into line with them.
+            val templates = templateApplier.activeTemplates()
+            val result = scanner.scan(root, incremental, System.currentTimeMillis(), templates) { dirs, books ->
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
+            // A scan is expected to leave the library as up to date as Homer can make it, and that
+            // has to include how the reader has told it to READ the library. An incremental crawl
+            // skips unchanged subtrees on their ETag, so without this a template change reached only
+            // the folders that happened to have moved — and every other book kept whatever it was
+            // parsed as, with a scan appearing to have considered and approved it.
+            //
+            // Cheap enough to be unconditional: it reads the books already in the database, writes
+            // only the ones that come out different, and touches the network not at all. For books
+            // the crawl just re-detected it is a no-op, since the crawl used these same templates.
+            templateApplier.applyAll(templates)
             // Only a COMPLETE crawl may stamp this — one that skipped no subtree. It is what lets
             // the shared index delete a book: a crawl that did not visit a folder cannot say the
             // book in it is gone, and treating it as gone would erase other devices' libraries.

@@ -225,6 +225,15 @@ class LibraryScanner @Inject constructor(
         libraryRoot: String,
         incremental: Boolean,
         now: Long,
+        /**
+         * The patterns a newly-detected book's path is read through — the user's own ahead of the
+         * conventional defaults.
+         *
+         * Passed in rather than defaulted, because defaulting is what went wrong: `buildBooks` was
+         * called without them and quietly fell back to the conventional layout, so a crawl parsed
+         * every new book as if no template had ever been written.
+         */
+        templates: List<ScopedTemplate>,
         onProgress: (directoriesVisited: Int, audioFoldersFound: Int) -> Unit,
     ): Result {
         val root = libraryRoot.trim('/')
@@ -285,7 +294,7 @@ class LibraryScanner @Inject constructor(
             onProgress(directoriesVisited, audioFolders.size)
         }
 
-        val books = detector.buildBooks(audioFolders, folderImages, root, now)
+        val books = detector.buildBooks(audioFolders, folderImages, root, now, templates)
 
         // Everything past this point mutates the index, and it belongs together: the upserts, the
         // moved-book re-links and the prune used to be independent writes, so a process death
