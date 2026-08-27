@@ -565,4 +565,19 @@
     <string name="set_templates_pattern">Pattern</string>
     <string name="set_templates_scope_desc">A folder narrows a pattern to the books under it, and is matched against the whole path — so a pattern for “Imports” still starts at the top of the library. Patterns for narrower folders are tried first. Leave the folder blank and the pattern applies everywhere.</string>
     <string name="details_read_folder">Read this folder differently…</string>
+    <string name="set_upkeep_undetected">Books Homer could not read</string>
+    <string name="set_upkeep_undetected_none">Every book has an author</string>
+    <string name="set_upkeep_undetected_lead">Their folder paths told Homer a title and nothing else. A pattern for the folder they are in, or an edit on each, is what fixes them.</string>
+    <string name="set_upkeep_hidden">Hidden books</string>
+    <string name="set_upkeep_hidden_none">Nothing is hidden</string>
+    <string name="set_upkeep_hidden_lead">Hidden books stay out of the library until you show them again. They are still downloaded, and their progress is still synced.</string>
+    <string name="set_upkeep_unhide">Show</string>
+    <plurals name="set_upkeep_undetected_some">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
+    <plurals name="set_upkeep_hidden_some">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
 </resources>

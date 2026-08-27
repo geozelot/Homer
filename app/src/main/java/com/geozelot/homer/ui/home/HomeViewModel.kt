@@ -1110,6 +1110,44 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { bookmarkDao.deleteById(id) }
     }
 
+    // ── the two worklists Upkeep offers ──────────────────────────────────────────────────────
+
+    /**
+     * Books somebody has hidden, whether or not the library is currently showing them.
+     *
+     * Built off the override table rather than off `books`, which filters them out — the whole point
+     * of the list is to be able to review what you have hidden without first turning the shelf-wide
+     * "show hidden" switch on and hunting for the faded rows.
+     */
+    val hiddenBooks: StateFlow<List<WorklistBook>> =
+        combine(libraryRepository.books, bookOverrideDao.observeAll()) { books, overrides ->
+            val hidden = overrides.filter { it.hidden }.map { it.bookId }.toSet()
+            books.filter { it.id in hidden }
+                .sortedBy { it.title.lowercase() }
+                .map { WorklistBook(id = it.id, title = it.title, author = it.author) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Books whose path told Homer nothing but a title.
+     *
+     * A worklist rather than a warning: these are the books a template would fix, and finding them
+     * by scrolling a library of three hundred looking for a missing author is the job this replaces.
+     * Keyed on the AUTHOR being absent, because that is the field every conventional layout supplies
+     * and its absence means no pattern matched anything useful.
+     */
+    val undetectedBooks: StateFlow<List<WorklistBook>> = books
+        .map { list ->
+            list.filter { it.author.isNullOrBlank() }
+                .sortedBy { it.id.lowercase() }
+                .map { WorklistBook(id = it.id, title = it.title, author = it.author) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Unhides a book from the review list. */
+    fun unhide(bookId: String) {
+        viewModelScope.launch { bookEditor.setHidden(bookId, hidden = false) }
+    }
+
     // ── path templates ───────────────────────────────────────────────────────────────────────
 
     /**

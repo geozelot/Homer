@@ -2,9 +2,14 @@ package com.geozelot.homer.ui.settings
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,8 +41,11 @@ import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.home.WorklistBook
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Muted
+import com.geozelot.homer.ui.theme.Parchment
 import kotlinx.coroutines.delay
 
 /**
@@ -77,6 +85,11 @@ fun LibraryUpkeepScreen(
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val lastFullCrawl by viewModel.lastFullCrawl.collectAsStateWithLifecycle()
 
+    val hidden by viewModel.hiddenBooks.collectAsStateWithLifecycle()
+    val undetected by viewModel.undetectedBooks.collectAsStateWithLifecycle()
+
+    var showHiddenList by remember { mutableStateOf(false) }
+    var showUndetected by remember { mutableStateOf(false) }
     var confirmRebuild by remember { mutableStateOf(false) }
     var confirmMeasure by remember { mutableStateOf(false) }
     var confirmRecheck by remember { mutableStateOf(false) }
@@ -171,6 +184,28 @@ fun LibraryUpkeepScreen(
                 summary = stringResource(R.string.set_templates_summary),
                 onClick = onOpenTemplates,
             )
+            // Two worklists. Both are "here is what is wrong, in one place" — which beats finding
+            // it by scrolling a library of three hundred and noticing.
+            SettingsRow(
+                label = stringResource(R.string.set_upkeep_undetected),
+                summary = if (undetected.isEmpty()) {
+                    stringResource(R.string.set_upkeep_undetected_none)
+                } else {
+                    pluralStringResource(R.plurals.set_upkeep_undetected_some, undetected.size, undetected.size)
+                },
+                enabled = undetected.isNotEmpty(),
+                onClick = { showUndetected = true },
+            )
+            SettingsRow(
+                label = stringResource(R.string.set_upkeep_hidden),
+                summary = if (hidden.isEmpty()) {
+                    stringResource(R.string.set_upkeep_hidden_none)
+                } else {
+                    pluralStringResource(R.plurals.set_upkeep_hidden_some, hidden.size, hidden.size)
+                },
+                enabled = hidden.isNotEmpty(),
+                onClick = { showHiddenList = true },
+            )
         }
 
         SettingsDivider()
@@ -208,6 +243,28 @@ fun LibraryUpkeepScreen(
         }
     }
 
+    if (showHiddenList) {
+        WorklistDialog(
+            title = stringResource(R.string.set_upkeep_hidden),
+            lead = stringResource(R.string.set_upkeep_hidden_lead),
+            books = hidden,
+            actionLabel = stringResource(R.string.set_upkeep_unhide),
+            onAction = viewModel::unhide,
+            onDismiss = { showHiddenList = false },
+        )
+    }
+    if (showUndetected) {
+        WorklistDialog(
+            title = stringResource(R.string.set_upkeep_undetected),
+            lead = stringResource(R.string.set_upkeep_undetected_lead),
+            books = undetected,
+            // Nothing to do per book here: what fixes these is a pattern or an edit, and both live
+            // elsewhere. The list exists so you know WHICH books to go and look at.
+            actionLabel = null,
+            onAction = {},
+            onDismiss = { showUndetected = false },
+        )
+    }
     if (confirmRebuild) {
         ConfirmDialog(
             title = stringResource(R.string.set_full_rescan_confirm_title),
@@ -431,4 +488,57 @@ private fun RowSpinner() {
     Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Amber, strokeWidth = 2.dp)
     }
+}
+
+/**
+ * One of Upkeep's worklists: the books, their paths, and optionally one action each.
+ *
+ * The path is shown because it is what identifies a book when its metadata is the problem — for the
+ * undetected list it is the only thing Homer knows, and for the hidden list it is how you tell two
+ * volumes with the same title apart.
+ */
+@Composable
+private fun WorklistDialog(
+    title: String,
+    lead: String,
+    books: List<WorklistBook>,
+    actionLabel: String?,
+    onAction: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(lead, color = Muted, fontSize = 12.sp, lineHeight = 16.sp)
+                books.forEach { book ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(book.title, color = Parchment, fontSize = 13.sp)
+                            Text(
+                                book.id,
+                                color = Faint,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp,
+                                modifier = Modifier.padding(top = 1.dp),
+                            )
+                        }
+                        actionLabel?.let { label ->
+                            TextButton(
+                                onClick = { onAction(book.id) },
+                                contentPadding = SettingsActionPadding,
+                            ) { Text(label, color = Amber, fontSize = 12.sp) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+        },
+    )
 }

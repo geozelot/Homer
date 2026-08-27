@@ -172,3 +172,12 @@ internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
         loose.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
     }
 }
+
+/**
+ * A book on one of Upkeep's worklists: enough to recognise it and act on it, and no more.
+ *
+ * Deliberately not a [BookListItem]. Those carry a resolved cover model, a progress fraction and a
+ * download state, none of which a review list uses — and building them for a list nobody has opened
+ * would resolve a cover per hidden book on every library change.
+ */
+data class WorklistBook(val id: String, val title: String, val author: String?)

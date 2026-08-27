@@ -542,4 +542,19 @@
     <string name="set_templates_pattern">Muster</string>
     <string name="set_templates_scope_desc">Ein Ordner grenzt ein Muster auf die Bücher darunter ein und wird gegen den ganzen Pfad geprüft — ein Muster für „Imports“ beginnt also weiterhin oben in der Bibliothek. Muster für engere Ordner werden zuerst probiert. Bleibt der Ordner leer, gilt das Muster überall.</string>
     <string name="details_read_folder">Diesen Ordner anders lesen…</string>
+    <string name="set_upkeep_undetected">Bücher, die Homer nicht lesen konnte</string>
+    <string name="set_upkeep_undetected_none">Jedes Buch hat einen Autor</string>
+    <string name="set_upkeep_undetected_lead">Ihre Ordnerpfade nannten Homer nur einen Titel. Ein Muster für ihren Ordner — oder eine Korrektur pro Buch — behebt das.</string>
+    <string name="set_upkeep_hidden">Ausgeblendete Bücher</string>
+    <string name="set_upkeep_hidden_none">Nichts ist ausgeblendet</string>
+    <string name="set_upkeep_hidden_lead">Ausgeblendete Bücher bleiben aus der Bibliothek heraus, bis du sie wieder einblendest. Sie bleiben heruntergeladen, und ihr Fortschritt wird weiter synchronisiert.</string>
+    <string name="set_upkeep_unhide">Einblenden</string>
+    <plurals name="set_upkeep_undetected_some">
+        <item quantity="one">%d Buch</item>
+        <item quantity="other">%d Bücher</item>
+    </plurals>
+    <plurals name="set_upkeep_hidden_some">
+        <item quantity="one">%d Buch</item>
+        <item quantity="other">%d Bücher</item>
+    </plurals>
 </resources>
