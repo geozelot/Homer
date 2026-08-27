@@ -1277,9 +1277,7 @@ private fun BookGridCard(
             // below the cover now says, and said it in a corner that could hold a fact the card
             // had nowhere else to put.
             book.totalDurationMs?.let {
-                CoverBadge(CoverCorner.BOTTOM_END, modifier = Modifier.align(Alignment.BottomEnd)) {
-                    BadgeText(formatCompactDuration(it))
-                }
+                DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
             }
         }
         // Under the cover rather than on it, exactly as the listening strip has always drawn it —
@@ -1501,6 +1499,9 @@ private fun SeriesGridCard(
                     modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
+            seriesTotalMs(series)?.let {
+                DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
+            }
         }
         Box {
             GridCardText(title = series.name, meta = seriesCardMeta(series, LocalContext.current)) {
@@ -1512,16 +1513,13 @@ private fun SeriesGridCard(
 }
 
 /**
- * The two lines under a stacked shelf's cover.
+ * The line under a stacked shelf's cover.
  *
- * The volume count and the downloaded count used to lead here and are now drawn on the cover
- * itself, so this carries what the cover cannot: the author, and how long the whole shelf runs.
+ * The volume count, the downloaded count and now the length are all drawn on the cover itself, so
+ * the only thing left for the text is the one fact a corner cannot hold: who wrote it.
  */
 private fun seriesCardMeta(series: LibraryEntry.Series, context: android.content.Context): String =
-    buildString {
-        append(series.author ?: context.getString(R.string.unknown_author))
-        seriesTotalMs(series)?.let { append('\n'); append(formatCompactDuration(it)) }
-    }
+    series.author ?: context.getString(R.string.unknown_author)
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -1699,13 +1697,18 @@ private fun ExpandedSeriesRow(
     }
 }
 
+/**
+ * The line beside a shelf row.
+ *
+ * The volume count and the downloaded count moved onto the cover, so what is left is the author and
+ * the length — the two facts that need words. Restating the counts here as well would put the same
+ * number twice on one row, two centimetres apart.
+ */
 private fun seriesMeta(series: LibraryEntry.Series, context: android.content.Context): String = buildString {
-    append(context.resources.getQuantityString(R.plurals.home_series_book_count, series.books.size, series.books.size))
-    // Whole-series length, on the shelf row as well as the grid card — a book row shows its own
-    // length, so a shelf that hid the sum was the one place the number went missing.
+    append(series.author ?: context.getString(R.string.unknown_author))
+    // Whole-series length: a book row shows its own, so a shelf that hid the sum was the one place
+    // the number went missing.
     seriesTotalMs(series)?.let { append(" · "); append(formatCompactDuration(it)) }
-    val downloaded = series.books.count { it.isDownloaded }
-    if (downloaded > 0) append(context.getString(R.string.home_series_offline_suffix, downloaded))
 }
 
 /** A series' length, but only once EVERY episode is measured — a partial sum understates it. */
@@ -1762,13 +1765,13 @@ private fun BookListRow(
                         .size(46.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
+                // The same cut corner the grid uses, at the compact size — bottom-right, where it
+                // sits under the thumb's line of travel rather than over the artwork's top third.
                 if (book.isDownloaded) {
-                    DownloadBadge(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(0.dp)
-                            .size(16.dp),
-                        iconSize = 9.dp,
+                    OfflineBadge(
+                        CoverCorner.BOTTOM_END,
+                        modifier = Modifier.align(Alignment.BottomEnd),
+                        compact = true,
                     )
                 }
             }
@@ -1887,13 +1890,31 @@ private fun SeriesShelfRow(
                             .border(1.dp, Line, RoundedCornerShape(6.dp)),
                     )
                 }
-                CoverArt(
-                    model = series.frontCover(),
+                // The badges sit on the FRONT cover rather than the 52x56 box, so they hug the
+                // artwork's own corners instead of floating in the gap the stack's fan leaves.
+                Box(
                     modifier = Modifier
                         .offset(y = hints.dp)
                         .size(width = 38.dp, height = 52.dp)
                         .clip(RoundedCornerShape(6.dp)),
-                )
+                ) {
+                    CoverArt(model = series.frontCover(), modifier = Modifier.fillMaxSize())
+                    VolumeCountBadge(
+                        series.books.size,
+                        isCollection = series.isCollection,
+                        modifier = Modifier.align(Alignment.TopStart),
+                        compact = true,
+                    )
+                    val downloaded = series.books.count { it.isDownloaded }
+                    if (downloaded > 0) {
+                        OfflineBadge(
+                            CoverCorner.BOTTOM_END,
+                            count = downloaded.takeIf { it < series.books.size }?.toString(),
+                            modifier = Modifier.align(Alignment.BottomEnd),
+                            compact = true,
+                        )
+                    }
+                }
             }
             Column(
                 modifier = Modifier
@@ -1940,22 +1961,6 @@ private fun SeriesShelfRow(
     }
 }
 
-// ── Status badge, progress ring ───────────────────────────────────────────────
-
-@Composable
-private fun DownloadBadge(modifier: Modifier = Modifier, iconSize: Dp = 11.dp) {
-    Box(
-        modifier = modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .background(Studio.copy(alpha = 0.72f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Decorative: the badge sits inside a card/row that TalkBack already reads out, and an
-        // extra "Downloaded" node in the middle of it only interrupts the title.
-        Icon(Icons.Filled.DownloadDone, contentDescription = null, tint = Sage, modifier = Modifier.size(iconSize))
-    }
-}
 
 // ── Cover art (title-forward placeholder) ─────────────────────────────────────
 

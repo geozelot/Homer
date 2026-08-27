@@ -166,7 +166,6 @@
         <item quantity="one">%1$d Buch</item>
         <item quantity="other">%1$d Bücher</item>
     </plurals>
-    <string name="home_series_offline_suffix"> · %1$d offline</string>
     <string name="home_cd_collapse_series">Serie zuklappen</string>
     <string name="home_meta_percent_bare">%1$d%%</string>
 
@@ -565,4 +564,5 @@
     <string name="folder_picker_up">Eine Ebene höher</string>
     <string name="folder_picker_leaf">Keine Ordner darin.</string>
     <string name="folder_picker_use">Diesen Ordner verwenden</string>
+    <string name="set_templates_preview_scoped">Bücher unter „%1$s“, für die das bearbeitete Muster gilt. Bis zum Anwenden wird nichts geschrieben.</string>
 </resources>

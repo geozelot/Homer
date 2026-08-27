@@ -51,8 +51,28 @@ class TemplateApplier @Inject constructor(
      * written — this is the pass that has to run before Apply is worth offering, since applying
      * rewrites metadata across a whole library in one action.
      */
-    suspend fun preview(templates: List<ScopedTemplate>, limit: Int = PREVIEW_SAMPLE): List<Preview> {
-        val books = bookDao.getAll()
+    suspend fun preview(
+        templates: List<ScopedTemplate>,
+        limit: Int = PREVIEW_SAMPLE,
+        /**
+         * Narrows the sample to one folder — the scope of the pattern being edited.
+         *
+         * Writing a pattern for a folder while the examples come from the whole library is writing
+         * blind: the rows that would tell you whether it is right are the ones it applies to, and
+         * they may not be in a library-wide sample at all.
+         */
+        focus: String? = null,
+    ): List<Preview> {
+        val all = bookDao.getAll()
+        val scope = focus?.trim('/').orEmpty()
+        val books = if (scope.isEmpty()) {
+            all
+        } else {
+            // Falls back to the whole library rather than showing nothing: a scope being typed is
+            // half-written most of the time, and an empty preview mid-word reads as a broken rule.
+            all.filter { it.id.startsWith("$scope/", ignoreCase = true) || it.id.equals(scope, true) }
+                .ifEmpty { all }
+        }
         val previews = books.map { Preview(it.id, it, apply(it, templates)) }
         val changed = previews.filterNot { it.before.sameFieldsAs(it.after) }
         // Changed books first, then unchanged ones to fill the sample out — and SPREAD across the

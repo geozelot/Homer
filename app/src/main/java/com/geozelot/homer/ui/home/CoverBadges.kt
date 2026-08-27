@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.ui.theme.Parchment
-import com.geozelot.homer.ui.theme.Sage
 import com.geozelot.homer.ui.theme.Studio
 
 /**
@@ -47,7 +46,19 @@ import com.geozelot.homer.ui.theme.Studio
  */
 
 /** Which edge-corner an area is cut to. */
-internal enum class CoverCorner { TOP_START, TOP_END, BOTTOM_END }
+internal enum class CoverCorner {
+    TOP_START,
+    TOP_END,
+    BOTTOM_START,
+    BOTTOM_END,
+    ;
+
+    /** Whether this corner hangs from the cover's top edge or stands on its bottom one. */
+    internal val atTop: Boolean get() = this == TOP_START || this == TOP_END
+
+    /** Whether the slanted side faces left — true when the badge is anchored to the right edge. */
+    internal val slantsLeft: Boolean get() = this == TOP_END || this == BOTTOM_END
+}
 
 /** How far the slanted inner edge leans, as a fraction of the area's height. */
 private const val SLANT = 0.55f
@@ -58,33 +69,32 @@ private val BadgeScrim = Studio.copy(alpha = 0.78f)
 /**
  * A quadrilateral with two sides on the cover's edges and one slanted side facing the artwork.
  *
- * Built per corner rather than rotated, because the slant always leans the same way relative to the
- * corner it anchors to — a rotation would send it the wrong way on two of the three.
+ * **The long edge always lies along the cover's border.** A badge hanging from the top edge is
+ * widest at the top and tapers downward; one standing on the bottom edge is widest at the bottom and
+ * tapers upward. Get that backwards and the shape reads as peeling away from the edge it is supposed
+ * to be part of — which is what the top-right and bottom-right ones were doing, both tapering the
+ * wrong way because the geometry was written per corner by hand instead of derived from it.
+ *
+ * The slant then leans away from the corner it anchors to: leftward for a badge on the right edge,
+ * rightward for one on the left.
  */
 private fun cutShape(corner: CoverCorner): Shape = GenericShape { size, _ ->
     val slant = size.height * SLANT
-    when (corner) {
-        // Anchored top-left; the inner edge falls away to the right as it descends.
-        CoverCorner.TOP_START -> {
-            moveTo(0f, 0f)
-            lineTo(size.width, 0f)
-            lineTo(size.width - slant, size.height)
-            lineTo(0f, size.height)
-        }
-        // Anchored top-right; the inner edge falls away to the left as it descends.
-        CoverCorner.TOP_END -> {
-            moveTo(slant, 0f)
-            lineTo(size.width, 0f)
-            lineTo(size.width, size.height)
-            lineTo(0f, size.height)
-        }
-        // Anchored bottom-right; the inner edge leans out as it descends to the cover's foot.
-        CoverCorner.BOTTOM_END -> {
-            moveTo(0f, 0f)
-            lineTo(size.width, 0f)
-            lineTo(size.width, size.height)
-            lineTo(slant, size.height)
-        }
+    val w = size.width
+    val h = size.height
+    // The inset is on the edge OPPOSITE the border the badge hangs from, on the slanted side.
+    if (corner.atTop) {
+        // Full width along the top; the bottom edge is pulled in on the slanted side.
+        moveTo(0f, 0f)
+        lineTo(w, 0f)
+        lineTo(if (corner.slantsLeft) w else w - slant, h)
+        lineTo(if (corner.slantsLeft) slant else 0f, h)
+    } else {
+        // Full width along the bottom; the top edge is pulled in on the slanted side.
+        moveTo(if (corner.slantsLeft) slant else 0f, 0f)
+        lineTo(if (corner.slantsLeft) w else w - slant, 0f)
+        lineTo(w, h)
+        lineTo(0f, h)
     }
     close()
 }
@@ -100,46 +110,82 @@ private fun cutShape(corner: CoverCorner): Shape = GenericShape { size, _ ->
 internal fun CoverBadge(
     corner: CoverCorner,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // The padding is asymmetric on purpose: the slanted side needs room the square sides do not,
-    // or the content collides with the diagonal.
-    val slantPad = 11.dp
+    // Asymmetric on purpose. The slanted side eats into the box as it crosses, so content set the
+    // same distance from both sides collides with the diagonal on one of them — which is what had
+    // the duration touching its own edge, since the bottom-right badge was getting no slant
+    // allowance at all. Derived from where the slant IS rather than listed per corner.
+    val slantPad = if (compact) 9.dp else 13.dp
+    val flatPad = if (compact) 5.dp else 8.dp
     Box(
         modifier = modifier
             .clip(cutShape(corner))
             .background(BadgeScrim)
             .padding(
-                start = if (corner == CoverCorner.TOP_END) slantPad else 7.dp,
-                end = if (corner == CoverCorner.TOP_START) slantPad else 7.dp,
-                top = 4.dp,
-                bottom = 4.dp,
+                start = if (corner.slantsLeft) slantPad else flatPad,
+                end = if (corner.slantsLeft) flatPad else slantPad,
+                top = if (compact) 3.dp else 4.dp,
+                bottom = if (compact) 3.dp else 4.dp,
             ),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp),
+        ) {
             content()
         }
     }
 }
 
-/** A glyph sized for cover furniture. */
+/**
+ * A glyph sized for cover furniture.
+ *
+ * Everything is [Parchment] — the same tone the interface's own headings and primary text use.
+ * Colour-coding the offline mark green made it the loudest thing on a cover that is already carrying
+ * artwork, and the corners read as one set of markings rather than a traffic light now that they
+ * share a tint. Meaning is carried by the glyph.
+ */
 @Composable
-internal fun BadgeIcon(icon: ImageVector, tint: Color = Parchment, size: Dp = 13.dp) {
-    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size))
+internal fun BadgeIcon(icon: ImageVector, tint: Color = Parchment, size: Dp? = null, compact: Boolean = false) {
+    Icon(
+        icon,
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier.size(size ?: if (compact) 11.dp else 15.dp),
+    )
 }
 
 /** A short string sized for cover furniture — a duration, a volume count. */
 @Composable
-internal fun BadgeText(text: String, color: Color = Parchment) {
-    Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 13.sp)
+internal fun BadgeText(text: String, color: Color = Parchment, compact: Boolean = false) {
+    Text(
+        text,
+        color = color,
+        fontSize = if (compact) 9.5.sp else 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = if (compact) 11.sp else 14.sp,
+    )
 }
 
-/** "Downloaded", in the one colour Homer uses to mean it. */
+/**
+ * "Downloaded".
+ *
+ * `OfflinePin` — a tick inside a ring — rather than `DownloadDone`'s arrow-over-a-line. At this size
+ * the arrow reads as an action still to be taken, which is the opposite of what it means; a sealed
+ * tick reads as a state already reached.
+ */
 @Composable
-internal fun OfflineBadge(corner: CoverCorner, count: String? = null, modifier: Modifier = Modifier) {
-    CoverBadge(corner, modifier) {
-        BadgeIcon(Icons.Filled.DownloadDone, tint = Sage)
-        count?.let { BadgeText(it, color = Sage) }
+internal fun OfflineBadge(
+    corner: CoverCorner,
+    count: String? = null,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    CoverBadge(corner, modifier, compact) {
+        BadgeIcon(Icons.Filled.OfflinePin, compact = compact)
+        count?.let { BadgeText(it, compact = compact) }
     }
 }
 
@@ -156,9 +202,21 @@ internal fun VolumeCountBadge(
     isCollection: Boolean = false,
     corner: CoverCorner = CoverCorner.TOP_START,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
-    CoverBadge(corner, modifier) {
-        BadgeIcon(if (isCollection) Icons.Filled.LibraryBooks else Icons.Filled.MenuBook)
-        BadgeText(count.toString())
+    CoverBadge(corner, modifier, compact) {
+        BadgeIcon(if (isCollection) Icons.Filled.LibraryBooks else Icons.Filled.MenuBook, compact = compact)
+        BadgeText(count.toString(), compact = compact)
     }
+}
+
+/** How long a book or a whole shelf runs. */
+@Composable
+internal fun DurationBadge(
+    text: String,
+    corner: CoverCorner = CoverCorner.BOTTOM_END,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    CoverBadge(corner, modifier, compact) { BadgeText(text, compact = compact) }
 }

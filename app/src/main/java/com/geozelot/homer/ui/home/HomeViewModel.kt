@@ -1201,15 +1201,28 @@ class HomeViewModel @Inject constructor(
      * and writes nothing. This is the pass that has to exist before Apply is offered at all: a
      * silent mis-parse across a subtree is far worse than no feature.
      */
+    /** Which draft row is being edited, so the preview can show the books IT is about. */
+    private val _templateFocus = MutableStateFlow<Int?>(null)
+    val templateFocus: StateFlow<Int?> = _templateFocus.asStateFlow()
+
+    fun focusTemplateRow(index: Int?) {
+        _templateFocus.value = index
+    }
+
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val templatePreview: StateFlow<List<TemplateApplier.Preview>> =
-        templateDraft
+        combine(templateDraft, _templateFocus) { lines, focus -> lines to focus }
             // Settles before it reads. Mapped straight off the draft it ran a full `SELECT * FROM
             // books` and re-parsed every row on each character typed, and the pattern field is
             // exactly where somebody types slowly and watches — so the preview lagged the typing on
             // the libraries big enough to need it.
             .debounce(PREVIEW_DEBOUNCE_MS)
-            .mapLatest { lines -> templateApplier.preview(TemplateApplier.templatesFrom(lines)) }
+            .mapLatest { (lines, focus) ->
+                val scope = focus?.let { lines.getOrNull(it) }
+                    ?.takeIf { '\t' in it }
+                    ?.substringBefore('\t')
+                templateApplier.preview(TemplateApplier.templatesFrom(lines), focus = scope)
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**

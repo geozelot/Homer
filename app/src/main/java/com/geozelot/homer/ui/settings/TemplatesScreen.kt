@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +76,7 @@ fun TemplatesScreen(
 
     // Which row's folder is being picked, by index — null when the picker is closed.
     var picking by remember { mutableStateOf<Int?>(null) }
+    val focus by viewModel.templateFocus.collectAsStateWithLifecycle()
 
     picking?.let { index ->
         val line = draft.getOrNull(index).orEmpty()
@@ -102,6 +104,8 @@ fun TemplatesScreen(
             TemplateRow(
                 scope = scope,
                 pattern = pattern,
+                focused = focus == index,
+                onFocus = { viewModel.focusTemplateRow(if (it) index else null) },
                 onBrowse = { picking = index },
                 onEdit = { newScope, newPattern ->
                     val joined = if (newScope.isBlank()) newPattern else "${newScope.trim('/')}\t$newPattern"
@@ -130,7 +134,16 @@ fun TemplatesScreen(
         if (preview.isEmpty()) {
             SettingsExplanation(stringResource(R.string.set_templates_preview_empty))
         } else {
-            SettingsExplanation(stringResource(R.string.set_templates_preview_lead))
+            SettingsExplanation(
+                if (focus != null && draft.getOrNull(focus!!)?.contains('\t') == true) {
+                    stringResource(
+                        R.string.set_templates_preview_scoped,
+                        draft[focus!!].substringBefore('\t'),
+                    )
+                } else {
+                    stringResource(R.string.set_templates_preview_lead)
+                },
+            )
             preview.forEach { row -> PreviewRow(row) }
         }
 
@@ -168,6 +181,8 @@ fun TemplatesScreen(
 private fun TemplateRow(
     scope: String,
     pattern: String,
+    focused: Boolean,
+    onFocus: (Boolean) -> Unit,
     onBrowse: () -> Unit,
     onEdit: (scope: String, pattern: String) -> Unit,
     onRemove: () -> Unit,
@@ -209,7 +224,9 @@ private fun TemplateRow(
                     }
                 },
                 textStyle = mono,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (it.isFocused) onFocus(true) },
             )
             OutlinedTextField(
                 value = pattern,
@@ -220,7 +237,10 @@ private fun TemplateRow(
                     Text("{author}/{title}", color = Faint, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                 },
                 textStyle = mono,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .onFocusChanged { if (it.isFocused) onFocus(true) },
             )
         }
         IconButton(onClick = onRemove) {
