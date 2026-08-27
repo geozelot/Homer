@@ -329,7 +329,6 @@
     <string name="lib_lengths_missing">%1$d ohne Länge · tausende kleine Anfragen, am besten über WLAN</string>
     <string name="lib_corrections_none">Noch nichts korrigiert</string>
     <string name="lib_corrections_local">%1$s · bleibt auf diesem Gerät, weil das Teilen aus ist</string>
-    <string name="lib_corrections_shared">%1$s · geteilt mit allen, die diesen Ordner lesen</string>
     <string name="lib_crawl_this_device">Letzter vollständiger Durchlauf %1$s, von diesem Gerät</string>
     <string name="lib_crawl_named_device">Letzter vollständiger Durchlauf %1$s, von %2$s</string>
     <string name="lib_crawl_other_device">Letzter vollständiger Durchlauf %1$s, von einem anderen Gerät</string>
@@ -565,4 +564,6 @@
     <string name="folder_picker_leaf">Keine Ordner darin.</string>
     <string name="folder_picker_use">Diesen Ordner verwenden</string>
     <string name="set_templates_preview_scoped">Bücher unter „%1$s“, für die das bearbeitete Muster gilt. Bis zum Anwenden wird nichts geschrieben.</string>
+    <string name="lib_corrections_all_shared">%1$s · alles geteilt</string>
+    <string name="lib_corrections_pending">%1$s warten auf das Teilen</string>
 </resources>

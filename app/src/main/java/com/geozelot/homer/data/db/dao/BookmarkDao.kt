@@ -29,6 +29,17 @@ interface BookmarkDao {
     @Query("SELECT * FROM bookmarks WHERE kind = 'cut' ORDER BY bookId, positionMs")
     suspend fun allCuts(): List<BookmarkEntity>
 
+    /**
+     * Chapter cuts made since [since]. Cuts ride corrections.json, so a new one is unpublished work.
+     *
+     * Keyed on `createdAt`, which is all a cut has — so a cut DELETED since the last publish is not
+     * counted, and the row will read as shared when one edit is in fact outstanding. Publishing
+     * anyway is one small upload, and the alternative is a timestamp on a table that has never
+     * needed one.
+     */
+    @Query("SELECT COUNT(*) FROM bookmarks WHERE kind = 'cut' AND createdAt > :since")
+    fun observeCutsSince(since: Long): Flow<Int>
+
     @Insert
     suspend fun insert(bookmark: BookmarkEntity): Long
 

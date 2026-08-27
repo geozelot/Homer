@@ -345,7 +345,6 @@
     <string name="lib_lengths_missing">%1$d without a length · thousands of small requests, best on Wi\u2011Fi</string>
     <string name="lib_corrections_none">Nothing corrected yet</string>
     <string name="lib_corrections_local">%1$s · kept on this device, because sharing is off</string>
-    <string name="lib_corrections_shared">%1$s · shared with anyone reading this folder</string>
     <!-- The crawl marker, shown because it is what authorises deletion: a book only disappears on
          the word of a complete crawl that post-dates it. -->
     <string name="lib_crawl_this_device">Last full crawl %1$s, from this device</string>
@@ -588,4 +587,6 @@
     <string name="folder_picker_leaf">No folders inside this one.</string>
     <string name="folder_picker_use">Use this folder</string>
     <string name="set_templates_preview_scoped">Books under “%1$s”, which the pattern you are editing applies to. Nothing is written until you apply.</string>
+    <string name="lib_corrections_all_shared">%1$s · everything is shared</string>
+    <string name="lib_corrections_pending">%1$s waiting to be shared</string>
 </resources>

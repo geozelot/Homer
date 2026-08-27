@@ -33,6 +33,23 @@ interface BookOverrideDao {
     )
     fun observeCorrectionCount(): Flow<Int>
 
+    /**
+     * Corrections edited since [since] — the ones the shared index has not been told about.
+     *
+     * The same field test as the count above, because a row of all-nulls is a CLEARED correction
+     * kept as a tombstone rather than an edit anybody is waiting to see published. Note this cannot
+     * see a correction that was cleared after the last publish: clearing writes a fresh timestamp,
+     * so it counts, but a row DELETED outright would not — nothing deletes them, which is why the
+     * tombstone exists.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM book_overrides WHERE updatedAt > :since AND (" +
+            "title IS NOT NULL OR author IS NOT NULL OR series IS NOT NULL OR seriesIndex IS NOT NULL " +
+            "OR collection IS NOT NULL OR collectionIndex IS NOT NULL OR genre IS NOT NULL " +
+            "OR language IS NOT NULL OR tags IS NOT NULL)",
+    )
+    fun observeUnpublishedCount(since: Long): Flow<Int>
+
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     suspend fun findById(bookId: String): BookOverrideEntity?
 

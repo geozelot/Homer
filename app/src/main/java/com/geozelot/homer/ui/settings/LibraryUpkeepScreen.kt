@@ -82,6 +82,7 @@ fun LibraryUpkeepScreen(
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
     val corrections by viewModel.correctionCount.collectAsStateWithLifecycle()
+    val unpublished by viewModel.unpublishedCorrections.collectAsStateWithLifecycle()
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val lastFullCrawl by viewModel.lastFullCrawl.collectAsStateWithLifecycle()
 
@@ -139,6 +140,7 @@ fun LibraryUpkeepScreen(
             CorrectionsRow(
                 queued = IndexPass.CORRECTIONS in queued,
                 count = corrections,
+                unpublished = unpublished,
                 shared = sharedIndex,
                 canPublish = libraryWritable,
                 onPublish = viewModel::publishCorrections,
@@ -381,6 +383,8 @@ private fun LengthsRow(
 private fun CorrectionsRow(
     queued: Boolean,
     count: Int,
+    /** Of those, the ones the shared index has not been told about — what Publish is FOR. */
+    unpublished: Int,
     shared: Boolean,
     canPublish: Boolean,
     onPublish: () -> Unit,
@@ -392,12 +396,21 @@ private fun CorrectionsRow(
             queued -> stringResource(R.string.sync_pass_queued)
             count == 0 -> stringResource(R.string.lib_corrections_none)
             !shared || !canPublish -> stringResource(R.string.lib_corrections_local, counted)
-            else -> stringResource(R.string.lib_corrections_shared, counted)
+            // The state that was missing. Corrections publish themselves a few seconds after an
+            // edit, so "all shared" is the normal resting state — and while the row could only ever
+            // say "N corrections" with a live button, a working publish was indistinguishable from
+            // one silently failing.
+            unpublished == 0 -> stringResource(R.string.lib_corrections_all_shared, counted)
+            else -> stringResource(
+                R.string.lib_corrections_pending,
+                pluralStringResource(R.plurals.sync_books_count, unpublished, unpublished),
+            )
         },
         action = stringResource(R.string.lib_action_publish),
-        // Corrections are published on their own a moment after an edit; this row is for saying so,
-        // and for the case where that attempt was made with no connection.
-        actionEnabled = !queued && count > 0 && shared && canPublish,
+        // Enabled only when there is something to publish. Edits go up on their own a few seconds
+        // after they are made, so this is for the case where that attempt happened with no
+        // connection — not a button somebody should feel they have to press after every edit.
+        actionEnabled = !queued && unpublished > 0 && shared && canPublish,
         busy = queued,
         onAction = onPublish,
     )

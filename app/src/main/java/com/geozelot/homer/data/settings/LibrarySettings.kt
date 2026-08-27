@@ -171,6 +171,20 @@ class LibrarySettings @Inject constructor(
         }
     }
 
+    /**
+     * When corrections were last successfully published to the shared index.
+     *
+     * What separates "there are corrections" from "there are corrections nobody else has seen". The
+     * count of corrections never falls — a published edit is still an edit — so keying the Publish
+     * control on it left the control looking permanently pending however many times it had run.
+     */
+    val correctionsPublishedAt: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_CORRECTIONS_PUBLISHED_AT] ?: 0L }
+
+    suspend fun setCorrectionsPublishedAt(value: Long) {
+        context.settingsDataStore.edit { it[KEY_CORRECTIONS_PUBLISHED_AT] = value }
+    }
+
     /** Whether series are drawn stacked or flat: "stacked" | "flat". Independent of shelving. */
     val seriesMode: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_SERIES_MODE] ?: "stacked" }
@@ -301,6 +315,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SERIES_MODE = stringPreferencesKey("library_series_mode")
         val KEY_PATH_TEMPLATES = stringPreferencesKey("library_path_templates")
         val KEY_PATH_TEMPLATES_AT = longPreferencesKey("library_path_templates_at")
+        val KEY_CORRECTIONS_PUBLISHED_AT = longPreferencesKey("corrections_published_at")
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")

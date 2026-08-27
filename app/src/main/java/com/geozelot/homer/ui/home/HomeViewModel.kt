@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -788,6 +789,22 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
+     * Corrections the shared index has not been told about — overrides and chapter cuts together.
+     *
+     * The count of corrections never falls, because a published edit is still an edit. Keying the
+     * Publish control on it meant the control read as permanently pending however many times it had
+     * run, which is indistinguishable from a publish that is silently failing.
+     */
+    val unpublishedCorrections: StateFlow<Int> = librarySettings.correctionsPublishedAt
+        .flatMapLatest { since ->
+            combine(
+                bookOverrideDao.observeUnpublishedCount(since),
+                bookmarkDao.observeCutsSince(since),
+            ) { edits, cuts -> edits + cuts }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /**
      * The last crawl that saw the whole tree, and whose it was.
      *
      * On the screen because it is what authorises deletion — until one has run, a book removed on
@@ -1269,13 +1286,27 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Stores the draft and re-derives every book under it. */
+    /**
+     * Stores the draft, re-derives every book under it, and shares both halves.
+     *
+     * BOTH halves, because applying a template changes two different things that live in two
+     * different facets: the patterns themselves ride `corrections.json`, and the fields they
+     * re-derived ride `structure`. Publishing only the patterns would leave every other device to
+     * work the books out again for itself — and a reader device never re-derives at all, so for the
+     * people the library is shared with the fix would simply not arrive.
+     */
     fun applyTemplates() {
         viewModelScope.launch {
             val lines = templateDraft.value
             librarySettings.setPathTemplates(lines)
-            templateApplier.applyAll(TemplateApplier.templatesFrom(lines))
+            val result = templateApplier.applyAll(TemplateApplier.templatesFrom(lines))
             _templateDraft.value = null
+            // The patterns, coalesced like any other edit.
+            libraryIndex.publishEdits()
+            // …and the re-derived books, but only if any actually changed: `push()` uploads the
+            // whole structure facet, which is not a thing to do because somebody opened the editor
+            // and pressed Apply on an unchanged pattern.
+            if (result.changed > 0) libraryIndex.push()
         }
     }
 

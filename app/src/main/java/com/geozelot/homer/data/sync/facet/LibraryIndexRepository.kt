@@ -176,6 +176,10 @@ class LibraryIndexRepository @Inject constructor(
         if (!librarySettings.sharedCatalogEnabled.first()) return true
         if (!networkMonitor.isOnline() || !canPublish()) return false
         val deviceId = deviceIdentity.id()
+        // Stamped from BEFORE the local state is read, not after the upload. An edit made while the
+        // request is in flight would otherwise be marked as published by an upload that never
+        // contained it, and would sit there unshared with nothing saying so.
+        val capturedAt = System.currentTimeMillis()
         // Cuts join the overrides here: a book can carry a hand-made chapter list and no corrected
         // field at all, so iterating the override table alone would publish neither.
         val cuts = bookmarkDao.allCuts().groupBy { it.bookId }
@@ -186,12 +190,16 @@ class LibraryIndexRepository @Inject constructor(
             }.toMap(),
             templates = localTemplateRules(deviceId),
         )
-        report(
-            LibraryFacets.CORRECTIONS_FILE,
-            store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
-                FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
-            },
-        )
+        val result = store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+            FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
+        }
+        report(LibraryFacets.CORRECTIONS_FILE, result)
+        // Both of these mean the server now holds what this device knows: one wrote it, the other
+        // found it already there. The rest are failures or deferrals and must leave the mark alone,
+        // or the UI would claim everything is shared while it sits in a retry queue.
+        if (result is FacetStore.SaveResult.Written || result is FacetStore.SaveResult.AlreadyCurrent) {
+            librarySettings.setCorrectionsPublishedAt(capturedAt)
+        }
         return true
     }
 
@@ -563,6 +571,14 @@ class LibraryIndexRepository @Inject constructor(
         const val TAG = "HomerSync"
         const val COVERS_DIR = "covers"
         const val SQL_PARAM_CHUNK = 400
-        const val EDIT_PUBLISH_IDLE_MS = 30_000L
+        /**
+         * How long a burst of edits settles before it is published.
+         *
+         * Coalescing is the point — twenty edits in a row should be one upload, not twenty — but
+         * thirty seconds meant a SINGLE edit sat unshared long enough to look broken: you make it,
+         * open the library page, and the control still says there is work to do. Five seconds still
+         * folds a burst together and lands one edit while the reader is still looking at it.
+         */
+        const val EDIT_PUBLISH_IDLE_MS = 5_000L
     }
 }
