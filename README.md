@@ -152,9 +152,14 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.0**. Betas continue under the moving tag `v2.0.0-BETA`: that tag is replaced
-by each build rather than added to, so there is one beta release to follow and the APK name
-carries the actual build (`homer-2.0.0-BETA.55.apk`).
+Homer is at **2.0**, and **2.1 is in beta** under the moving tag `v2.1.0-BETA`. A moving tag is
+replaced by each build rather than added to, so there is one beta release to follow; the release
+title carries the actual build (`2.1.0-BETA.57`) while the APK keeps a stable name. In-app update
+checks only offer a pre-release to devices on the beta channel.
+
+2.1 reorganises the library: collections above series, a search box that also filters, path
+templates for folders that are not laid out `Author / Series / Book`, and a details card behind
+every book and shelf.
 
 2.0 reworks how the library is indexed and synced. Two things to know before updating from 1.x:
 
