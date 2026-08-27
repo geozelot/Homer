@@ -580,4 +580,7 @@
         <item quantity="one">%d book</item>
         <item quantity="other">%d books</item>
     </plurals>
+    <string name="details_reading_order">Order</string>
+    <string name="details_reading_order_yes">Numbered — can be read straight through</string>
+    <string name="details_reading_order_no">A grouping, with no order of its own</string>
 </resources>

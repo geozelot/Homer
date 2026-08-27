@@ -249,6 +249,20 @@ fun SeriesDetailsCard(
                         series.books.mapNotNull { it.series }.distinct()
                             .takeIf { it.isNotEmpty() }?.joinToString(" · "),
                     )
+                    // Rule two, said out loud: a collection carrying volume numbers can be read
+                    // straight through, and one without them is a grouping and nothing more. It is
+                    // the difference between Discworld and Star Wars Legends, and the shelf itself
+                    // cannot show it.
+                    Fact(
+                        stringResource(R.string.details_reading_order),
+                        stringResource(
+                            if (series.books.collectionHasReadingOrder()) {
+                                R.string.details_reading_order_yes
+                            } else {
+                                R.string.details_reading_order_no
+                            },
+                        ),
+                    )
                 }
                 Fact(
                     stringResource(R.string.details_genre),

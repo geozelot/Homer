@@ -557,4 +557,7 @@
         <item quantity="one">%d Buch</item>
         <item quantity="other">%d Bücher</item>
     </plurals>
+    <string name="details_reading_order">Reihenfolge</string>
+    <string name="details_reading_order_yes">Nummeriert — kann durchgelesen werden</string>
+    <string name="details_reading_order_no">Eine Gruppierung ohne eigene Reihenfolge</string>
 </resources>
