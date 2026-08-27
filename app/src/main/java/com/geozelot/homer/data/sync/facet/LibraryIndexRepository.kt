@@ -524,15 +524,30 @@ class LibraryIndexRepository @Inject constructor(
     private suspend fun adoptTemplates(corrections: CorrectionsFacet) {
         if (corrections.templates.isEmpty()) return
         val newest = corrections.templates.values.maxOfOrNull { it.editedAt } ?: return
-        if (newest <= librarySettings.pathTemplatesEditedAt.first()) return
-        val lines = corrections.templates.entries
+        val localAt = librarySettings.pathTemplatesEditedAt.first()
+        if (newest <= localAt) return
+
+        // Merged per SCOPE, not replaced wholesale. `corrections` here is the REMOTE file — pull
+        // reads it rather than merging it with what this device holds — so replacing the list would
+        // delete every template this device has that the server has never seen. Which is not a rare
+        // case: a read-only share user CANNOT publish, so their own patterns are never up there, and
+        // the maintainer's next edit would silently wipe them.
+        val local = librarySettings.pathTemplates.first().mapNotNull { ScopedTemplate.decode(it) }
+        val localByScope = local.groupBy { it.scope }
+        val merged = LinkedHashMap<String, List<String>>()
+        // Whatever is only here stays; the server has no opinion about a scope it has never held.
+        localByScope.forEach { (scope, group) -> merged[scope] = group.map { it.template.source } }
+        // …and a scope the server does hold wins, because it is the newer deliberate act.
+        corrections.templates.forEach { (scope, rule) -> merged[scope] = rule.patterns }
+
+        val lines = merged.entries
             // Narrowest scope first, so a folder's own pattern is tried before a library-wide one.
             .sortedByDescending { it.key.length }
-            .flatMap { (scope, rule) ->
-                rule.patterns.map { if (scope.isBlank()) it else "$scope\t$it" }
+            .flatMap { (scope, patterns) ->
+                patterns.map { if (scope.isBlank()) it else "$scope\t$it" }
             }
         librarySettings.setPathTemplates(lines, editedAt = newest)
-        Log.i(TAG, "adopted ${lines.size} path template(s) from the shared index")
+        Log.i(TAG, "adopted templates: ${corrections.templates.size} shared scope(s), ${lines.size} pattern(s) in force")
     }
 
     private fun <T> FacetStore.Load<T>.valueOr(empty: T): T = (this as? FacetStore.Load.Present)?.value ?: empty

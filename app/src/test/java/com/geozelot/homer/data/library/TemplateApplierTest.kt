@@ -213,4 +213,36 @@ class TemplateApplierTest {
         assertFalse('\t' in t.encode())
         assertEquals("", ScopedTemplate.decode(t.encode())?.scope)
     }
+
+    // ── what a re-derive would write ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `a changed book gets a fresh updatedAt`() {
+        // The structure facet merges on this timestamp. Without the bump a template fix loses every
+        // tie against another device's stale copy and never arrives — and a read-only device, which
+        // never crawls and so never re-derives for itself, would stay wrong for ever.
+        val before = book("Pratchett/Sourcery", title = "wrong").copy(updatedAt = 1_000L)
+        val writes = TemplateApplier.planWrites(listOf(before), templates("{author}/{title}"), now = 9_000L)
+        assertEquals(1, writes.size)
+        assertEquals(9_000L, writes.single().updatedAt)
+        assertEquals("Sourcery", writes.single().title)
+    }
+
+    @Test
+    fun `an unchanged book is not written at all`() {
+        // Not "written with a new stamp" — left out, or a library of three hundred republishes in
+        // full every time one pattern is adjusted.
+        val same = book("Pratchett/Sourcery", title = "Sourcery", author = "Pratchett").copy(updatedAt = 1_000L)
+        assertTrue(TemplateApplier.planWrites(listOf(same), templates("{author}/{title}"), now = 9_000L).isEmpty())
+    }
+
+    @Test
+    fun `only the changed books are written`() {
+        val books = listOf(
+            book("Pratchett/Sourcery", title = "Sourcery", author = "Pratchett"),
+            book("Gaiman/Neverwhere", title = "wrong", author = "Gaiman"),
+        )
+        val writes = TemplateApplier.planWrites(books, templates("{author}/{title}"), now = 9_000L)
+        assertEquals(listOf("Gaiman/Neverwhere"), writes.map { it.id })
+    }
 }

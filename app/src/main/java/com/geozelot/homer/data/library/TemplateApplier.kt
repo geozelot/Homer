@@ -67,9 +67,7 @@ class TemplateApplier @Inject constructor(
     suspend fun applyAll(templates: List<ScopedTemplate> = emptyList()): Result {
         val active = templates.ifEmpty { activeTemplates() }
         val books = bookDao.getAll()
-        val updated = books.mapNotNull { book ->
-            apply(book, active).takeUnless { book.sameFieldsAs(it) }
-        }
+        val updated = planWrites(books, active, System.currentTimeMillis())
         // Chunked rather than written in one statement: a library can hold thousands of books and
         // a single transaction over all of them is a long lock on the table the shelf reads from.
         updated.chunked(WRITE_CHUNK).forEach { bookDao.upsert(it) }
@@ -80,6 +78,29 @@ class TemplateApplier @Inject constructor(
     companion object {
         private const val TAG = "HomerTemplate"
         private const val WRITE_CHUNK = 200
+
+        /**
+         * Which books a re-derive would write, and what they would become.
+         *
+         * Pure, and separated out because of the one line in it that matters: `updatedAt` moves on
+         * the books that CHANGED, and only those.
+         *
+         * The structure facet merges on that timestamp. Leaving it alone meant a template fix lost
+         * every tie against another device's stale copy and simply never arrived — invisibly, since
+         * the device that applied it saw the right answer all along. A maintainer re-derives on its
+         * next crawl and recovers; a reader never crawls, so for the people this library is shared
+         * with it would have stayed wrong for ever.
+         *
+         * Unchanged books are left out entirely rather than rewritten with a new stamp, or a library
+         * of three hundred would republish in full every time somebody adjusted one pattern.
+         */
+        fun planWrites(
+            books: List<BookEntity>,
+            templates: List<ScopedTemplate>,
+            now: Long,
+        ): List<BookEntity> = books.mapNotNull { book ->
+            apply(book, templates).takeUnless { book.sameFieldsAs(it) }?.copy(updatedAt = now)
+        }
 
         /** [raw] lines decoded, dropping the ones that do not compile — then the defaults behind them. */
         fun templatesFrom(raw: List<String>): List<ScopedTemplate> =

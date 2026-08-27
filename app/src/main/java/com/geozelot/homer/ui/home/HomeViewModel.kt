@@ -50,14 +50,18 @@ import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -410,41 +414,51 @@ class HomeViewModel @Inject constructor(
      * saved value naming a language nobody had any more from silently emptying the shelf. Held for
      * the process and cleared with it, that whole class of problem does not arise.
      */
-    private val _filter = MutableStateFlow(LibraryFilter())
-    val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
+    // Held as two flows rather than one, because the TEXT half feeds a fully controlled TextField
+    // and therefore has to update synchronously with the keystroke that caused it. Derived through
+    // `map`/`stateIn` it went round a coroutine hop, and a controlled field whose value comes back
+    // a beat late drops characters and jumps the cursor under fast or gesture typing. The tokens
+    // have no such constraint, so only the text needs its own flow.
+    private val _filterTokens = MutableStateFlow<List<FilterToken>>(emptyList())
+    private val _filterText = MutableStateFlow("")
 
-    /** The free-text half of [filter], for the input box's own value. */
-    val searchQuery: StateFlow<String> = _filter.map { it.text }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+    val filter: StateFlow<LibraryFilter> =
+        combine(_filterTokens, _filterText) { tokens, text -> LibraryFilter(tokens, text) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryFilter())
+
+    /** The free-text half of [filter], for the input box's own value. Synchronous, deliberately. */
+    val searchQuery: StateFlow<String> = _filterText.asStateFlow()
 
     /** What the box would offer for what is typed, read off the loaded shelf rather than an index. */
     val suggestions: StateFlow<List<FilterSuggestion>> =
-        combine(books, _filter) { list, filter -> suggest(list, filter.text, filter.tokens) }
+        combine(books, _filterText, _filterTokens) { list, text, tokens -> suggest(list, text, tokens) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** How many books the filter leaves, and how many there are — the "41 of 313" line. */
     val filterCount: StateFlow<Pair<Int, Int>> =
-        combine(books, _filter) { list, filter ->
-            (if (filter.isEmpty) list.size else list.count { filter.matches(it) }) to list.size
+        combine(books, filter) { list, active ->
+            (if (active.isEmpty) list.size else list.count { active.matches(it) }) to list.size
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     fun addFilterToken(token: FilterToken) {
         // Committing a suggestion consumes the text that produced it: leaving it behind would go on
         // narrowing the very shelf the new pill just selected.
-        _filter.value = _filter.value.plus(token).withText("")
+        if (token !in _filterTokens.value) _filterTokens.value = _filterTokens.value + token
+        _filterText.value = ""
     }
 
     fun removeFilterToken(token: FilterToken) {
-        _filter.value = _filter.value.minus(token)
+        _filterTokens.value = _filterTokens.value - token
     }
 
     fun clearFilter() {
-        _filter.value = LibraryFilter()
+        _filterTokens.value = emptyList()
+        _filterText.value = ""
     }
 
     /** Library list, filtered by [filter], ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, _filter, sortMode, shelfMode, seriesMode) { list, filter, sort, shelving, series ->
+        combine(books, filter, sortMode, shelfMode, seriesMode) { list, filter, sort, shelving, series ->
             // Filtering runs BEFORE the grouping: it changes which books are on which shelf, so a
             // shelf that loses its last book has to disappear rather than stand there empty.
             val filtered = if (filter.isEmpty) list else list.filter { filter.matches(it) }
@@ -901,7 +915,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSearchQuery(query: String) {
-        _filter.value = _filter.value.withText(query)
+        _filterText.value = query
     }
 
     /** Saves metadata corrections + hidden flag; blank fields revert to detection. */
@@ -1121,10 +1135,15 @@ class HomeViewModel @Inject constructor(
      */
     val hiddenBooks: StateFlow<List<WorklistBook>> =
         combine(libraryRepository.books, bookOverrideDao.observeAll()) { books, overrides ->
-            val hidden = overrides.filter { it.hidden }.map { it.bookId }.toSet()
-            books.filter { it.id in hidden }
-                .sortedBy { it.title.lowercase() }
-                .map { WorklistBook(id = it.id, title = it.title, author = it.author) }
+            val byBook = overrides.associateBy { it.bookId }
+            books.mapNotNull { book ->
+                val override = byBook[book.id]?.takeIf { it.hidden } ?: return@mapNotNull null
+                // Through the override layer, like every other screen. Listing the DETECTED title
+                // meant a book somebody had renamed appeared under the name they replaced — in the
+                // one list whose entire job is recognising it.
+                val effective = book.applyOverride(override)
+                WorklistBook(id = effective.id, title = effective.title, author = effective.author)
+            }.sortedBy { it.title.lowercase() }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -1135,13 +1154,17 @@ class HomeViewModel @Inject constructor(
      * Keyed on the AUTHOR being absent, because that is the field every conventional layout supplies
      * and its absence means no pattern matched anything useful.
      */
-    val undetectedBooks: StateFlow<List<WorklistBook>> = books
-        .map { list ->
-            list.filter { it.author.isNullOrBlank() }
+    val undetectedBooks: StateFlow<List<WorklistBook>> =
+        // Off the raw list and the override table rather than off `books`, which drops hidden books
+        // unless the shelf-wide switch is on. Somebody hides a badly-parsed book BECAUSE it looks
+        // broken, and it would then be missing from the worklist built to find exactly those.
+        combine(libraryRepository.books, bookOverrideDao.observeAll()) { books, overrides ->
+            val byBook = overrides.associateBy { it.bookId }
+            books.map { it.applyOverride(byBook[it.id]) }
+                .filter { it.author.isNullOrBlank() }
                 .sortedBy { it.id.lowercase() }
                 .map { WorklistBook(id = it.id, title = it.title, author = it.author) }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Unhides a book from the review list. */
     fun unhide(bookId: String) {
@@ -1176,9 +1199,15 @@ class HomeViewModel @Inject constructor(
      * and writes nothing. This is the pass that has to exist before Apply is offered at all: a
      * silent mis-parse across a subtree is far worse than no feature.
      */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val templatePreview: StateFlow<List<TemplateApplier.Preview>> =
         templateDraft
-            .map { lines -> templateApplier.preview(TemplateApplier.templatesFrom(lines)) }
+            // Settles before it reads. Mapped straight off the draft it ran a full `SELECT * FROM
+            // books` and re-parsed every row on each character typed, and the pattern field is
+            // exactly where somebody types slowly and watches — so the preview lagged the typing on
+            // the libraries big enough to need it.
+            .debounce(PREVIEW_DEBOUNCE_MS)
+            .mapLatest { lines -> templateApplier.preview(TemplateApplier.templatesFrom(lines)) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setTemplateDraft(lines: List<String>) {
@@ -1200,15 +1229,17 @@ class HomeViewModel @Inject constructor(
     fun seedTemplateFor(bookId: String) {
         viewModelScope.launch {
             val scope = bookId.trim('/').substringBeforeLast('/', "")
-            val current = ScopedTemplate.parseFirst(bookId, templateApplier.activeTemplates())
-            // Whichever template matched is the one to start from; with nothing matching, the
-            // conventional shape for a path of this depth is the least surprising blank slate.
-            val shape = ScopedTemplate.DEFAULTS.firstOrNull { it.parse(bookId) != null }?.template?.source
+            // The pattern actually IN FORCE for this book, which is the one that needs changing —
+            // the user's own if one matches, and only then the conventional default. Seeding from
+            // DEFAULTS regardless would hand somebody who already has a pattern for this folder a
+            // different line to edit, and adding it would leave two competing rules for one folder.
+            val active = templateApplier.activeTemplates()
+            val shape = active.firstOrNull { it.parse(bookId) != null }?.template?.source
                 ?: "{author}/{title}"
             val seeded = if (scope.isBlank()) shape else "$scope\t$shape"
             val existing = templateDraft.value
             _templateDraft.value = if (seeded in existing) existing else listOf(seeded) + existing
-            Log.i(TAG_STORAGE, "seeded a template for '$scope' from ${current?.size ?: 0} matched field(s)")
+            Log.i(TAG_STORAGE, "seeded a template for '$scope' from '$shape'")
         }
     }
 
@@ -1265,6 +1296,9 @@ class HomeViewModel @Inject constructor(
         const val DISCOVERY_TTL_MS = 10 * 60_000L
         const val MIRROR_MARKER = "progress.json"
         const val TAG_STORAGE = "HomerStore"
+
+        /** How long the template editor settles before the preview reads the library. */
+        const val PREVIEW_DEBOUNCE_MS = 250L
     }
 }
 

@@ -31,23 +31,23 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,8 +59,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -95,7 +95,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.Locale
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -103,10 +102,10 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
-import com.geozelot.homer.ui.components.CustomNumberDialog
-import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.EditBookDialog
+import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -119,8 +118,11 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface2
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun PlayerScreen(
@@ -157,11 +159,22 @@ fun PlayerScreen(
     // Start playback when the screen opens for this book.
     LaunchedEffect(bookId) { viewModel.play(bookId) }
 
-    // …and then, if the library sent us to a bookmark, go there. Keyed on the position as well as
-    // the book so returning to the same book at a different bookmark seeks again, and applied
-    // after `play` rather than instead of it: the seek needs a prepared player to land on.
+    // …and then, if the library sent us to a bookmark, go there.
+    //
+    // Waiting for the controller to actually be on THIS book is the whole of it. `play` returns
+    // before the player is prepared — it hands the request to the connection and comes straight
+    // back — so seeking in the next breath issued a seek against a controller still loading, or
+    // still holding the PREVIOUS book, and it was simply dropped. The bookmark opened the book at
+    // its saved position instead, which is the one thing tapping a bookmark must not do.
+    //
+    // The timeout is a floor rather than a deadline: if readiness never reports, seek anyway and
+    // let the player do what it can with it, rather than silently abandoning the request.
     LaunchedEffect(bookId, startAtMs) {
-        if (startAtMs >= 0) viewModel.seekTo(startAtMs)
+        if (startAtMs < 0) return@LaunchedEffect
+        withTimeoutOrNull(SEEK_READY_TIMEOUT_MS) {
+            viewModel.state.first { it.bookId == bookId && it.durationMs > 0 }
+        }
+        viewModel.seekTo(startAtMs)
     }
 
     // The screen's three parts as slots, so the tall and short layouts below can arrange the very
@@ -686,6 +699,9 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
 }
 
 /** Outer size of the drawn circular arrow; the digits sit in the clear middle of it. */
+/** How long to wait for the player to be ready for a bookmarked book before seeking regardless. */
+private const val SEEK_READY_TIMEOUT_MS = 10_000L
+
 private val SeekGlyphSize = 38.dp
 
 /** Wide pill opening the chapter picker; sits below the title. */
