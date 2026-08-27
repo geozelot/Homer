@@ -50,7 +50,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -620,39 +619,6 @@ private fun TopBar(onSettings: () -> Unit) {
     }
 }
 
-@Composable
-private fun SearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onClose) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.home_cd_close_search), tint = Muted)
-        }
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = { Text(stringResource(R.string.home_search_placeholder)) },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Faint) },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_clear), tint = Muted)
-                    }
-                }
-            },
-            modifier = Modifier
-                .weight(1f)
-                .focusRequester(focusRequester),
-        )
-    }
-}
-
 /** "Homer" with an amber initial, in the serif voice. */
 @Composable
 private fun Wordmark(text: String) {
@@ -1083,7 +1049,13 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
  * wanted here is a chip somebody can type into.
  *
  * No back arrow. The row it lives in did not move to make space for it, so there is nothing to
- * navigate back FROM — closing it is the X, a tap on the library, or the back gesture.
+ * navigate back FROM — it is closed by the X on an empty field, a tap on the library, or the back
+ * gesture.
+ *
+ * The X is two-stage, which is what a text field's X means everywhere else: with something typed it
+ * empties the field and keeps it open, and only on an already-empty field does it close the search.
+ * A single-purpose X threw away three words because one of them had a typo. Its label follows what
+ * it will actually do, rather than saying "Clear" while closing.
  */
 @Composable
 private fun InlineSearchField(
@@ -1105,7 +1077,7 @@ private fun InlineSearchField(
                 .clip(RoundedCornerShape(8.dp))
                 .background(Surface2)
                 .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
-                .padding(start = 9.dp, end = 4.dp),
+                .padding(start = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -1131,18 +1103,39 @@ private fun InlineSearchField(
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }
+            // Holds the X's width open so no typed text can end up underneath its tap target —
+            // otherwise tapping the last word of a query would clear it instead of placing a cursor.
+            Spacer(modifier = Modifier.width(TrailingActionWidth))
+        }
+        // The X's target, OUTSIDE the 28dp pill so it can be a real one.
+        //
+        // The glyph belongs inside the pill, but a 16dp clickable is not a control anybody can hit;
+        // the row is 48dp and only the pill is short, so the target takes the row's full height and
+        // the same 44dp width the view-toggle segments use, with the glyph drawn centred inside it.
+        // Exactly the split DropdownChip makes: chip-height paint, full-height touch.
+        val hasQuery = query.isNotEmpty()
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(width = TrailingActionWidth, height = 48.dp)
+                .clickable { if (hasQuery) onQueryChange("") else onClose() },
+            contentAlignment = Alignment.Center,
+        ) {
             Icon(
                 Icons.Filled.Close,
-                contentDescription = stringResource(R.string.action_clear),
+                // Says what the next tap does, not what the icon usually means.
+                contentDescription = stringResource(
+                    if (hasQuery) R.string.action_clear else R.string.home_cd_close_search,
+                ),
                 tint = Muted,
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable(onClick = onClose),
+                modifier = Modifier.size(16.dp),
             )
         }
     }
 }
+
+/** The X's slot in the search pill — the 44dp the view toggle's own segments settled on. */
+private val TrailingActionWidth = 44.dp
 
 /**
  * Grid / list, drawn to the same height as the chips next to it.

@@ -22,10 +22,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -42,12 +44,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -386,14 +392,16 @@ fun CustomNumberDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            HomerTextButton(
                 onClick = {
                     text.toIntOrNull()?.let { onConfirm(it.coerceIn(range.first, range.last)) }
                     onDismiss()
                 },
             ) { Text(stringResource(R.string.action_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+        dismissButton = {
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
     )
 }
 
@@ -447,15 +455,14 @@ fun ConfirmDialog(
         title = { Text(title) },
         text = { Text(body, color = Muted, fontSize = 13.sp, lineHeight = 19.sp) },
         confirmButton = {
-            TextButton(onClick = { onDismiss(); onConfirm() }) { Text(confirmLabel) }
+            HomerTextButton(onClick = { onDismiss(); onConfirm() }) { Text(confirmLabel) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
 
-/** Padding for the flat text buttons that carry secondary settings actions. */
 /**
  * Padding for an action sitting at the trailing edge of a settings row.
  *
@@ -507,3 +514,41 @@ fun HomerTextButton(
  * side by side in a dialog no longer fit.
  */
 val HomerButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+
+/**
+ * One width for a column of actions that do not share a row.
+ *
+ * Settings actions sit at the trailing edge of their own rows, so each one was as wide as its own
+ * word: four rows of buttons whose left edges stepped in and out with the length of "Scan",
+ * "Fetch", "Measure", "Publish". Given the widest of the set, every button can be drawn to it and
+ * the column reads as a column.
+ *
+ * MEASURED, not a constant. In German those same four words are "Scannen", "Holen", "Vermessen" and
+ * "Veröffentlichen" — a hardcoded dp would either clip the longest or strand the English ones in
+ * whitespace. Recomputed when the labels, the type scale or the font scale change, which is every
+ * input the answer depends on.
+ *
+ * Floored at Material's own minimum so a language with four very short words cannot end up with
+ * buttons narrower than an unwidened one would have been.
+ */
+@Composable
+fun rememberActionWidth(
+    labels: List<String>,
+    contentPadding: PaddingValues = SettingsActionPadding,
+): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    return remember(labels, style, density, direction, contentPadding) {
+        val widest = labels.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
+        with(density) {
+            val text = widest.toDp() +
+                contentPadding.calculateLeftPadding(direction) +
+                contentPadding.calculateRightPadding(direction) +
+                // The hairline, on both sides — it is inside the button's own width.
+                2.dp
+            if (text > ButtonDefaults.MinWidth) text else ButtonDefaults.MinWidth
+        }
+    }
+}

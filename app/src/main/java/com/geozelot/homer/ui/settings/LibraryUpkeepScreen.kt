@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,6 +42,7 @@ import com.geozelot.homer.ui.components.SettingsNavRow
 import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
+import com.geozelot.homer.ui.components.rememberActionWidth
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.home.WorklistBook
 import com.geozelot.homer.ui.theme.Amber
@@ -440,7 +443,17 @@ private fun ReaderContents(bookCount: Int, artless: Int, unmeasured: Int) {
     )
 }
 
-/** One job in the queue: what it knows, and the one thing that would close the gap. */
+/**
+ * One job in the queue: what it knows, and the one thing that would close the gap.
+ *
+ * The action is drawn to [PassActionWidth] — one width shared by all four passes — with its label
+ * against the LEFT of it. Sized to its own word, each button was a different width at the trailing
+ * edge of its row, so the four of them made a ragged column that had to be read one row at a time.
+ * Equal width settles the box edges; left-anchoring the label settles the words too.
+ *
+ * The spinner takes the same slot rather than replacing the button with something narrower, so
+ * starting a pass no longer makes the row twitch.
+ */
 @Composable
 private fun PassRow(
     label: String,
@@ -450,16 +463,41 @@ private fun PassRow(
     busy: Boolean,
     onAction: () -> Unit,
 ) {
+    val width = PassActionWidth()
     SettingsRow(label = label, summary = summary) {
-        if (busy) {
-            RowSpinner()
-        } else {
-            HomerTextButton(onClick = onAction, enabled = actionEnabled, contentPadding = SettingsActionPadding) {
-                Text(action)
+        Box(modifier = Modifier.width(width), contentAlignment = Alignment.Center) {
+            if (busy) {
+                RowSpinner()
+            } else {
+                HomerTextButton(
+                    onClick = onAction,
+                    enabled = actionEnabled,
+                    contentPadding = SettingsActionPadding,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(action, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                }
             }
         }
     }
 }
+
+/**
+ * The width every pass action shares — the widest of the four, in whatever language is running.
+ *
+ * Resolved here rather than passed down from the screen so the set stays next to the rows that use
+ * it: add a fifth pass and its label goes in this list, or it will be the one button that does not
+ * line up.
+ */
+@Composable
+private fun PassActionWidth(): Dp = rememberActionWidth(
+    listOf(
+        stringResource(R.string.lib_action_scan),
+        stringResource(R.string.lib_action_fetch),
+        stringResource(R.string.lib_action_measure),
+        stringResource(R.string.lib_action_publish),
+    ),
+)
 
 /**
  * "Last full crawl 2 days ago, from Pixel 7" — or the fact that none has run.
