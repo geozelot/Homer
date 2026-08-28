@@ -90,10 +90,16 @@ object FacetMapping {
         cuts: List<BookmarkEntity>,
         deviceId: String?,
     ): BookCorrection? {
+        // `collection` and `collectionIndex` count here too. They were declared on both
+        // BookOverrideEntity and BookCorrection and wired into NEITHER direction — so a per-book
+        // collection edit was applied locally by `applyOverride`, counted as an edit by
+        // `hasMetadataEdit`, and then treated by this very function as "nothing corrected" and never
+        // published. Putting a book into a collection by hand reached no other device at all.
         val nothingCorrected = override == null || (
             override.title == null && override.author == null && override.series == null &&
-                override.seriesIndex == null && override.genre == null && override.language == null &&
-                override.tags == null
+                override.seriesIndex == null && override.collection == null &&
+                override.collectionIndex == null && override.genre == null &&
+                override.language == null && override.tags == null
             )
         // Cuts alone are worth publishing: a book can have a hand-made chapter list and no
         // corrected field anywhere, and it is the chapter list other readers most want.
@@ -103,6 +109,8 @@ object FacetMapping {
             author = override?.author,
             series = override?.series,
             seriesIndex = override?.seriesIndex,
+            collection = override?.collection,
+            collectionIndex = override?.collectionIndex,
             genre = override?.genre,
             language = override?.language,
             tags = override?.tags,
@@ -285,6 +293,10 @@ object FacetMapping {
             author = correction.author,
             series = correction.series,
             seriesIndex = correction.seriesIndex,
+            // The other half of the same gap — a published collection correction was dropped on
+            // arrival, so even once one was sent it changed nothing on the receiving device.
+            collection = correction.collection,
+            collectionIndex = correction.collectionIndex,
             genre = correction.genre,
             language = correction.language,
             tags = correction.tags,

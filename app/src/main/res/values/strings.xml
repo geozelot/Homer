@@ -547,6 +547,7 @@
     <string name="filter_count">%1$d of %2$d</string>
     <string name="filter_clear_all">Clear</string>
     <string name="edit_field_collection">Collection</string>
+    <string name="edit_field_collection_index">Collection #</string>
     <string name="edit_field_collection_desc">A parent this whole series belongs to — Discworld over Rincewind. Leave blank unless the series is part of something bigger.</string>
     <string name="set_templates_title">Reading folder names</string>
     <string name="set_templates_patterns_header">PATTERNS</string>

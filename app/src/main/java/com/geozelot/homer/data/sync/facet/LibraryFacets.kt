@@ -235,6 +235,21 @@ data class BookCorrection(
     val author: String? = null,
     val series: String? = null,
     val seriesIndex: Int? = null,
+    /**
+     * The parent grouping above the series, and the position in it — as a PERSON stated them.
+     *
+     * `StructureBook` carries the same two fields for the shape a crawl read off the folders; these
+     * are the correction that outranks it, which is what makes "put this standalone into Discworld"
+     * expressible at all. They arrived late: both were present on `BookOverrideEntity` and applied
+     * locally by `applyOverride` while this class had nowhere to put them, so a per-book collection
+     * edit worked on the device that made it and reached no other.
+     *
+     * Defaulted, so a corrections file written before they existed reads back as "no opinion" rather
+     * than failing to parse — and therefore NOT a schema bump, on the same rule as `CrawlMarker`'s
+     * device name.
+     */
+    val collection: String? = null,
+    val collectionIndex: Int? = null,
     val genre: String? = null,
     /** A deliberate language, as an ISO 639-1 code. Outranks whatever any tag says. */
     val language: String? = null,

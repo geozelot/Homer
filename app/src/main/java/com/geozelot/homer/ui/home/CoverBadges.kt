@@ -210,6 +210,36 @@ internal fun VolumeCountBadge(
     }
 }
 
+/**
+ * Where one book sits in the thing it belongs to — "#3" of its series, or of its collection.
+ *
+ * Series first when a book has both. The sub-series is the more specific claim, and a Discworld
+ * witches novel is "Die Hexen #3" before it is "Scheibenwelt #12"; showing both would put two
+ * different numbers about the same book in the same corner. The glyph says which is meant, on the
+ * same rule as [VolumeCountBadge]: a book for a series, a shelf of books for a collection.
+ *
+ * Draws nothing when the book is in neither, rather than a bare "#" or a zero — most standalones are
+ * in neither, and a badge that appears on every cover to say nothing is worse than no badge.
+ */
+@Composable
+internal fun VolumeIndexBadge(
+    seriesIndex: Int?,
+    collectionIndex: Int?,
+    corner: CoverCorner = CoverCorner.TOP_START,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    val fromSeries = seriesIndex != null
+    val index = seriesIndex ?: collectionIndex ?: return
+    CoverBadge(corner, modifier, compact) {
+        BadgeIcon(
+            if (fromSeries) Icons.Filled.MenuBook else Icons.Filled.LibraryBooks,
+            compact = compact,
+        )
+        BadgeText(index.toString(), compact = compact)
+    }
+}
+
 /** How long a book or a whole shelf runs. */
 @Composable
 internal fun DurationBadge(

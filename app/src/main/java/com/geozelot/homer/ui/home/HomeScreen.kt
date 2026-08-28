@@ -496,10 +496,10 @@ fun HomeScreen(
     entries.findBook(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, collection, genre, language, tags, hidden, downloadOnPlay ->
+            onSave = { title, author, series, index, collection, collectionIndex, genre, language, tags, hidden, downloadOnPlay ->
                 viewModel.saveOverride(
-                    book.id, title, author, series, index, collection, genre, language, tags, hidden,
-                    downloadOnPlay,
+                    book.id, title, author, series, index, collection, collectionIndex,
+                    genre, language, tags, hidden, downloadOnPlay,
                 )
                 editingId = null
             },
@@ -612,6 +612,7 @@ private fun BookListItem.toEditable() = EditableBook(
     series = series,
     seriesIndex = seriesIndex,
     collection = collection,
+    collectionIndex = collectionIndex,
     genre = genre,
     language = language,
     tags = tags,
@@ -1625,6 +1626,17 @@ private fun BookGridCard(
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             CoverArt(model = book.coverModel, modifier = Modifier.fillMaxSize())
+            // Top-left: where this book sits in the thing it belongs to.
+            //
+            // The SERIES number when it has one, and the collection's otherwise — the sub-series is
+            // the more specific claim, and a book in both would say two different numbers about
+            // itself in one corner. The glyph carries which of the two it is, the same way the
+            // series stack's own count badge does: a book for a series, a shelf for a collection.
+            VolumeIndexBadge(
+                seriesIndex = book.seriesIndex,
+                collectionIndex = book.collectionIndex,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
             if (book.isDownloaded) {
                 OfflineBadge(CoverCorner.TOP_END, modifier = Modifier.align(Alignment.TopEnd))
             }
@@ -1646,7 +1658,7 @@ private fun BookGridCard(
         Box {
             GridCardText(
                 title = book.title,
-                meta = bookMeta(book, ctx, LocalContext.current, withDuration = false),
+                meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
             ) {
                 menuOpen = true
             }
@@ -1760,6 +1772,11 @@ private fun bookMeta(
      * card, whose cover does — saying it in both places would put the same fact twice on one card.
      */
     withOffline: Boolean = false,
+    /**
+     * False on the grid card, whose cover corner now carries the number. Same rule as
+     * [withDuration]: whatever a corner says, the text beside it stops saying.
+     */
+    withIndex: Boolean = true,
 ): String = buildList {
     // The length leads. It is the one number a reader scans a list FOR — "have I got an hour for
     // this" — and it was last, after the author and the genre they can already see from the shelf
@@ -1777,7 +1794,7 @@ private fun bookMeta(
     if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
         book.language?.let { add(BookLanguage.shortLabel(it)) }
     }
-    if (ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
+    if (withIndex && ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
         add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }
     addAll(book.tags)

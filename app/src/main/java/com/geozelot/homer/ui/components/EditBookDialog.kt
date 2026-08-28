@@ -78,6 +78,8 @@ data class EditableBook(
     val seriesIndex: Int?,
     /** Parent grouping above the series. Editable per book, so a STANDALONE can join one. */
     val collection: String?,
+    /** Position within that collection — Discworld #12, independent of the sub-series' own count. */
+    val collectionIndex: Int?,
     val genre: String?,
     val language: String?,
     val tags: List<String>,
@@ -101,6 +103,7 @@ fun EditBookDialog(
         series: String,
         index: String,
         collection: String,
+        collectionIndex: String,
         genre: String,
         language: String,
         tags: String,
@@ -124,6 +127,7 @@ fun EditBookDialog(
     var series by rememberSaveable { mutableStateOf(book.series.orEmpty()) }
     var collection by rememberSaveable { mutableStateOf(book.collection.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
+    var collectionIndex by rememberSaveable { mutableStateOf(book.collectionIndex?.toString().orEmpty()) }
     var genre by rememberSaveable { mutableStateOf(book.genre.orEmpty()) }
     var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
     var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
@@ -173,6 +177,19 @@ fun EditBookDialog(
                     onValueChange = { collection = it },
                     label = { Text(stringResource(R.string.edit_field_collection)) },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                // Directly under its collection, mirroring how the series index sits under the
+                // series. A book's place in the parent grouping is a different number from its place
+                // in the sub-series — Discworld counts every novel, "Die Hexen" counts only its own
+                // — and without this field the second of the two could be stated and the first
+                // could not.
+                OutlinedTextField(
+                    value = collectionIndex,
+                    onValueChange = { collectionIndex = it },
+                    label = { Text(stringResource(R.string.edit_field_collection_index)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
@@ -231,7 +248,10 @@ fun EditBookDialog(
         },
         confirmButton = {
             HomerTextButton(onClick = {
-                onSave(title, author, series, index, collection, genre, language, tags, hidden, playMode)
+                onSave(
+                    title, author, series, index, collection, collectionIndex,
+                    genre, language, tags, hidden, playMode,
+                )
             }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {

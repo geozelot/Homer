@@ -70,6 +70,8 @@ class FacetMappingTest {
     private fun override(
         title: String? = null,
         genre: String? = null,
+        collection: String? = null,
+        collectionIndex: Int? = null,
         finished: Boolean? = null,
         hidden: Boolean = false,
         downloadOnPlay: Boolean? = null,
@@ -80,6 +82,8 @@ class FacetMappingTest {
         author = null,
         series = null,
         seriesIndex = null,
+        collection = collection,
+        collectionIndex = collectionIndex,
         genre = genre,
         tags = null,
         finished = finished,
@@ -508,5 +512,54 @@ class FacetMappingTest {
         val e = FacetMapping.bookEntity("Author/Book", structure, null, local, now = 1_000)
         assertEquals("/data/cover.jpg", e.localCoverPath)
         assertEquals(local.addedAt, e.addedAt)
+    }
+
+    // ── a collection stated by hand travels ──────────────────────────────────────────────────
+    //
+    // `collection` and `collectionIndex` were declared on BookOverrideEntity AND on BookCorrection
+    // and wired into neither direction. `applyOverride` applied them, `hasMetadataEdit` counted
+    // them, and `correctionOf` called the same edit "nothing corrected" — so putting a book into a
+    // collection by hand worked on that device and reached no other.
+
+    @Test
+    fun `a collection-only edit is worth publishing`() {
+        val c = FacetMapping.correctionOf(override(collection = "Scheibenwelt"), emptyList(), "dev")
+        assertNotNull("a collection edit is an edit", c)
+        assertEquals("Scheibenwelt", c!!.collection)
+    }
+
+    @Test
+    fun `the collection index is published alongside it`() {
+        val c = FacetMapping.correctionOf(
+            override(collection = "Scheibenwelt", collectionIndex = 12),
+            emptyList(),
+            "dev",
+        )
+        assertEquals(12, c!!.collectionIndex)
+    }
+
+    @Test
+    fun `a collection index alone is still an edit`() {
+        // Someone numbering a book inside a collection the folder tree already named.
+        val c = FacetMapping.correctionOf(override(collectionIndex = 12), emptyList(), "dev")
+        assertNotNull(c)
+        assertEquals(12, c!!.collectionIndex)
+    }
+
+    @Test
+    fun `an arriving collection correction is written to the override`() {
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(collection = "Scheibenwelt", collectionIndex = 12, editedAt = 900),
+            existing = null,
+        )
+        assertEquals("Scheibenwelt", e!!.collection)
+        assertEquals(12, e.collectionIndex)
+    }
+
+    @Test
+    fun `an empty override is still nothing to publish`() {
+        // The guard has to stay a guard: a row that exists only to carry `hidden` is not an edit.
+        assertNull(FacetMapping.correctionOf(override(hidden = true), emptyList(), "dev"))
     }
 }
