@@ -334,6 +334,9 @@
     <string name="lib_row_artwork">Cover art</string>
     <string name="lib_row_lengths">Lengths</string>
     <string name="lib_row_corrections">Your corrections</string>
+    <string name="lib_reader_refresh">Check for changes</string>
+    <string name="lib_reader_refresh_summary">Reads the shared index again. Homer also does this when you open the app.</string>
+    <string name="lib_action_refresh">Check</string>
     <string name="lib_action_scan">Scan</string>
     <string name="lib_action_fetch">Fetch</string>
     <string name="lib_action_measure">Measure</string>

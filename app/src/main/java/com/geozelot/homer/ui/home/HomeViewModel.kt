@@ -1332,6 +1332,20 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Reads the shared index again, now, because the user asked.
+     *
+     * Unthrottled, unlike the foreground pull that shares the same code path: an explicit press is
+     * exactly the case the throttle must not apply to. It is the only actionable thing a device that
+     * merely READS the index has on this screen — every pass but artwork is refused to it — so
+     * without this a reader whose shelf was stale could only force-stop the app.
+     */
+    fun refreshIndex() {
+        viewModelScope.launch {
+            _sharedCatalogAvailable.value = libraryIndex.pull()
+        }
+    }
+
     /** Throws the draft away, reverting the editor to what is stored. */
     fun discardTemplateDraft() {
         _templateDraft.value = null

@@ -1,5 +1,6 @@
 package com.geozelot.homer.data.sync.facet
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -29,6 +30,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -125,9 +128,14 @@ class LibraryIndexRepository @Inject constructor(
         }
 
         // Backgrounding is the natural moment to ship corrections: the user has stopped editing.
-        // addObserver must run on the main thread, hence the explicit dispatcher on an IO scope.
+        // Foregrounding is the natural moment to read. addObserver must run on the main thread,
+        // hence the explicit dispatcher on an IO scope.
         scope.launch(Dispatchers.Main) {
             ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    scope.launch { pullOnForeground() }
+                }
+
                 override fun onStop(owner: LifecycleOwner) {
                     editPublishJob?.cancel()
                     editPublishJob = scope.launch { publishPendingEdits() }
@@ -135,6 +143,59 @@ class LibraryIndexRepository @Inject constructor(
             })
         }
     }
+
+    /**
+     * Reads the shared index when the app comes to the foreground.
+     *
+     * Until this existed, a pull happened at three moments only — the library ViewModel's `init`,
+     * adopting a folder, and toggling the shared catalog — and the first of those fires when the
+     * ViewModel is CREATED, not when the app is reopened. So a device that stayed in the background
+     * for a week came back to a week-old library, and **a device that only READS had no way at all
+     * to ask**: every index pass except artwork is refused to it, and artwork does not pull. For the
+     * half of this design that is "one person maintains the library and everybody else reads it",
+     * the reading half could not refresh.
+     *
+     * Cheap by construction. All three facets are read conditionally, so an unchanged index is three
+     * 304s and no bodies, and [FacetStore] keeps the ETags for the life of the process.
+     *
+     * Throttled anyway, because app switching fires this far more often than a library changes — and
+     * because the first `onStart` of a cold start lands in the same moment as the ViewModel's own
+     * pull. Whichever gets there first records the time and the other stands down.
+     */
+    private suspend fun pullOnForeground() {
+        // A device with sharing off has no shared index to read.
+        if (!librarySettings.sharedCatalogEnabled.first()) return
+        // The throttle is checked INSIDE the lock, and that ordering is the point: at a cold start
+        // this and the library ViewModel's own pull are both in flight, and if the check happened
+        // outside, the loser would wait for the winner and then pull again anyway.
+        syncMutex.withLock {
+            val now = SystemClock.elapsedRealtime()
+            if (lastPullStartedAt != 0L && now - lastPullStartedAt < FOREGROUND_PULL_MIN_MS) {
+                return@withLock
+            }
+            pullNow()
+        }
+    }
+
+    /**
+     * One index operation at a time.
+     *
+     * Added with the foreground pull, which is what made concurrency likely rather than theoretical:
+     * before it, every pull came from one of three points in one ViewModel. Now a lifecycle callback
+     * can start one while the worker is mid-publish, and the two share `lastStructure`, the ETag
+     * cache and the same book rows. They would probably have written the same values — "probably" is
+     * not a property to rely on for the file that defines the library.
+     */
+    private val syncMutex = Mutex()
+
+    /**
+     * When a pull last began, on the monotonic clock.
+     *
+     * `elapsedRealtime` rather than wall-clock: this is a duration between two events in one
+     * process, and a clock correction or a timezone change must not make the throttle skip for
+     * hours or fire on every foreground.
+     */
+    private var lastPullStartedAt = 0L
 
     /**
      * Notes that the user corrected a book, to be shared so a title fixed here is what everyone
@@ -173,7 +234,10 @@ class LibraryIndexRepository @Inject constructor(
      * a share this device may not write), so a caller holding a pending flag knows to keep it;
      * sharing being off is a settled answer, not a deferral.
      */
-    suspend fun pushCorrections(): Boolean {
+    suspend fun pushCorrections(): Boolean = syncMutex.withLock { pushCorrectionsNow() }
+
+    /** [pushCorrections] without the lock. */
+    private suspend fun pushCorrectionsNow(): Boolean {
         if (!librarySettings.sharedCatalogEnabled.first()) return true
         if (!networkMonitor.isOnline() || !canPublish()) return false
         val deviceId = deviceIdentity.id()
@@ -230,8 +294,15 @@ class LibraryIndexRepository @Inject constructor(
      * Each facet is fetched conditionally and independently, so the common case — nothing changed
      * — costs three 304s of a few hundred bytes rather than a multi-megabyte download.
      */
-    suspend fun pull(): Boolean {
+    suspend fun pull(): Boolean = syncMutex.withLock { pullNow() }
+
+    /** [pull] without the lock, for callers that already hold it. */
+    private suspend fun pullNow(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
+        // Stamped here rather than on success, so a pull that reads and finds nothing still holds the
+        // foreground throttle off. The offline case returns above without stamping, which is what
+        // lets the next foreground try again the moment there is a connection.
+        lastPullStartedAt = SystemClock.elapsedRealtime()
         _activity.value = IndexActivity.READING
         return try {
             // Every facet is version-checked, not just the structure: a facet from another schema
@@ -363,7 +434,10 @@ class LibraryIndexRepository @Inject constructor(
     // ── pushing ──────────────────────────────────────────────────────────────────────────────
 
     /** Publishes this device's view, facet by facet, writing only what changed. */
-    suspend fun push() {
+    suspend fun push() = syncMutex.withLock { pushNow() }
+
+    /** [push] without the lock. */
+    private suspend fun pushNow() {
         if (!canPublish() || credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
         _activity.value = IndexActivity.PUBLISHING
         try {
@@ -583,5 +657,14 @@ class LibraryIndexRepository @Inject constructor(
          * folds a burst together and lands one edit while the reader is still looking at it.
          */
         const val EDIT_PUBLISH_IDLE_MS = 5_000L
+
+        /**
+         * Least time between two foreground pulls.
+         *
+         * A minute is long enough that flicking between apps costs nothing and short enough that
+         * coming back to Homer after a coffee reads a fresh index. The pull it guards is three
+         * conditional GETs, so the cost of being wrong in either direction is small.
+         */
+        const val FOREGROUND_PULL_MIN_MS = 60_000L
     }
 }

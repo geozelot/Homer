@@ -318,6 +318,9 @@
     <string name="lib_row_artwork">Cover</string>
     <string name="lib_row_lengths">Längen</string>
     <string name="lib_row_corrections">Deine Korrekturen</string>
+    <string name="lib_reader_refresh">Auf Änderungen prüfen</string>
+    <string name="lib_reader_refresh_summary">Liest den gemeinsamen Index erneut. Homer tut das auch beim Öffnen der App.</string>
+    <string name="lib_action_refresh">Prüfen</string>
     <string name="lib_action_scan">Scannen</string>
     <string name="lib_action_fetch">Holen</string>
     <string name="lib_action_measure">Vermessen</string>

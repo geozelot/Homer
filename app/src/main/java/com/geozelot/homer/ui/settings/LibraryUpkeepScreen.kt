@@ -33,6 +33,7 @@ import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.CrawlSummary
+import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
@@ -81,6 +82,7 @@ fun LibraryUpkeepScreen(
     val indexActive by viewModel.indexActive.collectAsStateWithLifecycle()
     val indexProgress by viewModel.indexProgress.collectAsStateWithLifecycle()
     val indexWaiting by viewModel.indexWaiting.collectAsStateWithLifecycle()
+    val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
@@ -112,7 +114,13 @@ fun LibraryUpkeepScreen(
 
         if (readsOnly) {
             SettingsExplanation(stringResource(R.string.lib_contents_reader_lead))
-            ReaderContents(bookCount = bookCount, artless = artless, unmeasured = unmeasured)
+            ReaderContents(
+                bookCount = bookCount,
+                artless = artless,
+                unmeasured = unmeasured,
+                reading = indexActivity == IndexActivity.READING,
+                onRefresh = viewModel::refreshIndex,
+            )
         } else {
             SettingsExplanation(stringResource(R.string.lib_contents_lead))
 
@@ -428,7 +436,13 @@ private fun CorrectionsRow(
  * the index, and saying so is the difference between patience and a bug report.
  */
 @Composable
-private fun ReaderContents(bookCount: Int, artless: Int, unmeasured: Int) {
+private fun ReaderContents(
+    bookCount: Int,
+    artless: Int,
+    unmeasured: Int,
+    reading: Boolean,
+    onRefresh: () -> Unit,
+) {
     val lines = listOfNotNull(
         pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount),
         stringResource(R.string.lib_artwork_missing, artless).takeIf { artless > 0 },
@@ -441,6 +455,24 @@ private fun ReaderContents(bookCount: Int, artless: Int, unmeasured: Int) {
         lineHeight = 17.sp,
         modifier = Modifier.padding(vertical = 4.dp),
     )
+    SettingsDivider()
+    // The ONE thing a reading device can actually do here. Homer reads the index on its own when the
+    // app is opened or brought forward, so this is not the only way changes arrive — but it is the
+    // only way to ask, and a shelf that looks stale with nothing to press invites a force-stop.
+    SettingsRow(
+        label = stringResource(R.string.lib_reader_refresh),
+        summary = stringResource(R.string.lib_reader_refresh_summary),
+    ) {
+        Box(modifier = Modifier.width(PassActionWidth()), contentAlignment = Alignment.Center) {
+            if (reading) {
+                RowSpinner()
+            } else {
+                HomerTextButton(onClick = onRefresh, contentPadding = SettingsActionPadding) {
+                    Text(stringResource(R.string.lib_action_refresh))
+                }
+            }
+        }
+    }
 }
 
 /**
