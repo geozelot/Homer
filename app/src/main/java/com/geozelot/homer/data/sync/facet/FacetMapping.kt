@@ -121,8 +121,54 @@ object FacetMapping {
      * Cover files, "already tried" flags and the date the book first appeared here are local
      * bookkeeping; taking the facet's word for them would re-run work another device happens not
      * to have done, or claim a book has been in this library since somebody else first saw it.
+     *
+     * ## A LOCALLY NEWER row keeps its bibliographic fields
+     *
+     * The facet's `updatedAt` is not decoration. `FacetMerge.structure` has always resolved a
+     * conflict by taking whichever side is newer — but it only ran on the PUBLISH path, and a pull
+     * wrote the remote facet's title, author, series and collection straight over the local row
+     * whatever their stamps said, then overwrote the local stamp too.
+     *
+     * Which meant applying a path template could not survive a sync. `TemplateApplier.planWrites`
+     * moves `updatedAt` onto exactly the books a template changed, and its own comment explains that
+     * the structure facet merges on that timestamp — true on the way out, and read by nothing on the
+     * way in. So a template that produced visibly correct rows locally was reverted by the next pull
+     * from an index published before the template existed, and a reader (who never crawls, so never
+     * re-derives) would never see it at all. The symptom is a template whose preview is right and
+     * whose library is wrong, which says nothing about where to look.
+     *
+     * A crawl stamps the books it changes, so a genuine server-side change still wins: only a local
+     * act NEWER than the facet's own stamp holds its ground, which is the same rule as on the way
+     * out. [now] is unused for these fields on purpose — the winning side's stamp is kept, or the
+     * next pull would revert what this one just preserved.
      */
     fun bookEntity(
+        id: String,
+        structure: StructureBook,
+        derived: DerivedBook?,
+        existing: BookEntity?,
+        now: Long,
+    ): BookEntity {
+        val fromFacet = facetBookEntity(id, structure, derived, existing, now)
+        // Only when the local row is strictly newer. Equal stamps go to the facet, so a republish of
+        // the same state is not a conflict.
+        val local = existing?.takeIf { it.updatedAt > structure.updatedAt } ?: return fromFacet
+        // Exactly the fields a template can write — see `BookEntity.sameFieldsAs`, which is the same
+        // set for the same reason. Everything else still comes from the facets.
+        return fromFacet.copy(
+            title = local.title,
+            author = local.author,
+            series = local.series,
+            seriesIndex = local.seriesIndex,
+            collection = local.collection,
+            collectionIndex = local.collectionIndex,
+            genre = local.genre,
+            language = local.language,
+            updatedAt = local.updatedAt,
+        )
+    }
+
+    private fun facetBookEntity(
         id: String,
         structure: StructureBook,
         derived: DerivedBook?,

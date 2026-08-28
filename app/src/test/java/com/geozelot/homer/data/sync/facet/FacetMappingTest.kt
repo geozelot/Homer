@@ -444,4 +444,69 @@ class FacetMappingTest {
         )
         assertEquals(ChapterTier.EMBEDDED, e.chapterTier)
     }
+
+    // ── a locally newer row keeps its bibliographic fields ───────────────────────────────────
+    //
+    // This is the bug behind "the template preview is right and the library is wrong". Applying a
+    // path template writes the local rows and moves their `updatedAt`; the pull then wrote the
+    // remote facet straight over them, whatever the stamps said, so the apply was reverted by the
+    // next sync from an index published before the template existed.
+
+    @Test
+    fun `a locally newer row keeps the fields a template can write`() {
+        val local = book(updatedAt = 900).copy(
+            title = "Local Title",
+            author = "Local Author",
+            series = "Die Hexen",
+            seriesIndex = 2,
+            collection = "Scheibenwelt",
+            collectionIndex = 3,
+            genre = "Local Genre",
+            language = "de",
+        )
+        // structure.updatedAt is 700 — older than the local row's 900.
+        val e = FacetMapping.bookEntity("Author/Book", structure, DerivedBook(genre = "Facet Genre"), local, now = 1_000)
+        assertEquals("Local Title", e.title)
+        assertEquals("Local Author", e.author)
+        assertEquals("Die Hexen", e.series)
+        assertEquals(2, e.seriesIndex)
+        assertEquals("Scheibenwelt", e.collection)
+        assertEquals(3, e.collectionIndex)
+        assertEquals("Local Genre", e.genre)
+        assertEquals("de", e.language)
+    }
+
+    @Test
+    fun `the winning stamp is kept, or the next pull reverts what this one preserved`() {
+        val local = book(updatedAt = 900).copy(collection = "Scheibenwelt")
+        val e = FacetMapping.bookEntity("Author/Book", structure, null, local, now = 1_000)
+        assertEquals(900, e.updatedAt)
+    }
+
+    @Test
+    fun `a newer facet still wins, so a real server-side change arrives`() {
+        val local = book(updatedAt = 500).copy(title = "Stale Local", collection = "Wrong")
+        // structure.updatedAt 700 > local 500.
+        val e = FacetMapping.bookEntity("Author/Book", structure, null, local, now = 1_000)
+        assertEquals("From Facet", e.title)
+        assertNull("the facet has no collection and it is the newer word", e.collection)
+        assertEquals(700, e.updatedAt)
+    }
+
+    @Test
+    fun `equal stamps go to the facet, so a republish of the same state is not a conflict`() {
+        val local = book(updatedAt = 700).copy(title = "Local Title")
+        val e = FacetMapping.bookEntity("Author/Book", structure, null, local, now = 1_000)
+        assertEquals("From Facet", e.title)
+    }
+
+    @Test
+    fun `local bookkeeping is still kept whichever side wins the fields`() {
+        // The point of the fix is narrow: it must not start taking the facet's word for cover files
+        // or the date the book appeared here.
+        val local = book(updatedAt = 900, localCoverPath = "/data/cover.jpg").copy(collection = "Scheibenwelt")
+        val e = FacetMapping.bookEntity("Author/Book", structure, null, local, now = 1_000)
+        assertEquals("/data/cover.jpg", e.localCoverPath)
+        assertEquals(local.addedAt, e.addedAt)
+    }
 }
