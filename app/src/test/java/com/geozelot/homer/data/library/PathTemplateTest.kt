@@ -218,4 +218,80 @@ class PathTemplateTest {
                 ?.get(TemplateField.AUTHOR),
         )
     }
+
+    // ── adopting the shared set ──────────────────────────────────────────────────────────────
+    //
+    // mergeTemplateLines can DELETE the user's work, on a background sync, with nothing on screen
+    // to say it happened. Both ways it used to do that are pinned here.
+
+    @Test
+    fun `a pattern that no longer compiles SURVIVES a merge`() {
+        // The bug: the old merge decoded every line, dropped what failed, and wrote the survivors
+        // back — so one broken pattern was erased on the next sync rather than left to be fixed.
+        val local = listOf("{narrator}/{title}", "{author}/{title}")
+        assertNull("precondition: this really does not compile", PathTemplate.compile("{narrator}/{title}"))
+        val merged = mergeTemplateLines(local, emptyMap())
+        assertTrue("the broken line must still be there", "{narrator}/{title}" in merged)
+        assertTrue("{author}/{title}" in merged)
+    }
+
+    @Test
+    fun `an empty remote rule does not delete a local scope`() {
+        // TemplateRule.patterns defaults to empty, so an absent or unreadable field arrives as "no
+        // patterns". Honouring that would let one malformed shared file wipe a folder everywhere.
+        val local = listOf("Scheibenwelt\t{author}/{collection}/{series}/{title}")
+        val merged = mergeTemplateLines(local, mapOf("Scheibenwelt" to emptyList()))
+        assertEquals(local, merged)
+    }
+
+    @Test
+    fun `a remote scope that carries patterns does win`() {
+        val local = listOf("Scheibenwelt\t{author}/{title}")
+        val merged = mergeTemplateLines(
+            local,
+            mapOf("Scheibenwelt" to listOf("{author}/{collection}/{series}/{title}")),
+        )
+        assertEquals(listOf("Scheibenwelt\t{author}/{collection}/{series}/{title}"), merged)
+    }
+
+    @Test
+    fun `a scope only this device holds is kept`() {
+        // The read-only-share case: this user cannot publish, so their patterns are never up there.
+        val local = listOf("Import\t{title}")
+        val merged = mergeTemplateLines(local, mapOf("Other" to listOf("{author}/{title}")))
+        assertTrue("Import\t{title}" in merged)
+        assertTrue("Other\t{author}/{title}" in merged)
+    }
+
+    @Test
+    fun `merging nothing into nothing is empty, not a crash`() {
+        assertEquals(emptyList<String>(), mergeTemplateLines(emptyList(), emptyMap()))
+    }
+
+    @Test
+    fun `narrower scopes come first, because the first match wins`() {
+        val merged = mergeTemplateLines(
+            listOf("{title}", "Pratchett\t{author}/{title}", "Pratchett/Scheibenwelt\t{author}/{collection}/{title}"),
+            emptyMap(),
+        )
+        assertEquals(
+            listOf(
+                "Pratchett/Scheibenwelt\t{author}/{collection}/{title}",
+                "Pratchett\t{author}/{title}",
+                "{title}",
+            ),
+            merged,
+        )
+    }
+
+    @Test
+    fun `an unscoped line round-trips without acquiring a tab`() {
+        assertEquals(listOf("{author}/{title}"), mergeTemplateLines(listOf("{author}/{title}"), emptyMap()))
+    }
+
+    @Test
+    fun `blank lines are dropped without taking a scope with them`() {
+        val merged = mergeTemplateLines(listOf("", "   ", "{title}"), emptyMap())
+        assertEquals(listOf("{title}"), merged)
+    }
 }

@@ -14,6 +14,7 @@ import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.library.ScopedTemplate
+import com.geozelot.homer.data.library.mergeTemplateLines
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.DeviceIdentity
@@ -535,25 +536,27 @@ class LibraryIndexRepository @Inject constructor(
         val localAt = librarySettings.pathTemplatesEditedAt.first()
         if (newest <= localAt) return
 
-        // Merged per SCOPE, not replaced wholesale. `corrections` here is the REMOTE file — pull
-        // reads it rather than merging it with what this device holds — so replacing the list would
-        // delete every template this device has that the server has never seen. Which is not a rare
-        // case: a read-only share user CANNOT publish, so their own patterns are never up there, and
-        // the maintainer's next edit would silently wipe them.
-        val local = librarySettings.pathTemplates.first().mapNotNull { ScopedTemplate.decode(it) }
-        val localByScope = local.groupBy { it.scope }
-        val merged = LinkedHashMap<String, List<String>>()
-        // Whatever is only here stays; the server has no opinion about a scope it has never held.
-        localByScope.forEach { (scope, group) -> merged[scope] = group.map { it.template.source } }
-        // …and a scope the server does hold wins, because it is the newer deliberate act.
-        corrections.templates.forEach { (scope, rule) -> merged[scope] = rule.patterns }
+        // Merged per SCOPE and on RAW TEXT — see mergeTemplateLines, which is pure and tested
+        // because this is the one path in the feature that can destroy the user's work unprompted.
+        // `corrections` here is the REMOTE file: pull reads it rather than merging it with what this
+        // device holds, so replacing the list would delete every template this device has that the
+        // server has never seen. Not a rare case — a read-only share user CANNOT publish, so their
+        // own patterns are never up there, and the maintainer's next edit would silently wipe them.
+        val localLines = librarySettings.pathTemplates.first()
+        val lines = mergeTemplateLines(
+            local = localLines,
+            remote = corrections.templates.mapValues { (_, rule) -> rule.patterns },
+        )
 
-        val lines = merged.entries
-            // Narrowest scope first, so a folder's own pattern is tried before a library-wide one.
-            .sortedByDescending { it.key.length }
-            .flatMap { (scope, patterns) ->
-                patterns.map { if (scope.isBlank()) it else "$scope\t$it" }
-            }
+        // A floor under the whole operation. `setPathTemplates` REMOVES the key for an empty list,
+        // so an empty result is indistinguishable from the user having deleted everything — and it
+        // would arrive here from a background sync with nothing on screen to say so. If a merge ever
+        // manages to produce nothing out of something, the right answer is to keep what we have and
+        // say so in the log, not to write the emptiness down.
+        if (lines.isEmpty() && localLines.isNotEmpty()) {
+            Log.w(TAG, "refusing to adopt templates: merge emptied ${localLines.size} local line(s)")
+            return
+        }
         librarySettings.setPathTemplates(lines, editedAt = newest)
         Log.i(TAG, "adopted templates: ${corrections.templates.size} shared scope(s), ${lines.size} pattern(s) in force")
     }

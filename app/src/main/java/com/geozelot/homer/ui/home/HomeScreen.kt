@@ -1,7 +1,6 @@
 package com.geozelot.homer.ui.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -88,7 +87,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -284,94 +282,40 @@ fun HomeScreen(
         }
     }
 
-    // Held as the MutableState rather than only as a `by` delegate, because the nested-scroll
-    // connection below is inside `remember` and has to write to the SAME state object across
-    // recompositions. Capturing a delegated local in a remembered lambda captures the first
-    // one, and the panel would stop responding after the first recomposition.
-    val listeningExpandedState = rememberSaveable { mutableStateOf(true) }
-    var listeningExpanded by listeningExpandedState
-    var foldedOnFirstScroll by rememberSaveable { mutableStateOf(false) }
-    val libraryScrolled by remember(gridState) {
-        derivedStateOf {
-            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 48
-        }
-    }
-    // Pulling DOWN on a library that is already at its top opens the panel back up.
-    //
-    // Deliberately not the first upward gesture. That one is the reader travelling back to the
-    // top of the list and it has to be allowed to just do that — a gesture that both scrolls to
-    // the top AND unfolds the panel would leave them somewhere they did not ask to be. So a
-    // gesture that STARTS anywhere below the top is blocked outright for its whole duration,
-    // however far past the top it carries, and only the next one counts.
-    //
-    // The threshold exists because `available.y` also picks up the residue of a fling settling
-    // against the top; a stray pixel or two must not count as a pull.
+    // Every rule about when this panel folds lives in ListeningFold, with tests. The first attempt
+    // at this read correctly, compiled, and did not work on a device — which is the argument for
+    // taking it out of the callback and making it a thing that can be asserted on.
+    val fold = rememberSaveable(saver = ListeningFold.Saver) { ListeningFold() }
     val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
-    val listeningPull = remember(gridState, listeningExpandedState) {
+    val listeningScroll = remember(gridState, fold, pullToExpandPx) {
         object : NestedScrollConnection {
-            /** Accumulated downward slack this gesture, once it is eligible to count. */
-            var pulled = 0f
-
-            /** Set when a gesture begins below the top; cleared when the gesture ends. */
-            var blocked = false
-
             private fun atTop() =
                 gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
 
+            // onPRE, so the delta is the raw pointer movement — before the grid, and before the
+            // stretch overscroll that also sits in this chain, have taken anything out of it. The
+            // version that read the leftover in onPostScroll is the one that did nothing on a
+            // device. Nothing is consumed here; this only watches.
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // The first delta of a gesture decides whether the whole gesture may count.
-                if (pulled == 0f && !blocked && !atTop()) blocked = true
+                fold.onScroll(
+                    deltaY = available.y,
+                    atTop = atTop(),
+                    fromUser = source == NestedScrollSource.Drag,
+                    threshold = pullToExpandPx,
+                )
                 return Offset.Zero
             }
 
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                // A FINGER only. A fling settling against the top delivers slack here too, so
-                // without this a hard flick back to the top would unfold the panel by itself —
-                // which is the one thing this panel is not allowed to do.
-                if (source != NestedScrollSource.Drag) return Offset.Zero
-                if (blocked || listeningExpandedState.value) return Offset.Zero
-                when {
-                    // Slack left over after the list took what it could: it is at the top.
-                    available.y > 0f -> {
-                        pulled += available.y
-                        if (pulled >= pullToExpandPx) {
-                            listeningExpandedState.value = true
-                            pulled = 0f
-                        }
-                    }
-                    // Reversed mid-gesture — that was not a pull.
-                    available.y < 0f -> pulled = 0f
-                }
-                return Offset.Zero
-            }
-
-            // onPOSTFling, not onPreFling. Pre-fling runs at the START of the fling, i.e. still
-            // inside the gesture that was blocked — clearing the block there would re-arm it for
-            // that gesture's own fling phase and undo the whole point of the block.
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                pulled = 0f
-                blocked = false
+                fold.onGestureEnd()
                 return Velocity.Zero
             }
         }
     }
-    // Latched: the first scroll folds it, and after that scrolling is the reader's business.
-    // Without the latch, expanding it while scrolled down would fold straight back up.
-    LaunchedEffect(libraryScrolled) {
-        if (libraryScrolled && !foldedOnFirstScroll) {
-            foldedOnFirstScroll = true
-            listeningExpanded = false
-        }
-    }
-    // Every time search opens, not just the first — opening the box is the clearest statement
-    // there is that the reader is looking for something other than what is on this strip.
-    LaunchedEffect(searching) { if (searching) listeningExpanded = false }
+    // Every time the box opens, not just the first.
+    LaunchedEffect(searching) { if (searching) fold.onSearchOpened() }
 
-    Column(modifier = modifier.fillMaxSize().nestedScroll(listeningPull)) {
+    Column(modifier = modifier.fillMaxSize().nestedScroll(listeningScroll)) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
         Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
@@ -402,8 +346,8 @@ fun HomeScreen(
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = listeningShelf,
-                expanded = listeningExpanded,
-                onToggle = { listeningExpanded = !listeningExpanded },
+                expanded = fold.expanded,
+                onExpand = fold::onPanelTapped,
                 rowState = shelfRowState,
                 onOpen = onBookClick,
                 actions = actions,
@@ -1402,20 +1346,16 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
  *
  * So the size still changes, but never on its own initiative except to get OUT of the way:
  *
- *  - **Folding is automatic; unfolding is always asked for.** It folds away on the first scroll into
- *    the library, and again whenever search opens, because in both cases the reader has just said
- *    they are looking at something else. It never unfolds on its own.
- *  - **Once, for the scroll.** The first-scroll fold is latched, so expanding it again while still
- *    scrolled down does not have it immediately fold back up under the reader's finger.
- *  - **Folded, the whole panel is the button.** A tap anywhere on it opens it. Nothing inside is
- *    tappable in that state, so the covers are part of the target instead of dead space beside the
- *    header — which also means a 46dp thumbnail can never open a book the reader could not identify.
- *  - **Or pull it open**, by dragging down on a library already at its top. See the nested-scroll
- *    connection in HomeScreen: the first upward gesture is the reader travelling back to the top and
- *    is left alone; the next one unfolds.
+ * **Every rule about WHEN is in [ListeningFold], which is a plain object with tests.** This
+ * composable only draws the two states and reports taps. Folding is automatic and unfolding is
+ * always asked for; there is no manual fold, so the header is a label rather than a control.
  *
- * Expanded, the panel itself is NOT clickable — the covers open books, the header folds it, and a
- * panel-wide tap would steal from the first or undo the second.
+ * **Folded, the whole panel is the button.** A tap anywhere on it opens it, and nothing inside is
+ * tappable in that state — so the covers are part of the target instead of dead space beside the
+ * header, and a 46dp thumbnail can never open a book the reader could not identify from it.
+ *
+ * Expanded, the panel itself is NOT clickable: the covers open books then, and there is no fold for
+ * a panel-wide tap to perform.
  *
  * All of which is subordinate to the search-dismiss gesture the caller hands in. While the box is
  * open EVERY tap on this panel closes it and does nothing else, folded or not, because that is the
@@ -1430,7 +1370,7 @@ private fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->
 private fun ListeningShelf(
     books: List<BookListItem>,
     expanded: Boolean,
-    onToggle: () -> Unit,
+    onExpand: () -> Unit,
     rowState: LazyListState,
     onOpen: (String) -> Unit,
     actions: BookActions,
@@ -1451,23 +1391,17 @@ private fun ListeningShelf(
                 // FOLDED, the whole panel is one button that opens it — nothing inside it is
                 // tappable, so the covers are part of the target rather than dead space beside the
                 // header. EXPANDED it must not be clickable at all: the covers open books then, and
-                // a panel-wide tap would either steal those taps or collapse the thing the reader
-                // was aiming into.
+                // there is no manual fold for a tap to perform.
                 .then(
-                    if (expanded) Modifier else Modifier.clickable(onClick = onToggle),
+                    if (expanded) Modifier else Modifier.clickable(onClick = onExpand),
                 ),
         ) {
-            // The header IS the control. Nothing else folds the panel, and nothing else unfolds it,
-            // so the one row that names the strip is also the one row that owns its size.
+            // The header is a LABEL, not a control. There is no manual fold any more — the panel
+            // folds when the reader turns to the library or to search — so a chevron pointing up
+            // would advertise an action that does not exist. Folded, it gains a chevron pointing
+            // down, which is true: the whole panel opens on a tap.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Only while expanded. Folded, the panel above already owns every tap, and a
-                    // second clickable inside it would just draw its own ripple over the first.
-                    .then(
-                        if (expanded) Modifier.clickable(onClick = onToggle) else Modifier,
-                    )
-                    .padding(horizontal = LibraryGridPadding),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = LibraryGridPadding),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
@@ -1480,14 +1414,14 @@ private fun ListeningShelf(
                         large = false,
                     )
                 }
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = stringResource(
-                        if (expanded) R.string.home_cd_collapse_listening else R.string.home_cd_expand_listening,
-                    ),
-                    tint = Muted,
-                    modifier = Modifier.size(18.dp),
-                )
+                if (!expanded) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = stringResource(R.string.home_cd_expand_listening),
+                        tint = Muted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
             LazyRow(
                 state = rowState,
@@ -1765,33 +1699,27 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
         // the title with dead strip beneath them — and the part of the footer that looked like it
         // should open the menu did nothing.
         //
-        // The GLYPH spans it too, which `Icon` cannot do: a 24dp vector painted with ContentScale.Fit
-        // into a tall narrow box fits by its width and stays a 24dp square in the middle, so
-        // stretching the button left the dots their original size and the affordance still read as
-        // small. Three drawn dots take the height honestly.
-        val moreLabel = stringResource(R.string.action_more)
+        // The BUTTON spans the footer; the glyph stays a glyph.
+        //
+        // Drawing the three dots across the full height was a literal reading of "stretch" and it
+        // looked like a control with its parts pulled apart — at 58dp the outer two sat a centimetre
+        // from the middle one and stopped reading as one mark. What the footer actually needed was a
+        // tap target the height of the panel and an icon in proportion to it, so this is Material's
+        // own glyph a size up, centred in the full-height target.
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .sizeIn(minWidth = 32.dp, minHeight = 48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onMenu)
-                // Carried here because the Canvas below is a drawing, not an Icon, and has no
-                // description of its own to lend the button.
-                .semantics { contentDescription = moreLabel },
+                .clickable(onClick = onMenu),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.fillMaxHeight().width(18.dp)) {
-                val radius = 1.7.dp.toPx()
-                // Inset by a dot's diameter so the outer two sit inside the footer rather than
-                // half-way off its edges.
-                val top = radius * 2
-                val bottom = size.height - radius * 2
-                val x = size.width / 2f
-                for (y in listOf(top, (top + bottom) / 2f, bottom)) {
-                    drawCircle(color = Faint, radius = radius, center = Offset(x, y))
-                }
-            }
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.action_more),
+                tint = Faint,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }

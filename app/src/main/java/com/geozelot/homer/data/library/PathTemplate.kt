@@ -218,3 +218,54 @@ data class ScopedTemplate(val scope: String, val template: PathTemplate) {
             templates.firstNotNullOfOrNull { it.parse(path) }
     }
 }
+
+
+/**
+ * The stored template lines after taking on what the shared index carries.
+ *
+ * Pure, and tested, because this function can DELETE the user's work and the two ways it used to do
+ * so were both invisible: it runs on a background pull, writes its result straight back to storage,
+ * and nothing on screen says it happened.
+ *
+ * ## It works on RAW TEXT, and that is the point
+ *
+ * The previous version decoded every stored line into a [ScopedTemplate] first and dropped whatever
+ * failed — then wrote the survivors back. So one pattern that no longer compiled was not merely
+ * inert, it was **erased on the next sync**, silently and for good. Which is exactly what
+ * `LibrarySettings.pathTemplates` promises never happens: templates are stored as text precisely so
+ * that a pattern naming a field a later build renamed, or one with a typo in it, survives being
+ * loaded and can be seen and fixed. A scope can be read off a line with a string split; compiling it
+ * is not needed to decide where it belongs, so nothing here compiles anything.
+ *
+ * ## An empty remote rule is not an instruction to delete
+ *
+ * `TemplateRule.patterns` defaults to an empty list, so a rule whose field is absent, renamed or
+ * unreadable arrives as "no patterns" rather than as an error. Assigning that over a local scope
+ * would let one malformed shared file wipe a folder's templates on every device that reads it.
+ * A remote scope only ever wins when it actually carries something.
+ *
+ * @param local the stored lines, `scope\tpattern` or a bare pattern for the whole library
+ * @param remote the shared index's patterns per scope
+ */
+internal fun mergeTemplateLines(local: List<String>, remote: Map<String, List<String>>): List<String> {
+    fun scopeOf(raw: String) = if ('\t' in raw) raw.substringBefore('\t').trim().trim('/') else ""
+    fun patternOf(raw: String) = if ('\t' in raw) raw.substringAfter('\t').trim() else raw.trim()
+
+    val merged = LinkedHashMap<String, List<String>>()
+    // Whatever is here stays: the server has no opinion about a scope it has never held, and a
+    // read-only share user CANNOT publish, so their own patterns are never up there to be echoed.
+    for ((scope, lines) in local.filter { it.isNotBlank() }.groupBy(::scopeOf)) {
+        merged[scope] = lines.map(::patternOf)
+    }
+    // …and a scope the server does hold wins, because it is the newer deliberate act.
+    for ((scope, patterns) in remote) {
+        val cleaned = patterns.map { it.trim() }.filter { it.isNotEmpty() }
+        if (cleaned.isNotEmpty()) merged[scope.trim().trim('/')] = cleaned
+    }
+    return merged.entries
+        // Narrowest scope first, so a folder's own pattern is tried before a library-wide one.
+        .sortedByDescending { it.key.length }
+        .flatMap { (scope, patterns) ->
+            patterns.map { if (scope.isBlank()) it else "$scope\t$it" }
+        }
+}
