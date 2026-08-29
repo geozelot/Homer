@@ -132,7 +132,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.Velocity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -318,11 +317,6 @@ fun HomeScreen(
                     threshold = pullToExpandPx,
                 )
                 return Offset.Zero
-            }
-
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                fold.onGestureEnd()
-                return Velocity.Zero
             }
         }
     }
@@ -1426,10 +1420,10 @@ private fun ListeningShelf(
                     if (expanded) Modifier else Modifier.clickable(onClick = onExpand),
                 ),
         ) {
-            // The header is a LABEL, not a control. There is no manual fold any more — the panel
-            // folds when the reader turns to the library or to search — so a chevron pointing up
-            // would advertise an action that does not exist. Folded, it gains a chevron pointing
-            // down, which is true: the whole panel opens on a tap.
+            // The header is a LABEL, and carries no glyph at all. There is no manual fold, so a
+            // chevron pointing up would advertise an action that does not exist — and one pointing
+            // down while folded was true but pointed at the wrong thing, since the target is the
+            // whole panel rather than the corner the chevron sat in.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = LibraryGridPadding),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1442,14 +1436,6 @@ private fun ListeningShelf(
                         // Small, unlike the library header below it. That one titles the list being
                         // scrolled; this titles a strip that is deliberately not the subject.
                         large = false,
-                    )
-                }
-                if (!expanded) {
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        contentDescription = stringResource(R.string.home_cd_expand_listening),
-                        tint = Muted,
-                        modifier = Modifier.size(18.dp),
                     )
                 }
             }

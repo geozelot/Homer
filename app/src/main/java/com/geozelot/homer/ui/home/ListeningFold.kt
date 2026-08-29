@@ -34,13 +34,12 @@ import androidx.compose.runtime.setValue
  *  - **It folds when search opens**, for the same reason.
  *  - **Nothing folds it by hand.** There is no collapse control, so the header is not one.
  *  - **It unfolds on a tap anywhere on the panel**, and
- *  - **on a deliberate pull while the library is ALREADY at its top.** A gesture that begins
- *    anywhere below the top is refused for its whole duration, however far past the top it carries;
- *    otherwise one flick would both scroll home and unfold a panel nobody asked for.
- *  - **Folding disqualifies the gesture that did it.** Scroll down and back up in one movement and
- *    the panel stays folded — a single gesture must not both close and reopen it.
+ *  - **on a deliberate pull while the library is at its top.** Travel counts only while the list can
+ *    go no further up, so scrolling home is not itself a pull — the count starts over every time the
+ *    list is away from the top.
  *  - **A fling can fold it but never unfold it.** Folding on momentum is harmless; unfolding on
- *    momentum is the panel opening itself.
+ *    momentum means the panel opens itself, which is the one thing it must not do — and it is what
+ *    stops a single flick from both scrolling home and opening the panel.
  */
 internal class ListeningFold(expanded: Boolean = true) {
 
@@ -48,70 +47,49 @@ internal class ListeningFold(expanded: Boolean = true) {
     var expanded: Boolean by mutableStateOf(expanded)
         private set
 
-    /**
-     * Whether a finger-down-to-finger-up interaction is in progress, INCLUDING the fling it throws.
-     *
-     * Compose reports a drag's deltas, then a pre-fling, then the fling's deltas, then a post-fling.
-     * Treating all of that as one gesture is what makes "the gesture began below the top" mean what
-     * a reader would mean by it.
-     */
-    private var inGesture = false
-
-    /** Whether this gesture is allowed to unfold at all. Decided at its first delta, and revocable. */
-    private var mayUnfold = false
-
-    /** Downward travel accumulated by the current gesture, once it is eligible to count. */
+    /** Downward travel accumulated while the list has been sitting at its top. */
     private var pulled = 0f
 
     /**
-     * A scroll delta arrived.
+     * The library scrolled.
      *
      * [deltaY] is the RAW pointer movement before anything consumes it — positive when the finger
-     * travels down the screen, i.e. back towards the top of the list. [atTop] is whether the list
-     * can go no further up. [fromUser] separates a finger from a fling.
+     * travels down the screen, i.e. back towards the top of the list. [atTop] is whether the list can
+     * go no further up. [fromUser] separates a finger from a fling.
+     *
+     * **Nothing here is latched across a gesture, and that is the fix.** The version before this
+     * decided at a gesture's first delta whether that whole gesture was allowed to unfold, and reset
+     * the decision in `onPostFling` — a suspend callback that is skipped whenever the fling coroutine
+     * is cancelled, which is what happens every time a finger comes down again before the previous
+     * fling has settled. Miss it once and the flag stayed set for the life of the screen, so pulling
+     * never worked again and nothing about the code looked wrong. Every decision is now taken from
+     * the state in front of it.
+     *
+     * The cost, and it is worth naming: a slow drag that travels to the top and keeps going will
+     * open the panel within that same gesture, where before it would have been refused until the
+     * finger lifted. A FLING home still cannot, which is the case that actually mattered — that is
+     * the one that would have scrolled home and opened the panel off a single flick.
      */
     fun onScroll(deltaY: Float, atTop: Boolean, fromUser: Boolean, threshold: Float) {
-        if (!inGesture) {
-            inGesture = true
-            // Only a gesture that begins at the very top may ever unfold.
-            mayUnfold = atTop
-        }
         // Folding first, and unconditionally: any travel into the library folds the panel, whether
         // the finger is still down or the list is coasting.
         if (deltaY < 0f) {
             expanded = false
             pulled = 0f
-            // …and this gesture has now had its say. Without this, scrolling down and back up in one
-            // movement would fold the panel and then immediately pull it open again.
-            mayUnfold = false
             return
         }
-        if (!fromUser || expanded || !mayUnfold) return
-        // Below the top, a downward delta is the list scrolling, not a pull against its end.
-        if (!atTop) {
+        // Everything below is unfolding, which a fling is never allowed to do. Away from the top a
+        // downward delta is the list scrolling, not a pull against its end, so the count starts over
+        // — which is also what stops travel from two separate moments adding up.
+        if (!fromUser || expanded || !atTop) {
             pulled = 0f
             return
         }
-        if (deltaY > 0f) {
-            pulled += deltaY
-            if (pulled >= threshold) {
-                expanded = true
-                pulled = 0f
-            }
+        pulled += deltaY
+        if (pulled >= threshold) {
+            expanded = true
+            pulled = 0f
         }
-    }
-
-    /**
-     * The gesture ended — finger up AND its fling finished.
-     *
-     * Called from `onPostFling`, never `onPreFling`. Pre-fling runs at the START of the fling, still
-     * inside the gesture, so clearing the refusal there would hand that gesture's own momentum a
-     * clean slate and undo what it had earned.
-     */
-    fun onGestureEnd() {
-        inGesture = false
-        mayUnfold = false
-        pulled = 0f
     }
 
     /** Search opened. Folds, every time — not only the first. */

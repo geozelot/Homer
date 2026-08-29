@@ -43,7 +43,6 @@ class ListeningFoldTest {
     fun `it folds again on a later scroll, not only the first`() {
         val fold = ListeningFold()
         fold.drag(-30f)
-        fold.onGestureEnd()
         fold.onPanelTapped()
         assertTrue(fold.expanded)
         // Scrolling down a second time must fold it again — there is no once-only latch.
@@ -117,30 +116,7 @@ class ListeningFoldTest {
 
     // ── the rule that makes it feel deliberate ───────────────────────────────────────────────
 
-    @Test
-    fun `a gesture that began below the top can never unfold it, however far it carries`() {
-        val fold = ListeningFold()
-        fold.drag(-30f)
-        fold.onGestureEnd()
-        // One gesture: scrolls back to the top, then keeps pulling well past it.
-        fold.drag(30f, atTop = false)
-        fold.drag(200f, atTop = true)
-        assertFalse("the trip home must not also open the panel", fold.expanded)
-    }
 
-    @Test
-    fun `the NEXT gesture, starting at the top, does unfold it`() {
-        val fold = ListeningFold()
-        fold.drag(-30f)
-        fold.onGestureEnd()
-        fold.drag(30f, atTop = false)
-        fold.drag(200f, atTop = true)
-        assertFalse(fold.expanded)
-        // Finger up, fling done — the refusal expires with the gesture that earned it.
-        fold.onGestureEnd()
-        fold.drag(70f, atTop = true)
-        assertTrue(fold.expanded)
-    }
 
     @Test
     fun `a fling can never unfold it, even from the top`() {
@@ -150,17 +126,6 @@ class ListeningFoldTest {
         assertFalse("momentum must not open the panel", fold.expanded)
     }
 
-    @Test
-    fun `the fling phase of a refused gesture is still refused`() {
-        // This is the bug that shipped once: clearing the refusal at the START of the fling handed
-        // the blocked gesture's own momentum a clean slate, so a hard flick home opened the panel.
-        val fold = ListeningFold()
-        fold.drag(-30f)
-        fold.onGestureEnd()
-        fold.drag(30f, atTop = false)
-        fold.fling(300f, atTop = true)
-        assertFalse(fold.expanded)
-    }
 
     @Test
     fun `pulling while already expanded changes nothing`() {
@@ -169,20 +134,6 @@ class ListeningFoldTest {
         assertTrue(fold.expanded)
     }
 
-    @Test
-    fun `folding disqualifies the gesture that did it`() {
-        // Down and back up in ONE movement: the panel folds and must stay folded. Otherwise a
-        // single flick both closes and reopens it, which looks like a bug whichever way it lands.
-        val fold = ListeningFold()
-        fold.drag(-30f, atTop = true)
-        assertFalse(fold.expanded)
-        fold.drag(200f, atTop = true)
-        assertFalse("one gesture must not fold and then unfold", fold.expanded)
-        // A fresh gesture from the top may of course open it.
-        fold.onGestureEnd()
-        fold.drag(70f, atTop = true)
-        assertTrue(fold.expanded)
-    }
 
     @Test
     fun `a downward delta below the top does not count as pull progress`() {
@@ -197,14 +148,59 @@ class ListeningFoldTest {
     // ── what survives a rotation ─────────────────────────────────────────────────────────────
 
     @Test
-    fun `only the fold state is saved, not the gesture in progress`() {
+    fun `scrolling home is not itself a pull`() {
+        // Every delta of the trip back up is below the top, so none of it counts — the count starts
+        // over each time rather than banking travel that was really just scrolling.
+        val fold = ListeningFold()
+        fold.drag(-30f)
+        assertFalse(fold.expanded)
+        repeat(10) { fold.drag(200f, atTop = false) }
+        assertFalse("2000dp of scrolling home must not open it", fold.expanded)
+    }
+
+    @Test
+    fun `travel either side of reaching the top does not add up`() {
         val fold = ListeningFold()
         fold.onSearchOpened()
-        fold.drag(-5f, atTop = false) // leaves a refusal armed
+        fold.drag(60f, atTop = false)
+        fold.drag(20f, atTop = true)
+        assertFalse("the 60 was scrolling, not pulling", fold.expanded)
+    }
 
+    @Test
+    fun `pulling at the top opens it whatever came before`() {
+        // The point of the rewrite: no state carried from an earlier gesture can leave this stuck.
+        val fold = ListeningFold()
+        fold.drag(-30f)
+        fold.drag(30f, atTop = false)
+        fold.fling(500f, atTop = true)
+        assertFalse(fold.expanded)
+        fold.drag(70f, atTop = true)
+        assertTrue(fold.expanded)
+    }
+
+    @Test
+    fun `nothing needs a gesture to end for it to work again`() {
+        // There is no end-of-gesture callback any more. Pulling works on the very next delta after
+        // any amount of scrolling, which is what the missed onPostFling used to make impossible.
+        val fold = ListeningFold()
+        repeat(5) {
+            fold.drag(-40f)
+            fold.drag(40f, atTop = false)
+        }
+        fold.drag(70f, atTop = true)
+        assertTrue(fold.expanded)
+    }
+
+    // ── what survives a rotation ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `only the fold state is saved`() {
+        val fold = ListeningFold()
+        fold.onSearchOpened()
+        assertFalse(fold.expanded)
         val restored = ListeningFold.Saver.run { restore(false) }!!
         assertFalse(restored.expanded)
-        // The refusal did NOT come back with it, so a pull at the top works immediately.
         restored.drag(70f, atTop = true)
         assertTrue(restored.expanded)
     }
