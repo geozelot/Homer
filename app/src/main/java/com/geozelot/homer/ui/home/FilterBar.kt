@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -92,11 +99,13 @@ fun FilterPills(
         // Wraps and scrolls VERTICALLY. Horizontally, a filter you had set scrolled off the side
         // and left the shelf short for no visible reason; wrapping keeps every pill on screen, and
         // the cap stops eight of them pushing the library off the bottom.
+        val pillScroll = rememberScrollState()
         FlowRow(
             modifier = Modifier
                 .weight(1f)
                 .heightIn(max = PillRowsMax)
-                .verticalScroll(rememberScrollState())
+                .scrollEdgeFade(pillScroll, vertical = true)
+                .verticalScroll(pillScroll)
                 .padding(end = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -147,6 +156,9 @@ private val PillRowsMax = 96.dp
  */
 internal val FilterChipHeight = 28.dp
 
+/** Fully rounded — the shape that says "committed", against the offers' squarer 8dp. */
+private val PillCorner = 999.dp
+
 /** A chip's padding, on the button that has to pretend to be one. */
 private val FilterChipPadding = PaddingValues(horizontal = 10.dp)
 
@@ -161,11 +173,17 @@ private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .height(FilterChipHeight)
-            .clip(RoundedCornerShape(8.dp))
+            // A STADIUM, and an amber outline. Set against the offers on the line above, a committed
+            // filter used to differ by one thing only: a 14%-opacity amber wash, which on a dark
+            // ground is the faintest cue the palette has. Now it differs by two, and neither is a
+            // tint — the outline is the app's own word for "this is the live control" (the search
+            // chip wears it), and the shape survives a glance, a small size and greyscale, which
+            // colour does not.
+            .clip(RoundedCornerShape(PillCorner))
             .background(AmberSoft)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Amber, RoundedCornerShape(PillCorner))
             .clickable(onClick = onRemove)
-            .padding(start = 8.dp, end = 5.dp),
+            .padding(start = 10.dp, end = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -190,6 +208,51 @@ private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
 }
 
 /**
+ * Fades the content out at whichever edge still has something behind it.
+ *
+ * The honest version of a scrollbar: [ScrollState] knows which way it can still go, so the fade
+ * appears on the right only while there IS more to the right, on both sides mid-row, and nowhere at
+ * all when everything fits. A cue that is sometimes absent is worth more than one that is always
+ * present, because its absence means something too.
+ *
+ * `DstIn` against a gradient rather than a scrim drawn over the top: the chips fade to whatever is
+ * behind the row rather than to one assumed background colour, which matters here because the
+ * control bar sits on a vertical wash rather than a flat fill.
+ */
+private fun Modifier.scrollEdgeFade(state: ScrollState, vertical: Boolean = false): Modifier =
+    graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
+        drawContent()
+        // Nothing to say when nothing can move — and saying it would mean two gradient stops sharing
+        // a position, which is the sort of degenerate input a platform shader is entitled to render
+        // however it likes.
+        if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
+        val span = if (vertical) size.height else size.width
+        if (span <= 0f) return@drawWithContent
+        // Capped at a third of the row: on a short row an unclamped fade would meet itself in the
+        // middle and dim content that is fully visible. Every stop stays inside 0..1 and ascending,
+        // which the platform's gradient requires and will not forgive.
+        val fade = (FadeLength.toPx() / span).coerceIn(0f, 0.33f)
+        val opaque = Color.Black
+        val stops = arrayOf(
+            0f to if (state.canScrollBackward) Color.Transparent else opaque,
+            (if (state.canScrollBackward) fade else 0f) to opaque,
+            (if (state.canScrollForward) 1f - fade else 1f) to opaque,
+            1f to if (state.canScrollForward) Color.Transparent else opaque,
+        )
+        drawRect(
+            brush = if (vertical) {
+                Brush.verticalGradient(colorStops = stops)
+            } else {
+                Brush.horizontalGradient(colorStops = stops)
+            },
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
+/** How far the fade reaches in from an edge that can still scroll. */
+private val FadeLength = 20.dp
+
+/**
  * What the box offers for what has been typed: values to turn into filters.
  *
  * ONE SCROLLING LINE, all of them. It was a dropdown of up to 232dp dropped on top of the results it
@@ -210,11 +273,13 @@ fun FilterSuggestions(
     onPick: (FilterSuggestion) -> Unit,
 ) {
     if (suggestions.isEmpty()) return
+    val scroll = rememberScrollState()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 6.dp)
-            .horizontalScroll(rememberScrollState()),
+            .scrollEdgeFade(scroll)
+            .horizontalScroll(scroll),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
