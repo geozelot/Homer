@@ -264,11 +264,20 @@ private fun MoreSuggestionsChip(count: Int, onClick: () -> Unit) {
             .background(Surface2)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .semantics { contentDescription = label }
             .padding(horizontal = 9.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("+$count", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "+$count",
+            color = Amber,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            // On the TEXT, not on the clickable row above it. A description on the row is merged
+            // WITH this text rather than replacing it, so the chip announced itself twice — "3 more
+            // suggestions, plus 3". Set here it overrides what this node would otherwise read, and
+            // the row keeps its click action.
+            modifier = Modifier.semantics { contentDescription = label },
+        )
     }
 }
 
