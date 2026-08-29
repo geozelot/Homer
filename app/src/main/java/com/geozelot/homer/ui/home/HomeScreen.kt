@@ -52,12 +52,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
@@ -148,6 +149,7 @@ import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.components.SettingsRow
+import com.geozelot.homer.ui.components.rememberTextWidth
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -1378,6 +1380,17 @@ private val TrailingActionWidth = 44.dp
  */
 @Composable
 private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit) {
+    // The collection's OWN name for itself, not "flat". Read as one run this shelf is being treated
+    // as the collection it is, and "flat" describes what happened to the threads rather than what
+    // the reader gets — which is the whole collection, in its own order.
+    val asCollection = stringResource(R.string.depth_collection)
+    val asSeries = stringResource(R.string.depth_series)
+    // One width for both labels, so the chip does not resize under the finger that just tapped it —
+    // and so the chevron beside it does not shift every time this is used.
+    val labelWidth = rememberTextWidth(
+        listOf(asCollection, asSeries),
+        TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal),
+    )
     Box(
         modifier = Modifier
             .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
@@ -1401,11 +1414,12 @@ private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit) {
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                stringResource(if (flat) R.string.depth_flat else R.string.depth_series),
+                if (flat) asCollection else asSeries,
                 color = Muted,
                 fontSize = 11.sp,
                 lineHeight = 13.sp,
                 maxLines = 1,
+                modifier = Modifier.width(labelWidth),
             )
         }
     }
@@ -2370,6 +2384,17 @@ private fun BookListRow(
                         .size(46.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
+                // Compact, which is what fits a "#12" on a 46dp cover without the badge taking most
+                // of the artwork. The corners came off these covers once because a glyph at this
+                // size was a smudge; a two-character number is not a glyph, and it is the one fact
+                // about a book in a series that the row's single line of text keeps running out of
+                // room for.
+                VolumeIndexBadge(
+                    seriesIndex = if (ctx.collectionNumbered) null else book.seriesIndex,
+                    collectionIndex = book.collectionIndex,
+                    modifier = Modifier.align(Alignment.TopStart),
+                    compact = true,
+                )
             }
             // Same bar, same place, whatever view a book appears in.
             if (book.hasVisibleProgress()) {
@@ -2497,11 +2522,16 @@ private fun SeriesShelfRow(
                         .size(width = 38.dp, height = 52.dp)
                         .clip(RoundedCornerShape(6.dp)),
                 ) {
-                    // No corner badges here. At 38x52 a cut corner with a glyph in it is a smudge,
-                    // and two of them cover a third of the artwork to say what the line beside it
-                    // has room to say in words. The corners stay in GRID view, where the cover is
-                    // big enough to carry them and there is no room for a second line of text.
+                    // ONE corner, and it carries no number. Two badges here were a smudge at 38x52,
+                    // and the count they showed is in the text beside the cover anyway ("12 books").
+                    // What the text cannot say at a glance is which KIND of shelf this is, and a
+                    // glyph is exactly the right size of answer for that.
                     CoverArt(model = series.frontCover(), modifier = Modifier.fillMaxSize())
+                    ShelfKindBadge(
+                        isCollection = series.isCollection,
+                        modifier = Modifier.align(Alignment.TopStart),
+                        compact = true,
+                    )
                 }
             }
             Column(
@@ -2536,7 +2566,10 @@ private fun SeriesShelfRow(
             // edge and the overflow still lines up with the one on every book row. Leading it instead
             // pushed the covers out of line with the book rows above and below.
             Icon(
-                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                // Filled triangles rather than the thin chevrons. At this size a stroked chevron
+                // reads as a decoration next to the solid 3-dot button beside it; a filled arrowhead
+                // reads as a control, which is what it is.
+                imageVector = if (expanded) Icons.Filled.ArrowDropDown else Icons.AutoMirrored.Filled.ArrowRight,
                 contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                 tint = Faint,
             )

@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -546,19 +547,28 @@ fun rememberActionWidth(
     labels: List<String>,
     contentPadding: PaddingValues = SettingsActionPadding,
 ): Dp {
-    val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.labelLarge
-    val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
-    return remember(labels, style, density, direction, contentPadding) {
+    val width = rememberTextWidth(labels, MaterialTheme.typography.labelLarge) +
+        contentPadding.calculateLeftPadding(direction) +
+        contentPadding.calculateRightPadding(direction) +
+        // The hairline, on both sides — it is inside the button's own width.
+        2.dp
+    return if (width > ButtonDefaults.MinWidth) width else ButtonDefaults.MinWidth
+}
+
+/**
+ * How wide the widest of [labels] is in [style], and nothing else.
+ *
+ * The measuring half of [rememberActionWidth], separated because a control that is not a button
+ * wants the measurement without a button's padding or its 58dp floor — a chip whose label changes
+ * between two words, say, and which should not change width as it does.
+ */
+@Composable
+fun rememberTextWidth(labels: List<String>, style: TextStyle): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(labels, style, density) {
         val widest = labels.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
-        with(density) {
-            val text = widest.toDp() +
-                contentPadding.calculateLeftPadding(direction) +
-                contentPadding.calculateRightPadding(direction) +
-                // The hairline, on both sides — it is inside the button's own width.
-                2.dp
-            if (text > ButtonDefaults.MinWidth) text else ButtonDefaults.MinWidth
-        }
+        with(density) { widest.toDp() }
     }
 }

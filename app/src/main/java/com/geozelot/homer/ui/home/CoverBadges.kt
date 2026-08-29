@@ -236,6 +236,25 @@ internal fun VolumeIndexBadge(
     CoverBadge(corner, modifier, compact) { BadgeText("#$index", compact = compact) }
 }
 
+/**
+ * WHAT this shelf is — a series or a collection — with no number attached.
+ *
+ * For the list view, where the count already sits in the text beside the cover ("12 books") and a
+ * badge repeating it would put the same number twice on one row two centimetres apart. What the text
+ * cannot say at a glance is which KIND of shelf this is, and that is exactly what a glyph is for.
+ */
+@Composable
+internal fun ShelfKindBadge(
+    isCollection: Boolean,
+    corner: CoverCorner = CoverCorner.TOP_START,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    CoverBadge(corner, modifier, compact) {
+        BadgeIcon(if (isCollection) Icons.Filled.LibraryBooks else Icons.Filled.MenuBook, compact = compact)
+    }
+}
+
 /** How long a book or a whole shelf runs. */
 @Composable
 internal fun DurationBadge(
