@@ -402,4 +402,60 @@ class LibraryFilterTest {
         val offered = suggest(listOf(hexen, wache), "hexen", emptyList())
         assertEquals("Die Hexen", offered.first().value)
     }
+
+    // -- committed free text -------------------------------------------------------------------
+    //
+    // A word kept as a chip has to behave exactly as the same word still in the box: matched across
+    // every field at once, forgiving, and ANDed with everything else.
+
+    @Test
+    fun `a committed text token matches the way typing matches`() {
+        val f = LibraryFilter().plus(FilterToken(FilterFacet.TEXT, "hexen"))
+        assertTrue(f.matches(hexen))
+        assertFalse(f.matches(wache))
+    }
+
+    @Test
+    fun `two text tokens AND, like typing both words`() {
+        val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.TEXT, "pratchett"))
+            .plus(FilterToken(FilterFacet.TEXT, "hexen"))
+        assertTrue(f.matches(hexen))
+        assertFalse(f.matches(wache))
+    }
+
+    @Test
+    fun `a text token is as forgiving as the box is`() {
+        assertTrue(LibraryFilter().plus(FilterToken(FilterFacet.TEXT, "pratchet")).matches(hexen))
+        assertTrue(LibraryFilter().plus(FilterToken(FilterFacet.TEXT, "marchen")).matches(maerchen))
+    }
+
+    @Test
+    fun `a text token narrows against a facet token`() {
+        val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.COLLECTION, "Scheibenwelt"))
+            .plus(FilterToken(FilterFacet.TEXT, "hexen"))
+        assertTrue(f.matches(hexen))
+        assertFalse("same collection, and the text does not land", f.matches(wache))
+    }
+
+    @Test
+    fun `text tokens still narrow what is left in the box`() {
+        val f = LibraryFilter(text = "pratchett").plus(FilterToken(FilterFacet.TEXT, "hexen"))
+        assertTrue(f.matches(hexen))
+        assertFalse(f.matches(wache))
+    }
+
+    @Test
+    fun `the box never offers a text token, because it has no values to offer`() {
+        assertTrue(hexen.valuesFor(FilterFacet.TEXT).isEmpty())
+        val offered = suggest(listOf(hexen, wache), "hexen", emptyList())
+        assertTrue(offered.none { it.facet == FilterFacet.TEXT })
+    }
+
+    @Test
+    fun `a text token round-trips through its encoded form`() {
+        val t = FilterToken(FilterFacet.TEXT, "pratchett hexen")
+        assertEquals(t, FilterToken.decode(t.encode()))
+    }
 }

@@ -48,6 +48,20 @@ enum class FilterFacet(val key: String, @StringRes val label: Int) {
      * the reading, which is the less useful one and cannot express the other.
      */
     STATE("is", R.string.filter_facet_state),
+
+    /**
+     * Free text somebody committed rather than a value chosen off the shelf.
+     *
+     * The odd one out, and deliberately so: every other facet matches a value the library actually
+     * holds, and this one matches the way TYPING matches — [BookListItem.matchesText], across every
+     * field at once, forgiving accents and a slipped letter. It exists because pressing enter on a
+     * query should keep it and clear the box for the next one, and a word that spans no single facet
+     * ("hexen" before the series is known to exist) has no value to be committed as.
+     *
+     * [valuesFor] returns nothing for it, which is what keeps it out of the suggestion list: the box
+     * cannot offer you text you have not typed yet.
+     */
+    TEXT("text", R.string.filter_facet_text),
     ;
 
     companion object {
@@ -118,6 +132,9 @@ internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (fa
     // Every state that currently holds. A book is "downloaded" and "started" at once, and listing
     // both is what lets two state tokens OR together like two authors do.
     FilterFacet.STATE -> BookState.entries.filter { it.holds(this) }.map { it.key }
+    // Nothing. A text token is not a value off the shelf, so there is nothing here to offer or to
+    // compare against — see how [LibraryFilter.matches] singles it out.
+    FilterFacet.TEXT -> emptyList()
 }
 
 /**
@@ -142,8 +159,14 @@ data class LibraryFilter(
         // A flat AND over every token — no grouping by facet any more, because there is no longer a
         // within-facet rule for the grouping to express. Every pill is one more condition.
         for (token in tokens) {
-            val values = book.valuesFor(token.facet)
-            if (values.none { it.equals(token.value, ignoreCase = true) }) return false
+            val holds = if (token.facet == FilterFacet.TEXT) {
+                // Matched as typing is matched, not by equality: a committed word is the same
+                // question as the word still in the box, only kept.
+                book.matchesText(token.value)
+            } else {
+                book.valuesFor(token.facet).any { it.equals(token.value, ignoreCase = true) }
+            }
+            if (!holds) return false
         }
         val needle = text.trim()
         return needle.isEmpty() || book.matchesText(needle)

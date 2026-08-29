@@ -48,6 +48,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -124,6 +126,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -221,12 +224,20 @@ fun HomeScreen(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf<String>() }
 
-    // Back closes the field and drops what was typed. Committed pills SURVIVE it: they are a
-    // deliberate state with their own row and their own Clear, so throwing them away here would
-    // undo work the reader can see, on a gesture that means "put the keyboard away".
+    // Closing the box KEEPS what was typed, as a chip.
+    //
+    // It used to drop it, which made leaving the field the one way to lose a query — and the only
+    // ways out of search are leaving the field, so a word survived exactly as long as the keyboard
+    // was up. Every exit now commits first: back, the arrow, and a tap on the library all mean "I am
+    // done typing", not "forget that". Throwing it away has its own control, the X, which is the one
+    // thing on the row that says so.
+    //
+    // Committed pills survive it too, as they always did: they have their own row and their own
+    // Clear, and undoing them on a gesture meaning "put the keyboard away" would undo visible work.
     BackHandler(enabled = searching) {
-        searching = false
+        viewModel.commitSearchText()
         viewModel.setSearchQuery("")
+        searching = false
     }
 
     val actions = remember(viewModel) {
@@ -277,8 +288,11 @@ fun HomeScreen(
                 event.changes.forEach { it.consume() }
                 pressed = event.changes.any { it.pressed }
             }
-            searching = false
+            // Same rule as the back gesture: a tap on the library ends the typing, it does not
+            // discard it. See the BackHandler above.
+            viewModel.commitSearchText()
             viewModel.setSearchQuery("")
+            searching = false
         }
     }
 
@@ -393,24 +407,22 @@ fun HomeScreen(
                     searchOpen = searching,
                     onQueryChange = viewModel::setSearchQuery,
                     onOpenSearch = { searching = true },
-                    onCloseSearch = { searching = false; viewModel.setSearchQuery("") },
+                    onCloseSearch = {
+                        viewModel.commitSearchText()
+                        viewModel.setSearchQuery("")
+                        searching = false
+                    },
                     onRemoveToken = viewModel::removeFilterToken,
                     onClearFilter = viewModel::clearFilter,
+                    onCommitQuery = viewModel::commitSearchText,
+                    suggestions = suggestions,
+                    onPickSuggestion = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
                     onSortChange = viewModel::setSortMode,
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
                     onToggleView = viewModel::setGridView,
                     modifier = Modifier.padding(horizontal = LibraryGridPadding),
                 )
-                // Under the field it belongs to, and INSIDE the region the dismiss gesture spares
-                // — a suggestion you tap has to commit rather than merely closing the box.
-                if (searching) {
-                    FilterSuggestions(
-                        suggestions = suggestions,
-                        modifier = Modifier.padding(horizontal = LibraryGridPadding),
-                        onPick = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
-                    )
-                }
                 HorizontalDivider(color = Line)
             }
         }
@@ -944,6 +956,10 @@ private fun LibraryControlBar(
     onCloseSearch: () -> Unit,
     onRemoveToken: (FilterToken) -> Unit,
     onClearFilter: () -> Unit,
+    /** Committed by the keyboard's own action key — see [InlineSearchField]. */
+    onCommitQuery: () -> Unit,
+    suggestions: List<FilterSuggestion>,
+    onPickSuggestion: (FilterSuggestion) -> Unit,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
@@ -979,6 +995,7 @@ private fun LibraryControlBar(
                     query = query,
                     onQueryChange = onQueryChange,
                     onClose = onCloseSearch,
+                    onCommit = onCommitQuery,
                     modifier = Modifier.weight(1f),
                 )
                 return@Row
@@ -1053,6 +1070,12 @@ private fun LibraryControlBar(
                 }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
+        }
+        // Offers first, then what has been taken. The suggestion row sits directly under the field
+        // that produces it and the committed pills sit under THAT, so the three lines read top to
+        // bottom as one thought: what you are typing, what it could become, what it already is.
+        if (searchOpen) {
+            FilterSuggestions(suggestions = suggestions, onPick = onPickSuggestion)
         }
         // BELOW the controls, not above them. Above, they pushed the chips away from the header
         // every time one was added; below, the bar keeps its place and the pills grow into the gap
@@ -1177,6 +1200,7 @@ private fun InlineSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
+    onCommit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focus = remember { FocusRequester() }
@@ -1210,6 +1234,11 @@ private fun InlineSearchField(
                     singleLine = true,
                     textStyle = TextStyle(color = Parchment, fontSize = 12.sp),
                     cursorBrush = SolidColor(Amber),
+                    // The key that was doing nothing. On a single-line field the IME shows an action
+                    // in place of a newline, and it went unhandled — so pressing it dismissed the
+                    // keyboard and threw the query's momentum away. It keeps the words instead.
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onCommit() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }

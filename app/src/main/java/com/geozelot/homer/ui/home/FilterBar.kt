@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,10 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -107,11 +107,19 @@ fun FilterPills(
         // never scrolls away itself. A reader who has filtered themselves into an empty shelf must
         // always be able to see the way out of it.
         Column(horizontalAlignment = Alignment.End) {
-            HomerTextButton(onClick = onClear, contentPadding = SettingsActionPadding) {
+            // The same height as the chips it sits beside. Left to size itself it came out taller
+            // than every pill on the row, because a TextButton carries Material's own 40dp minimum
+            // — so the one control that is not a chip was the tallest thing on the line.
+            HomerTextButton(
+                onClick = onClear,
+                contentPadding = FilterChipPadding,
+                modifier = Modifier.height(FilterChipHeight),
+            ) {
                 Text(
                     stringResource(R.string.filter_clear_all),
                     color = Amber,
                     fontSize = 11.sp,
+                    lineHeight = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -126,7 +134,21 @@ fun FilterPills(
 }
 
 /** Three rows of pills before it scrolls — past that the library is the thing being crowded out. */
-private val PillRowsMax = 84.dp
+private val PillRowsMax = 96.dp
+
+/**
+ * The one height every chip on the search lines is drawn to — offered, committed, and Clear.
+ *
+ * Pinned rather than left to content, for the reason that keeps catching this codebase out:
+ * Material's `bodyLarge` carries `lineHeight = 24.sp`, and a `Text` that overrides `fontSize` alone
+ * is laid out in a 24dp line box whatever size its letters are. Three chips with slightly different
+ * padding therefore came out three slightly different heights, all of them taller than they looked
+ * like they should be. Every label on these rows sets its own line height to match.
+ */
+internal val FilterChipHeight = 28.dp
+
+/** A chip's padding, on the button that has to pretend to be one. */
+private val FilterChipPadding = PaddingValues(horizontal = 10.dp)
 
 /**
  * One committed filter: the axis in small type, the value in full, and an X.
@@ -138,20 +160,25 @@ private val PillRowsMax = 84.dp
 private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
+            .height(FilterChipHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(AmberSoft)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onRemove)
-            .padding(start = 8.dp, end = 5.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = 8.dp, end = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(stringResource(token.facet.label), color = Faint, fontSize = 9.5.sp)
+        Text(stringResource(token.facet.label), color = Faint, fontSize = 9.5.sp, lineHeight = 11.sp)
         Text(
             displayValue(token.facet, token.value),
             color = Parchment,
             fontSize = 11.sp,
+            lineHeight = 13.sp,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 200.dp),
         )
         Icon(
             Icons.Filled.Close,
@@ -165,18 +192,16 @@ private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
 /**
  * What the box offers for what has been typed: values to turn into filters.
  *
- * A ROW OF CHIPS, not a dropdown. The dropdown was up to 232dp of menu dropped directly on top of
- * the results it exists to preview — and with the keyboard up there was next to nothing left of the
- * library underneath it, so the one thing that tells you whether a suggestion is the one you want
- * was the thing it covered. A single scrolling line costs about a sixth of that and never hides a
- * book.
+ * ONE SCROLLING LINE, all of them. It was a dropdown of up to 232dp dropped on top of the results it
+ * exists to preview — and with the keyboard up almost nothing of the library was left underneath, so
+ * the one thing that tells you whether a suggestion is the one you want was exactly what it covered.
+ * A line costs a chip's height and never hides a book.
  *
- * The full list is still there, one tap away behind a "+N" chip, because the chips give up two
- * things the list had: you can only see a few at once, and a long value is cut short. Both matter
- * exactly when a query is ambiguous, which is when somebody actually reads this.
+ * Everything is reachable by scrolling rather than by expanding. A "+N" chip that opened the old
+ * list was the first attempt: it kept the full list one tap away, at the price of a second mode to
+ * be in and a second way out of it, for a row that can simply be pushed sideways.
  *
- * Shown only while something is typed, and dismissed by committing one or by clearing the field —
- * a suggestion list that outlives its query is a menu covering the list you were trying to read.
+ * Shown only while the box is open, above the committed pills — see the control bar.
  */
 @Composable
 fun FilterSuggestions(
@@ -185,14 +210,6 @@ fun FilterSuggestions(
     onPick: (FilterSuggestion) -> Unit,
 ) {
     if (suggestions.isEmpty()) return
-    // Keyed on the suggestions themselves, so typing another character collapses it again: the
-    // expanded list answers a question about THIS query, and a new query has not asked it yet.
-    var expanded by remember(suggestions) { mutableStateOf(false) }
-
-    if (expanded) {
-        SuggestionList(suggestions, modifier, onPick)
-        return
-    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -201,23 +218,11 @@ fun FilterSuggestions(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        suggestions.take(SuggestionChips).forEach { suggestion ->
+        suggestions.forEach { suggestion ->
             SuggestionChip(suggestion) { onPick(suggestion) }
-        }
-        if (suggestions.size > SuggestionChips) {
-            MoreSuggestionsChip(suggestions.size - SuggestionChips) { expanded = true }
         }
     }
 }
-
-/**
- * How many suggestions the row shows before the rest go behind "+N".
- *
- * Not a width calculation — the row scrolls, so more would fit. It is a reading limit: past about
- * four, scanning a horizontal line is slower than reading a vertical list, which is the point at
- * which the full list is the better answer and should be offered rather than approximated.
- */
-private const val SuggestionChips = 4
 
 /**
  * One offer: which axis, the value, and how many books it would leave.
@@ -230,103 +235,33 @@ private const val SuggestionChips = 4
 private fun SuggestionChip(suggestion: FilterSuggestion, onPick: () -> Unit) {
     Row(
         modifier = Modifier
+            .height(FilterChipHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(Surface2)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onPick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Text(stringResource(suggestion.facet.label), color = Faint, fontSize = 9.5.sp)
+        Text(
+            stringResource(suggestion.facet.label),
+            color = Faint,
+            fontSize = 9.5.sp,
+            lineHeight = 11.sp,
+        )
         Text(
             displayValue(suggestion.facet, suggestion.value),
             color = Parchment,
             fontSize = 11.sp,
+            lineHeight = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            // Capped so one long series name cannot take the whole row and hide the three offers
-            // behind it. A value cut short here is exactly what "+N" is for.
+            // Capped so one long series name cannot fill the row and hide every offer behind it.
+            // The row scrolls, so the rest are still reachable — they are just further away.
             modifier = Modifier.widthIn(max = 168.dp),
         )
-        Text(suggestion.count.toString(), color = Muted, fontSize = 9.5.sp)
-    }
-}
-
-/** The way back to the full list, and the only hint that there IS more than the row shows. */
-@Composable
-private fun MoreSuggestionsChip(count: Int, onClick: () -> Unit) {
-    val label = pluralStringResource(R.plurals.filter_suggestions_more, count, count)
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Surface2)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "+$count",
-            color = Amber,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            // On the TEXT, not on the clickable row above it. A description on the row is merged
-            // WITH this text rather than replacing it, so the chip announced itself twice — "3 more
-            // suggestions, plus 3". Set here it overrides what this node would otherwise read, and
-            // the row keeps its click action.
-            modifier = Modifier.semantics { contentDescription = label },
-        )
-    }
-}
-
-/**
- * Every suggestion, as the vertical list this used to be.
- *
- * Still capped and still scrolling inside the cap: a common substring must not be able to push the
- * library off the screen. It is only ever reached deliberately now, which is what makes the cost of
- * covering the list acceptable — somebody who taps "+N" has said the offers matter more than the
- * results for a moment.
- */
-@Composable
-private fun SuggestionList(
-    suggestions: List<FilterSuggestion>,
-    modifier: Modifier,
-    onPick: (FilterSuggestion) -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(top = 6.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Surface2)
-            .border(1.dp, Line, RoundedCornerShape(10.dp))
-            .heightIn(max = 232.dp)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        suggestions.forEach { suggestion ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onPick(suggestion) }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(suggestion.facet.label),
-                    color = Faint,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                Text(
-                    displayValue(suggestion.facet, suggestion.value),
-                    color = Parchment,
-                    fontSize = 13.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(suggestion.count.toString(), color = Muted, fontSize = 11.sp)
-            }
-        }
+        Text(suggestion.count.toString(), color = Muted, fontSize = 9.5.sp, lineHeight = 11.sp)
     }
 }

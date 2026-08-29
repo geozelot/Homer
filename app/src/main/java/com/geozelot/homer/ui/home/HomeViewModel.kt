@@ -465,6 +465,21 @@ class HomeViewModel @Inject constructor(
         _filterText.value = ""
     }
 
+    /**
+     * Keeps what is typed as a chip and empties the box for the next word.
+     *
+     * What pressing enter should do. Before this, a query lived only as long as the box held it, so
+     * narrowing by two unrelated words meant typing both together and keeping them together — and
+     * clearing one of them meant retyping the other.
+     *
+     * Blank text commits nothing rather than an empty chip that would match everything.
+     */
+    fun commitSearchText() {
+        val typed = _filterText.value.trim()
+        if (typed.isEmpty()) return
+        addFilterToken(FilterToken(FilterFacet.TEXT, typed))
+    }
+
     fun removeFilterToken(token: FilterToken) {
         _filterTokens.value = _filterTokens.value - token
     }
