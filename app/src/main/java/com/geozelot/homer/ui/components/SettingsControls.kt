@@ -274,26 +274,6 @@ fun <T> DropdownChip(
      */
     icon: ImageVector? = null,
     iconDescription: String? = null,
-    /**
-     * Pins the pill to an exact height instead of letting it size to its content.
-     *
-     * For a chip standing on its own, content-sized is right. For a chip in a ROW of controls it is
-     * not: this pill came out around 34dp against the 28dp of the search chip and the view toggle
-     * beside it, so the library's control bar was three heights pretending to be a band.
-     *
-     * The 34dp is not the padding — it is [LocalTextStyle]. Material's `bodyLarge` carries
-     * `lineHeight = 24.sp` and the label overrides `fontSize` only, so an 11sp word is laid out in
-     * a 24dp-tall box and the 5dp padding sits outside THAT. Pinning the height is deliberately the
-     * fix rather than correcting the line height, because the settings pages have used this chip's
-     * natural size since it was written and this is a control-bar problem.
-     */
-    pillHeight: Dp? = null,
-    /**
-     * Drops the chip's own outline and fill, for a chip that is a SEGMENT of a shared band rather
-     * than a pill in its own right — see the library control bar's shelve/depth/sort group. Three
-     * outlined pills butted together draw three borders where the group wants one.
-     */
-    flat: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -308,25 +288,10 @@ fun <T> DropdownChip(
         ) {
             Row(
                 modifier = Modifier
-                    .then(if (pillHeight != null) Modifier.height(pillHeight) else Modifier)
                     .clip(RoundedCornerShape(8.dp))
-                    .then(
-                        if (flat) {
-                            Modifier
-                        } else {
-                            Modifier
-                                .border(1.dp, Line, RoundedCornerShape(8.dp))
-                                .background(Surface1)
-                        },
-                    )
-                    // With the height pinned, the vertical padding would fight it — the 24sp line
-                    // box already fills a 28dp pill on its own.
-                    .padding(
-                        start = if (icon != null) 7.dp else 10.dp,
-                        end = 6.dp,
-                        top = if (pillHeight != null) 0.dp else 5.dp,
-                        bottom = if (pillHeight != null) 0.dp else 5.dp,
-                    ),
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .background(Surface1)
+                    .padding(start = if (icon != null) 7.dp else 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 icon?.let {
@@ -357,11 +322,6 @@ fun <T> DropdownChip(
                     },
                     color = Muted,
                     fontSize = 11.sp,
-                    // Only when the height is pinned. Left inherited, the label's line box is
-                    // bodyLarge's 24sp — which is what made this pill 34dp in the first place, and
-                    // which at a 1.2x font scale would be TALLER than the pin and clip. Given a
-                    // line height in proportion to the 11sp text, the pin has room to spare.
-                    lineHeight = if (pillHeight != null) 14.sp else TextUnit.Unspecified,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),

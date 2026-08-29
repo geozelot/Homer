@@ -159,9 +159,10 @@
     <string name="home_shelf_unknown_author">Unknown author</string>
     <string name="home_shelf_no_genre">No genre</string>
     <string name="home_shelf_no_language">No language</string>
-    <string name="home_chip_shelve">Shelve · %1$s</string>
-    <string name="home_chip_series">Series · %1$s</string>
-    <string name="home_chip_sort">Sort · %1$s</string>
+    <string name="home_chip_arrange">Arrange</string>
+    <string name="arrange_shelve">Shelve</string>
+    <string name="arrange_group">Group</string>
+    <string name="arrange_sort">Sort</string>
     <!-- Only offered while the library actually holds more than one language. -->
     <string name="home_meta_series_position">Book %1$d</string>
     <!-- Not a plural: a series is only ever formed from two or more books, so 1 is

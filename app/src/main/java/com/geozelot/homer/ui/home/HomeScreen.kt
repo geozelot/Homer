@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -58,7 +57,6 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
@@ -149,6 +147,7 @@ import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.MiniPlayer
+import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -189,6 +188,7 @@ fun HomeScreen(
     val languages by viewModel.languages.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val flatCollections by viewModel.flatCollections.collectAsStateWithLifecycle()
     val filterCount by viewModel.filterCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
@@ -468,6 +468,8 @@ fun HomeScreen(
                 libraryContent(
                     entries = entries,
                     gridView = gridView,
+                    flatCollections = flatCollections,
+                    onCollectionOrder = viewModel::setCollectionFlat,
                     ctx = RowContext(shelfMode, seriesMode, mixedLanguages = languages.size > 1),
                     expanded = expanded,
                     onBookClick = onBookClick,
@@ -718,6 +720,9 @@ private fun gridCellWidth(totalWidth: Dp): Dp =
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
     gridView: Boolean,
+    /** Collections the reader has asked to see as one numbered run — see [LibrarySettings]. */
+    flatCollections: Set<String>,
+    onCollectionOrder: (collection: String, flat: Boolean) -> Unit,
     ctx: RowContext,
     /** Book ids anchoring the open series shelves — see [isOpen]. */
     expanded: MutableList<String>,
@@ -777,17 +782,29 @@ private fun LazyGridScope.libraryContent(
             is LibraryEntry.Series -> {
                 val shelfKey = entry.expandKey
                 val shelfOpen = isOpen(entry)
+                // Only a collection has two readings, and only one with threads AND numbers has a
+                // choice worth offering — see CollectionOrderChip.
+                val flat = entry.isCollection && entry.name in flatCollections
+                // The books of a collection read flat are numbered by the collection, so that is
+                // what their corners must show, even for one that also sits in a thread.
+                val shelfCtx = if (flat) ctx.copy(collectionNumbered = true) else ctx
                 if (gridView) {
                     if (shelfOpen) {
                         // A header banner, then the episodes a row at a time — every one of them a
                         // separate lazy item drawing its own slice of the enclosure that wraps the
                         // whole shelf. See `seriesEnclosure`.
                         item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
-                            ExpandedSeriesHeader(series = entry, ctx = ctx, onCollapse = { close(entry) })
+                            ExpandedSeriesHeader(
+                                series = entry,
+                                ctx = ctx,
+                                flat = flat,
+                                onOrderChange = { onCollectionOrder(entry.name, it) },
+                                onCollapse = { close(entry) },
+                            )
                         }
                         // An opened COLLECTION breaks into its threads; an opened plain series is
                         // one run, exactly as before. See `expandedRows`.
-                        val rows = entry.expandedRows(LibraryGridColumns)
+                        val rows = entry.expandedRows(LibraryGridColumns, flat = flat)
                         itemsIndexed(
                             rows,
                             span = { _, _ -> GridItemSpan(maxLineSpan) },
@@ -810,7 +827,7 @@ private fun LazyGridScope.libraryContent(
                                 is ShelfRow.Books -> ExpandedSeriesRow(
                                     books = row.books,
                                     last = last,
-                                    ctx = ctx,
+                                    ctx = shelfCtx,
                                     onOpen = onBookClick,
                                     actions = actions,
                                 )
@@ -835,6 +852,8 @@ private fun LazyGridScope.libraryContent(
                             series = entry,
                             ctx = ctx,
                             expanded = shelfOpen,
+                            flat = flat,
+                            onOrderChange = { onCollectionOrder(entry.name, it) },
                             onToggle = { if (shelfOpen) close(entry) else open(entry) },
                             actions = actions,
                         )
@@ -842,7 +861,7 @@ private fun LazyGridScope.libraryContent(
                     if (shelfOpen) {
                         // One book per row here, so the same split produces one Books row each and
                         // the sub-headings land between the threads.
-                        val listRows = entry.expandedRows(columns = 1)
+                        val listRows = entry.expandedRows(columns = 1, flat = flat)
                         itemsIndexed(
                             listRows,
                             span = { _, _ -> GridItemSpan(maxLineSpan) },
@@ -876,7 +895,7 @@ private fun LazyGridScope.libraryContent(
                                 BookListRow(
                                     book,
                                     startPadding = 2.dp,
-                                    ctx = ctx,
+                                    ctx = shelfCtx,
                                     onOpen = onBookClick,
                                     actions = actions,
                                     bordered = false,
@@ -1006,70 +1025,35 @@ private fun LibraryControlBar(
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
             SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
-            // A single row that SCROLLS rather than wraps. FlowRow let the chips fall onto a
-            // second line on a narrower screen, which moved everything below them and made the
-            // header a different height on different devices. Overflow is now horizontal, so the
-            // control bar is exactly one chip tall everywhere — and with the category words
-            // replaced by glyphs there is rarely anything to scroll.
-            // Resolved through the context because `labelOf` is a plain lambda, not a composable.
-            val controlContext = LocalContext.current
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    // BEFORE the scroll, so it is a viewport inset and not content that scrolls
-                    // away. Search does a different KIND of thing from the three chips beside it,
-                    // and a gap is what separates a group from its neighbour rather than making it
-                    // the first member of one.
-                    .padding(start = 12.dp)
-                    .horizontalScroll(rememberScrollState())
-                    .padding(end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // ONE control where there were three.
+            //
+            // Shelve, depth and sort are genuinely orthogonal — sections, grouping, order — so their
+            // menus cannot be merged without multiplying: four shelvings times three depths is
+            // twelve entries to pick one thing from. What CAN be merged is the chrome. The three
+            // dropdowns spent a third of a phone's width standing open at all times to show three
+            // values that change rarely, on a row that also has to hold search and the view toggle.
+            // They are one chip and a sheet now, and the row stopped needing to scroll at all.
+            //
+            // The cost, stated because it is real: the current arrangement is no longer legible at a
+            // glance and takes a tap to see. That is the trade — the row is for reaching things, the
+            // sheet is for reading them.
+            var arranging by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                // Shelve, depth and sort are ONE control in three parts — they all answer "how
-                // is this list arranged" — so they share a band the way the view toggle's halves
-                // do, instead of standing as three separate pills with gaps between them. Each
-                // chip drops its own outline and fill; the band draws them once for all three.
-                Row(
-                    modifier = Modifier.controlGroupPill(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DropdownChip(
-                        label = stringResource(shelving.label),
-                        icon = Icons.Filled.Category,
-                        iconDescription = stringResource(R.string.home_chip_shelve, stringResource(shelving.label)),
-                        options = LibraryShelving.values().toList(),
-                        selected = shelving,
-                        labelOf = { controlContext.getString(it.label) },
-                        onSelect = onShelfChange,
-                        pillHeight = ControlPillHeight,
-                        flat = true,
-                    )
-                    ControlGroupSeam()
-                    DropdownChip(
-                        label = stringResource(series.label),
-                        icon = Icons.Filled.Layers,
-                        iconDescription = stringResource(R.string.home_chip_series, stringResource(series.label)),
-                        options = LibraryDepth.entries.toList(),
-                        selected = series,
-                        labelOf = { controlContext.getString(it.label) },
-                        onSelect = onSeriesChange,
-                        pillHeight = ControlPillHeight,
-                        flat = true,
-                    )
-                    ControlGroupSeam()
-                    // Only the sorts that still do something — see LibrarySort.offeredFor.
-                    DropdownChip(
-                        label = stringResource(sort.label),
-                        icon = Icons.AutoMirrored.Filled.Sort,
-                        iconDescription = stringResource(R.string.home_chip_sort, stringResource(sort.label)),
-                        options = LibrarySort.offeredFor(shelving),
-                        selected = sort,
-                        labelOf = { controlContext.getString(it.label) },
-                        onSelect = onSortChange,
-                        pillHeight = ControlPillHeight,
-                        flat = true,
-                    )
-                }
+                ArrangeChip(onClick = { arranging = true })
+            }
+            if (arranging) {
+                ArrangeSheet(
+                    sort = sort,
+                    shelving = shelving,
+                    series = series,
+                    onSortChange = onSortChange,
+                    onShelfChange = onShelfChange,
+                    onSeriesChange = onSeriesChange,
+                    onDismiss = { arranging = false },
+                )
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1118,21 +1102,103 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
     )
 }
 
-/**
- * The seam between two segments of a [controlGroupPill].
- *
- * The view toggle needs none — two glyphs, one of them lit amber, and it is obvious which is which.
- * Three segments each carrying an icon AND a word do need one, or the band reads as a single
- * run-on phrase. Inset from the band's edges so it is a seam inside the pill rather than a second
- * outline crossing it.
- */
+/** The one control that opens [ArrangeSheet]. Shows no value: the sheet is where values are read. */
 @Composable
-private fun ControlGroupSeam() {
+private fun ArrangeChip(onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .width(1.dp)
-            .height(ControlPillHeight - 10.dp)
-            .background(Line),
+            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = Modifier
+                .height(ControlPillHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Surface1)
+                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.Filled.Tune,
+                contentDescription = null,
+                tint = Muted,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                stringResource(R.string.home_chip_arrange),
+                color = Muted,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * Everything about how the library is arranged, in one place and labelled.
+ *
+ * Each row names its axis, which the chips could not: in German the shelving's "no sections" and the
+ * depth's "every book loose" are one word apart from each other by accident, and two glyph-and-value
+ * chips side by side gave a reader nothing to tell them apart with. A row that says "Shelve" before
+ * its value cannot have that problem.
+ *
+ * Changes apply as they are made — there is no Save, because there is nothing here to get wrong and
+ * nothing that needs confirming. The dialog closes when the reader is done looking.
+ */
+@Composable
+private fun ArrangeSheet(
+    sort: LibrarySort,
+    shelving: LibraryShelving,
+    series: LibraryDepth,
+    onSortChange: (LibrarySort) -> Unit,
+    onShelfChange: (LibraryShelving) -> Unit,
+    onSeriesChange: (LibraryDepth) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Resolved through the context because `labelOf` is a plain lambda, not a composable.
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.home_chip_arrange)) },
+        text = {
+            Column {
+                SettingsRow(label = stringResource(R.string.arrange_shelve)) {
+                    DropdownChip(
+                        label = stringResource(shelving.label),
+                        options = LibraryShelving.values().toList(),
+                        selected = shelving,
+                        labelOf = { context.getString(it.label) },
+                        onSelect = onShelfChange,
+                    )
+                }
+                SettingsRow(label = stringResource(R.string.arrange_group)) {
+                    DropdownChip(
+                        label = stringResource(series.label),
+                        options = LibraryDepth.entries.toList(),
+                        selected = series,
+                        labelOf = { context.getString(it.label) },
+                        onSelect = onSeriesChange,
+                    )
+                }
+                // Only the sorts that still do something — see LibrarySort.offeredFor.
+                SettingsRow(label = stringResource(R.string.arrange_sort)) {
+                    DropdownChip(
+                        label = stringResource(sort.label),
+                        options = LibrarySort.offeredFor(shelving),
+                        selected = sort,
+                        labelOf = { context.getString(it.label) },
+                        onSelect = onSortChange,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
     )
 }
 
@@ -1295,6 +1361,60 @@ private fun InlineSearchField(
  */
 private val LeadingActionWidth = 44.dp
 private val TrailingActionWidth = 44.dp
+
+/**
+ * How an opened collection reads: as its threads, or as one numbered run.
+ *
+ * Deliberately the DEPTH control's own glyph and its own two words. This is not a new idea to learn
+ * — "series or flat" is exactly what the depth chip in the control bar asks of the whole library,
+ * and this asks it of one collection. Same question, smaller scope, so it should not look like a
+ * different question.
+ *
+ * A toggle rather than a menu: there are two answers, and a dropdown to choose between two is a menu
+ * where a switch would do.
+ *
+ * Drawn only where it would change something. A collection whose books are in no sub-series has one
+ * reading, and offering a choice between it and itself is worse than offering nothing.
+ */
+@Composable
+private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit) {
+    Box(
+        modifier = Modifier
+            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .clickable { onChange(!flat) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier
+                .height(ControlPillHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Surface1)
+                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                Icons.Filled.Layers,
+                contentDescription = null,
+                tint = Muted,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                stringResource(if (flat) R.string.depth_flat else R.string.depth_series),
+                color = Muted,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** Whether threading this shelf would actually separate anything. */
+private fun LibraryEntry.Series.hasThreads(): Boolean =
+    isCollection && books.any { it.series != null } && books.mapNotNull { it.series }.distinct().size +
+        (if (books.any { it.series == null }) 1 else 0) > 1
 
 /**
  * Grid / list, drawn to the same height as the chips next to it.
@@ -1656,7 +1776,7 @@ private fun BookGridCard(
             // itself in one corner. The glyph carries which of the two it is, the same way the
             // series stack's own count badge does: a book for a series, a shelf for a collection.
             VolumeIndexBadge(
-                seriesIndex = book.seriesIndex,
+                seriesIndex = if (ctx.collectionNumbered) null else book.seriesIndex,
                 collectionIndex = book.collectionIndex,
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -1766,6 +1886,14 @@ private data class RowContext(
     val series: LibraryDepth,
     /** Whether the library holds more than one language — see [bookMeta]. */
     val mixedLanguages: Boolean = false,
+    /**
+     * Whether the shelf these books are sitting on is counting the COLLECTION rather than the series.
+     *
+     * Set only for the books inside a collection being read as one numbered run. The corner shows
+     * one number and the shelf is the context that says which — so when the shelf is the collection,
+     * the number has to be the collection's, even for a book that also belongs to a thread.
+     */
+    val collectionNumbered: Boolean = false,
 )
 
 /**
@@ -2029,6 +2157,8 @@ private fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier = 
 private fun ExpandedSeriesHeader(
     series: LibraryEntry.Series,
     ctx: RowContext,
+    flat: Boolean,
+    onOrderChange: (Boolean) -> Unit,
     onCollapse: () -> Unit,
 ) {
     Column(
@@ -2065,6 +2195,9 @@ private fun ExpandedSeriesHeader(
                 seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
                     Text(it, color = Muted, fontSize = 11.5.sp)
                 }
+            }
+            if (series.hasThreads()) {
+                CollectionOrderChip(flat = flat, onChange = onOrderChange)
             }
             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
         }
@@ -2306,6 +2439,8 @@ private fun SeriesShelfRow(
     series: LibraryEntry.Series,
     ctx: RowContext,
     expanded: Boolean,
+    flat: Boolean,
+    onOrderChange: (Boolean) -> Unit,
     onToggle: () -> Unit,
     actions: BookActions,
 ) {
@@ -2391,6 +2526,11 @@ private fun SeriesShelfRow(
                 seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
                     Text(text = it, color = Muted, fontSize = 11.5.sp)
                 }
+            }
+            // Only while open: folded, the shelf is one card and how its insides are arranged is not
+            // yet a question the reader has asked.
+            if (expanded && series.hasThreads()) {
+                CollectionOrderChip(flat = flat, onChange = onOrderChange)
             }
             // Chevron immediately left of the overflow button, so the two sit together at the trailing
             // edge and the overflow still lines up with the one on every book row. Leading it instead

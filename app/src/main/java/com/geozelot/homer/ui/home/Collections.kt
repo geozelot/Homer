@@ -159,6 +159,10 @@ sealed interface ShelfRow {
  * A plain series gets no headings at all: it has one thread and labelling it with its own name
  * inside a card already titled that would be saying the same word twice.
  *
+ * [flat] asks a collection for the other reading of itself: one run in collection order, the way it
+ * is numbered, rather than the threads it is made of. Discworld has both readings and they are both
+ * right — which is why it is a choice and not a rule.
+ *
  * Inside a collection, the threads come in the order the collection reads — by the first book of
  * each, so a numbered collection lists its threads in publication order rather than alphabetically —
  * and the books belonging to no thread come last, under a heading of their own.
@@ -168,9 +172,12 @@ sealed interface ShelfRow {
  * as more of that series. Being what is left is itself worth saying once, and only when there is
  * something for them to be distinguished FROM — a collection with no threads at all gets no heading.
  */
-internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
+internal fun LibraryEntry.Series.expandedRows(columns: Int, flat: Boolean = false): List<ShelfRow> {
     val perRow = columns.coerceAtLeast(1)
-    if (!isCollection) return books.chunked(perRow).map { ShelfRow.Books(it) }
+    // A plain series has one thread and nothing to group. A collection asked to read FLAT is the
+    // same shape for a different reason: the books are already in collection order, so one run IS
+    // the numbered reading, and the threads are what that reading deliberately sets aside.
+    if (!isCollection || flat) return books.chunked(perRow).map { ShelfRow.Books(it) }
 
     val threads = LinkedHashMap<String, MutableList<BookListItem>>()
     val loose = mutableListOf<BookListItem>()

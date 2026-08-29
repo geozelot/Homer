@@ -525,6 +525,19 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * The collections the reader has asked to see as one numbered run.
+     *
+     * Presentational, and local for that reason — the same kind of preference as the grid toggle
+     * beneath it, not a claim about the library that other devices should adopt.
+     */
+    val flatCollections: StateFlow<Set<String>> = librarySettings.flatCollections
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun setCollectionFlat(collection: String, flat: Boolean) {
+        viewModelScope.launch { librarySettings.setCollectionFlat(collection, flat) }
+    }
+
     /** Cover grid (true) vs. scannable list (false); persisted. */
     val gridView: StateFlow<Boolean> = librarySettings.gridView
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)

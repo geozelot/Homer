@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.geozelot.homer.data.update.UpdateChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,6 +61,28 @@ class LibrarySettings @Inject constructor(
 
     suspend fun setGridView(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_GRID_VIEW] = value }
+    }
+
+    /**
+     * The collections that read as one numbered run rather than as their threads.
+     *
+     * A SET of the exceptions, not a value per collection: threaded is the answer for almost every
+     * collection almost always, and storing only the ones that differ means a collection that is
+     * renamed or disappears takes its entry with it instead of leaving a preference about a shelf
+     * that no longer exists.
+     *
+     * Local, like the grid toggle and the sort — this is how one person wants to look at a shelf,
+     * not a fact about the library, so it neither belongs in the shared index nor wants merging.
+     */
+    val flatCollections: Flow<Set<String>> =
+        context.settingsDataStore.data.map { it[KEY_FLAT_COLLECTIONS] ?: emptySet() }
+
+    suspend fun setCollectionFlat(collection: String, flat: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            val current = prefs[KEY_FLAT_COLLECTIONS] ?: emptySet()
+            val next = if (flat) current + collection else current - collection
+            if (next.isEmpty()) prefs.remove(KEY_FLAT_COLLECTIONS) else prefs[KEY_FLAT_COLLECTIONS] = next
+        }
     }
 
     
@@ -309,6 +332,7 @@ class LibrarySettings @Inject constructor(
     private companion object {
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
+        val KEY_FLAT_COLLECTIONS = stringSetPreferencesKey("library_flat_collections")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_LANGUAGE_FILTER = stringPreferencesKey("library_language_filter")
         val KEY_SHELF_MODE = stringPreferencesKey("library_group_mode")
