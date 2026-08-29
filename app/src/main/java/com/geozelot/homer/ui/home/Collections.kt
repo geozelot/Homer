@@ -137,6 +137,18 @@ sealed interface ShelfRow {
     /** The name of a sub-series inside a collection. */
     data class SubHeader(val label: String) : ShelfRow
 
+    /**
+     * The heading over the books that belong to no thread.
+     *
+     * Carries no text of its own: the label is a string resource and this is not a composable, and
+     * resolving it here would bake one language into a list that outlives a language change — the
+     * same rule the shelf headings already follow.
+     *
+     * Emitted only when there ARE threads to be distinguished from. A collection that is nothing but
+     * loose books does not need a heading telling it so.
+     */
+    data object LooseHeader : ShelfRow
+
     /** As many books as fit one row of the view drawing it. */
     data class Books(val books: List<BookListItem>) : ShelfRow
 }
@@ -149,8 +161,12 @@ sealed interface ShelfRow {
  *
  * Inside a collection, the threads come in the order the collection reads — by the first book of
  * each, so a numbered collection lists its threads in publication order rather than alphabetically —
- * and the books belonging to no thread come last under no heading, because they are not a group,
- * they are what is left.
+ * and the books belonging to no thread come last, under a heading of their own.
+ *
+ * They used to come last under NO heading, on the reasoning that they are not a group but what is
+ * left. True, and it made them unreadable: with nothing between them and the thread above, they read
+ * as more of that series. Being what is left is itself worth saying once, and only when there is
+ * something for them to be distinguished FROM — a collection with no threads at all gets no heading.
  */
 internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
     val perRow = columns.coerceAtLeast(1)
@@ -169,7 +185,12 @@ internal fun LibraryEntry.Series.expandedRows(columns: Int): List<ShelfRow> {
             add(ShelfRow.SubHeader(thread))
             members.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
         }
-        loose.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
+        if (loose.isNotEmpty()) {
+            // Only against threads. Alone in a collection these books are the whole of it, and a
+            // heading over all of them would be labelling the card with its own contents.
+            if (threads.isNotEmpty()) add(ShelfRow.LooseHeader)
+            loose.chunked(perRow).forEach { add(ShelfRow.Books(it)) }
+        }
     }
 }
 

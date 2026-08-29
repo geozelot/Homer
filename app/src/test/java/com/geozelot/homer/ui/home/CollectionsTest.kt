@@ -220,12 +220,42 @@ class CollectionsTest {
     }
 
     @Test
-    fun `books belonging to no thread come last, under no heading`() {
+    fun `books belonging to no thread come last, under a heading of their own`() {
         val shelf = (collapseIntoUnits(discworld, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
         val rows = shelf.expandedRows(columns = 3)
-        // They are not a group, they are what is left — so no "Other" heading is invented for them.
         val lastBooks = rows.filterIsInstance<ShelfRow.Books>().last().books
         assertEquals(listOf("d"), lastBooks.map { it.id })
+        assertEquals(2, rows.filterIsInstance<ShelfRow.SubHeader>().size)
+        // They used to come under NO heading, on the reasoning that they are not a group but what is
+        // left. True, and unreadable: with nothing between them and the thread above they read as
+        // more of that series.
+        assertTrue(ShelfRow.LooseHeader in rows)
+        assertEquals("and it is the last heading, not a stray one", rows.indexOf(ShelfRow.LooseHeader), rows.size - 2)
+    }
+
+    @Test
+    fun `a collection that is only loose books gets no heading`() {
+        // Nothing to be distinguished FROM, so a heading would be labelling the card with its own
+        // contents.
+        val loose = listOf(
+            book("x", collection = "Odds", author = "A", collectionIndex = 1),
+            book("y", collection = "Odds", author = "A", collectionIndex = 2),
+        )
+        val shelf = (collapseIntoUnits(loose, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        val rows = shelf.expandedRows(columns = 3)
+        assertTrue(ShelfRow.LooseHeader !in rows)
+        assertTrue(rows.none { it is ShelfRow.SubHeader })
+    }
+
+    @Test
+    fun `a collection with no loose books gets no loose heading`() {
+        val threaded = listOf(
+            book("p", collection = "Odds", series = "One", author = "A", collectionIndex = 1),
+            book("q", collection = "Odds", series = "Two", author = "A", collectionIndex = 2),
+        )
+        val shelf = (collapseIntoUnits(threaded, LibraryDepth.COLLECTION).single() as SortUnit.Ser).series
+        val rows = shelf.expandedRows(columns = 3)
+        assertTrue(ShelfRow.LooseHeader !in rows)
         assertEquals(2, rows.filterIsInstance<ShelfRow.SubHeader>().size)
     }
 

@@ -171,6 +171,7 @@
         <item quantity="one">%1$d book</item>
         <item quantity="other">%1$d books</item>
     </plurals>
+    <string name="home_shelf_loose">On their own</string>
     <string name="home_cd_collapse_series">Collapse series</string>
     <string name="home_meta_percent_bare">%1$d%%</string>
 

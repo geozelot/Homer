@@ -215,8 +215,8 @@ internal fun VolumeCountBadge(
  *
  * Series first when a book has both. The sub-series is the more specific claim, and a Discworld
  * witches novel is "Die Hexen #3" before it is "Scheibenwelt #12"; showing both would put two
- * different numbers about the same book in the same corner. The glyph says which is meant, on the
- * same rule as [VolumeCountBadge]: a book for a series, a shelf of books for a collection.
+ * different numbers about the same book in the same corner — so the corner does not say WHICH it is,
+ * and does not try to. The shelf the book is sitting on is the context that answers that.
  *
  * Draws nothing when the book is in neither, rather than a bare "#" or a zero — most standalones are
  * in neither, and a badge that appears on every cover to say nothing is worse than no badge.
@@ -229,15 +229,11 @@ internal fun VolumeIndexBadge(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    val fromSeries = seriesIndex != null
     val index = seriesIndex ?: collectionIndex ?: return
-    CoverBadge(corner, modifier, compact) {
-        BadgeIcon(
-            if (fromSeries) Icons.Filled.MenuBook else Icons.Filled.LibraryBooks,
-            compact = compact,
-        )
-        BadgeText(index.toString(), compact = compact)
-    }
+    // A "#", not a glyph. The book/shelf icons said WHICH of the two numbers this is, at the cost of
+    // the corner reading as an icon with a number stuck to it rather than as a number — and the
+    // distinction was never the question being asked here. "#3" is what a volume number looks like.
+    CoverBadge(corner, modifier, compact) { BadgeText("#$index", compact = compact) }
 }
 
 /** How long a book or a whole shelf runs. */

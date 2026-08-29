@@ -797,6 +797,7 @@ private fun LazyGridScope.libraryContent(
                             key = { _, row ->
                                 when (row) {
                                     is ShelfRow.SubHeader -> "sesub:$shelfKey:${row.label}"
+                                    ShelfRow.LooseHeader -> "seloose:$shelfKey"
                                     is ShelfRow.Books -> "sep:${row.books.first().id}"
                                 }
                             },
@@ -804,6 +805,8 @@ private fun LazyGridScope.libraryContent(
                             val last = index == rows.lastIndex
                             when (row) {
                                 is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = last)
+                                ShelfRow.LooseHeader ->
+                                    ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = last)
                                 is ShelfRow.Books -> ExpandedSeriesRow(
                                     books = row.books,
                                     last = last,
@@ -846,6 +849,7 @@ private fun LazyGridScope.libraryContent(
                             key = { _, row ->
                                 when (row) {
                                     is ShelfRow.SubHeader -> "epsub:$shelfKey:${row.label}"
+                                    ShelfRow.LooseHeader -> "eploose:$shelfKey"
                                     is ShelfRow.Books -> "ep:${row.books.first().id}"
                                 }
                             },
@@ -853,6 +857,10 @@ private fun LazyGridScope.libraryContent(
                             val last = index == listRows.lastIndex
                             if (row is ShelfRow.SubHeader) {
                                 ExpandedSubHeader(row.label, last = last)
+                                return@itemsIndexed
+                            }
+                            if (row is ShelfRow.LooseHeader) {
+                                ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = last)
                                 return@itemsIndexed
                             }
                             val book = (row as ShelfRow.Books).books.first()
