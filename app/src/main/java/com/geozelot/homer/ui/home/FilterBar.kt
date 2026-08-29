@@ -3,6 +3,7 @@ package com.geozelot.homer.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -20,11 +22,19 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -153,7 +163,17 @@ private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
 }
 
 /**
- * What the box offers for what has been typed: values to turn into filters, above the plain search.
+ * What the box offers for what has been typed: values to turn into filters.
+ *
+ * A ROW OF CHIPS, not a dropdown. The dropdown was up to 232dp of menu dropped directly on top of
+ * the results it exists to preview — and with the keyboard up there was next to nothing left of the
+ * library underneath it, so the one thing that tells you whether a suggestion is the one you want
+ * was the thing it covered. A single scrolling line costs about a sixth of that and never hides a
+ * book.
+ *
+ * The full list is still there, one tap away behind a "+N" chip, because the chips give up two
+ * things the list had: you can only see a few at once, and a long value is cut short. Both matter
+ * exactly when a query is ambiguous, which is when somebody actually reads this.
  *
  * Shown only while something is typed, and dismissed by committing one or by clearing the field —
  * a suggestion list that outlives its query is a menu covering the list you were trying to read.
@@ -165,6 +185,107 @@ fun FilterSuggestions(
     onPick: (FilterSuggestion) -> Unit,
 ) {
     if (suggestions.isEmpty()) return
+    // Keyed on the suggestions themselves, so typing another character collapses it again: the
+    // expanded list answers a question about THIS query, and a new query has not asked it yet.
+    var expanded by remember(suggestions) { mutableStateOf(false) }
+
+    if (expanded) {
+        SuggestionList(suggestions, modifier, onPick)
+        return
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        suggestions.take(SuggestionChips).forEach { suggestion ->
+            SuggestionChip(suggestion) { onPick(suggestion) }
+        }
+        if (suggestions.size > SuggestionChips) {
+            MoreSuggestionsChip(suggestions.size - SuggestionChips) { expanded = true }
+        }
+    }
+}
+
+/**
+ * How many suggestions the row shows before the rest go behind "+N".
+ *
+ * Not a width calculation — the row scrolls, so more would fit. It is a reading limit: past about
+ * four, scanning a horizontal line is slower than reading a vertical list, which is the point at
+ * which the full list is the better answer and should be offered rather than approximated.
+ */
+private const val SuggestionChips = 4
+
+/**
+ * One offer: which axis, the value, and how many books it would leave.
+ *
+ * The axis is named for the same reason the committed pill names it — a genre and a tag both called
+ * "Classic" filter to different shelves — and the count is what separates a suggestion worth taking
+ * from one that would empty the shelf.
+ */
+@Composable
+private fun SuggestionChip(suggestion: FilterSuggestion, onPick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface2)
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .clickable(onClick = onPick)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(stringResource(suggestion.facet.label), color = Faint, fontSize = 9.5.sp)
+        Text(
+            displayValue(suggestion.facet, suggestion.value),
+            color = Parchment,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            // Capped so one long series name cannot take the whole row and hide the three offers
+            // behind it. A value cut short here is exactly what "+N" is for.
+            modifier = Modifier.widthIn(max = 168.dp),
+        )
+        Text(suggestion.count.toString(), color = Muted, fontSize = 9.5.sp)
+    }
+}
+
+/** The way back to the full list, and the only hint that there IS more than the row shows. */
+@Composable
+private fun MoreSuggestionsChip(count: Int, onClick: () -> Unit) {
+    val label = pluralStringResource(R.plurals.filter_suggestions_more, count, count)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface2)
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label }
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("+$count", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * Every suggestion, as the vertical list this used to be.
+ *
+ * Still capped and still scrolling inside the cap: a common substring must not be able to push the
+ * library off the screen. It is only ever reached deliberately now, which is what makes the cost of
+ * covering the list acceptable — somebody who taps "+N" has said the offers matter more than the
+ * results for a moment.
+ */
+@Composable
+private fun SuggestionList(
+    suggestions: List<FilterSuggestion>,
+    modifier: Modifier,
+    onPick: (FilterSuggestion) -> Unit,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -172,9 +293,8 @@ fun FilterSuggestions(
             .clip(RoundedCornerShape(10.dp))
             .background(Surface2)
             .border(1.dp, Line, RoundedCornerShape(10.dp))
-            // Capped so a common substring cannot push the library off the screen; the list scrolls
-            // inside the cap rather than growing past it.
-            .heightIn(max = 232.dp),
+            .heightIn(max = 232.dp)
+            .verticalScroll(rememberScrollState()),
     ) {
         suggestions.forEach { suggestion ->
             Row(

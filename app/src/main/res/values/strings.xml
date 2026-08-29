@@ -545,6 +545,10 @@
     <string name="filter_facet_language">Language</string>
     <string name="filter_facet_tag">Tag</string>
     <string name="filter_count">%1$d of %2$d</string>
+    <plurals name="filter_suggestions_more">
+        <item quantity="one">%1$d more suggestion</item>
+        <item quantity="other">%1$d more suggestions</item>
+    </plurals>
     <string name="filter_clear_all">Clear</string>
     <string name="edit_field_collection">Collection</string>
     <string name="edit_field_collection_index">Collection #</string>

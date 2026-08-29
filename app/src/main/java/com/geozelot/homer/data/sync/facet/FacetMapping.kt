@@ -287,6 +287,19 @@ object FacetMapping {
         existing: BookOverrideEntity?,
     ): BookOverrideEntity? {
         if (correction == null) return existing
+        // A LOCALLY NEWER edit is kept, on the same rule as `bookEntity` above and for the same
+        // reason: `FacetMerge.corrections` resolves a conflict by taking whichever side is newer,
+        // and it only ever ran on the publish path. Here an older remote entry replaced a local one
+        // outright — and it took the local stamp with it, so the evidence went too.
+        //
+        // Barely visible to a MAINTAINER, whose edits publish a few seconds later and are therefore
+        // the newer side by the time anything is pulled. Total for a READER: they cannot publish at
+        // all, so their edit is always the newer one and so always the one discarded. A reader who
+        // corrected a book the maintainer had also corrected lost that correction on every single
+        // pull, for ever.
+        //
+        // Equal stamps go to the correction, so republishing the same state is not a conflict.
+        if (existing != null && existing.updatedAt > correction.editedAt) return existing
         return BookOverrideEntity(
             bookId = bookId,
             title = correction.title,

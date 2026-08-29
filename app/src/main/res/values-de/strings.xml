@@ -522,6 +522,10 @@
     <string name="filter_facet_language">Sprache</string>
     <string name="filter_facet_tag">Schlagwort</string>
     <string name="filter_count">%1$d von %2$d</string>
+    <plurals name="filter_suggestions_more">
+        <item quantity="one">%1$d weiterer Vorschlag</item>
+        <item quantity="other">%1$d weitere Vorschläge</item>
+    </plurals>
     <string name="filter_clear_all">Zurücksetzen</string>
     <string name="edit_field_collection">Reihe</string>
     <string name="edit_field_collection_index">Sammlung Nr.</string>

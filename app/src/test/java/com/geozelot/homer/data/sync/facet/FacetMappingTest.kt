@@ -562,4 +562,59 @@ class FacetMappingTest {
         // The guard has to stay a guard: a row that exists only to carry `hidden` is not an edit.
         assertNull(FacetMapping.correctionOf(override(hidden = true), emptyList(), "dev"))
     }
+
+    // ── a locally newer correction survives a pull ───────────────────────────────────────────
+    //
+    // Same one-sided merge as `bookEntity` had: FacetMerge.corrections takes the newer side and only
+    // ran on the publish path, so an OLDER remote entry replaced a local one here. Nearly invisible
+    // to a maintainer (whose edits publish seconds later) and total for a reader, who cannot publish
+    // at all and whose edit is therefore always the newer — and always the one thrown away.
+
+    @Test
+    fun `a locally newer override is kept over an older correction`() {
+        val local = override(title = "Mine", updatedAt = 900)
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "Theirs", editedAt = 500),
+            existing = local,
+        )
+        assertEquals("Mine", e!!.title)
+        assertEquals("and it keeps its own stamp", 900, e.updatedAt)
+    }
+
+    @Test
+    fun `a newer correction still wins`() {
+        val local = override(title = "Mine", updatedAt = 500)
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "Theirs", editedAt = 900),
+            existing = local,
+        )
+        assertEquals("Theirs", e!!.title)
+        assertEquals(900, e.updatedAt)
+    }
+
+    @Test
+    fun `equal stamps go to the correction, so a republish is not a conflict`() {
+        val local = override(title = "Mine", updatedAt = 700)
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "Theirs", editedAt = 700),
+            existing = local,
+        )
+        assertEquals("Theirs", e!!.title)
+    }
+
+    @Test
+    fun `a locally newer override keeps this device's private flags`() {
+        // Returning `existing` wholesale must not lose what was never publishable anyway.
+        val local = override(title = "Mine", finished = true, hidden = true, updatedAt = 900)
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "Theirs", editedAt = 500),
+            existing = local,
+        )
+        assertEquals(true, e!!.finished)
+        assertEquals(true, e.hidden)
+    }
 }
