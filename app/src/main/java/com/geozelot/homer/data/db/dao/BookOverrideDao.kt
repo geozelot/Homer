@@ -26,10 +26,19 @@ interface BookOverrideDao {
      * uses to decide there is anything to publish. `finished`, `hidden` and `downloadOnPlay` are
      * absent on purpose: those are claims about the reader, never published, and counting them here
      * would promise to share something that never leaves the device.
+     *
+     * `collection`, `collectionIndex` and `language` were absent by ACCIDENT — the same three fields
+     * that went missing everywhere else they had to be listed. A book whose only correction was
+     * being put into a collection was not counted, so the Library screen said "no corrections" while
+     * holding a folder full of them. This is the fourth place in the codebase that spells out "the
+     * fields an edit can touch"; the others are `hasMetadataEdit`, `correctionOf`, `sameFieldsAs` and
+     * [observeUnpublishedCount] below, and they drift.
      */
     @Query(
         "SELECT COUNT(*) FROM book_overrides WHERE title IS NOT NULL OR author IS NOT NULL " +
-            "OR series IS NOT NULL OR seriesIndex IS NOT NULL OR genre IS NOT NULL OR tags IS NOT NULL",
+            "OR series IS NOT NULL OR seriesIndex IS NOT NULL OR collection IS NOT NULL " +
+            "OR collectionIndex IS NOT NULL OR genre IS NOT NULL OR language IS NOT NULL " +
+            "OR tags IS NOT NULL",
     )
     fun observeCorrectionCount(): Flow<Int>
 
@@ -60,11 +69,11 @@ interface BookOverrideDao {
     @Query("UPDATE book_overrides SET bookId = :newId WHERE bookId = :oldId")
     suspend fun relink(oldId: String, newId: String)
 
-    /** Drops overrides for books that are no longer indexed (no FK here, so a prune orphans them). */
-    /** Drops one book's override, for when a shared correction is cleared and nothing personal remains. */
+    /** Drops one book's override, for when a correction is cleared and nothing personal remains. */
     @Query("DELETE FROM book_overrides WHERE bookId = :bookId")
     suspend fun deleteById(bookId: String)
 
+    /** Drops overrides for books that are no longer indexed (no FK here, so a prune orphans them). */
     @Query("DELETE FROM book_overrides WHERE bookId NOT IN (SELECT id FROM books)")
     suspend fun deleteOrphans()
 
