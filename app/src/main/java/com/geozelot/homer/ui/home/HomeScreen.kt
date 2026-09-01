@@ -1,7 +1,5 @@
 package com.geozelot.homer.ui.home
 
-import android.os.SystemClock
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -325,6 +323,10 @@ fun HomeScreen(
      *
      * **Nothing is consumed.** The grid scrolls exactly as before; this only watches.
      *
+     * Confirmed working on a device at `2.1.0-BETA.79`, which is why the diagnostic that shipped with
+     * it is gone: a log on every 250ms of drag is a cost in a build nobody is debugging, and the rules
+     * it was watching are covered by `ListeningFoldTest`.
+     *
      * The cost, stated: momentum no longer reaches the fold at all, so the panel does not fold on a
      * fling that follows a lift. It folds on the drag that produced the fling, which is the same
      * moment to a reader. The rule "a fling must never unfold it" is now true by construction rather
@@ -336,34 +338,18 @@ fun HomeScreen(
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var pressed = true
-            var lastLogAt = 0L
             while (pressed) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val dy = event.changes.fold(0f) { sum, change -> sum + change.positionChange().y }
                 if (dy != 0f) {
                     // `canScrollBackward` rather than the first-item index and offset: it is the
                     // question being asked, answered by the state itself.
-                    val atTop = !gridState.canScrollBackward
                     fold.onScroll(
                         deltaY = dy,
-                        atTop = atTop,
+                        atTop = !gridState.canScrollBackward,
                         fromUser = true,
                         threshold = pullToExpandPx,
                     )
-                    // Kept, and now UNCONDITIONAL on travel rather than only on downward travel:
-                    // the previous diagnostic logged only one sign, so its silence could not
-                    // distinguish "no events" from "events of the other sign". This one cannot be
-                    // ambiguous — if it is silent, pointer events are not arriving either, and that
-                    // is the end of the road for this gesture.
-                    val now = SystemClock.uptimeMillis()
-                    if (now - lastLogAt >= FoldLogIntervalMs) {
-                        lastLogAt = now
-                        Log.i(
-                            FoldLogTag,
-                            "travel dy=${dy.toInt()} atTop=$atTop expanded=${fold.expanded} " +
-                                "pulled=${fold.pulledPx.toInt()}/${pullToExpandPx.toInt()}",
-                        )
-                    }
                 }
                 pressed = event.changes.any { it.pressed }
             }
@@ -1706,16 +1692,6 @@ private fun ListeningFolded(book: BookListItem) {
  */
 private val ListeningPullToExpand = 64.dp
 
-/**
- * Diagnostics for the fold gesture — see `pullToExpand` in the library screen.
- *
- * These, and the log that uses them, were written once before and NEVER SHIPPED: the script that
- * added them failed partway, the file was never written, and the commit message said otherwise. A
- * build went out claiming to be instrumented, its log was silent, and that silence was then read as
- * evidence about nested scroll when it was only evidence that nothing was logging.
- */
-private const val FoldLogTag = "HomerFold"
-private const val FoldLogIntervalMs = 250L
 
 /** The folded cover, at exactly the size [BookListRow] draws its own. */
 private val ListeningFoldedCover = 46.dp

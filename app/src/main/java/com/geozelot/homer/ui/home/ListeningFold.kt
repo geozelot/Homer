@@ -51,15 +51,6 @@ internal class ListeningFold(expanded: Boolean = true) {
     private var pulled = 0f
 
     /**
-     * How much travel is banked, for diagnostics only.
-     *
-     * Exposed because this mechanism has now been reported broken four times and cannot be
-     * reproduced off a device: the only way to tell "the deltas never arrive" from "they arrive and a
-     * condition refuses them" is to be able to print both. Nothing reads this to make a decision.
-     */
-    internal val pulledPx: Float get() = pulled
-
-    /**
      * The library scrolled.
      *
      * [deltaY] is the RAW pointer movement before anything consumes it — positive when the finger
