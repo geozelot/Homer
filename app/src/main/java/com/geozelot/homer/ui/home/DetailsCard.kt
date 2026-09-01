@@ -107,7 +107,7 @@ private fun DetailsHeader(cover: Any?, title: String, subtitle: String?) {
             model = cover,
             modifier = Modifier
                 .width(72.dp)
-                .aspectRatio(1f / 1.5f)
+                .aspectRatio(1f)
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, Line, RoundedCornerShape(8.dp)),
         )

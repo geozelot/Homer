@@ -1664,7 +1664,10 @@ private val ListeningFoldedCover = 46.dp
  *
  * **This is the one number to turn if the panel wants to be taller or shorter.** The collapsed strip
  * used 2.5; this is a little above it, per the brief, and the panel's whole height follows from it
- * because the cover is 2:3 and everything else on the item is a fixed line of text.
+ * because the cover is square and everything else on the item is a fixed line of text.
+ *
+ * The panel lost about a third of its height when covers went square, which is a gift rather than a
+ * problem — it was already the thing most often accused of taking up too much room.
  *
  * It is a trade: narrower keeps the panel out of the library's way, and wider gives the title room
  * before it ellipsises. At this width a title gets roughly a dozen characters.
@@ -1701,7 +1704,7 @@ private fun ListeningItem(
                 model = book.coverModel,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1f / 1.5f)
+                    .aspectRatio(1f)
                     .clip(RoundedCornerShape(8.dp))
                     // Same hairline the grid cards carry, so a cover reads as a cover everywhere.
                     .border(1.dp, Line, RoundedCornerShape(8.dp)),
@@ -1787,7 +1790,7 @@ private fun BookGridCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f / 1.5f)
+                .aspectRatio(1f)
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
@@ -2010,15 +2013,15 @@ private fun bookMeta(
 //     the wide horizontal step cost the cover 26dp of width and took it to about 1:1.79 —
 //     noticeably narrower than the 2:3 every other cover in the app is drawn at.
 //
-// **The fan is now equal in both directions**, at the smaller of the two old steps, and the stack
-// fills the cover space exactly. That buys the ratio back: the cover is cellW − 8dp by cellH − 8dp,
-// which for a 170dp column is 162 × 247 — **1:1.525 against a target of 1:1.5. 1.7% taller than 2:3,
-// which is not a difference anybody can see.**
+// **The fan is equal in both directions**, at the smaller of the two old steps, and the stack fills
+// the cover space exactly.
 //
-// Exact 2:3 is unreachable while the fan is equal AND the stack fills a 2:3 cell: the algebra
-// collapses to a step of zero. Holding the bounding box at 2:3 around a 2:3 cover would need the
-// steps in that same proportion — 4dp across, 6dp up — a diagonal that leans rather than one that
-// recedes. 1.7% is the cheaper price.
+// The ratio problem this used to have has dissolved. It was: an equal fan filling a 2:3 cell cannot
+// leave a 2:3 cover — the algebra collapses to a step of zero — so the cover came out at 1:1.525
+// against a 1.5 target and the 1.7% was argued about. The cell is SQUARE now (see `CoverImage`:
+// audiobook art is square, and cropping it to 2:3 was cutting a third off every cover in the app),
+// and an equal fan inside a square cell leaves a square cover, exactly. Both constraints are
+// satisfied at once by the shape of the medium rather than by a compromise.
 //
 // **Two sheets always, whatever the volume count.** They used to be derived from `books.size`, and
 // they are not evidence about it: a shelf of two drawing one sheet and a shelf of forty drawing two
@@ -2079,13 +2082,13 @@ private fun SeriesGridCard(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f / 1.5f)
+                .aspectRatio(1f)
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             // Derived from the declared aspect ratio rather than read off `maxHeight`: the cell IS
-            // 1:1.5 by construction, so this is exact and cannot come back unbounded.
-            val cellH = maxWidth * 1.5f
+            // square by construction, so this is exact and cannot come back unbounded.
+            val cellH = maxWidth
             val coverW = maxWidth - StackInset
             val coverH = cellH - StackInset
 

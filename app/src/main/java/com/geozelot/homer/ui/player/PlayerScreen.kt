@@ -450,14 +450,17 @@ private fun PlayerArtwork(model: Any?, onCollapse: () -> Unit, modifier: Modifie
             },
         contentAlignment = Alignment.Center,
     ) {
-        // Largest 1:1.3 cover that fits the slot both ways, floored so a pathological slot can't
+        // Largest SQUARE cover that fits the slot both ways, floored so a pathological slot can't
         // reduce it to nothing (an unbounded slot height falls back to the width limit).
-        val coverWidth = minOf(maxWidth * 0.82f, maxHeight / 1.3f).coerceAtLeast(MIN_COVER_WIDTH)
+        //
+        // It was 1:1.3, which cut 23% off a square cover — less brutal than the library's 2:3 but on
+        // the one screen where the artwork IS the content, and where there is room to show all of it.
+        val coverWidth = minOf(maxWidth * 0.82f, maxHeight).coerceAtLeast(MIN_COVER_WIDTH)
         CoverImage(
             model = model,
             modifier = Modifier
                 .width(coverWidth)
-                .aspectRatio(1f / 1.3f)
+                .aspectRatio(1f)
                 .shadow(
                     elevation = 30.dp,
                     shape = RoundedCornerShape(14.dp),
