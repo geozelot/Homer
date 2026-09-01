@@ -80,12 +80,6 @@ class LibraryIndexWorker @AssistedInject constructor(
      */
     private suspend fun runPass(request: PassRequest) {
         when (request.pass) {
-            IndexPass.CORRECTIONS -> {
-                report(request.pass)
-                setForegroundSafely(foregroundInfo("Sharing corrections…", 0, 0))
-                libraryIndex.pushCorrections()
-            }
-
             IndexPass.BOOKS -> {
                 report(request.pass)
                 setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))

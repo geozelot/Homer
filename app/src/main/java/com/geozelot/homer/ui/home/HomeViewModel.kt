@@ -836,9 +836,6 @@ class HomeViewModel @Inject constructor(
     /** As [measureBookLengths], but also re-arms the files whose probe failed before. */
     fun remeasureBookLengths() = libraryIndexManager.remeasureDurations()
 
-    /** Publish outstanding metadata corrections now. */
-    fun publishCorrections() = libraryIndexManager.publishCorrections()
-
     /** Stops everything queued or running. Every pass resumes where it stopped. */
     fun stopIndexing() = libraryIndexManager.cancel()
 
@@ -1392,9 +1389,21 @@ class HomeViewModel @Inject constructor(
      * merely READS the index has on this screen — every pass but artwork is refused to it — so
      * without this a reader whose shelf was stale could only force-stop the app.
      */
-    fun refreshIndex() {
+    /**
+     * Sync now: read the shared index and publish what this device knows.
+     *
+     * Homer does this on its own — when the app is opened, when an edit is saved, when a library is
+     * discovered — so this is not the only way changes move. It is the only way to ASK, and a shelf
+     * that looks stale with nothing to press invites a force-stop.
+     *
+     * Not a worker pass. Both halves are conditional round trips measured in hundreds of bytes, so
+     * putting it behind WorkManager would buy durability for something that finishes in the time it
+     * takes to notice it started. The `CORRECTIONS` pass remains the durable way to ask for the push
+     * alone, which is what a retry after a failure needs.
+     */
+    fun syncLibrary() {
         viewModelScope.launch {
-            _sharedCatalogAvailable.value = libraryIndex.pull()
+            _sharedCatalogAvailable.value = libraryIndex.sync()
         }
     }
 

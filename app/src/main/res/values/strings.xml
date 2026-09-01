@@ -261,9 +261,6 @@
          rather than cancelling one another, so a row has to be able to say "your turn is coming". -->
     <string name="sync_pass_queued">Waiting its turn\u2026</string>
     <string name="sync_fetching_covers">Fetching art %1$d of %2$d…</string>
-    <string name="set_measure_confirm_title">Measure every book?</string>
-    <string name="set_measure_confirm_body">Homer normally learns a book\u2019s length the first time you open it, because reading it means fetching a piece of every audio file. Doing the whole library at once is thousands of small requests and can take a while — best on Wi\u2011Fi. Books already measured are skipped, and you can stop it at any time; whatever finished is kept.</string>
-    <string name="set_measure_confirm_action">Measure</string>
     <string name="sync_show_hidden">Show hidden books</string>
     <string name="sync_rediscover">Rediscover</string>
     <string name="sync_discovering">Scanning your server…</string>
@@ -336,22 +333,21 @@
     <string name="lib_section_source">WHERE YOUR BOOKS COME FROM</string>
     <string name="lib_section_contents">WHAT HOMER HAS READ</string>
     <string name="lib_section_sharing">SHARING WITH YOUR OTHER DEVICES</string>
-    <string name="lib_section_startover">START OVER</string>
+    <string name="lib_section_retry">When something is still missing</string>
+    <string name="lib_try_covers">Try missing covers</string>
+    <string name="lib_try_lengths">Try missing lengths</string>
     <!-- Shown instead of the Contents lead on a device that only reads the index. -->
     <string name="lib_contents_reader_lead">This device reads an index kept by whoever can write to that folder, so it runs no scans of its own. New and deleted books arrive when they next update it.</string>
     <string name="lib_reader_unmeasured">%1$d without a length</string>
     <string name="lib_contents_lead">Each of these is read separately, because they cost wildly different amounts. Asking for one while another is running simply queues it.</string>
     <string name="lib_row_books">Books</string>
-    <string name="lib_row_artwork">Cover art</string>
-    <string name="lib_row_lengths">Lengths</string>
-    <string name="lib_row_corrections">Your corrections</string>
+    <string name="lib_row_sync">Sync</string>
+    <string name="lib_action_sync">Sync</string>
+    <string name="lib_sync_off">Not sharing — corrections stay on this device.</string>
     <string name="lib_reader_refresh">Check for changes</string>
     <string name="lib_reader_refresh_summary">Reads the shared index again. Homer also does this when you open the app.</string>
     <string name="lib_action_refresh">Check</string>
     <string name="lib_action_scan">Scan</string>
-    <string name="lib_action_fetch">Fetch</string>
-    <string name="lib_action_measure">Measure</string>
-    <string name="lib_action_publish">Publish</string>
     <string name="lib_books_none">No books yet — scan to read the folder</string>
     <string name="lib_artwork_complete">Every book has art</string>
     <string name="lib_artwork_missing">%1$d without art</string>
@@ -368,8 +364,6 @@
     <string name="lib_index_publishing">Publishing the index to this folder\u2026</string>
     <string name="lib_rebuild">Rebuild the library</string>
     <string name="lib_rebuild_desc">Re-reads every folder and fetches all cover art again. The slowest option</string>
-    <string name="lib_recheck_lengths">Try the lengths that failed</string>
-    <string name="lib_recheck_lengths_desc">Some files can\'t be measured at all. This asks again anyway</string>
     <string name="lib_recheck_confirm_title">Try the failed lengths again?</string>
     <string name="lib_recheck_confirm_body">Homer remembers which files it could not measure and stops asking. This forgets that, so the next measure pass tries them all again. Lengths it already knows are kept.</string>
     <string name="lib_recheck_confirm_action">Try again</string>

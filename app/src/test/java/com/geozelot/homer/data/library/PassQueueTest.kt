@@ -30,13 +30,15 @@ class PassQueueTest {
     fun `deep is dropped from a pass that has no deep variant`() {
         // Publishing corrections thoroughly is not a thing, and a token that claimed it would name
         // a pass the drain has no branch for.
-        assertEquals("CORRECTIONS", PassQueue.encode(PassRequest(IndexPass.CORRECTIONS, deep = true)))
+        assertEquals("ARTWORK", PassQueue.encode(PassRequest(IndexPass.ARTWORK)))
     }
 
     @Test
     fun `a token this build does not understand is not guessed at`() {
         assertNull("a pass from a newer build", PassQueue.decode("SHELVES"))
-        assertNull("a deep variant that does not exist", PassQueue.decode("CORRECTIONS:deep"))
+        // Also covers a pass that has LEFT: `CORRECTIONS` was removed, and a token an older
+        // build persisted has to be dropped rather than mishandled.
+        assertNull("a pass this build does not have", PassQueue.decode("CORRECTIONS"))
         assertNull(PassQueue.decode(""))
         assertNull(PassQueue.decode("BOOKS:thorough"))
     }
@@ -75,10 +77,10 @@ class PassQueueTest {
         assertEquals(
             // A correction is kilobytes and someone is waiting to see it on another device; a length
             // sweep is the longest thing the app does. Neither order is arbitrary.
-            listOf(IndexPass.CORRECTIONS, IndexPass.BOOKS, IndexPass.ARTWORK, IndexPass.LENGTHS),
+            listOf(IndexPass.BOOKS, IndexPass.ARTWORK, IndexPass.LENGTHS),
             PassQueue.pending(q).map { it.pass },
         )
-        assertEquals(PassRequest(IndexPass.CORRECTIONS), PassQueue.next(q))
+        assertEquals(PassRequest(IndexPass.BOOKS), PassQueue.next(q))
     }
 
     @Test

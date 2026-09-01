@@ -174,6 +174,12 @@ class LibraryIndexRepository @Inject constructor(
                 return@withLock
             }
             pullNow()
+            // And the other direction, which used to wait for the app to be BACKGROUNDED. That was
+            // enough while the pending flag was the only trigger, but the flag lives in memory: an
+            // edit made offline and followed by a process death was published by nothing until the
+            // next edit. Pushing on the way in as well means the durable state gets its chance every
+            // time the app is opened, and it is conditional, so the idle case costs one 304.
+            pushCorrectionsNow()
         }
     }
 
@@ -295,6 +301,23 @@ class LibraryIndexRepository @Inject constructor(
      * — costs three 304s of a few hundred bytes rather than a multi-megabyte download.
      */
     suspend fun pull(): Boolean = syncMutex.withLock { pullNow() }
+
+    /**
+     * Read the shared index, then tell it what this device knows. One round trip each way.
+     *
+     * "Sync" as one word, because that is how it is thought about: pulling without pushing leaves
+     * an edit sitting locally with nothing saying so, and pushing without pulling means publishing
+     * on top of something you have not read. Both halves are conditional — three 304s and, when
+     * nothing has changed, a `SaveResult.AlreadyCurrent` — so an idle sync costs a few hundred bytes.
+     *
+     * Under one lock for the whole operation rather than two, so nothing can publish between the
+     * read and the write.
+     */
+    suspend fun sync(): Boolean = syncMutex.withLock {
+        val found = pullNow()
+        pushCorrectionsNow()
+        found
+    }
 
     /** [pull] without the lock, for callers that already hold it. */
     private suspend fun pullNow(): Boolean {

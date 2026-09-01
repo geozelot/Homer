@@ -152,10 +152,30 @@ class LibraryIndexManager @Inject constructor(
         }
     }
 
-    /** Everyday scan: incremental crawl (skips unchanged subtrees), then any missing covers. */
+    /**
+     * Everyday scan: find what has arrived or gone, then finish the job on whatever is new.
+     *
+     * An incremental crawl (skipping unchanged subtrees on their ETag), then covers for the books
+     * that have none, then lengths for the files that have never been measured. One action, because
+     * "the library changed" is one thought — asking somebody to run three passes in the right order
+     * is asking them to hold a model of the pass queue.
+     *
+     * ## Lengths belong here now, and the reason it used to be otherwise still stands
+     *
+     * A length needs a ranged probe of every audio file, so a library of a few hundred books is
+     * thousands of requests — which is why this pass was kept out of the everyday scan, so the
+     * routine action would not be the expensive one.
+     *
+     * What makes it safe is that the shallow pass only touches files it has NEVER tried
+     * (`durationMs == null && !durationAttempted`). On a settled library that set is empty and this
+     * costs nothing; on a library that just grew by three books it is three books. The expensive
+     * case — re-arming files whose probe failed — is still asked for explicitly, by
+     * [remeasureDurations].
+     */
     fun scan() {
         request(IndexPass.BOOKS)
         request(IndexPass.ARTWORK)
+        request(IndexPass.LENGTHS)
     }
 
     /** Deep re-scan: full crawl re-reading everything, and all cover art fetched again. */
@@ -187,9 +207,6 @@ class LibraryIndexManager @Inject constructor(
      * only cost time — so this widens the pass to what was tried and could not be measured.
      */
     fun remeasureDurations() = request(IndexPass.LENGTHS, deep = true)
-
-    /** Publish outstanding metadata corrections now, rather than on the next idle moment. */
-    fun publishCorrections() = request(IndexPass.CORRECTIONS)
 
     /**
      * Stops everything queued or running.

@@ -3,9 +3,21 @@ package com.geozelot.homer.data.library
 /**
  * One maintenance pass over the library.
  *
- * Declaration order is **run order**, cheapest and most user-visible first. A correction is
- * kilobytes and someone is waiting to see it on their other device, so it must never sit behind an
- * hour-long length sweep; a length sweep is the longest thing this app does and goes last.
+ * Declaration order is **run order**, cheapest and most user-visible first: find what is there,
+ * then get art for it, then measure it. A length sweep is the longest thing this app does and goes
+ * last.
+ *
+ * There used to be a fourth, `CORRECTIONS`, which published metadata edits — first in the order, on
+ * the reasoning that a correction is kilobytes and somebody is waiting to see it on their other
+ * device. It is gone because it no longer had a job. Publishing happens a few seconds after an edit
+ * (`LibraryIndexRepository.publishEdits`), when the app is backgrounded, and now also when it is
+ * brought forward — and that last one is driven off the override table rather than an in-memory
+ * flag, which is the durability the pass existed to provide. A pass nothing requested would have
+ * been a fourth queue entry that could only ever be empty.
+ *
+ * A `CORRECTIONS` token persisted by an older build is ignored rather than mishandled: `PassQueue`
+ * already drops tokens it does not recognise, which was written for the opposite case (a token from
+ * a NEWER build) and covers this one unchanged.
  */
 enum class IndexPass(
     /** Whether the pass has a thorough variant — see [PassRequest.deep]. */
@@ -23,9 +35,6 @@ enum class IndexPass(
      */
     val needsMaintainer: Boolean,
 ) {
-    /** Publish the shared half of every metadata correction. */
-    CORRECTIONS(hasDeep = false, needsMaintainer = true),
-
     /** Crawl the folder tree. Deep = a full crawl instead of an incremental one. */
     BOOKS(hasDeep = true, needsMaintainer = true),
 

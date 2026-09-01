@@ -97,7 +97,6 @@ fun LibraryUpkeepScreen(
     var showHiddenList by remember { mutableStateOf(false) }
     var showUndetected by remember { mutableStateOf(false) }
     var confirmRebuild by remember { mutableStateOf(false) }
-    var confirmMeasure by remember { mutableStateOf(false) }
     var confirmRecheck by remember { mutableStateOf(false) }
 
     // Re-reads the clock so "scanned 12 minutes ago" keeps counting while the screen stays open.
@@ -119,14 +118,21 @@ fun LibraryUpkeepScreen(
                 artless = artless,
                 unmeasured = unmeasured,
                 reading = indexActivity == IndexActivity.READING,
-                onRefresh = viewModel::refreshIndex,
+                onRefresh = viewModel::syncLibrary,
             )
         } else {
             SettingsExplanation(stringResource(R.string.lib_contents_lead))
 
-            val running = indexProgress
-            BooksRow(
-                queued = IndexPass.BOOKS in queued,
+            // TWO rows, where there were four. Scan and Sync are the two things that happen to a
+            // library, and the four passes underneath them are an implementation of those two —
+            // asking somebody to run a crawl, then covers, then lengths, in that order, was asking
+            // them to hold a model of the pass queue in order to keep their own shelf up to date.
+            //
+            // Nothing was removed: the three passes Scan drives report their progress into its one
+            // row, and asking for any of them alone is still possible further down the page.
+            ScanRow(
+                queued = queued,
+                progress = indexProgress,
                 scanState = scanState,
                 bookCount = bookCount,
                 lastScannedAt = lastScannedAt,
@@ -134,27 +140,13 @@ fun LibraryUpkeepScreen(
                 onScan = viewModel::scan,
             )
             SettingsDivider()
-            ArtworkRow(
-                queued = IndexPass.ARTWORK in queued,
-                progress = running?.takeIf { it.pass == IndexPass.ARTWORK },
-                artless = artless,
-                onFetch = viewModel::fetchCoverArt,
-            )
-            SettingsDivider()
-            LengthsRow(
-                queued = IndexPass.LENGTHS in queued,
-                progress = running?.takeIf { it.pass == IndexPass.LENGTHS },
-                unmeasured = unmeasured,
-                onMeasure = { confirmMeasure = true },
-            )
-            SettingsDivider()
-            CorrectionsRow(
-                queued = IndexPass.CORRECTIONS in queued,
+            SyncRow(
+                activity = indexActivity,
                 count = corrections,
                 unpublished = unpublished,
                 shared = sharedIndex,
                 canPublish = libraryWritable,
-                onPublish = viewModel::publishCorrections,
+                onSync = viewModel::syncLibrary,
             )
 
             // Queued but not started: without saying so, the Wi-Fi-only rule is indistinguishable
@@ -230,28 +222,49 @@ fun LibraryUpkeepScreen(
             onCheckedChange = viewModel::setShowHidden,
         )
 
-        // ── Start over ───────────────────────────────────────────────────────
-        // The two actions that redo work already done. They are not "fixes" — the rows above say
-        // what is incomplete and offer to complete it — these throw away a previous answer, which
-        // is a different and rarer thing to want. Neither is a reader's to ask for.
+        // ── When something is still missing ──────────────────────────────────
+        // The second tier: three ways to have another go at one thing, for when Scan has run and
+        // the gap is still there. Each does something Scan does not — Scan tries the covers and
+        // lengths it has never tried, so what is left to ask for is trying them WITHOUT a crawl,
+        // re-arming the probes that failed, and throwing the whole answer away. None is a reader's
+        // to ask for.
         if (!readsOnly) {
             SettingsDivider()
-            SettingsSectionHeader(stringResource(R.string.lib_section_startover))
+            SettingsSectionHeader(stringResource(R.string.lib_section_retry))
+            SettingsRow(
+                label = stringResource(R.string.lib_try_covers),
+                summary = if (artless == 0) {
+                    stringResource(R.string.lib_artwork_complete)
+                } else {
+                    stringResource(R.string.lib_artwork_missing, artless)
+                },
+                enabled = IndexPass.ARTWORK !in queued && artless > 0,
+                onClick = viewModel::fetchCoverArt,
+            )
+            SettingsDivider()
+            SettingsRow(
+                label = stringResource(R.string.lib_try_lengths),
+                summary = if (unmeasured == 0) {
+                    stringResource(R.string.lib_lengths_complete)
+                } else {
+                    stringResource(R.string.lib_lengths_missing, unmeasured)
+                },
+                // The DEEP variant, because the shallow one already ran as part of Scan: what is
+                // left to offer is re-arming the files whose probe failed, which is the only reason
+                // asking a second time can change the answer.
+                //
+                // A file that failed has no length, so it is counted in `unmeasured`. None
+                // outstanding therefore means there is nothing to re-try, and offering it anyway
+                // buys a pass that reports "measuring lengths for 0 books" and does nothing.
+                enabled = IndexPass.LENGTHS !in queued && unmeasured > 0,
+                onClick = { confirmRecheck = true },
+            )
+            SettingsDivider()
             SettingsRow(
                 label = stringResource(R.string.lib_rebuild),
                 summary = stringResource(R.string.lib_rebuild_desc),
                 enabled = IndexPass.BOOKS !in queued,
                 onClick = { confirmRebuild = true },
-            )
-            SettingsDivider()
-            SettingsRow(
-                label = stringResource(R.string.lib_recheck_lengths),
-                summary = stringResource(R.string.lib_recheck_lengths_desc),
-                // A file that failed to measure has no length, so it is counted in `unmeasured`.
-                // None outstanding therefore means there is nothing to re-try, and offering it
-                // anyway buys a pass that reports "measuring lengths for 0 books" and does nothing.
-                enabled = IndexPass.LENGTHS !in queued && unmeasured > 0,
-                onClick = { confirmRecheck = true },
             )
         }
     }
@@ -287,15 +300,6 @@ fun LibraryUpkeepScreen(
             onDismiss = { confirmRebuild = false },
         )
     }
-    if (confirmMeasure) {
-        ConfirmDialog(
-            title = stringResource(R.string.set_measure_confirm_title),
-            body = stringResource(R.string.set_measure_confirm_body),
-            confirmLabel = stringResource(R.string.set_measure_confirm_action),
-            onConfirm = viewModel::measureBookLengths,
-            onDismiss = { confirmMeasure = false },
-        )
-    }
     if (confirmRecheck) {
         ConfirmDialog(
             title = stringResource(R.string.lib_recheck_confirm_title),
@@ -307,15 +311,24 @@ fun LibraryUpkeepScreen(
     }
 }
 
-// ── the four contents rows ───────────────────────────────────────────────────────────────────
+// ── the two contents rows ────────────────────────────────────────────────────────────────────
 //
-// Each one answers the same two questions in the same shape — how complete is this, and what would
-// close the gap — so they read as a queue rather than four unrelated buttons. None of them is
-// disabled because another is running: asking while something else runs is exactly what queues it.
+// Each answers the same two questions in the same shape — how complete is this, and what would
+// close the gap. Neither is disabled because the other is running: asking while something else runs
+// is exactly what queues it.
 
+/**
+ * The crawl and the two passes that finish the job on what it finds, as one row.
+ *
+ * It reports whichever of the three is running, in the order they run, because that is what somebody
+ * watching wants to know — "scanning", then "fetching covers", then "measuring". Three rows each
+ * saying "waiting its turn" while one worked was three quarters of a queue's internals on a page
+ * about a library.
+ */
 @Composable
-private fun BooksRow(
-    queued: Boolean,
+private fun ScanRow(
+    queued: Set<IndexPass>,
+    progress: LibraryIndexManager.IndexProgress?,
     scanState: ScanState,
     bookCount: Int,
     lastScannedAt: Long?,
@@ -323,107 +336,78 @@ private fun BooksRow(
     onScan: () -> Unit,
 ) {
     val scanning = scanState as? ScanState.Scanning
+    val busy = queued.any { it == IndexPass.BOOKS || it == IndexPass.ARTWORK || it == IndexPass.LENGTHS }
     PassRow(
         label = stringResource(R.string.lib_row_books),
         summary = when {
             scanning != null ->
                 stringResource(R.string.sync_scan_folders_books, scanning.directoriesVisited, scanning.booksFound)
-            queued -> stringResource(R.string.sync_pass_queued)
+            progress?.pass == IndexPass.ARTWORK && progress.total > 0 ->
+                stringResource(R.string.sync_fetching_covers, progress.done, progress.total)
+            progress?.pass == IndexPass.LENGTHS && progress.total > 0 ->
+                stringResource(
+                    R.string.sync_measuring,
+                    progress.books, progress.bookTotal, progress.done, progress.total,
+                )
+            busy -> stringResource(R.string.sync_pass_queued)
             bookCount == 0 -> stringResource(R.string.lib_books_none)
             else -> statusLine(bookCount, lastScannedAt, now)
         },
         action = stringResource(R.string.lib_action_scan),
         // A crawl is the one pass with nothing to be complete about — the folder may always have
         // changed — so its action is never withheld.
-        actionEnabled = !queued,
-        busy = queued,
+        actionEnabled = !busy,
+        busy = busy,
         onAction = onScan,
     )
 }
 
+/**
+ * Reading the shared index and telling it what this device knows, as one row.
+ *
+ * It was "Corrections", with a Publish that went live only when something was outstanding. Two
+ * things were wrong with that. The row named an internal facet rather than the thing a person wants,
+ * and Publish is half of an exchange — there was no way at all to ask for the OTHER half, so a
+ * device whose shelf looked stale had nothing to press.
+ *
+ * The action is therefore always live: a sync always has something to do, because it always reads.
+ * The summary still speaks about corrections, since that is the part with a count worth reporting.
+ */
 @Composable
-private fun ArtworkRow(
-    queued: Boolean,
-    progress: LibraryIndexManager.IndexProgress?,
-    artless: Int,
-    onFetch: () -> Unit,
-) {
-    PassRow(
-        label = stringResource(R.string.lib_row_artwork),
-        summary = when {
-            progress != null && progress.total > 0 ->
-                stringResource(R.string.sync_fetching_covers, progress.done, progress.total)
-            queued -> stringResource(R.string.sync_pass_queued)
-            artless == 0 -> stringResource(R.string.lib_artwork_complete)
-            else -> stringResource(R.string.lib_artwork_missing, artless)
-        },
-        action = stringResource(R.string.lib_action_fetch),
-        actionEnabled = !queued && artless > 0,
-        busy = queued,
-        onAction = onFetch,
-    )
-}
-
-@Composable
-private fun LengthsRow(
-    queued: Boolean,
-    progress: LibraryIndexManager.IndexProgress?,
-    unmeasured: Int,
-    onMeasure: () -> Unit,
-) {
-    PassRow(
-        label = stringResource(R.string.lib_row_lengths),
-        summary = when {
-            progress != null && progress.total > 0 ->
-                stringResource(
-                    R.string.sync_measuring,
-                    progress.books, progress.bookTotal, progress.done, progress.total,
-                )
-            queued -> stringResource(R.string.sync_pass_queued)
-            unmeasured == 0 -> stringResource(R.string.lib_lengths_complete)
-            else -> stringResource(R.string.lib_lengths_missing, unmeasured)
-        },
-        action = stringResource(R.string.lib_action_measure),
-        actionEnabled = !queued && unmeasured > 0,
-        busy = queued,
-        onAction = onMeasure,
-    )
-}
-
-@Composable
-private fun CorrectionsRow(
-    queued: Boolean,
+private fun SyncRow(
+    activity: IndexActivity,
     count: Int,
-    /** Of those, the ones the shared index has not been told about — what Publish is FOR. */
+    /** Of those, the ones the shared index has not been told about. */
     unpublished: Int,
     shared: Boolean,
     canPublish: Boolean,
-    onPublish: () -> Unit,
+    onSync: () -> Unit,
 ) {
     val counted = pluralStringResource(R.plurals.sync_books_count, count, count)
+    val busy = activity != IndexActivity.IDLE
     PassRow(
-        label = stringResource(R.string.lib_row_corrections),
+        label = stringResource(R.string.lib_row_sync),
         summary = when {
-            queued -> stringResource(R.string.sync_pass_queued)
+            activity == IndexActivity.READING -> stringResource(R.string.home_reading_index)
+            activity == IndexActivity.PUBLISHING -> stringResource(R.string.lib_index_publishing)
+            !shared -> stringResource(R.string.lib_sync_off)
             count == 0 -> stringResource(R.string.lib_corrections_none)
-            !shared || !canPublish -> stringResource(R.string.lib_corrections_local, counted)
-            // The state that was missing. Corrections publish themselves a few seconds after an
-            // edit, so "all shared" is the normal resting state — and while the row could only ever
-            // say "N corrections" with a live button, a working publish was indistinguishable from
-            // one silently failing.
+            !canPublish -> stringResource(R.string.lib_corrections_local, counted)
+            // Corrections publish themselves a few seconds after an edit, so "all shared" is the
+            // normal resting state — and while the row could only ever say "N corrections" with a
+            // live button, a working publish was indistinguishable from one silently failing.
             unpublished == 0 -> stringResource(R.string.lib_corrections_all_shared, counted)
             else -> stringResource(
                 R.string.lib_corrections_pending,
                 pluralStringResource(R.plurals.sync_books_count, unpublished, unpublished),
             )
         },
-        action = stringResource(R.string.lib_action_publish),
-        // Enabled only when there is something to publish. Edits go up on their own a few seconds
-        // after they are made, so this is for the case where that attempt happened with no
-        // connection — not a button somebody should feel they have to press after every edit.
-        actionEnabled = !queued && unpublished > 0 && shared && canPublish,
-        busy = queued,
-        onAction = onPublish,
+        action = stringResource(R.string.lib_action_sync),
+        // Live even with nothing to publish, and even when sharing is off — with sharing off it is
+        // the one control that tells you so, and with sharing on there is always an index to read.
+        actionEnabled = !busy,
+        busy = busy,
+        onAction = onSync,
     )
 }
 
@@ -516,19 +500,18 @@ private fun PassRow(
 }
 
 /**
- * The width every pass action shares — the widest of the four, in whatever language is running.
+ * The width every row action shares — the widest of them, in whatever language is running.
  *
  * Resolved here rather than passed down from the screen so the set stays next to the rows that use
- * it: add a fifth pass and its label goes in this list, or it will be the one button that does not
- * line up.
+ * it: add a row with an action and its label goes in this list, or it will be the one button that
+ * does not line up.
  */
 @Composable
 private fun PassActionWidth(): Dp = rememberActionWidth(
     listOf(
         stringResource(R.string.lib_action_scan),
-        stringResource(R.string.lib_action_fetch),
-        stringResource(R.string.lib_action_measure),
-        stringResource(R.string.lib_action_publish),
+        stringResource(R.string.lib_action_sync),
+        stringResource(R.string.lib_action_refresh),
     ),
 )
 
