@@ -166,7 +166,10 @@ class TemplateApplier @Inject constructor(
          * is unreachable on the shelf.
          */
         fun apply(book: BookEntity, templates: List<ScopedTemplate>): BookEntity {
-            val parsed = ScopedTemplate.parseFirst(book.id, templates) ?: return book
+            // Normalised even when no template matches, so a re-derive HEALS a book already carrying
+            // `collection == series` rather than only refusing to create a new one.
+            val parsed = ScopedTemplate.parseFirst(book.id, templates)
+                ?: return book.withoutRedundantCollection()
             return book.copy(
                 title = parsed[TemplateField.TITLE] ?: book.title,
                 author = parsed[TemplateField.AUTHOR] ?: book.author,
@@ -178,7 +181,9 @@ class TemplateApplier @Inject constructor(
                 // Normalised like every other language Homer stores, so a template capturing "German"
                 // and one capturing "de" produce the same shelf.
                 language = parsed[TemplateField.LANGUAGE]?.let { BookLanguage.normalise(it) } ?: book.language,
-            )
+            // A template that captures the same folder name for both — easy to do with `{**}` — is
+            // describing one shelf, not a hierarchy. See `redundantCollection`.
+            ).withoutRedundantCollection()
         }
     }
 }
