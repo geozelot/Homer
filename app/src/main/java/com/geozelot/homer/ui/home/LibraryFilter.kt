@@ -119,7 +119,11 @@ enum class BookState(val key: String, @StringRes val label: Int, val holds: (Boo
     }
 }
 
-/** The values a book presents on one axis. Author and series are single; tags are many. */
+/**
+ * The values a book presents on one axis, for MATCHING. Author and series are single; tags are many.
+ *
+ * See [suggestionValuesFor] for the deliberately narrower set the suggestion list offers.
+ */
 internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (facet) {
     FilterFacet.AUTHOR -> listOfNotNull(author)
     FilterFacet.SERIES -> listOfNotNull(series)
@@ -136,6 +140,23 @@ internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (fa
     // compare against — see how [LibraryFilter.matches] singles it out.
     FilterFacet.TEXT -> emptyList()
 }
+
+/**
+ * The values a book contributes to the SUGGESTION vocabulary.
+ *
+ * Identical to [valuesFor] on every axis but one. `collection:` offers only a collection somebody
+ * actually expressed, never the series-standing-in-as-its-own fallback — because on that fallback
+ * every single series in the library appeared twice in the box, once as `series:Die Hexen` and again
+ * as `collection:Die Hexen`, two suggestions that select the same books. Half the vocabulary was a
+ * duplicate of the other half.
+ *
+ * Matching keeps the fallback, and that asymmetry is the point rather than an oversight: a
+ * `collection:` token already committed against a plain series has to go on working, and
+ * `collection:Discworld` has to keep finding Discworld's unaffiliated books. What changes is only
+ * what the box VOLUNTEERS.
+ */
+internal fun BookListItem.suggestionValuesFor(facet: FilterFacet): List<String> =
+    if (facet == FilterFacet.COLLECTION) listOfNotNull(collection) else valuesFor(facet)
 
 /**
  * The whole state of the input box: what has been committed, and what is still being typed.
@@ -397,7 +418,7 @@ internal fun suggest(
     val counts = LinkedHashMap<Pair<FilterFacet, String>, Int>()
     for (book in books) {
         for (facet in FilterFacet.entries) {
-            for (value in book.valuesFor(facet)) {
+            for (value in book.suggestionValuesFor(facet)) {
                 if (terms.none { termMatches(foldedOf(value), it) }) continue
                 if (facet to value.lowercase() in taken) continue
                 counts[facet to value] = (counts[facet to value] ?: 0) + 1

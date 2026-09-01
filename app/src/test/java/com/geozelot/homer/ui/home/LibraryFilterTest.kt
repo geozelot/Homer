@@ -453,6 +453,40 @@ class LibraryFilterTest {
         assertTrue(offered.none { it.facet == FilterFacet.TEXT })
     }
 
+    // ── what the box OFFERS is narrower than what a token MATCHES ────────────────────────────
+
+    @Test
+    fun `the box does not offer a plain series as a collection`() {
+        // Every series in the library fell back to standing in as its own collection, so the box
+        // offered `series:Die Hexen` and `collection:Die Hexen` side by side — two suggestions
+        // selecting exactly the same books. Half the vocabulary was a duplicate of the other half.
+        val plain = book("h1", series = "Die Hexen", author = "Pratchett")
+        val offered = suggest(listOf(plain), "hexen", emptyList())
+        assertTrue(offered.any { it.facet == FilterFacet.SERIES && it.value == "Die Hexen" })
+        assertTrue(offered.none { it.facet == FilterFacet.COLLECTION })
+    }
+
+    @Test
+    fun `the box does offer a collection somebody actually expressed`() {
+        val nested = book("d1", series = "Die Hexen", collection = "Scheibenwelt", author = "Pratchett")
+        val offered = suggest(listOf(nested), "scheiben", emptyList())
+        assertTrue(offered.any { it.facet == FilterFacet.COLLECTION && it.value == "Scheibenwelt" })
+    }
+
+    @Test
+    fun `a collection token still MATCHES a plain series standing in as its own`() {
+        // The asymmetry is deliberate: a token already committed against a plain series — or typed
+        // by hand — has to go on working even though the box no longer volunteers it.
+        val plain = book("h1", series = "Die Hexen", author = "Pratchett")
+        assertTrue(LibraryFilter(tokens = listOf(FilterToken(FilterFacet.COLLECTION, "Die Hexen"))).matches(plain))
+    }
+
+    @Test
+    fun `a collection token still finds the books of that collection that are on no thread`() {
+        val loose = book("d9", collection = "Scheibenwelt", author = "Pratchett")
+        assertTrue(LibraryFilter(tokens = listOf(FilterToken(FilterFacet.COLLECTION, "Scheibenwelt"))).matches(loose))
+    }
+
     @Test
     fun `a text token round-trips through its encoded form`() {
         val t = FilterToken(FilterFacet.TEXT, "pratchett hexen")
