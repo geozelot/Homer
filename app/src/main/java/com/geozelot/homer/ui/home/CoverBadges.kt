@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CollectionsBookmark
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Studio
 
@@ -242,9 +242,13 @@ internal fun OfflineBadge(
  * KIND it is, when that matters, is named in words on the details card and by the collection chip in
  * the control bar.
  *
- * `CollectionsBookmark` — three upright spines with a bookmark tab — because it is the only
- * candidate that still reads as *books* at 13dp. The tab is the part that goes soft first; three
+ * [HomerIcons.Spines] — three upright spines with a bookmark notch — because it is the only
+ * candidate that still reads as *books* at 13dp. The notch is the part that goes soft first; three
  * uprights is what survives, and three uprights is the whole message.
+ *
+ * Drawn by Homer rather than taken from the Material set. It shipped as `CollectionsBookmark` on the
+ * strength of the name matching the description of the reviewed mark, and that icon is a different
+ * shape — so the thing on the device was never the thing that was approved. See [HomerIcons].
  *
  * [count] is omitted on a list row, where the meta line beside the cover already says "8 books" and
  * a badge repeating it would put the same number twice on one row two centimetres apart.
@@ -257,7 +261,7 @@ internal fun ShelfBadge(
     size: BadgeSize = BadgeSize.LARGE,
 ) {
     CoverBadge(corner, modifier, size) {
-        BadgeIcon(Icons.Filled.CollectionsBookmark, size)
+        BadgeIcon(HomerIcons.Spines, size)
         count?.let { BadgeText(it.toString(), size) }
     }
 }

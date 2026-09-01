@@ -1997,69 +1997,71 @@ private fun bookMeta(
 
 // ── the stack ────────────────────────────────────────────────────────────────
 //
-// One cover anchored to the bottom-left, with the EDGES of two more leaning back and to the right.
+// One cover on the bottom-left, with the edges of two more receding to the top-right at 45°.
 //
-// It used to fan three full covers diagonally across the cell, which cost the front book a third of
-// its width and a third of its height to show two others at an angle you could not read anyway.
-// Then it inset the front cover from all four sides and fanned upward from there, which left the
-// artwork floating in the middle of the cell with slack on every edge — about 40dp of it along the
-// top, because a 2:3 cover inside a 2:3 cell cannot also give up room for a stack.
+// Three earlier versions, and what each got wrong — the constraints only become visible once they
+// conflict:
 //
-// Anchoring the cover to one corner collects that slack into a single band along the top and right,
-// and the sheets and the badges are exactly what goes in it. Nothing is left over.
+//  1. Three full covers fanned across the cell. Cost the front book a third of its width and a third
+//     of its height to show two others at an angle you could not read anyway.
+//  2. Front cover inset from all four sides, sheets fanning up from there. Left the artwork floating
+//     in the middle of the cell with slack on every edge.
+//  3. Front cover anchored bottom-left, sheets stepping 13dp across for 4dp up. Filled the cell, but
+//     the wide horizontal step cost the cover 26dp of width and took it to about 1:1.79 —
+//     noticeably narrower than the 2:3 every other cover in the app is drawn at.
 //
-// THE COVER IS THEREFORE NOT 2:3. It fills the cell's height and takes whatever width the stack
-// leaves, which comes out near 1:1.79 — so a wide cover loses about 16% off its sides. It was being
-// cropped to 2:3 before, so this crops LESS on the square artwork most audiobooks ship with and
-// slightly more on tall artwork. That is the trade, made once, here.
+// **The fan is now equal in both directions**, at the smaller of the two old steps, and the stack
+// fills the cover space exactly. That buys the ratio back: the cover is cellW − 8dp by cellH − 8dp,
+// which for a 170dp column is 162 × 247 — **1:1.525 against a target of 1:1.5. 1.7% taller than 2:3,
+// which is not a difference anybody can see.**
 //
-// The sheets are not cover art. They are blank stock, which is honest (they stand in for no
-// particular volume) and cheap (no second and third image load per series cell, on a screen that may
-// hold twenty of them). They are filled with `Line` and edged in `Studio` — a pale slab with a
-// near-black cut, rather than the dark slab with a pale cut they were, which at this size read as
-// texture on the card instead of as separate sheets. The front cover takes the same dark edge, so
-// all three are divided by the same line.
+// Exact 2:3 is unreachable while the fan is equal AND the stack fills a 2:3 cell: the algebra
+// collapses to a step of zero. Holding the bounding box at 2:3 around a 2:3 cover would need the
+// steps in that same proportion — 4dp across, 6dp up — a diagonal that leans rather than one that
+// recedes. 1.7% is the cheaper price.
+//
+// **Two sheets always, whatever the volume count.** They used to be derived from `books.size`, and
+// they are not evidence about it: a shelf of two drawing one sheet and a shelf of forty drawing two
+// said nothing useful, while making the front cover's crop a function of how many books you own. A
+// stack card means "this is a shelf", and it should look like one whatever is on it.
+//
+// The sheets are not cover art. They are blank stock — honest (they stand in for no particular
+// volume) and cheap (no second and third image load per cell, on a screen that may hold twenty).
+// Filled with `Line` and cut with a `Studio` edge: a pale slab with a near-black division, rather
+// than the dark slab with a pale hairline they were, which read as texture rather than as sheets.
 
-/** How far each sheet behind the front cover peeks out to the right. */
-private val StackStepX = 13.dp
+/** How far each sheet behind the front cover recedes — the same distance in both directions. */
+private val StackStep = 4.dp
 
-/** …and how far it rises. Under a third of the horizontal step: a lean, not a diagonal. */
-private val StackStepY = 4.dp
-
-/** At most two sheets. A third is a hairline at this step and reads as a rendering artefact. */
-private const val STACK_MAX_HINTS = 2
-
-/** Inset, so the stack never touches the card's own outline. */
-private val StackPad = 5.dp
+/** Always this many, regardless of what the shelf holds. */
+private const val STACK_SHEETS = 2
 
 /** The cut between sheets, and around the front cover. */
 private val StackEdge = 1.5.dp
 
-/**
- * The room the stack takes whether or not it draws anything in it.
- *
- * Reserved unconditionally so every series card in the grid crops its artwork IDENTICALLY: a
- * two-volume series draws one sheet in the same footprint an eight-volume one uses for two. Sizing
- * the cover to the sheets actually drawn would make the crop a function of how many books you happen
- * to own, and a row of series cards would each show its cover at a different width.
- */
-private val StackReservedX = StackStepX * STACK_MAX_HINTS
-private val StackReservedY = StackStepY * STACK_MAX_HINTS
+/** What the fan costs the front cover, in each direction. */
+private val StackInset = StackStep * STACK_SHEETS
 
 // The same stack at row scale. Separate constants rather than a scale factor: 46dp is not a scaled
-// 255dp, it is the size a book row's cover already is, and the steps have to be legible against a
+// 255dp, it is the size a book row's cover already is, and the step has to be legible against a
 // cover a fifth of the width rather than proportional to one.
 
 /** A shelf row's whole stack footprint — a book row's cover exactly, so the two line up. */
 private val ShelfRowBox = 46.dp
-private val RowStackStepX = 4.dp
-private val RowStackStepY = 1.5.dp
-private val RowStackReservedY = RowStackStepY * STACK_MAX_HINTS
+private val RowStackStep = 3.dp
+private val RowStackInset = RowStackStep * STACK_SHEETS
 private val RowStackEdge = 1.dp
-private val ShelfRowCoverW = ShelfRowBox - RowStackStepX * STACK_MAX_HINTS
-private val ShelfRowCoverH = ShelfRowBox - RowStackReservedY
 
-/** A series as a grid cell the same size as a book card: one cover with a pile leaning behind it. */
+/**
+ * The front cover on a row, which comes out SQUARE.
+ *
+ * Right here rather than a compromise: a book row's own cover is 46dp square, so the list already
+ * crops everything to 1:1 and a shelf that did otherwise would be the odd one out. The grid keeps its
+ * near-2:3 crop for the same reason — it is what the cards around it use.
+ */
+private val ShelfRowCover = ShelfRowBox - RowStackInset
+
+/** A series as a grid cell the same size as a book card: one cover with a pile receding behind it. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SeriesGridCard(
@@ -2081,55 +2083,57 @@ private fun SeriesGridCard(
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
-            // Derived from the declared aspect ratio rather than read from `maxHeight`: the cell IS
+            // Derived from the declared aspect ratio rather than read off `maxHeight`: the cell IS
             // 1:1.5 by construction, so this is exact and cannot come back unbounded.
             val cellH = maxWidth * 1.5f
-            val coverW = maxWidth - StackPad * 2 - StackReservedX
-            val coverH = cellH - StackPad * 2 - StackReservedY
-            val hints = (series.books.size - 1).coerceIn(0, STACK_MAX_HINTS)
-            // The front cover stands on the bottom inset; the reserved rise is all above it.
-            val frontY = StackPad + StackReservedY
+            val coverW = maxWidth - StackInset
+            val coverH = cellH - StackInset
 
-            // Deepest first, so each sheet is overdrawn by the one in front of it.
-            for (i in hints downTo 1) {
+            // Deepest first, so each sheet is overdrawn by the one in front of it. The deepest sits
+            // flush with the cell's top-right; the front cover sits flush with its bottom-left.
+            for (i in STACK_SHEETS downTo 1) {
                 Box(
                     modifier = Modifier
-                        .offset(x = StackPad + StackStepX * i, y = frontY - StackStepY * i)
+                        .offset(x = StackStep * i, y = StackInset - StackStep * i)
                         .size(width = coverW, height = coverH)
                         .clip(RoundedCornerShape(9.dp))
                         .background(Line)
                         .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
                 )
             }
-            // The badges sit on the FRONT COVER, not on the cell, so they hug the artwork's own
-            // corners rather than floating in the band the stack leans into.
-            Box(
+            CoverArt(
+                model = series.frontCover(),
                 modifier = Modifier
-                    .offset(x = StackPad, y = frontY)
+                    .offset(y = StackInset)
                     .size(width = coverW, height = coverH)
                     .clip(RoundedCornerShape(9.dp))
                     .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
-            ) {
-                CoverArt(model = series.frontCover(), modifier = Modifier.fillMaxSize())
-                ShelfBadge(
-                    count = series.books.size,
-                    modifier = Modifier.align(Alignment.TopStart),
+            )
+            // The badges belong to the CELL, not to the front cover.
+            //
+            // They were briefly moved onto the front cover so they would hug the artwork instead of
+            // floating in the band the stack recedes into. That put them 8dp inside the card, so a
+            // shelf's corners sat somewhere different from a book's and the grid lost its alignment.
+            // A badge is furniture on the ITEM's cover space, and the stack is a drawing inside that
+            // space — running off the cell's own edge is what makes a badge read as part of the card.
+            ShelfBadge(
+                count = series.books.size,
+                modifier = Modifier.align(Alignment.TopStart),
+                size = BadgeSize.LARGE,
+            )
+            // The count comes along only when it is not all of them: "12 of 12 downloaded" is said
+            // better by the icon alone.
+            val downloaded = series.books.count { it.isDownloaded }
+            if (downloaded > 0) {
+                OfflineBadge(
+                    CoverCorner.TOP_END,
+                    count = downloaded.takeIf { it < series.books.size }?.toString(),
+                    modifier = Modifier.align(Alignment.TopEnd),
                     size = BadgeSize.LARGE,
                 )
-                // The count comes along only when it is not all of them: "12 of 12 downloaded" is
-                // said better by the icon alone.
-                val downloaded = series.books.count { it.isDownloaded }
-                if (downloaded > 0) {
-                    OfflineBadge(
-                        CoverCorner.TOP_END,
-                        count = downloaded.takeIf { it < series.books.size }?.toString(),
-                        modifier = Modifier.align(Alignment.TopEnd),
-                        size = BadgeSize.LARGE,
-                    )
-                }
-                seriesTotalMs(series)?.let {
-                    DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
-                }
+            }
+            seriesTotalMs(series)?.let {
+                DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
             }
         }
         Box {
@@ -2566,42 +2570,38 @@ private fun SeriesShelfRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The same stack the grid card draws, at row scale: the front cover on the bottom-left
-            // with the edges of two more leaning back and right. It used to fan three real covers
+            // with the edges of two more receding to the top-right. It used to fan three real covers
             // with the LAST drawn on top, so the cover a series row showed was its third volume's.
             //
             // 46dp square, which is a BOOK row's cover exactly — so a shelf sitting among those rows
             // lines up with them and does not make its own row taller. It was 52x56.
             Box(modifier = Modifier.size(ShelfRowBox)) {
-                val hints = (series.books.size - 1).coerceIn(0, STACK_MAX_HINTS)
-                val frontY = RowStackReservedY
-                for (i in hints downTo 1) {
+                for (i in STACK_SHEETS downTo 1) {
                     Box(
                         modifier = Modifier
-                            .offset(x = RowStackStepX * i, y = frontY - RowStackStepY * i)
-                            .size(width = ShelfRowCoverW, height = ShelfRowCoverH)
+                            .offset(x = RowStackStep * i, y = RowStackInset - RowStackStep * i)
+                            .size(ShelfRowCover)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Line)
                             .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
                     )
                 }
-                // The badge sits on the FRONT cover rather than the 46dp box, so it hugs the
-                // artwork's own corner instead of floating in the band the stack leans into.
-                Box(
+                CoverArt(
+                    model = series.frontCover(),
                     modifier = Modifier
-                        .offset(y = frontY)
-                        .size(width = ShelfRowCoverW, height = ShelfRowCoverH)
+                        .offset(y = RowStackInset)
+                        .size(ShelfRowCover)
                         .clip(RoundedCornerShape(6.dp))
                         .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
-                ) {
-                    // ONE corner, and it carries no number: the count is in the text beside the
-                    // cover anyway ("8 books"), and the same number twice on one row two
-                    // centimetres apart is not twice as clear.
-                    CoverArt(model = series.frontCover(), modifier = Modifier.fillMaxSize())
-                    ShelfBadge(
-                        modifier = Modifier.align(Alignment.TopStart),
-                        size = BadgeSize.SMALL,
-                    )
-                }
+                )
+                // On the ROW's cover space, like the grid's, so a shelf's corner is where a book's
+                // corner is. ONE corner, and it carries no number: the count is in the text beside
+                // the cover anyway ("8 books"), and the same number twice on one row two centimetres
+                // apart is not twice as clear.
+                ShelfBadge(
+                    modifier = Modifier.align(Alignment.TopStart),
+                    size = BadgeSize.SMALL,
+                )
             }
             Column(
                 modifier = Modifier
