@@ -31,7 +31,7 @@ class LibraryFilterTest {
         seriesIndex = null,
         collection = collection,
         collectionIndex = null,
-        genre = genre,
+        genres = listOfNotNull(genre),
         language = language,
         tags = tags,
         totalDurationMs = null,
@@ -451,6 +451,46 @@ class LibraryFilterTest {
         assertTrue(hexen.valuesFor(FilterFacet.TEXT).isEmpty())
         val offered = suggest(listOf(hexen, wache), "hexen", emptyList())
         assertTrue(offered.none { it.facet == FilterFacet.TEXT })
+    }
+
+    // ── several genres ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a book is found under every genre it carries, not just the one it shelves under`() {
+        val funny = book("f1", author = "Pratchett").copy(genres = listOf("Fantasy", "Humour"))
+        assertTrue(LibraryFilter(tokens = listOf(FilterToken(FilterFacet.GENRE, "Fantasy"))).matches(funny))
+        assertTrue(LibraryFilter(tokens = listOf(FilterToken(FilterFacet.GENRE, "Humour"))).matches(funny))
+    }
+
+    @Test
+    fun `the box offers every genre in the library`() {
+        val funny = book("f1", author = "Pratchett").copy(genres = listOf("Fantasy", "Humour"))
+        val offered = suggest(listOf(funny), "hum", emptyList())
+        assertTrue(offered.any { it.facet == FilterFacet.GENRE && it.value == "Humour" })
+    }
+
+    @Test
+    fun `the shelf genre is the first one, and nothing else can disagree with it`() {
+        // `genre` is computed off `genres`, so a caller cannot set one without the other. It could,
+        // once, and every genre filter here went quietly empty.
+        assertEquals("Fantasy", book("f1").copy(genres = listOf("Fantasy", "Humour")).genre)
+        assertNull(book("f1").copy(genres = emptyList()).genre)
+    }
+
+    @Test
+    fun `two genre tokens are an AND, like every other pair`() {
+        val funny = book("f1").copy(genres = listOf("Fantasy", "Humour"))
+        val grim = book("g1").copy(genres = listOf("Fantasy"))
+        val both = LibraryFilter(
+            tokens = listOf(
+                FilterToken(FilterFacet.GENRE, "Fantasy"),
+                FilterToken(FilterFacet.GENRE, "Humour"),
+            ),
+        )
+        // Which now means something on this axis, where it used to be unsatisfiable: a book really
+        // can be both.
+        assertTrue(both.matches(funny))
+        assertFalse(both.matches(grim))
     }
 
     // ── what the box OFFERS is narrower than what a token MATCHES ────────────────────────────

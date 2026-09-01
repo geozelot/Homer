@@ -34,6 +34,7 @@ import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
@@ -96,7 +97,8 @@ data class BookListItem(
     val collection: String? = null,
     /** Position within the collection; its presence means the collection also has a reading order. */
     val collectionIndex: Int? = null,
-    val genre: String?,
+    /** Every genre this book carries, in order, primary first. Empty when it has none. */
+    val genres: List<String> = emptyList(),
     /** ISO 639-1 code, override applied; null when nothing has established one. */
     val language: String?,
     /** User tags (from the override layer); empty if none. */
@@ -132,6 +134,20 @@ data class BookListItem(
 
     /** Fully downloaded for offline playback. */
     val isDownloaded: Boolean get() = downloadStatus == DownloadStatus.DONE
+
+    /**
+     * The genre this book SHELVES and displays under — the first of the ones it carries.
+     *
+     * Computed rather than stored beside [genres], so the two cannot disagree. They did, briefly,
+     * and every genre filter in the test suite went silently empty: a caller that set only the
+     * primary left the list blank, which no type checked and no name suggested.
+     *
+     * A book can carry several genres and every one of them filters. Only one can be the heading it
+     * sits under, or the genre shelf stops being a partition — the count above a heading would no
+     * longer sum to the library, a reader scrolling would meet the same book three times, and the
+     * grid's item keys would collide. The first is that one, so the choice is made by typing.
+     */
+    val genre: String? get() = genres.firstOrNull()
 }
 
 /** How close to the end still counts as finished (playback often stops a moment short). */
@@ -365,7 +381,7 @@ class HomeViewModel @Inject constructor(
                     seriesIndex = book.seriesIndex,
                     collection = book.collection,
                     collectionIndex = book.collectionIndex,
-                    genre = book.genre,
+                    genres = decodeGenres(book.genre),
                     language = book.language,
                     tags = eff.tags,
                     hasEdits = eff.hasEdits,

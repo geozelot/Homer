@@ -155,7 +155,12 @@ fun BookDetailsCard(
                 Fact(stringResource(R.string.details_collection), book.collectionLine(context)) {
                     book.collection?.let { onFilter(FilterToken(FilterFacet.COLLECTION, it)) }
                 }
-                Fact(stringResource(R.string.details_genre), book.genre) {
+                // Every genre, and tapping filters on the PRIMARY one. A single tap cannot mean
+                // three tokens, and the first is the one the shelf agrees with.
+                Fact(
+                    stringResource(R.string.details_genre),
+                    book.genres.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                ) {
                     book.genre?.let { onFilter(FilterToken(FilterFacet.GENRE, it)) }
                 }
                 Fact(
@@ -268,7 +273,7 @@ fun SeriesDetailsCard(
                 }
                 Fact(
                     stringResource(R.string.details_genre),
-                    series.books.mapNotNull { it.genre }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                    series.books.flatMap { it.genres }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · "),
                 )
                 Fact(
                     stringResource(R.string.details_language),

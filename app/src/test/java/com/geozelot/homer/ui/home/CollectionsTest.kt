@@ -31,7 +31,6 @@ class CollectionsTest {
         seriesIndex = seriesIndex,
         collection = collection,
         collectionIndex = collectionIndex,
-        genre = null,
         language = null,
         tags = emptyList(),
         totalDurationMs = null,

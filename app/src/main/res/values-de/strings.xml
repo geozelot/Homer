@@ -67,6 +67,8 @@
     <string name="edit_field_series">Serie</string>
     <string name="edit_field_series_index">Serien-Nr.</string>
     <string name="edit_field_genre">Genre</string>
+    <string name="edit_genre_placeholder">Fantasy, Humor</string>
+    <string name="edit_field_genre_desc">Mit Komma getrennt. Das erste ist das Regal, auf dem es steht; filtern lässt sich nach allen.</string>
     <string name="edit_field_language">Sprache</string>
     <string name="edit_language_placeholder">de, en, fr\u2026</string>
     <string name="edit_field_tags">Schlagwörter</string>

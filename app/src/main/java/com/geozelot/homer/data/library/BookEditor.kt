@@ -94,7 +94,11 @@ class BookEditor @Inject constructor(
             seriesIndex = seriesIndex.trim().toIntOrNull()?.takeUnless { it == detected?.seriesIndex },
             collection = correctedCollection,
             collectionIndex = collectionIndex.trim().toIntOrNull()?.takeUnless { it == detected?.collectionIndex },
-            genre = correction(genre, detected?.genre),
+            // Several genres, comma-separated on the way in and newline-delimited in the column —
+            // the same shape `tags` has always had. Compared as the ENCODED value so that adding a
+            // second genre, or reordering them (the first is the one the shelf uses), counts as a
+            // correction while retyping the same list does not.
+            genre = genresFromInput(genre)?.takeUnless { it == detected?.genre },
             // Normalised on both sides, or a template capturing "German" and a user typing "de"
             // would read as a disagreement and be stored as a correction saying the same thing.
             language = (BookLanguage.normalise(language) ?: language.trim().ifBlank { null })
@@ -186,7 +190,7 @@ class BookEditor @Inject constructor(
         val now = System.currentTimeMillis()
         val n = name.trim().ifBlank { null }
         val a = author.trim().ifBlank { null }
-        val g = genre.trim().ifBlank { null }
+        val g = genresFromInput(genre)
         val c = if (namesCollection) n else collection.trim().ifBlank { null }
         for (id in bookIds) {
             val existing = bookOverrideDao.findById(id)

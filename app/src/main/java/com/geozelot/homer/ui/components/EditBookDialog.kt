@@ -80,7 +80,8 @@ data class EditableBook(
     val collection: String?,
     /** Position within that collection — Discworld #12, independent of the sub-series' own count. */
     val collectionIndex: Int?,
-    val genre: String?,
+    /** Every genre, primary first. Shown and typed as a comma-separated list, like the tags. */
+    val genres: List<String>,
     val language: String?,
     val tags: List<String>,
     val hidden: Boolean,
@@ -128,7 +129,7 @@ fun EditBookDialog(
     var collection by rememberSaveable { mutableStateOf(book.collection.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
     var collectionIndex by rememberSaveable { mutableStateOf(book.collectionIndex?.toString().orEmpty()) }
-    var genre by rememberSaveable { mutableStateOf(book.genre.orEmpty()) }
+    var genre by rememberSaveable { mutableStateOf(book.genres.joinToString(", ")) }
     var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
     var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by rememberSaveable { mutableStateOf(book.hidden) }
@@ -206,6 +207,8 @@ fun EditBookDialog(
                     value = genre,
                     onValueChange = { genre = it },
                     label = { Text(stringResource(R.string.edit_field_genre)) },
+                    placeholder = { Text(stringResource(R.string.edit_genre_placeholder)) },
+                    supportingText = { Text(stringResource(R.string.edit_field_genre_desc)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )

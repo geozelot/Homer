@@ -17,6 +17,7 @@ import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -210,7 +211,7 @@ class PlayerViewModel @Inject constructor(
                 seriesIndex = eff.seriesIndex,
                 collection = eff.collection,
                 collectionIndex = eff.collectionIndex,
-                genre = eff.genre,
+                genres = decodeGenres(eff.genre),
                 language = eff.language,
                 tags = ov?.tags?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
                 hidden = ov?.hidden ?: false,

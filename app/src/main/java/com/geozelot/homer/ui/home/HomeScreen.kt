@@ -632,7 +632,7 @@ private fun BookListItem.toEditable() = EditableBook(
     seriesIndex = seriesIndex,
     collection = collection,
     collectionIndex = collectionIndex,
-    genre = genre,
+    genres = genres,
     language = language,
     tags = tags,
     hidden = hidden,
@@ -1969,7 +1969,11 @@ private fun bookMeta(
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
-    if (ctx.shelving != LibraryShelving.GENRE) book.genre?.let { add(it) }
+    // Every genre it carries, not only the one it shelves under — a book that is Fantasy AND Humour
+    // says more about itself in the same amount of space.
+    if (ctx.shelving != LibraryShelving.GENRE && book.genres.isNotEmpty()) {
+        add(book.genres.joinToString(" · "))
+    }
     // Only where it distinguishes something: on a single-language library this is the same two
     // letters on every row, and shelved BY language the heading above already says it.
     if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
@@ -2900,8 +2904,10 @@ private fun ShelfEditDialog(
     // Prefilled only when the whole shelf already agrees. Showing one member's genre would make
     // Save quietly impose it on the rest, and blank means "leave it to detection" — so a shelf that
     // disagrees with itself starts empty and the user is choosing, not confirming.
+    // The whole LIST, comma-separated, so a two-genre series prefills with both rather than losing
+    // the second the moment somebody presses Save.
     var genre by rememberSaveable {
-        mutableStateOf(series.books.map { it.genre }.distinct().singleOrNull().orEmpty())
+        mutableStateOf(series.books.map { it.genres }.distinct().singleOrNull()?.joinToString(", ").orEmpty())
     }
     // Same rule again, and unused on a collection — there, `name` IS the collection.
     var collection by rememberSaveable {

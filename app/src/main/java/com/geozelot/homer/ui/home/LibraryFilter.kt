@@ -130,7 +130,10 @@ internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (fa
     // The effective collection, so filtering by a collection also finds the books of a plain series
     // standing in as its own — the same fallback the shelf stacks by.
     FilterFacet.COLLECTION -> listOfNotNull(effectiveCollection())
-    FilterFacet.GENRE -> listOfNotNull(genre)
+    // Every genre a book carries, not just the one it shelves under: `genre:Humor` should find a
+    // book filed under Fantasy that is also funny. The shelf can only put it in one place; the
+    // filter is under no such constraint.
+    FilterFacet.GENRE -> genres
     FilterFacet.LANGUAGE -> listOfNotNull(language)
     FilterFacet.TAG -> tags
     // Every state that currently holds. A book is "downloaded" and "started" at once, and listing

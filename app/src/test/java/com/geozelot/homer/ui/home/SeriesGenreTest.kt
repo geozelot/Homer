@@ -21,7 +21,7 @@ class SeriesGenreTest {
         series: String? = "S",
         index: Int? = null,
         language: String? = null,
-    ) = blank(id).copy(genre = genre, series = series, seriesIndex = index, language = language)
+    ) = blank(id).copy(genres = listOfNotNull(genre), series = series, seriesIndex = index, language = language)
 
     private fun blank(id: String) = BookListItem(
         id = id,
@@ -33,7 +33,6 @@ class SeriesGenreTest {
         hasCustomCover = false,
         series = "S",
         seriesIndex = null,
-        genre = null,
         language = null,
         tags = emptyList(),
         totalDurationMs = null,
