@@ -21,6 +21,8 @@ import com.geozelot.homer.ui.about.DiagnosticsScreen
 import com.geozelot.homer.ui.about.LicensesScreen
 import com.geozelot.homer.ui.about.PrivacyScreen
 import com.geozelot.homer.ui.home.HomeScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geozelot.homer.ui.home.findBook
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.login.LoginScreen
 import com.geozelot.homer.ui.player.PlayerScreen
@@ -97,9 +99,30 @@ fun LibraryNavHost() {
             popExitTransition = { slideOutVertically(tween(300)) { it } },
         ) { entry ->
             val bookId = entry.arguments?.getString(ARG_BOOK_ID).orEmpty()
+            // The LIBRARY's ViewModel, on the same rule the settings destinations follow: a bare
+            // hiltViewModel() here would build a second one whose init re-runs the scan and the
+            // sync. It is here so the player's Details card shows the book the library shows,
+            // computed once.
+            val library = navController.libraryViewModel(entry)
+            val entries by library.entries.collectAsStateWithLifecycle()
+            val maintains by library.maintainsLibrary.collectAsStateWithLifecycle()
             PlayerScreen(
                 bookId = bookId,
                 startAtMs = entry.arguments?.getLong(ARG_AT_MS) ?: -1L,
+                details = entries.findBook(bookId),
+                // A filter only means something on the library, so applying one leaves for it.
+                onFilter = { token ->
+                    library.addFilterToken(token)
+                    navController.popBackStack()
+                },
+                onReadFolderDifferently = if (maintains) {
+                    {
+                        library.seedTemplateFor(bookId)
+                        navController.navigate(ROUTE_SETTINGS_TEMPLATES)
+                    }
+                } else {
+                    null
+                },
                 onBack = { navController.popBackStack() },
             )
         }

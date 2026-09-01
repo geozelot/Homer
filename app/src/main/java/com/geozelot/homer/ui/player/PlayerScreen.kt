@@ -101,6 +101,9 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
+import com.geozelot.homer.ui.home.BookDetailsCard
+import com.geozelot.homer.ui.home.BookListItem
+import com.geozelot.homer.ui.home.FilterToken
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.EditBookDialog
@@ -128,6 +131,19 @@ import kotlinx.coroutines.withTimeoutOrNull
 fun PlayerScreen(
     bookId: String,
     /**
+     * The playing book as the library sees it, for the Details card — null until the library list
+     * has it, which is why the menu item is conditional.
+     *
+     * Passed in rather than rebuilt here. A `BookListItem` carries a resolved cover, a progress
+     * fraction and a download state, all of which the library ViewModel already computes; a second
+     * copy assembled in the player would be a second set of rules for the same facts.
+     */
+    details: BookListItem? = null,
+    /** Applies a filter token and leaves for the library, which is the only place one means anything. */
+    onFilter: (FilterToken) -> Unit = {},
+    /** Seeds the template editor for this book's folder; null where patterns are somebody else's. */
+    onReadFolderDifferently: (() -> Unit)? = null,
+    /**
      * Where to start, in ms — or -1 to resume wherever the book was left, which is every arrival
      * but one. Set when the library opens a book AT a bookmark.
      */
@@ -154,6 +170,7 @@ fun PlayerScreen(
     var showBookmarksDialog by rememberSaveable { mutableStateOf(false) }
     var showChaptersDialog by rememberSaveable { mutableStateOf(false) }
     var showEditDialog by rememberSaveable { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Start playback when the screen opens for this book.
@@ -185,11 +202,11 @@ fun PlayerScreen(
             started = state.bookElapsedMs > 0,
             offline = offline,
             downloading = DownloadStatus.isActive(download?.status),
-            canEdit = editableBook != null,
+            canShowDetails = details != null,
             onBack = onBack,
             onMarkCompleted = viewModel::markCompleted,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
-            onEdit = { showEditDialog = true },
+            onDetails = { showDetails = true },
         )
     }
     val artwork: @Composable (Modifier) -> Unit = { slotModifier ->
@@ -379,6 +396,21 @@ fun PlayerScreen(
         )
     }
 
+    // Details, with Edit one level inside it — the same order the library uses.
+    if (showDetails) {
+        details?.let { book ->
+            BookDetailsCard(
+                book = book,
+                onEdit = { showDetails = false; showEditDialog = true },
+                onFilter = { showDetails = false; onFilter(it) },
+                onReadFolderDifferently = onReadFolderDifferently?.let {
+                    { showDetails = false; it() }
+                },
+                onDismiss = { showDetails = false },
+            )
+        }
+    }
+
     if (showEditDialog) {
         editableBook?.let { editable ->
             EditBookDialog(
@@ -479,11 +511,11 @@ private fun PlayerTopBar(
     started: Boolean,
     offline: Boolean,
     downloading: Boolean,
-    canEdit: Boolean,
+    canShowDetails: Boolean,
     onBack: () -> Unit,
     onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
-    onEdit: () -> Unit,
+    onDetails: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -511,11 +543,15 @@ private fun PlayerTopBar(
                         },
                     )
                 }
-                if (canEdit) {
+                // DETAILS, not Edit. The library's own menus lead here too, and editing is one
+                // level inside it — which is the right order: you look at a book before deciding it
+                // is wrong. Reaching Edit directly from the player skipped the looking, and made the
+                // player the one place where a book's facts were unreachable while it was playing.
+                if (canShowDetails) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.edit_title)) },
+                        text = { Text(stringResource(R.string.menu_details)) },
                         onClick = {
-                            onEdit()
+                            onDetails()
                             overflowOpen = false
                         },
                     )

@@ -1,5 +1,7 @@
 package com.geozelot.homer.ui.home
 
+import android.os.SystemClock
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -64,8 +66,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
@@ -606,7 +606,7 @@ private val LibraryEntry.Series.expandKey: String
     get() = "series:${books.minOf { it.id }}"
 
 /** The live row for an open edit dialog, or null when there's no target (or it's gone). */
-private fun List<LibraryEntry>.findBook(id: String?): BookListItem? {
+internal fun List<LibraryEntry>.findBook(id: String?): BookListItem? {
     if (id == null) return null
     return firstNotNullOfOrNull { entry ->
         when (entry) {
@@ -1388,7 +1388,7 @@ private val TrailingActionWidth = 44.dp
  * reading, and offering a choice between it and itself is worse than offering nothing.
  */
 @Composable
-private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit) {
+private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     // The collection's OWN name for itself, not "flat". Read as one run this shelf is being treated
     // as the collection it is, and "flat" describes what happened to the threads rather than what
     // the reader gets — which is the whole collection, in its own order.
@@ -1401,7 +1401,7 @@ private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit) {
         TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal),
     )
     Box(
-        modifier = Modifier
+        modifier = modifier
             .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
             .clickable { onChange(!flat) },
         contentAlignment = Alignment.Center,
@@ -2033,25 +2033,32 @@ private fun bookMeta(
 // Filled with `Line` and cut with a `Studio` edge: a pale slab with a near-black division, rather
 // than the dark slab with a pale hairline they were, which read as texture rather than as sheets.
 
-/** How far each sheet behind the front cover recedes — the same distance in both directions. */
-private val StackStep = 4.dp
+/**
+ * How far each sheet recedes, as a fraction of the cover space it sits in.
+ *
+ * A ratio rather than a dp, so the grid and the list fan by the SAME amount relative to their own
+ * size. They did not: a 3dp step in a 46dp row box is a fan of 6.5%, while 4dp in a ~111dp grid cell
+ * is 3.6% — so the list's pile read as a pile and the grid's read as a hairline someone had left on.
+ * Two numbers chosen separately will always drift; one fraction cannot.
+ *
+ * The value is the list's, which is the one that looked right. At three columns on an ordinary phone
+ * it puts the grid's step near 7dp, and it scales with the column count and the screen instead of
+ * being tuned for one of them.
+ */
+private const val StackStepFraction = 3f / 46f
 
-/** Always this many, regardless of what the shelf holds. */
+/** Always this many sheets, regardless of what the shelf holds. */
 private const val STACK_SHEETS = 2
 
 /** The cut between sheets, and around the front cover. */
 private val StackEdge = 1.5.dp
 
-/** What the fan costs the front cover, in each direction. */
-private val StackInset = StackStep * STACK_SHEETS
-
-// The same stack at row scale. Separate constants rather than a scale factor: 46dp is not a scaled
-// 255dp, it is the size a book row's cover already is, and the step has to be legible against a
-// cover a fifth of the width rather than proportional to one.
+// The same stack at row scale, off the same fraction — which is the point: this is the fan the grid
+// is now measured against, since it is the one that read correctly.
 
 /** A shelf row's whole stack footprint — a book row's cover exactly, so the two line up. */
 private val ShelfRowBox = 46.dp
-private val RowStackStep = 3.dp
+private val RowStackStep = ShelfRowBox * StackStepFraction
 private val RowStackInset = RowStackStep * STACK_SHEETS
 private val RowStackEdge = 1.dp
 
@@ -2089,15 +2096,18 @@ private fun SeriesGridCard(
             // Derived from the declared aspect ratio rather than read off `maxHeight`: the cell IS
             // square by construction, so this is exact and cannot come back unbounded.
             val cellH = maxWidth
-            val coverW = maxWidth - StackInset
-            val coverH = cellH - StackInset
+            // Derived from the cell, so the fan is proportionally the list's — see StackStepFraction.
+            val step = maxWidth * StackStepFraction
+            val inset = step * STACK_SHEETS
+            val coverW = maxWidth - inset
+            val coverH = cellH - inset
 
             // Deepest first, so each sheet is overdrawn by the one in front of it. The deepest sits
             // flush with the cell's top-right; the front cover sits flush with its bottom-left.
             for (i in STACK_SHEETS downTo 1) {
                 Box(
                     modifier = Modifier
-                        .offset(x = StackStep * i, y = StackInset - StackStep * i)
+                        .offset(x = step * i, y = inset - step * i)
                         .size(width = coverW, height = coverH)
                         .clip(RoundedCornerShape(9.dp))
                         .background(Line)
@@ -2107,7 +2117,7 @@ private fun SeriesGridCard(
             CoverArt(
                 model = series.frontCover(),
                 modifier = Modifier
-                    .offset(y = StackInset)
+                    .offset(y = inset)
                     .size(width = coverW, height = coverH)
                     .clip(RoundedCornerShape(9.dp))
                     .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
@@ -2284,9 +2294,22 @@ private fun ExpandedSeriesHeader(
                 }
             }
             if (series.hasThreads()) {
-                CollectionOrderChip(flat = flat, onChange = onOrderChange)
+                // Held off the chevron: the two were touching, so a chip that is a control and an
+                // arrowhead that is a state read as one cluster and invited a tap on the wrong half.
+                CollectionOrderChip(
+                    flat = flat,
+                    onChange = onOrderChange,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.home_cd_collapse_series), tint = Amber)
+            // The list view's arrowhead, not a keyboard chevron — the same glyph for the same state,
+            // so an open shelf looks open in both views. It points at the contents below it rather
+            // than at the action, exactly as the list's does.
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = stringResource(R.string.home_cd_collapse_series),
+                tint = Amber,
+            )
         }
         // Separates the shelf's own title from its episodes. Inset from the enclosure's side rails
         // so it reads as a rule inside the card rather than a second edge of it.
