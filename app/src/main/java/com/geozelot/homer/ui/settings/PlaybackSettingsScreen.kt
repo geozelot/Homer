@@ -56,6 +56,9 @@ fun PlaybackSettingsScreen(
     var customFade by remember { mutableStateOf(false) }
 
     SettingsScaffold(stringResource(R.string.set_playback_title), onBack, modifier) {
+        // Labelled like the two groups below it. It was the only unlabelled one, which made the
+        // headers further down read as marking those sections out as special.
+        SettingsSectionHeader(stringResource(R.string.set_playback_skip_header))
         SettingsDropdownRow(
             label = stringResource(R.string.settings_skip_interval),
             chipLabel = stringResource(R.string.settings_seconds, seekSeconds),

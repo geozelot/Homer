@@ -108,7 +108,16 @@ fun LibraryUpkeepScreen(
         }
     }
 
-    SettingsScaffold(stringResource(R.string.set_upkeep_title), onBack, modifier) {
+    SettingsScaffold(
+        title = stringResource(R.string.set_upkeep_title),
+        onBack = onBack,
+        modifier = modifier,
+        // Under the title, because it qualifies every count on the page rather than belonging to any
+        // one group: until a full crawl has run, a book removed on the server is kept rather than
+        // pruned. It used to sit at the very bottom, under the last action, where it read as a
+        // footnote to Sync.
+        status = crawlStatus(lastFullCrawl, now),
+    ) {
         SettingsSectionHeader(stringResource(R.string.lib_section_contents))
 
         if (readsOnly) {
@@ -175,10 +184,6 @@ fun LibraryUpkeepScreen(
             }
         }
 
-        // The crawl marker qualifies everything above it, on either side of that branch: it is the
-        // reason a book that has left the server may still be on the shelf.
-        CrawlLine(lastFullCrawl, now, modifier = Modifier.padding(top = 10.dp))
-
         // Not a reader's to change: a pattern rewrites what the shared index says about every
         // book, which is the maintainer's half of the split.
         if (!readsOnly) {
@@ -215,7 +220,10 @@ fun LibraryUpkeepScreen(
 
         SettingsDivider()
 
-        // A view preference, not an edit — which is why it is here for a reader too.
+        // Labelled, though it is one switch. It sits between two labelled groups, and a group that
+        // is the only unlabelled thing on a page reads as an omission rather than a choice. A view
+        // preference rather than an edit, which is why a reader gets it too.
+        SettingsSectionHeader(stringResource(R.string.set_upkeep_view_header))
         SettingsSwitchRow(
             label = stringResource(R.string.sync_show_hidden),
             checked = showHidden,
@@ -527,18 +535,15 @@ private fun PassActionWidth(): Dp = rememberActionWidth(
  * first one, a book deleted on the server stays on the shelf for ever, which looks like a bug.
  */
 @Composable
-private fun CrawlLine(crawl: CrawlSummary?, now: Long, modifier: Modifier = Modifier) {
-    val text = if (crawl == null) {
-        stringResource(R.string.lib_crawl_never)
-    } else {
-        val ago = DateUtils.getRelativeTimeSpanString(crawl.at, now, DateUtils.MINUTE_IN_MILLIS).toString()
-        when {
-            crawl.byThisDevice -> stringResource(R.string.lib_crawl_this_device, ago)
-            crawl.deviceName != null -> stringResource(R.string.lib_crawl_named_device, ago, crawl.deviceName)
-            else -> stringResource(R.string.lib_crawl_other_device, ago)
-        }
+private fun crawlStatus(crawl: CrawlSummary?, now: Long): String = if (crawl == null) {
+    stringResource(R.string.lib_crawl_never)
+} else {
+    val ago = DateUtils.getRelativeTimeSpanString(crawl.at, now, DateUtils.MINUTE_IN_MILLIS).toString()
+    when {
+        crawl.byThisDevice -> stringResource(R.string.lib_crawl_this_device, ago)
+        crawl.deviceName != null -> stringResource(R.string.lib_crawl_named_device, ago, crawl.deviceName)
+        else -> stringResource(R.string.lib_crawl_other_device, ago)
     }
-    Text(text, color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = modifier)
 }
 
 /** "309 books · scanned 12 minutes ago" — the relative part left to the platform to localise. */

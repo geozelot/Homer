@@ -295,6 +295,7 @@
     <string name="set_language_system">System</string>
     <string name="set_about_title">Über</string>
     <string name="set_about_summary">Version, Diagnose, Lizenzen</string>
+    <string name="set_about_more_header">MEHR ÜBER HOMER</string>
 
     <!-- Settings: library source -->
     <string name="set_source_none">Nicht verbunden</string>
@@ -316,14 +317,15 @@
     <string name="set_full_rescan_confirm_body">Homer liest jeden Ordner auf deinem Server erneut und holt alle Cover noch einmal. Bei einer großen Bibliothek dauert das eine Weile. Deine Stelle, Lesezeichen und Korrekturen bleiben erhalten.</string>
     <string name="set_full_rescan_confirm_action">Neu aufbauen</string>
     <string name="lib_section_source">WOHER DEINE BÜCHER KOMMEN</string>
-    <string name="lib_section_contents">WAS HOMER GELESEN HAT</string>
+    <string name="lib_section_contents">AUF DEM STAND HALTEN</string>
+    <string name="set_upkeep_view_header">ANSICHT</string>
     <string name="lib_section_sharing">TEILEN MIT DEINEN ANDEREN GERÄTEN</string>
-    <string name="lib_section_retry">Wenn noch etwas fehlt</string>
+    <string name="lib_section_retry">WENN NOCH ETWAS FEHLT</string>
     <string name="lib_try_covers">Fehlende Cover versuchen</string>
     <string name="lib_try_lengths">Fehlende Längen versuchen</string>
     <string name="lib_contents_reader_lead">Dieses Gerät liest einen Index, den jemand mit Schreibrecht auf diesen Ordner pflegt, und scannt daher selbst nicht. Neue und gelöschte Bücher kommen an, sobald dort das nächste Mal aktualisiert wird.</string>
     <string name="lib_reader_unmeasured">%1$d ohne Länge</string>
-    <string name="lib_contents_lead">Jedes davon wird einzeln gelesen, weil die Kosten weit auseinanderliegen. Wenn du eines anfragst, während ein anderes läuft, wird es einfach eingereiht.</string>
+    <string name="lib_contents_lead">Scan sieht sich den Ordner an; Sync tauscht das Erarbeitete mit deinen anderen Geräten aus. Wenn du eines anfragst, während das andere läuft, wird es einfach eingereiht.</string>
     <string name="lib_row_books">Bücher</string>
     <string name="lib_row_sync">Sync</string>
     <string name="lib_action_sync">Sync</string>
@@ -361,6 +363,7 @@
     <string name="set_device_delete_downloads_count">Gibt den Platz frei, den %1$s belegen</string>
     <string name="set_device_delete_downloads_none">Es ist nichts heruntergeladen. Dateien aus einer Bibliothek, von der du dich abgemeldet hast, werden mit entfernt</string>
     <string name="set_device_notify_header">BENACHRICHTIGUNGEN</string>
+    <string name="set_device_reclaim_header">PLATZ FREIGEBEN</string>
     <string name="set_device_notify_label">Homer darf Benachrichtigungen senden</string>
     <string name="set_device_notify_on">Erlaubt. Wiedergabesteuerung, Scans und Downloads zeigen ihren Fortschritt.</string>
     <string name="set_device_notify_off">Blockiert — Scans, Downloads und Wiedergabe laufen still, ohne Anzeige.</string>
@@ -382,6 +385,7 @@
     <string name="settings_unit_seconds">Sekunden</string>
     <string name="settings_unit_minutes">Minuten</string>
     <string name="set_playback_sleep_header">EINSCHLAF-TIMER</string>
+    <string name="set_playback_skip_header">SPRINGEN UND ZURÜCKSPULEN</string>
     <string name="set_playback_sleep_lead">Den Timer startest du im Player. Das hier bestimmt, was er tut, während er läuft.</string>
     <string name="set_playback_shake_desc">Wenn du das Handy schüttelst, während der Timer läuft, bekommst du mehr Zeit.</string>
     <string name="set_playback_fade_desc">Blendet die Lautstärke aus, bevor er stoppt, damit der Timer keinen Satz halbiert.</string>

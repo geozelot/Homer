@@ -142,10 +142,13 @@ fun LibrarySyncScreen(
 
         SettingsDivider()
 
+        // Hoisted above the branch: it names what BOTH halves are about — where your place is
+        // saved — and it was emitted by the share half only, so the ordinary case showed a bare
+        // switch under a divider with nothing saying what it belonged to.
+        SettingsSectionHeader(stringResource(R.string.set_sync_account_header))
         if (libraryIsShare) {
             // A share link is somebody else's storage: progress stays on this device until the
             // user points it at an account of their own.
-            SettingsSectionHeader(stringResource(R.string.set_sync_account_header))
             val sync = syncAccount
             SettingsRow(
                 label = if (sync != null) {

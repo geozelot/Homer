@@ -98,7 +98,21 @@ fun HomerSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, enabled
 // text, large font scale, narrow screen) leaves the trailing control measured at zero width —
 // invisible and untappable. Weighting the label is the fix, and it must not be undone.
 
-/** An all-caps section header, e.g. "WHERE DOWNLOADS ARE KEPT". */
+/**
+ * A section header, e.g. "WHERE DOWNLOADS ARE KEPT".
+ *
+ * Two conventions, both written down because both have already been broken:
+ *
+ *  - **The capitals live in the string resource**, not here. [SectionLabel] sets weight, size and
+ *    tracking; Compose has no text-transform, so a header typed in sentence case renders in sentence
+ *    case and is the one odd header on the page. Every `*_header` / `*_section_*` string is upper
+ *    case in every language.
+ *  - **A run of controls between two dividers is a group, and a group among labelled groups gets a
+ *    header.** Four screens had grown an unlabelled group — usually the first on the page, or one
+ *    marooned between two labelled ones — which reads as an omission rather than as a choice. A
+ *    single trailing action at the foot of a page (sign out) is a footer, not a group, and needs
+ *    none.
+ */
 @Composable
 fun SettingsSectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(

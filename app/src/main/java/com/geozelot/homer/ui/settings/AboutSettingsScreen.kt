@@ -64,6 +64,7 @@ fun AboutSettingsScreen(
         UpdateSection()
 
         SettingsDivider()
+        SettingsSectionHeader(stringResource(R.string.set_about_more_header))
         SettingsNavRow(
             label = stringResource(R.string.settings_diagnostics),
             summary = stringResource(R.string.set_about_diagnostics_summary),

@@ -308,6 +308,7 @@
     <string name="set_language_system">System</string>
     <string name="set_about_title">About</string>
     <string name="set_about_summary">Version, diagnostics, licenses</string>
+    <string name="set_about_more_header">MORE ABOUT HOMER</string>
 
     <!-- Settings: library source -->
     <string name="set_source_none">Not connected</string>
@@ -331,15 +332,16 @@
     <!-- Settings: the Library screen. Three sections, one per facet of the shared index: where the
          books come from, what Homer has managed to read about them, and what is shared. -->
     <string name="lib_section_source">WHERE YOUR BOOKS COME FROM</string>
-    <string name="lib_section_contents">WHAT HOMER HAS READ</string>
+    <string name="lib_section_contents">KEEPING IT UP TO DATE</string>
+    <string name="set_upkeep_view_header">VIEWING</string>
     <string name="lib_section_sharing">SHARING WITH YOUR OTHER DEVICES</string>
-    <string name="lib_section_retry">When something is still missing</string>
+    <string name="lib_section_retry">WHEN SOMETHING IS STILL MISSING</string>
     <string name="lib_try_covers">Try missing covers</string>
     <string name="lib_try_lengths">Try missing lengths</string>
     <!-- Shown instead of the Contents lead on a device that only reads the index. -->
     <string name="lib_contents_reader_lead">This device reads an index kept by whoever can write to that folder, so it runs no scans of its own. New and deleted books arrive when they next update it.</string>
     <string name="lib_reader_unmeasured">%1$d without a length</string>
-    <string name="lib_contents_lead">Each of these is read separately, because they cost wildly different amounts. Asking for one while another is running simply queues it.</string>
+    <string name="lib_contents_lead">Scan looks at the folder; Sync exchanges what has been worked out with your other devices. Asking for one while the other runs simply queues it.</string>
     <string name="lib_row_books">Books</string>
     <string name="lib_row_sync">Sync</string>
     <string name="lib_action_sync">Sync</string>
@@ -384,6 +386,7 @@
     <string name="set_device_delete_downloads_count">Frees the space %1$s are using</string>
     <string name="set_device_delete_downloads_none">Nothing is downloaded. Files left by a library you have signed out of are removed too</string>
     <string name="set_device_notify_header">NOTIFICATIONS</string>
+    <string name="set_device_reclaim_header">FREEING UP SPACE</string>
     <string name="set_device_notify_label">Let Homer send notifications</string>
     <string name="set_device_notify_on">Allowed. Playback controls, scans and downloads all show their progress.</string>
     <string name="set_device_notify_off">Blocked — scans, downloads and playback run silently, with nothing on screen.</string>
@@ -405,6 +408,7 @@
     <string name="settings_unit_seconds">Seconds</string>
     <string name="settings_unit_minutes">Minutes</string>
     <string name="set_playback_sleep_header">SLEEP TIMER</string>
+    <string name="set_playback_skip_header">SKIPPING AND REWIND</string>
     <string name="set_playback_sleep_lead">You start a timer from the player. These decide what it does while it runs.</string>
     <string name="set_playback_shake_desc">Shaking the phone while the timer is counting down gives you more time.</string>
     <string name="set_playback_fade_desc">Eases the volume down before it stops, so the timer doesn\'t cut a sentence in half.</string>

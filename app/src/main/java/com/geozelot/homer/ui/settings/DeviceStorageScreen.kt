@@ -127,6 +127,7 @@ fun DeviceStorageScreen(
 
         SettingsDivider()
 
+        SettingsSectionHeader(stringResource(R.string.set_device_reclaim_header))
         // The only way to reclaim this space, and the only way to be rid of files a library this
         // device no longer has left behind — signing into a different account orphans them, and
         // nothing else on disk knows they are orphans.
