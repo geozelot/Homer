@@ -2,6 +2,7 @@ package com.geozelot.homer.data.library
 
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.db.entity.EditFields
 
 /**
  * Applies a user [override] on top of a detected [BookEntity] (D2: override > detected).
@@ -69,11 +70,7 @@ internal fun BookOverrideEntity.withoutRedundantCollection(): BookOverrideEntity
 /**
  * Whether this override actually corrects a bibliographic field.
  *
- * Not "is there a row": a row also exists to carry the hidden flag, a per-book play mode, or as the
- * all-null tombstone that a cleared correction leaves behind. Counting those as edits would put
- * every book somebody had ever hidden on the `is:edited` shelf.
+ * The field list lives in [EditFields] rather than here. It used to be spelled out in this function
+ * AND in four other places, and the five drifted — see that class for what it cost.
  */
-fun BookOverrideEntity.hasMetadataEdit(): Boolean =
-    title != null || author != null || series != null || seriesIndex != null ||
-        collection != null || collectionIndex != null || genre != null || language != null ||
-        tags != null
+fun BookOverrideEntity.hasMetadataEdit(): Boolean = EditFields.corrected(this)

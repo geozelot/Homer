@@ -3,6 +3,7 @@ package com.geozelot.homer.data.library
 import android.util.Log
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.EditFields
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.flow.first
@@ -188,13 +189,11 @@ class TemplateApplier @Inject constructor(
     }
 }
 
-/** Whether the fields a template can write are identical — the test for "this changed nothing". */
+/**
+ * Whether the fields a template can write are identical — the test for "this changed nothing".
+ *
+ * The field list lives in [EditFields], which is also where the correction-side check and the two
+ * SQL predicates get theirs. Four separate copies of it drifted before that existed.
+ */
 internal fun BookEntity.sameFieldsAs(other: BookEntity): Boolean =
-    title == other.title &&
-        author == other.author &&
-        series == other.series &&
-        seriesIndex == other.seriesIndex &&
-        collection == other.collection &&
-        collectionIndex == other.collectionIndex &&
-        genre == other.genre &&
-        language == other.language
+    EditFields.sameDetected(this, other)

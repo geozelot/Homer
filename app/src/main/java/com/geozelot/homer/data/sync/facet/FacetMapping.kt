@@ -5,6 +5,7 @@ import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
+import com.geozelot.homer.data.db.entity.EditFields
 import com.geozelot.homer.data.db.entity.ChapterTier
 
 /**
@@ -90,17 +91,12 @@ object FacetMapping {
         cuts: List<BookmarkEntity>,
         deviceId: String?,
     ): BookCorrection? {
-        // `collection` and `collectionIndex` count here too. They were declared on both
-        // BookOverrideEntity and BookCorrection and wired into NEITHER direction — so a per-book
-        // collection edit was applied locally by `applyOverride`, counted as an edit by
-        // `hasMetadataEdit`, and then treated by this very function as "nothing corrected" and never
-        // published. Putting a book into a collection by hand reached no other device at all.
-        val nothingCorrected = override == null || (
-            override.title == null && override.author == null && override.series == null &&
-                override.seriesIndex == null && override.collection == null &&
-                override.collectionIndex == null && override.genre == null &&
-                override.language == null && override.tags == null
-            )
+        // Asked of `EditFields`, not spelled out here. This function used to carry its own copy of
+        // the list and it was missing `collection` and `collectionIndex` — so a per-book collection
+        // edit was applied locally by `applyOverride`, counted as an edit by `hasMetadataEdit`, and
+        // then treated right here as "nothing corrected" and never published. Putting a book into a
+        // collection by hand reached no other device at all.
+        val nothingCorrected = override == null || !EditFields.corrected(override)
         // Cuts alone are worth publishing: a book can have a hand-made chapter list and no
         // corrected field anywhere, and it is the chapter list other readers most want.
         if (nothingCorrected && cuts.isEmpty()) return null

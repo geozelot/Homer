@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.db.entity.EditFields
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -22,24 +23,16 @@ interface BookOverrideDao {
     /**
      * How many books carry a SHARED correction — the count the corrections row reports.
      *
-     * The predicate is the same one [com.geozelot.homer.data.sync.facet.FacetMapping.correctionOf]
-     * uses to decide there is anything to publish. `finished`, `hidden` and `downloadOnPlay` are
-     * absent on purpose: those are claims about the reader, never published, and counting them here
-     * would promise to share something that never leaves the device.
+     * The predicate is [EditFields.CORRECTED] — the same set the Kotlin-side check uses, from the
+     * same declaration. `finished`, `hidden` and `downloadOnPlay` are absent on purpose: those are
+     * claims about the reader, never published, and counting them here would promise to share
+     * something that never leaves the device.
      *
-     * `collection`, `collectionIndex` and `language` were absent by ACCIDENT — the same three fields
-     * that went missing everywhere else they had to be listed. A book whose only correction was
-     * being put into a collection was not counted, so the Library screen said "no corrections" while
-     * holding a folder full of them. This is the fourth place in the codebase that spells out "the
-     * fields an edit can touch"; the others are `hasMetadataEdit`, `correctionOf`, `sameFieldsAs` and
-     * [observeUnpublishedCount] below, and they drift.
+     * Three of the nine columns were absent by ACCIDENT until the set was consolidated, so a book
+     * whose only correction was being put into a collection was not counted and the Library screen
+     * said "no corrections" while holding a folder full of them.
      */
-    @Query(
-        "SELECT COUNT(*) FROM book_overrides WHERE title IS NOT NULL OR author IS NOT NULL " +
-            "OR series IS NOT NULL OR seriesIndex IS NOT NULL OR collection IS NOT NULL " +
-            "OR collectionIndex IS NOT NULL OR genre IS NOT NULL OR language IS NOT NULL " +
-            "OR tags IS NOT NULL",
-    )
+    @Query("SELECT COUNT(*) FROM book_overrides WHERE " + EditFields.CORRECTED)
     fun observeCorrectionCount(): Flow<Int>
 
     /**
@@ -51,12 +44,7 @@ interface BookOverrideDao {
      * so it counts, but a row DELETED outright would not — nothing deletes them, which is why the
      * tombstone exists.
      */
-    @Query(
-        "SELECT COUNT(*) FROM book_overrides WHERE updatedAt > :since AND (" +
-            "title IS NOT NULL OR author IS NOT NULL OR series IS NOT NULL OR seriesIndex IS NOT NULL " +
-            "OR collection IS NOT NULL OR collectionIndex IS NOT NULL OR genre IS NOT NULL " +
-            "OR language IS NOT NULL OR tags IS NOT NULL)",
-    )
+    @Query("SELECT COUNT(*) FROM book_overrides WHERE updatedAt > :since AND " + EditFields.CORRECTED)
     fun observeUnpublishedCount(since: Long): Flow<Int>
 
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
