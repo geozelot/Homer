@@ -103,9 +103,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
@@ -117,6 +114,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -297,35 +295,85 @@ fun HomeScreen(
         }
     }
 
-    // Every rule about when this panel folds lives in ListeningFold, with tests. The first attempt
-    // at this read correctly, compiled, and did not work on a device — which is the argument for
-    // taking it out of the callback and making it a thing that can be asserted on.
+    // Every rule about when this panel folds lives in ListeningFold, with tests.
     val fold = rememberSaveable(saver = ListeningFold.Saver) { ListeningFold() }
     val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
-    val listeningScroll = remember(gridState, fold, pullToExpandPx) {
-        object : NestedScrollConnection {
-            private fun atTop() =
-                gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
 
-            // onPRE, so the delta is the raw pointer movement — before the grid, and before the
-            // stretch overscroll that also sits in this chain, have taken anything out of it. The
-            // version that read the leftover in onPostScroll is the one that did nothing on a
-            // device. Nothing is consumed here; this only watches.
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                fold.onScroll(
-                    deltaY = available.y,
-                    atTop = atTop(),
-                    fromUser = source == NestedScrollSource.Drag,
-                    threshold = pullToExpandPx,
-                )
-                return Offset.Zero
+    /**
+     * Folding and unfolding, driven by RAW POINTER TRAVEL rather than by nested scroll.
+     *
+     * ## Why the fifth attempt changes the input instead of the rules
+     *
+     * Four versions of this used `NestedScrollConnection` and none of them worked on a device. The
+     * fifth was supposed to be instrumentation rather than a fix — and **the instrumentation never
+     * shipped**: the edit that added it failed partway, the file was never written, and the commit
+     * said otherwise. A build went out claiming to log, logged nothing, and the silence was briefly
+     * mistaken for evidence about the deltas.
+     *
+     * So what a scroll delta's sign means here, and whether that connection was ever in the chain
+     * the grid walks, are both still unknown. Three OTHER explanations were eliminated by reading —
+     * the source test (`NestedScrollSource.Drag` really is `UserInput` on 1.7.5, confirmed from the
+     * bytecode), the stretch overscroll (it hands `applyToScroll` the whole delta and dispatches
+     * pre-scroll inside it), and the wiring in the layout tree (the grid IS a descendant of the node
+     * that carried the modifier).
+     *
+     * Rather than settle the remaining question, this stops depending on it. `positionChange().y` is screen
+     * coordinates: **positive is the finger moving down the glass**, and there is no second reading.
+     * It is the same `awaitEachGesture` / `PointerEventPass.Initial` shape as `dismissSearch` above,
+     * which has always worked on this exact node — so the mechanism is now one that is demonstrably
+     * delivered here, instead of one that is supposed to be.
+     *
+     * **Nothing is consumed.** The grid scrolls exactly as before; this only watches.
+     *
+     * The cost, stated: momentum no longer reaches the fold at all, so the panel does not fold on a
+     * fling that follows a lift. It folds on the drag that produced the fling, which is the same
+     * moment to a reader. The rule "a fling must never unfold it" is now true by construction rather
+     * than by a check — `fromUser` is passed `true` because a finger is the only thing that gets
+     * here, and it is kept as a parameter because `ListeningFoldTest` is where that rule is written
+     * down.
+     */
+    val pullToExpand = Modifier.pointerInput(gridState, fold, pullToExpandPx) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            var pressed = true
+            var lastLogAt = 0L
+            while (pressed) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val dy = event.changes.fold(0f) { sum, change -> sum + change.positionChange().y }
+                if (dy != 0f) {
+                    // `canScrollBackward` rather than the first-item index and offset: it is the
+                    // question being asked, answered by the state itself.
+                    val atTop = !gridState.canScrollBackward
+                    fold.onScroll(
+                        deltaY = dy,
+                        atTop = atTop,
+                        fromUser = true,
+                        threshold = pullToExpandPx,
+                    )
+                    // Kept, and now UNCONDITIONAL on travel rather than only on downward travel:
+                    // the previous diagnostic logged only one sign, so its silence could not
+                    // distinguish "no events" from "events of the other sign". This one cannot be
+                    // ambiguous — if it is silent, pointer events are not arriving either, and that
+                    // is the end of the road for this gesture.
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastLogAt >= FoldLogIntervalMs) {
+                        lastLogAt = now
+                        Log.i(
+                            FoldLogTag,
+                            "travel dy=${dy.toInt()} atTop=$atTop expanded=${fold.expanded} " +
+                                "pulled=${fold.pulledPx.toInt()}/${pullToExpandPx.toInt()}",
+                        )
+                    }
+                }
+                pressed = event.changes.any { it.pressed }
             }
         }
     }
+
     // Every time the box opens, not just the first.
     LaunchedEffect(searching) { if (searching) fold.onSearchOpened() }
 
-    Column(modifier = modifier.fillMaxSize().nestedScroll(listeningScroll)) {
+    Column(modifier = modifier.fillMaxSize()) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
         Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
@@ -459,6 +507,8 @@ fun HomeScreen(
                 state = gridState,
                 modifier = Modifier
                     .weight(1f)
+                    // Before dismissSearch, and consuming nothing — see `pullToExpand`.
+                    .then(pullToExpand)
                     .fillMaxWidth()
                     .then(dismissSearch),
                 contentPadding = PaddingValues(
@@ -1655,6 +1705,17 @@ private fun ListeningFolded(book: BookListItem) {
  * not a drag handle.
  */
 private val ListeningPullToExpand = 64.dp
+
+/**
+ * Diagnostics for the fold gesture — see `pullToExpand` in the library screen.
+ *
+ * These, and the log that uses them, were written once before and NEVER SHIPPED: the script that
+ * added them failed partway, the file was never written, and the commit message said otherwise. A
+ * build went out claiming to be instrumented, its log was silent, and that silence was then read as
+ * evidence about nested scroll when it was only evidence that nothing was logging.
+ */
+private const val FoldLogTag = "HomerFold"
+private const val FoldLogIntervalMs = 250L
 
 /** The folded cover, at exactly the size [BookListRow] draws its own. */
 private val ListeningFoldedCover = 46.dp
