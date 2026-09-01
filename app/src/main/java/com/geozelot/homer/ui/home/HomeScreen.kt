@@ -121,6 +121,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -571,10 +572,19 @@ fun HomeScreen(
     }
 
     entries.findSeries(editingSeriesKey)?.let { series ->
-        SeriesEditDialog(
+        ShelfEditDialog(
             series = series,
             onSave = { name, author, genre, collection ->
-                viewModel.saveSeriesOverride(series.books.map { it.id }, name, author, genre, collection)
+                viewModel.saveShelfOverride(
+                    bookIds = series.books.map { it.id },
+                    name = name,
+                    author = author,
+                    genre = genre,
+                    // The card knows what it drew. A collection card's name field names the
+                    // COLLECTION, and writing it to `series` is what used to flatten the threads.
+                    namesCollection = series.isCollection,
+                    collection = collection,
+                )
                 editingSeriesKey = null
             },
             onDismiss = { editingSeriesKey = null },
@@ -2809,44 +2819,75 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
     }
 }
 
-/** Edits the series-level fields (name + author) and pushes them to every book in the series. */
+/**
+ * Edits the shelf-level fields — name, author, genre — and pushes them to every book on the shelf.
+ *
+ * **It has to know whether it is looking at a series or a collection.** The version before this did
+ * not: one field labelled "Series", prefilled with [LibraryEntry.Series.name], which on a collection
+ * card is the collection's own name. Saving wrote it into every member's `series`, so editing
+ * Discworld overwrote Rincewind, the Watch and the witches in one action and the shelf redrew as a
+ * collection holding a single sub-series named after itself.
+ *
+ * A collection therefore gets ONE name field, labelled Collection, and no series field at all — the
+ * sub-series inside it are per-book facts and are not this dialog's business. A plain series gets
+ * its name plus the collection it belongs to, as before.
+ */
 @Composable
-private fun SeriesEditDialog(
+private fun ShelfEditDialog(
     series: LibraryEntry.Series,
     onSave: (name: String, author: String, genre: String, collection: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val namesCollection = series.isCollection
     // rememberSaveable, like the book dialog: a rotation used to throw away what was typed.
     var name by rememberSaveable { mutableStateOf(series.name) }
     var author by rememberSaveable { mutableStateOf(series.author.orEmpty()) }
-    // Prefilled only when the whole series already agrees. Showing one member's genre would make
-    // Save quietly impose it on the rest, and blank means "leave it to detection" — so a series
-    // that disagrees with itself starts empty and the user is choosing, not confirming.
+    // Prefilled only when the whole shelf already agrees. Showing one member's genre would make
+    // Save quietly impose it on the rest, and blank means "leave it to detection" — so a shelf that
+    // disagrees with itself starts empty and the user is choosing, not confirming.
     var genre by rememberSaveable {
         mutableStateOf(series.books.map { it.genre }.distinct().singleOrNull().orEmpty())
     }
-    // Prefilled on the same rule as the genre, and for the same reason: a series that already
-    // disagrees with itself about its parent starts blank, so Save is a choice rather than an
-    // accidental vote for whichever member happened to be first.
+    // Same rule again, and unused on a collection — there, `name` IS the collection.
     var collection by rememberSaveable {
         mutableStateOf(series.books.map { it.collection }.distinct().singleOrNull().orEmpty())
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.home_series_edit_title)) },
+        title = {
+            Text(
+                stringResource(
+                    if (namesCollection) R.string.home_collection_edit_title else R.string.home_series_edit_title,
+                ),
+            )
+        },
         text = {
             // Scrollable: a dialog resizes for the keyboard, and without this the second field
             // gets crushed or clipped once the IME is up (EditBookDialog already does this).
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    stringResource(R.string.home_series_edit_desc, series.books.size),
+                    pluralStringResource(
+                        if (namesCollection) {
+                            R.plurals.home_collection_edit_desc
+                        } else {
+                            R.plurals.home_series_edit_desc
+                        },
+                        series.books.size,
+                        series.books.size,
+                    ),
                     color = Muted,
                     fontSize = 12.sp,
                 )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.edit_field_series)) },
+                    label = {
+                        Text(
+                            stringResource(
+                                if (namesCollection) R.string.edit_field_collection else R.string.edit_field_series,
+                            ),
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )
@@ -2864,20 +2905,24 @@ private fun SeriesEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                OutlinedTextField(
-                    value = collection,
-                    onValueChange = { collection = it },
-                    label = { Text(stringResource(R.string.edit_field_collection)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Text(
-                    stringResource(R.string.edit_field_collection_desc),
-                    color = Muted,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
+                // Only for a plain series. On a collection there is no level above to join, and
+                // offering the field would invite exactly the confusion that caused the bug.
+                if (!namesCollection) {
+                    OutlinedTextField(
+                        value = collection,
+                        onValueChange = { collection = it },
+                        label = { Text(stringResource(R.string.edit_field_collection)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    Text(
+                        stringResource(R.string.edit_field_collection_desc),
+                        color = Muted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         },
         confirmButton = {
@@ -2888,3 +2933,4 @@ private fun SeriesEditDialog(
         dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
+

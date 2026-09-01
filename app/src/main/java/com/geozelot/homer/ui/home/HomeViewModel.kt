@@ -1009,17 +1009,24 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Applies a series-level edit (name + author) to every member book (see [BookEditor]).
-     * Members re-group under the new series name; the change syncs like any override.
+     * Applies a shelf-level edit (name, author, genre) to every member book (see
+     * [BookEditor.saveShelfOverride]). Members re-group under the new name; the change syncs like
+     * any override.
+     *
+     * [namesCollection] is passed through rather than inferred, because only the caller drawing the
+     * card knows which level it drew.
      */
-    fun saveSeriesOverride(
+    fun saveShelfOverride(
         bookIds: List<String>,
-        series: String,
+        name: String,
         author: String,
         genre: String,
+        namesCollection: Boolean,
         collection: String,
     ) {
-        viewModelScope.launch { bookEditor.saveSeriesOverride(bookIds, series, author, genre, collection) }
+        viewModelScope.launch {
+            bookEditor.saveShelfOverride(bookIds, name, author, genre, namesCollection, collection)
+        }
     }
 
     /** Reverts a book to pure detection (see [BookEditor.clearOverride]). */

@@ -208,7 +208,15 @@
 
     <!-- Home: series edit -->
     <string name="home_series_edit_title">Edit series</string>
-    <string name="home_series_edit_desc">%1$d books — changes apply to all of them.</string>
+    <plurals name="home_series_edit_desc">
+        <item quantity="one">%1$d book — changes apply to it.</item>
+        <item quantity="other">%1$d books — changes apply to all of them.</item>
+    </plurals>
+    <string name="home_collection_edit_title">Edit collection</string>
+    <plurals name="home_collection_edit_desc">
+        <item quantity="one">%1$d book — changes apply to it. The series inside stay as they are.</item>
+        <item quantity="other">%1$d books — changes apply to all of them. The series inside stay as they are.</item>
+    </plurals>
 
     <!-- Settings: shared labels reused across the settings screens -->
     <string name="settings_title">Settings</string>
