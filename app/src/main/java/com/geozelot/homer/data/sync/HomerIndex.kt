@@ -17,7 +17,14 @@ data class HomerIndex(
     val books: Map<String, HomerBookState> = emptyMap(),
 ) {
     companion object {
-        const val SCHEMA_VERSION = 1
+        /**
+         * 2: the override shrank to the reader's own state.
+         *
+         * Nothing reads this — the DI Json ignores unknown keys, so every version of the manifest
+         * parses as every other one — and it is bumped anyway, because it is the only place the
+         * shape is written down. See [HomerOverride] for what left and why.
+         */
+        const val SCHEMA_VERSION = 2
     }
 }
 
@@ -50,18 +57,37 @@ data class HomerBookmark(
 )
 
 /**
- * A synced metadata/hide override, reconciled last-write-wins on [updatedAt]. A "cleared"
- * override is an all-null, not-hidden entry with a fresh timestamp, so a reset propagates
- * to other devices rather than being resurrected.
+ * What THIS READER has decided about a book, reconciled last-write-wins on [updatedAt].
+ *
+ * ## What is deliberately not here any more
+ *
+ * Title, author, series, series index, genre and tags used to travel in this object, and that was
+ * the second channel for something that already had one. `corrections.json` beside the library
+ * carries the same fields plus `collection`, `collectionIndex` and `language` — and because this
+ * object never had those three, `toEntity` (which built a whole override row from scratch) wrote
+ * them as null every time the manifest's copy won the last-write-wins compare. Putting a book into
+ * a collection by hand, numbering it, or setting its language could therefore be undone by a sync
+ * that was only supposed to be carrying a reading position.
+ *
+ * Total for a device on a read-only share with a personal sync account: it can write this file but
+ * not the library's `corrections.json`, so the lossy channel was its ONLY channel.
+ *
+ * The boundary now matches the one `FacetMapping.correctionOf` already draws from the other side —
+ * "finished, hidden and downloadOnPlay are never published, on a folder shared with other people
+ * they would say who has read what". Those three are exactly what is left here. This file is pinned
+ * to the files-root and keyed to the SYNC ACCOUNT, which is right for what one person has read and
+ * wrong for what a shared library is called.
+ *
+ * A metadata correction now reaches other devices only through the shared index. With sharing off,
+ * corrections stay on the device that made them — which is what "don't touch the shared folder"
+ * has to mean.
+ *
+ * ⚠ A build older than schema 2 reading this file finds no bibliographic fields and, on its own
+ * rules, clears them locally. Do not run a pre-2.1 Homer against a manifest this one has written.
  */
 @Serializable
 data class HomerOverride(
-    val title: String? = null,
-    val author: String? = null,
-    val series: String? = null,
-    val seriesIndex: Int? = null,
-    val genre: String? = null,
-    val tags: List<String> = emptyList(),
+    /** Tri-state finished flag: null = auto (derive from position), true/false = forced. */
     val finished: Boolean? = null,
     /** Per-book playback mode: null = follow global, true = download on play, false = stream. */
     val downloadOnPlay: Boolean? = null,

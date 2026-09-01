@@ -27,12 +27,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Reconciles resume positions, bookmarks and metadata overrides with the central `.homer`
- * manifest for cross-device sync. One [sync] pass merges the remote manifest and local Room
- * state: the position, the bookmark list and the override are each reconciled by
+ * Reconciles resume positions, bookmarks and the reader's own per-book flags with the central
+ * `.homer` manifest for cross-device sync. One [sync] pass merges the remote manifest and local
+ * Room state: the position, the bookmark list and the override are each reconciled by
  * last-write-wins on their own timestamp (SCOPE D3), remote-newer data flows into Room, and
  * the merged result is written back under ETag optimistic concurrency (retry on conflict;
  * final attempt unconditional).
+ *
+ * **It no longer carries metadata corrections.** Titles, authors, series, collections, genres,
+ * languages and tags belong to the library, not to a sync account, and travel in the shared index's
+ * `corrections.json`. This manifest carried a strict SUBSET of those fields and nulled the rest on
+ * arrival — see [HomerOverride] for the full account of what that cost.
  *
  * Bookmark ties (equal timestamps — notably pre-sync bookmarks at ts 0) union both sides so
  * nothing is dropped; a genuine concurrent edit still resolves last-write-wins.
@@ -235,7 +240,7 @@ class HomerSyncRepository @Inject constructor(
                 val remoteOv = remote?.override
                 val winnerOv: HomerOverride? = when {
                     remoteOv != null && (localOv == null || remoteOv.updatedAt > localOv.updatedAt) -> {
-                        overridePulls += remoteOv.toEntity(id)
+                        overridePulls += remoteOv.mergeInto(id, localOv)
                         remoteOv
                     }
                     localOv != null -> localOv.toHomer()
@@ -343,31 +348,34 @@ private fun HomerBookmark.toEntity(bookId: String) =
         createdAt = createdAt,
     )
 
-private fun BookOverrideEntity.toHomer() =
+/** The reader's half of an override. The book's half belongs to `corrections.json` — see [HomerOverride]. */
+internal fun BookOverrideEntity.toHomer() =
     HomerOverride(
-        title = title,
-        author = author,
-        series = series,
-        seriesIndex = seriesIndex,
-        genre = genre,
-        tags = tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
         finished = finished,
         downloadOnPlay = downloadOnPlay,
         hidden = hidden,
         updatedAt = updatedAt,
     )
 
-private fun HomerOverride.toEntity(bookId: String) =
-    BookOverrideEntity(
-        bookId = bookId,
-        title = title,
-        author = author,
-        series = series,
-        seriesIndex = seriesIndex,
-        genre = genre,
-        tags = tags.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString("\n"),
-        finished = finished,
-        downloadOnPlay = downloadOnPlay,
-        hidden = hidden,
-        updatedAt = updatedAt,
-    )
+/**
+ * Folds an incoming manifest override onto the row this device already has.
+ *
+ * A MERGE, not a construction, and that is the whole fix. Its predecessor built a fresh
+ * [BookOverrideEntity] from the manifest's fields — so every field the manifest could not carry
+ * (`collection`, `collectionIndex`, `language`) was written as null whenever the remote copy won
+ * the last-write-wins compare. Nothing about it looked wrong: the fields were simply absent from
+ * one of the two formats describing the same row.
+ *
+ * The bibliographic half now comes from [existing] unconditionally, because this file no longer has
+ * an opinion about it. An older manifest that still carries those fields is ignored rather than
+ * trusted — it cannot be newer than what is already here in any way that matters, since the shared
+ * index is the channel that carries them.
+ */
+internal fun HomerOverride.mergeInto(bookId: String, existing: BookOverrideEntity?) =
+    (existing ?: BookOverrideEntity(bookId = bookId, title = null, author = null, series = null, seriesIndex = null, hidden = false, updatedAt = 0L))
+        .copy(
+            finished = finished,
+            downloadOnPlay = downloadOnPlay,
+            hidden = hidden,
+            updatedAt = updatedAt,
+        )
