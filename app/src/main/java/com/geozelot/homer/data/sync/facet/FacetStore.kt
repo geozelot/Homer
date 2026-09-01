@@ -180,7 +180,7 @@ class FacetStore @Inject constructor(
     }
 
     private companion object {
-        const val TAG = "HomerSync"
+        const val TAG = "HomerIndex"
         const val MAX_ATTEMPTS = 3
     }
 }

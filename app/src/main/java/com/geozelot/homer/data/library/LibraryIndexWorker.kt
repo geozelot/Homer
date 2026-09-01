@@ -127,10 +127,24 @@ class LibraryIndexWorker @AssistedInject constructor(
                 // A reader device gets the shared cache and nothing else — and a DEEP artwork pass
                 // is entirely about re-creating art, so for a reader there is nothing to do at all.
                 val readerOnly = !maintenance.maintainsNow()
-                if (readerOnly && request.deep) return
+                if (readerOnly && request.deep) {
+                    Log.i(TAG, "skipping deep artwork pass: this device reads an index it cannot write")
+                    return
+                }
                 if (request.deep) libraryRepository.resetCoverArt()
                 // Nothing to fetch: finish without ever showing a notification.
-                if (coverEnricher.pendingCount() == 0) return
+                //
+                // LOGGED, because the silence was the bug. "Try missing covers" asked for this pass
+                // on a library where every art-less book had already been probed, so it returned
+                // here — no notification, no progress, no log line — and the only way to tell it
+                // from a crash was to read the source. A pass that decides to do nothing has to say
+                // so; that is the whole difference between "working as designed" and "broken".
+                val pending = coverEnricher.pendingCount()
+                if (pending == 0) {
+                    Log.i(TAG, "no covers to fetch: every book without art has already been probed")
+                    return
+                }
+                Log.i(TAG, "fetching covers for $pending book(s)${if (readerOnly) " (shared cache only)" else ""}")
                 report(request.pass)
                 // Throttle the notification: one update per book overran Android's ~5/s notify
                 // budget on a large library, so the framework shed the updates and flooded the log

@@ -15,16 +15,6 @@ interface BookmarkDao {
     @Query("SELECT * FROM bookmarks")
     suspend fun getAll(): List<BookmarkEntity>
 
-    /**
-     * A book's chapter cuts, in playing order — the chapter list a listener authored for a
-     * single-file book whose tags carry none.
-     *
-     * Ordered by position rather than by when they were made: a cut added later can belong earlier
-     * in the book, and a chapter list out of order is not a chapter list.
-     */
-    @Query("SELECT * FROM bookmarks WHERE bookId = :bookId AND kind = 'cut' ORDER BY positionMs")
-    suspend fun findCutsForBook(bookId: String): List<BookmarkEntity>
-
     /** Every cut in the library, for publishing them all in one pass. */
     @Query("SELECT * FROM bookmarks WHERE kind = 'cut' ORDER BY bookId, positionMs")
     suspend fun allCuts(): List<BookmarkEntity>

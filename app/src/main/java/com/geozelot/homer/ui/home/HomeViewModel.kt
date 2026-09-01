@@ -824,16 +824,28 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Fetch art for the books that have none (no library crawl, nothing already cached refetched). */
-    fun fetchCoverArt() = libraryIndexManager.fetchMissingCovers()
+    /**
+     * Try again for the books that still have no artwork.
+     *
+     * **Re-arms first, and that is the whole fix.** A cover pass targets
+     * `localCoverPath IS NULL AND coverAttempted = 0`, so a book probed once is never a target
+     * again — and Scan already runs the shallow pass every time. Asking for it a second time
+     * therefore found nothing to do and returned before it even showed a notification: a live
+     * button, no work, no feedback, no log line. Indistinguishable from broken, and reported as
+     * such.
+     *
+     * Clearing the attempted flag on the art-less books gives the same pass something to find. The
+     * pattern is not new here — `setOnlineCoverLookup` has always re-armed before asking — it just
+     * was not applied to the button whose whole purpose is retrying.
+     */
+    fun retryMissingCovers() {
+        viewModelScope.launch {
+            libraryRepository.rearmCovers()
+            libraryIndexManager.fetchMissingCovers()
+        }
+    }
 
-    /** Re-fetch cover art for every book (no library crawl). */
-    fun refreshCoverArt() = libraryIndexManager.refreshCovers()
-
-    /** Measure the length of every book that doesn't have one yet — see the manager for the cost. */
-    fun measureBookLengths() = libraryIndexManager.measureDurations()
-
-    /** As [measureBookLengths], but also re-arms the files whose probe failed before. */
+    /** Measure the books with no length, re-arming the files whose probe failed before. */
     fun remeasureBookLengths() = libraryIndexManager.remeasureDurations()
 
     /** Stops everything queued or running. Every pass resumes where it stopped. */
@@ -1403,7 +1415,12 @@ class HomeViewModel @Inject constructor(
      */
     fun syncLibrary() {
         viewModelScope.launch {
-            _sharedCatalogAvailable.value = libraryIndex.sync()
+            // Only a DEFINITE yes moves the flag. `sync` returns false both for "there is no shared
+            // index" and for "I could not look" — offline, or no credentials — and the two are not
+            // the same claim. Reporting the second as the first is the mistake `pullNow` already
+            // warns about for 304s: it told the settings screen the library had vanished. Absence is
+            // established by `libraryIndex.exists()`, which asks that question and only that one.
+            if (libraryIndex.sync()) _sharedCatalogAvailable.value = true
         }
     }
 

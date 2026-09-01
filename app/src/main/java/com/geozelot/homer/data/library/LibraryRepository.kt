@@ -46,6 +46,16 @@ class LibraryRepository @Inject constructor(
      * Stored lengths are deliberately left alone — a duration is a fact about bytes, so there is
      * nothing to correct, only gaps to fill.
      */
+    /**
+     * Re-arms the cover probe for books that still have no art, so a shallow pass tries them again.
+     *
+     * Cached art is left alone — a cover already fetched is not what "missing" means. The exact
+     * counterpart of [rearmDurations] below, which keeps measured lengths for the same reason.
+     */
+    suspend fun rearmCovers() {
+        bookDao.rearmMissingCovers()
+    }
+
     suspend fun rearmDurations() {
         audioFileDao.resetDurationAttempted()
         bookDao.resetMetadataAttempted()

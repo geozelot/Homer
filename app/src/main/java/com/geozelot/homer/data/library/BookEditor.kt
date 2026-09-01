@@ -195,18 +195,25 @@ class BookEditor @Inject constructor(
         for (id in bookIds) {
             val existing = bookOverrideDao.findById(id)
             val base = existing ?: blank(id)
-            // Untouched when the name belongs to the collection: each book keeps whichever thread it
-            // is on, which is the thing the collection is a parent OF.
-            val series = if (namesCollection) base.series else n
+            val detected = bookDao.findById(id)
+            // Only what DIFFERS from detection, on the same rule as `saveOverride` above and for the
+            // same reason: writing a value that merely repeats the folder tree pins the book, after
+            // which no path template can move it again. Setting a shelf's author to the author it
+            // already has should not quietly opt forty-one books out of their own template.
+            val series = if (namesCollection) base.series else n.takeUnless { it == detected?.series }
+            val author = a.takeUnless { it == detected?.author }
+            val genre = g.takeUnless { it == detected?.genre }
             // Compared against the EFFECTIVE series, since a book's thread usually comes from the
             // folder tree rather than from a correction.
-            val effectiveSeries = series ?: bookDao.findById(id)?.series
-            val collectionFor = c?.takeUnless { redundantCollection(effectiveSeries, it) }
+            val effectiveSeries = series ?: detected?.series
+            val collectionFor = c
+                ?.takeUnless { redundantCollection(effectiveSeries, it) }
+                ?.takeUnless { it == detected?.collection }
             bookOverrideDao.upsert(
                 base.copy(
                     series = series,
-                    author = a,
-                    genre = g,
+                    author = author,
+                    genre = genre,
                     collection = collectionFor,
                     // A position in a collection that was just dropped is a number about nothing.
                     collectionIndex = if (collectionFor == null) null else base.collectionIndex,

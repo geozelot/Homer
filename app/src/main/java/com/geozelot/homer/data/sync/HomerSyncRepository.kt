@@ -313,7 +313,14 @@ class HomerSyncRepository @Inject constructor(
     }
 
     private companion object {
-        const val TAG = "HomerSync"
+        /**
+         * The PERSONAL manifest — position, bookmarks, the reader's own flags.
+         *
+         * Named for what it carries now that the bibliographic half has moved to the shared index.
+         * It shared "HomerSync" with `LibraryIndexRepository` and `FacetStore`, which made a sync
+         * log unreadable at exactly the moment somebody needs to read one.
+         */
+        const val TAG = "HomerProgress"
         const val DIR = ".homer"
         const val FILE = "index.json"
 

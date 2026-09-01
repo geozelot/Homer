@@ -187,19 +187,6 @@ class LibraryIndexManager @Inject constructor(
     /** Cover pass for books still missing art — what the library screen asks for on open. */
     fun fetchMissingCovers() = request(IndexPass.ARTWORK)
 
-    /** Re-fetch cover art for every book (drops what is cached first). */
-    fun refreshCovers() = request(IndexPass.ARTWORK, deep = true)
-
-    /**
-     * Measure every book that still has no total length.
-     *
-     * Deliberately its own pass rather than part of a scan. A crawl reads names, sizes and ETags —
-     * one cheap request per folder — whereas a length needs a ranged probe of every audio file, so
-     * a library of a few hundred books is thousands of requests. Folding that into the everyday
-     * scan would make the routine action the expensive one; this way the cost is asked for.
-     */
-    fun measureDurations() = request(IndexPass.LENGTHS)
-
     /**
      * As [measureDurations], but re-arms the files whose probe failed before.
      *

@@ -80,6 +80,25 @@ interface BookDao {
     @Query("UPDATE books SET coverAttempted = 0 WHERE localCoverPath IS NULL AND coverFilePath IS NULL")
     suspend fun retryCoversWithoutArt()
 
+    /**
+     * Re-arms cover enrichment for EVERY book with no cached art, keeping the art that exists.
+     *
+     * The cover half of [resetMetadataAttempted]'s bargain, and the reason "Try missing covers" used
+     * to do nothing at all: [booksNeedingCover] is `localCoverPath IS NULL AND coverAttempted = 0`,
+     * so once a book has been probed once it is never a target again, and a pass asked for a second
+     * time finished silently without so much as a notification.
+     *
+     * Wider than [retryCoversWithoutArt] by one clause. That one skips books with a `coverFilePath`,
+     * which is right for its own caller (online lookup can only help books with no art anywhere) and
+     * wrong here: a folder cover that failed to cache — a timeout, a truncated read — is exactly the
+     * case somebody is asking to retry.
+     *
+     * Cached art is deliberately NOT cleared, unlike [resetCoverArt]. A cover already fetched is not
+     * what a person means by "missing".
+     */
+    @Query("UPDATE books SET coverAttempted = 0 WHERE localCoverPath IS NULL")
+    suspend fun rearmMissingCovers()
+
     @Query("UPDATE books SET totalDurationMs = :totalDurationMs WHERE id = :bookId")
     suspend fun updateTotalDuration(bookId: String, totalDurationMs: Long)
 

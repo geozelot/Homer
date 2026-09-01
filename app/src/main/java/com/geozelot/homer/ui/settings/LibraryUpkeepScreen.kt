@@ -238,8 +238,12 @@ fun LibraryUpkeepScreen(
                 } else {
                     stringResource(R.string.lib_artwork_missing, artless)
                 },
+                // `artless` is an honest gate now that the action re-arms: every book with no
+                // cached art becomes a target again. It was NOT honest before — the count asks
+                // `localCoverPath IS NULL` while the pass asks `... AND coverAttempted = 0`, so the
+                // button was live in exactly the state where the pass had nothing to do.
                 enabled = IndexPass.ARTWORK !in queued && artless > 0,
-                onClick = viewModel::fetchCoverArt,
+                onClick = viewModel::retryMissingCovers,
             )
             SettingsDivider()
             SettingsRow(

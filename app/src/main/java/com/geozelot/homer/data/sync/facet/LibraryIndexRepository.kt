@@ -246,6 +246,20 @@ class LibraryIndexRepository @Inject constructor(
     private suspend fun pushCorrectionsNow(): Boolean {
         if (!librarySettings.sharedCatalogEnabled.first()) return true
         if (!networkMonitor.isOnline() || !canPublish()) return false
+        // REPORTED, like every other network step. `_activity` was set by `pushNow` alone, so a
+        // corrections publish — by far the more frequent of the two — happened with the UI reading
+        // idle: the Sync row's spinner never appeared, its button stayed live mid-publish, and the
+        // Library page's "Publishing…" note was unreachable for the only publish most people ever
+        // trigger.
+        _activity.value = IndexActivity.PUBLISHING
+        return try {
+            pushCorrectionsInner()
+        } finally {
+            _activity.value = IndexActivity.IDLE
+        }
+    }
+
+    private suspend fun pushCorrectionsInner(): Boolean {
         val deviceId = deviceIdentity.id()
         // Stamped from BEFORE the local state is read, not after the upload. An edit made while the
         // request is in flight would otherwise be marked as published by an upload that never
@@ -668,7 +682,15 @@ class LibraryIndexRepository @Inject constructor(
     private suspend fun pathOf(file: String): String = "${dirOf()}/$file"
 
     private companion object {
-        const val TAG = "HomerSync"
+        /**
+         * The SHARED LIBRARY INDEX, not the personal manifest.
+         *
+         * It was "HomerSync", which `HomerSyncRepository` and `FacetStore` also used — three
+         * subsystems under one tag, so a log showing "remote=67 books" and "pulled index: 313 books"
+         * two lines apart looked like one component contradicting itself. They are two files with
+         * two different jobs and two different book counts, and the tag now says which is which.
+         */
+        const val TAG = "HomerIndex"
         const val COVERS_DIR = "covers"
         const val SQL_PARAM_CHUNK = 400
         /**
