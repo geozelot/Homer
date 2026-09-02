@@ -45,6 +45,62 @@ class CollectionsTest {
         hidden = false,
     )
 
+    /** A shelf of [n] books, the ones named in [withArt] carrying a cover. */
+    private fun shelf(n: Int, withArt: Set<Int> = (1..n).toSet()) = LibraryEntry.Series(
+        key = "k",
+        name = "Discworld",
+        author = "Pratchett",
+        books = (1..n).map { i ->
+            book("b$i").copy(coverModel = if (i in withArt) "art$i" else null)
+        },
+    )
+
+    // ── the pile: how many, and whose artwork ────────────────────────────────────────────────
+
+    @Test
+    fun `a shelf draws one cover fewer than it holds, up to the cap`() {
+        assertEquals(3, shelf(8).stackSheets(3).size)
+        assertEquals(3, shelf(4).stackSheets(3).size)
+        assertEquals(2, shelf(3).stackSheets(3).size)
+        assertEquals(1, shelf(2).stackSheets(3).size)
+        assertEquals(0, shelf(1).stackSheets(3).size)
+    }
+
+    @Test
+    fun `the sheets are the volumes after the front cover, in order`() {
+        assertEquals(listOf<Any?>("art2", "art3", "art4"), shelf(8).stackSheets(3))
+    }
+
+    @Test
+    fun `the front cover is never repeated in the pile`() {
+        // `frontCover` takes the first volume WITH art, so the pile has to drop that same one or the
+        // same picture appears twice and reads as a rendering fault.
+        val s = shelf(8, withArt = setOf(3, 4, 5, 6))
+        assertEquals("art3", s.frontCover())
+        assertEquals(listOf<Any?>("art4", "art5", "art6"), s.stackSheets(3))
+    }
+
+    @Test
+    fun `the COUNT comes from the books, not from how many have artwork`() {
+        // An eight-volume shelf whose later volumes are unillustrated is still eight volumes. Taking
+        // the count from the art would draw it as a two-volume one.
+        val s = shelf(8, withArt = setOf(1, 2))
+        assertEquals(3, s.stackSheets(3).size)
+        assertEquals(listOf<Any?>("art2", null, null), s.stackSheets(3))
+    }
+
+    @Test
+    fun `a shelf with no artwork at all still draws its pile`() {
+        val s = shelf(5, withArt = emptySet())
+        assertEquals(listOf<Any?>(null, null, null), s.stackSheets(3))
+    }
+
+    @Test
+    fun `the row cap is honoured independently of the grid's`() {
+        assertEquals(2, shelf(8).stackSheets(2).size)
+        assertEquals(1, shelf(2).stackSheets(2).size)
+    }
+
     // ── rule one: a series with no collection is its own collection ──────────────────────────
 
     @Test

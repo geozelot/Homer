@@ -113,6 +113,29 @@ enum class LibraryDepth(val key: String, @StringRes val label: Int) {
 internal fun LibraryEntry.Series.frontCover(): Any? = books.firstNotNullOfOrNull { it.coverModel }
 
 /**
+ * The covers behind the front one, at most [max] of them, DEEPEST LAST.
+ *
+ * ## The count comes from the books; the artwork comes from whatever has any
+ *
+ * Two different questions, and conflating them understates the shelf. How many sheets to draw is
+ * `books.size - 1` capped at [max] — a shelf of eight draws its cap whether or not the later volumes
+ * have art. WHICH artwork each sheet shows is then filled from the volumes that do have some, in
+ * order, and a sheet with nothing left to show is null: the caller draws blank stock for those.
+ *
+ * Taking the count from the art instead would make an eight-volume series whose second and third
+ * volumes are unillustrated look like a two-volume one, which is the opposite of what a stack is for.
+ *
+ * The front cover is skipped, not re-used. [frontCover] takes the first volume that HAS art, so this
+ * drops that same one — otherwise the pile would show the same picture twice and read as a rendering
+ * fault rather than as a stack.
+ */
+internal fun LibraryEntry.Series.stackSheets(max: Int): List<Any?> {
+    val behind = books.mapNotNull { it.coverModel }.drop(1)
+    val count = (books.size - 1).coerceIn(0, max)
+    return List(count) { behind.getOrNull(it) }
+}
+
+/**
  * Whether this book has progress worth drawing a bar for.
  *
  * Two guards beyond "progress is non-null". A book at 0% has not been started and a bar of nothing

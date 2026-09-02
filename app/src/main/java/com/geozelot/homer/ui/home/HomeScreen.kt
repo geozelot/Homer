@@ -2037,76 +2037,80 @@ private fun bookMeta(
 
 // ── the stack ────────────────────────────────────────────────────────────────
 //
-// One cover on the bottom-left, with the edges of two more receding to the top-right at 45°.
+// Up to four real covers, receding to the top-right at 45°, inside a padded cell.
 //
-// Three earlier versions, and what each got wrong — the constraints only become visible once they
-// conflict:
+// Five earlier versions and what each got wrong, because the constraints only became visible as they
+// conflicted:
 //
-//  1. Three full covers fanned across the cell. Cost the front book a third of its width and a third
-//     of its height to show two others at an angle you could not read anyway.
-//  2. Front cover inset from all four sides, sheets fanning up from there. Left the artwork floating
-//     in the middle of the cell with slack on every edge.
-//  3. Front cover anchored bottom-left, sheets stepping 13dp across for 4dp up. Filled the cell, but
-//     the wide horizontal step cost the cover 26dp of width and took it to about 1:1.79 —
-//     noticeably narrower than the 2:3 every other cover in the app is drawn at.
+//  1. Three full covers fanned across the cell — cost the front book a third of its width and its
+//     height to show two others at an unreadable angle.
+//  2. Front cover inset from all four sides, fanning up — artwork floating with slack on every edge.
+//  3. Anchored bottom-left, stepping 13dp across for 4dp up — filled the cell, but the wide
+//     horizontal step took the cover to about 1:1.79.
+//  4. Equal 4dp fan filling the cell exactly — right proportions, but flush to the card's border on
+//     two sides, and the sheets were blank stock so a 4dp sliver of nothing said very little.
+//  5. Same, at the list's proportional step — the fan grew, and filling the cell still meant the
+//     front cover read as a smaller object than the standalone beside it.
 //
-// **The fan is equal in both directions**, at the smaller of the two old steps, and the stack fills
-// the cover space exactly.
+// **The sheets are real artwork now, and that is what pays for everything else.** A 4dp sliver of an
+// actual cover carries what 7dp of blank stock could not, so the fan can stay small while the pile
+// reads unmistakably as a pile of books. It costs up to three more image loads per series cell —
+// which is exactly why they were blank, and is the trade being made deliberately.
 //
-// The ratio problem this used to have has dissolved. It was: an equal fan filling a 2:3 cell cannot
-// leave a 2:3 cover — the algebra collapses to a step of zero — so the cover came out at 1:1.525
-// against a 1.5 target and the 1.7% was argued about. The cell is SQUARE now (see `CoverImage`:
-// audiobook art is square, and cropping it to 2:3 was cutting a third off every cover in the app),
-// and an equal fan inside a square cell leaves a square cover, exactly. Both constraints are
-// satisfied at once by the shape of the medium rather than by a compromise.
+// The stack no longer fills the cover space: [StackPad] holds it off the card's own border on every
+// side, so a shelf reads as a stack sitting IN the cell rather than as one cropped by it.
 //
-// **Two sheets always, whatever the volume count.** They used to be derived from `books.size`, and
-// they are not evidence about it: a shelf of two drawing one sheet and a shelf of forty drawing two
-// said nothing useful, while making the front cover's crop a function of how many books you own. A
-// stack card means "this is a shelf", and it should look like one whatever is on it.
-//
-// The sheets are not cover art. They are blank stock — honest (they stand in for no particular
-// volume) and cheap (no second and third image load per cell, on a screen that may hold twenty).
-// Filled with `Line` and cut with a `Studio` edge: a pale slab with a near-black division, rather
-// than the dark slab with a pale hairline they were, which read as texture rather than as sheets.
+// **Room is reserved for the maximum, and the drawn stack is CENTRED in what is left.** A shelf of
+// two draws two covers, not four — but its front cover is the same size as an eight-volume shelf's,
+// because the space the missing sheets would have taken is split evenly around what is drawn instead
+// of left empty in the top-right. That is what keeps a row of series cards from going ragged while
+// still letting the pile say how much is in it.
+
+/** Held off the card's border on every side, so the stack is in the cell rather than cropped by it. */
+private val StackPad = 4.dp
+
+/** At most four covers: the front one and three behind it. */
+private const val STACK_SHEETS = 3
 
 /**
- * How far each sheet recedes, as a fraction of the cover space it sits in.
+ * How far each cover recedes from the one in front of it, in both directions.
  *
- * A ratio rather than a dp, so the grid and the list fan by the SAME amount relative to their own
- * size. They did not: a 3dp step in a 46dp row box is a fan of 6.5%, while 4dp in a ~111dp grid cell
- * is 3.6% — so the list's pile read as a pile and the grid's read as a hairline someone had left on.
- * Two numbers chosen separately will always drift; one fraction cannot.
- *
- * The value is the list's, which is the one that looked right. At three columns on an ordinary phone
- * it puts the grid's step near 7dp, and it scales with the column count and the screen instead of
- * being tuned for one of them.
+ * A dp rather than a fraction of the cell now, and deliberately small. It was proportional so the
+ * grid and the list would fan alike — but with four real covers instead of two blank sheets the fan
+ * is three steps deep rather than two, and a proportional step at that depth ate more of the front
+ * cover than the whole exercise was trying to save. Real artwork is what makes a small step legible,
+ * so the step gets to be small.
  */
-private const val StackStepFraction = 3f / 46f
+private val StackStep = 4.dp
 
-/** Always this many sheets, regardless of what the shelf holds. */
-private const val STACK_SHEETS = 2
-
-/** The cut between sheets, and around the front cover. */
+/** The cut between covers in the pile. */
 private val StackEdge = 1.5.dp
 
-// The same stack at row scale, off the same fraction — which is the point: this is the fan the grid
-// is now measured against, since it is the one that read correctly.
+// The same stack at row scale, with its own numbers — 46dp is a fifth of a grid cell, and a fan
+// scaled down from one would be three slivers of a millimetre each.
 
 /** A shelf row's whole stack footprint — a book row's cover exactly, so the two line up. */
 private val ShelfRowBox = 46.dp
-private val RowStackStep = ShelfRowBox * StackStepFraction
-private val RowStackInset = RowStackStep * STACK_SHEETS
+
+/**
+ * Two covers behind the front one, not three.
+ *
+ * The grid's cap does not scale down: at row size a fourth cover is a hairline, and three of them
+ * cost the front cover a fifth of its width to say something the count badge says better. The row
+ * still adapts downward — a two-volume shelf draws one sheet — so the pile is honest, just shallower.
+ */
+private const val ROW_STACK_SHEETS = 2
+private val RowStackStep = 3.dp
+private val RowStackPad = 2.dp
 private val RowStackEdge = 1.dp
 
 /**
- * The front cover on a row, which comes out SQUARE.
+ * The front cover on a row — square, and reserved for the maximum like the grid's.
  *
- * Right here rather than a compromise: a book row's own cover is 46dp square, so the list already
- * crops everything to 1:1 and a shelf that did otherwise would be the odd one out. The grid keeps its
- * near-2:3 crop for the same reason — it is what the cards around it use.
+ * Square is right here rather than a compromise: a book row's own cover is 46dp square, so the list
+ * crops everything to 1:1 already and a shelf that did otherwise would be the odd one out.
  */
-private val ShelfRowCover = ShelfRowBox - RowStackInset
+private val ShelfRowCover = ShelfRowBox - RowStackPad * 2 - RowStackStep * ROW_STACK_SHEETS
 
 /** A series as a grid cell the same size as a book card: one cover with a pile receding behind it. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -2130,32 +2134,34 @@ private fun SeriesGridCard(
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
-            // Derived from the declared aspect ratio rather than read off `maxHeight`: the cell IS
-            // square by construction, so this is exact and cannot come back unbounded.
-            val cellH = maxWidth
-            // Derived from the cell, so the fan is proportionally the list's — see StackStepFraction.
-            val step = maxWidth * StackStepFraction
-            val inset = step * STACK_SHEETS
-            val coverW = maxWidth - inset
-            val coverH = cellH - inset
+            // The cell is square by construction, so one dimension is all of them.
+            val sheets = series.stackSheets(STACK_SHEETS)
+            // Reserved for the MAXIMUM, so the front cover is the same size on every series card
+            // whatever the shelf holds. What the missing sheets would have taken is then split
+            // evenly around the stack that IS drawn, rather than left as a gap in the top-right.
+            val cover = maxWidth - StackPad * 2 - StackStep * STACK_SHEETS
+            val origin = StackPad + StackStep * (STACK_SHEETS - sheets.size) / 2
+            // The front cover sits at the bottom-left of the drawn stack; each cover behind it steps
+            // up and to the right by one.
+            val bottom = origin + StackStep * sheets.size
 
-            // Deepest first, so each sheet is overdrawn by the one in front of it. The deepest sits
-            // flush with the cell's top-right; the front cover sits flush with its bottom-left.
-            for (i in STACK_SHEETS downTo 1) {
-                Box(
+            // Deepest first, so each is overdrawn by the one in front of it.
+            for ((index, model) in sheets.withIndex().reversed()) {
+                val step = StackStep * (index + 1)
+                CoverArt(
+                    model = model,
                     modifier = Modifier
-                        .offset(x = step * i, y = inset - step * i)
-                        .size(width = coverW, height = coverH)
+                        .offset(x = origin + step, y = bottom - step)
+                        .size(cover)
                         .clip(RoundedCornerShape(9.dp))
-                        .background(Line)
                         .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
                 )
             }
             CoverArt(
                 model = series.frontCover(),
                 modifier = Modifier
-                    .offset(y = inset)
-                    .size(width = coverW, height = coverH)
+                    .offset(x = origin, y = bottom)
+                    .size(cover)
                     .clip(RoundedCornerShape(9.dp))
                     .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
             )
@@ -2639,20 +2645,24 @@ private fun SeriesShelfRow(
             // 46dp square, which is a BOOK row's cover exactly — so a shelf sitting among those rows
             // lines up with them and does not make its own row taller. It was 52x56.
             Box(modifier = Modifier.size(ShelfRowBox)) {
-                for (i in STACK_SHEETS downTo 1) {
-                    Box(
+                val sheets = series.stackSheets(ROW_STACK_SHEETS)
+                val origin = RowStackPad + RowStackStep * (ROW_STACK_SHEETS - sheets.size) / 2
+                val bottom = origin + RowStackStep * sheets.size
+                for ((index, model) in sheets.withIndex().reversed()) {
+                    val step = RowStackStep * (index + 1)
+                    CoverArt(
+                        model = model,
                         modifier = Modifier
-                            .offset(x = RowStackStep * i, y = RowStackInset - RowStackStep * i)
+                            .offset(x = origin + step, y = bottom - step)
                             .size(ShelfRowCover)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Line)
                             .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
                     )
                 }
                 CoverArt(
                     model = series.frontCover(),
                     modifier = Modifier
-                        .offset(y = RowStackInset)
+                        .offset(x = origin, y = bottom)
                         .size(ShelfRowCover)
                         .clip(RoundedCornerShape(6.dp))
                         .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
