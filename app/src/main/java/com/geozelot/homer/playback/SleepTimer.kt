@@ -10,8 +10,20 @@ import kotlinx.coroutines.launch
 
 /**
  * The sleep-timer state machine: a countdown that pauses playback on expiry (with
- * shake-to-extend armed while it runs), or an "end of chapter" mode that pauses when the
- * current chapter finishes.
+ * shake-to-extend armed while it runs, if the reader wants it), or an "end of chapter" mode that
+ * pauses when the current chapter finishes.
+ *
+ * ## The reported bug, and where it actually was
+ *
+ * "It either extends itself without any interaction, or the counter just keeps counting" — one
+ * defect, seen from two angles. Nothing here was wrong: `ShakeDetector` fired on a single 2.7g peak,
+ * which is what an impact produces rather than a shake, so putting the phone down added fifteen
+ * minutes. The target kept moving, so the countdown never reached zero and the number went back up.
+ * Bounded only by [MAX_REMAINING_MS], which made "never stops" the practical result.
+ *
+ * Shake-to-extend also could not be turned OFF — the setting offered 5, 15, 30, previous and
+ * chapter, and nothing else — so the sensor was registered for every countdown whether the reader
+ * wanted the feature or not.
  *
  * It never touches the media controller — playback is paused via [onPause] and UI refreshes
  * are requested via [onChanged] — so it stays a small, self-contained unit.
@@ -44,22 +56,34 @@ class SleepTimer(
             null
         }
 
-    /** Pauses playback after [durationMs]; shake-to-extend is armed while it counts down. */
-    fun startCountdown(durationMs: Long) {
+    /**
+     * Pauses playback after [durationMs].
+     *
+     * [armShake] arms shake-to-extend for the life of this countdown. It is a parameter rather than
+     * something read in here because the accelerometer should not be REGISTERED at all when the
+     * feature is off — the previous version armed it unconditionally, and there was no way to turn
+     * the feature off in the first place.
+     */
+    fun startCountdown(durationMs: Long, armShake: Boolean) {
         clear()
         targetRealtimeMs = SystemClock.elapsedRealtime() + durationMs
-        shakeDetector.start()
+        if (armShake) shakeDetector.start()
         job = scope.launch {
-            while (true) {
-                if (SystemClock.elapsedRealtime() >= targetRealtimeMs) {
-                    onPause()
-                    clear()
-                    onChanged()
-                    break
-                }
+            // The target can move under this loop — that is what `extendBy` does — so it is the
+            // condition rather than a fixed count of ticks.
+            while (SystemClock.elapsedRealtime() < targetRealtimeMs) {
                 onChanged()
                 delay(TICK_MS)
             }
+            // Expired. Everything `clear()` does EXCEPT cancelling the job, because the job is this
+            // coroutine and it is about to finish on its own. Calling `clear()` here made the body
+            // cancel itself and survived only by not suspending afterwards.
+            shakeDetector.stop()
+            endOfChapter = false
+            job = null
+            // After `job = null`, so the state this pushes reports no timer rather than a stale one.
+            onPause()
+            onChanged()
         }
         onChanged()
     }

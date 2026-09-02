@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.SettingsDivider
+import com.geozelot.homer.data.settings.SLEEP_EXTEND_OFF
 import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsRow
@@ -159,6 +160,7 @@ private fun secondsOrOff(context: Context, seconds: Int): String =
     }
 
 private fun sleepExtendLabel(mode: String): Int = when (mode) {
+    SLEEP_EXTEND_OFF -> R.string.settings_off
     "5" -> R.string.player_sleep_extend_5
     "15" -> R.string.player_sleep_extend_15
     "30" -> R.string.player_sleep_extend_30
@@ -239,4 +241,5 @@ private fun Context.openBatteryOptimisationSettings() {
 private val SEEK_OPTIONS = listOf(5, 10, 15, 20, 30, 45, 60)
 private val REWIND_OPTIONS = listOf(0, 5, 10, 15, 20, 30)
 private val SLEEP_FADE_OPTIONS = listOf(0, 5, 10, 20, 30, 60)
-private val SLEEP_EXTEND_OPTIONS = listOf("5", "15", "30", "previous", "chapter")
+/** Off first, because it is the default and because the picker had no way to say it at all. */
+private val SLEEP_EXTEND_OPTIONS = listOf(SLEEP_EXTEND_OFF, "5", "15", "30", "previous", "chapter")

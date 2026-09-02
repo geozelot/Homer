@@ -360,6 +360,17 @@ class LibrarySettings @Inject constructor(
  * Global playback preferences (same DataStore file as [LibrarySettings]). These apply to
  * every book; a per-book override is a later enhancement.
  */
+/**
+ * Shake-to-extend, turned off.
+ *
+ * A real value rather than an absence, so it round-trips through DataStore and can be offered in the
+ * picker. Public because three places need to agree on it: the default here, the decision whether to
+ * register the accelerometer at all, and the branch in `extendSleepByPreference` — which falls back
+ * to fifteen minutes for anything it does not recognise, so "off" reaching it silently would extend
+ * by a quarter of an hour.
+ */
+const val SLEEP_EXTEND_OFF = "off"
+
 @Singleton
 class PlaybackSettings @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -463,7 +474,15 @@ class PlaybackSettings @Inject constructor(
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
-        const val DEFAULT_SLEEP_EXTEND = "15"
+        /**
+         * Shake-to-extend, off by default.
+         *
+         * It was "15", and the feature had no off switch at all — so every countdown registered the
+         * accelerometer and any single knock over 2.7g added a quarter of an hour. A sleep timer
+         * whose failure mode is "the audiobook plays all night" does not get to be on by default,
+         * even with the much stricter detector `ShakeDetector` now uses.
+         */
+        const val DEFAULT_SLEEP_EXTEND = SLEEP_EXTEND_OFF
         const val DEFAULT_SEEK_SECONDS = 15
         const val DEFAULT_VOLUME_MODE = "normal"
         const val DEFAULT_AUTO_REWIND = 0

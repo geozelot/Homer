@@ -24,6 +24,7 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.settings.SLEEP_EXTEND_OFF
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
@@ -542,8 +543,15 @@ class PlaybackConnection @Inject constructor(
     }
 
     fun startSleepTimer(durationMs: Long) {
-        scope.launch { playbackSettings.setSleepLastDurationMs(durationMs) }
-        sleepTimer.startCountdown(durationMs)
+        scope.launch {
+            playbackSettings.setSleepLastDurationMs(durationMs)
+            // Read BEFORE arming, so the accelerometer is never registered for a reader who has the
+            // feature off. It used to be registered for every countdown, and there was no off.
+            sleepTimer.startCountdown(
+                durationMs = durationMs,
+                armShake = playbackSettings.sleepExtend.first() != SLEEP_EXTEND_OFF,
+            )
+        }
     }
 
     fun startSleepTimerEndOfChapter() = sleepTimer.startEndOfChapter()
@@ -592,6 +600,10 @@ class PlaybackConnection @Inject constructor(
         if (!sleepTimer.isCountingDown) return
         scope.launch {
             when (val mode = playbackSettings.sleepExtend.first()) {
+                // Checked even though the sensor is not armed when off: `else` below falls back to
+                // fifteen minutes for anything it does not recognise, so "off" reaching it would
+                // have extended by a quarter of an hour — the exact opposite of what it says.
+                SLEEP_EXTEND_OFF -> Unit
                 "chapter" -> sleepTimer.startEndOfChapter()
                 "previous" -> {
                     val last = playbackSettings.sleepLastDurationMs.first()
