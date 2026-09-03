@@ -24,7 +24,6 @@ import com.geozelot.homer.ui.home.HomeScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.ui.home.findBook
 import com.geozelot.homer.ui.home.HomeViewModel
-import com.geozelot.homer.ui.login.LoginScreen
 import com.geozelot.homer.ui.player.PlayerScreen
 import com.geozelot.homer.ui.settings.AboutSettingsScreen
 import com.geozelot.homer.ui.settings.DeviceStorageScreen
@@ -33,6 +32,8 @@ import com.geozelot.homer.ui.settings.LibraryUpkeepScreen
 import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
 import com.geozelot.homer.ui.settings.PrivacySettingsScreen
 import com.geozelot.homer.ui.settings.SettingsHubScreen
+import com.geozelot.homer.ui.setup.SetupEntry
+import com.geozelot.homer.ui.setup.SetupFlow
 import com.geozelot.homer.ui.settings.TemplatesScreen
 import com.geozelot.homer.ui.settings.StorageDialogsHost
 import com.geozelot.homer.ui.storage.StorageBrowserScreen
@@ -41,7 +42,8 @@ private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_LICENSES = "licenses"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_DIAGNOSTICS = "diagnostics"
-private const val ROUTE_LINK_SYNC = "link_sync"
+private const val ROUTE_SETUP = "setup"
+private const val ARG_SETUP_ENTRY = "entry"
 private const val ROUTE_STORAGE_BROWSER = "storage_browser"
 private const val ARG_AT_MS = "at"
 private const val ROUTE_SETTINGS = "settings"
@@ -147,8 +149,24 @@ fun LibraryNavHost() {
         composable(ROUTE_SETTINGS_LIBRARY) { entry ->
             LibrarySyncScreen(
                 viewModel = navController.libraryViewModel(entry),
-                onLinkSyncAccount = { navController.navigate(ROUTE_LINK_SYNC) },
+                // Every change to the library is the setup flow, opened at the step that answers
+                // the row — which is also what makes the migrations free.
+                onChange = { navController.navigate("$ROUTE_SETUP/${it.name}") },
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = "$ROUTE_SETUP/{$ARG_SETUP_ENTRY}",
+            arguments = listOf(navArgument(ARG_SETUP_ENTRY) { type = NavType.StringType }),
+        ) { entry ->
+            // firstRun = false: this run may be abandoned, and marking setup as under way would
+            // leave the gate holding the user in it.
+            SetupFlow(
+                firstRun = false,
+                entry = runCatching {
+                    SetupEntry.valueOf(entry.arguments?.getString(ARG_SETUP_ENTRY).orEmpty())
+                }.getOrDefault(SetupEntry.BOOKS),
+                onDone = { navController.popBackStack() },
             )
         }
         composable(ROUTE_SETTINGS_UPKEEP) { entry ->
@@ -212,10 +230,6 @@ fun LibraryNavHost() {
         }
         composable(ROUTE_DIAGNOSTICS) {
             DiagnosticsScreen(onBack = { navController.popBackStack() })
-        }
-        composable(ROUTE_LINK_SYNC) {
-            // Reuses the login flow to add a progress-sync account to a share library.
-            LoginScreen(syncMode = true, onLinked = { navController.popBackStack() })
         }
     }
 }

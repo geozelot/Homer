@@ -29,6 +29,7 @@ import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
+import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.ScopedTemplate
@@ -48,6 +49,7 @@ import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.CrawlSummary
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
+import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
@@ -273,6 +275,7 @@ class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val libraryIndexManager: LibraryIndexManager,
     private val maintenance: LibraryMaintenance,
+    private val libraryPolicy: LibraryPolicyRepository,
     private val librarySettings: LibrarySettings,
     private val webDavClient: WebDavClient,
     private val homerSync: HomerSyncRepository,
@@ -321,8 +324,37 @@ class HomeViewModel @Inject constructor(
     val libraryWritable: StateFlow<Boolean> = librarySettings.libraryWritable
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    /** Stops syncing progress to a linked account (share libraries → device-local). */
-    fun unlinkSyncAccount() = authRepository.unlinkSyncAccount()
+    /**
+     * Where this device stands in this library, whole.
+     *
+     * [maintainsLibrary], [readsSharedIndex] and [libraryWritable] are all views of it, kept as
+     * their own flows because that is what their call sites ask. The Library settings page wants
+     * the whole thing: it states what the library IS, and every one of those facts is a field here.
+     */
+    val standing: StateFlow<LibraryStanding> = maintenance.standing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryStanding.NONE)
+
+    /**
+     * Writes this library's rules. Owner only, and refused by
+     * [com.geozelot.homer.data.sync.facet.LibraryPolicyRepository] if it turns out not to be.
+     *
+     * The switches on the page are bound to [standing], which is fed by the resolution the write
+     * updates — so a failed write leaves them where they were rather than showing a state the
+     * server does not hold.
+     */
+    fun setLibraryRules(sharedIndexRequired: Boolean, editsAllowed: Boolean) {
+        viewModelScope.launch { libraryPolicy.write(sharedIndexRequired, editsAllowed) }
+    }
+
+    /**
+     * Re-reads this library's rules now, because a page that states them is open.
+     *
+     * The ordinary resolve is throttled to hours, which is right for the gates that ask it on every
+     * pass and wrong for a page whose whole subject it is.
+     */
+    fun refreshLibraryRules() {
+        viewModelScope.launch { libraryPolicy.refresh(force = true) }
+    }
 
     /** Live playback snapshot for the docked mini-player. */
     val playback: StateFlow<PlaybackUiState> = connection.state
@@ -576,24 +608,6 @@ class HomeViewModel @Inject constructor(
     val sharedCatalogEnabled: StateFlow<Boolean> = librarySettings.sharedCatalogEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    /** Whether a shared catalog exists in this library (advisory, for the settings UI). */
-    private val _sharedCatalogAvailable = MutableStateFlow(false)
-    val sharedCatalogAvailable: StateFlow<Boolean> = _sharedCatalogAvailable.asStateFlow()
-
-    /** Detected Nextcloud owner of the library folder, or null if not discoverable. */
-    private val _libraryOwner = MutableStateFlow<String?>(null)
-    val libraryOwner: StateFlow<String?> = _libraryOwner.asStateFlow()
-
-    /** Homer-bearing folders found by the discovery sweep (files root, library root, shares). */
-    private val _discovered = MutableStateFlow<List<DiscoveredLibrary>>(emptyList())
-    val discovered: StateFlow<List<DiscoveredLibrary>> = _discovered.asStateFlow()
-
-    /** When the last discovery sweep completed, so opening the sheet doesn't re-sweep every time. */
-    private var lastDiscoveryAtMs = 0L
-
-    private val _discovering = MutableStateFlow(false)
-    val discovering: StateFlow<Boolean> = _discovering.asStateFlow()
-
     val wifiOnlyDownloads: StateFlow<Boolean> = playbackSettings.wifiOnlyDownloads
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -683,7 +697,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             if (maintenance.standingNow().usesSharedIndex) {
                 // pull() reports whether a shared index exists, so this needs no second probe.
-                _sharedCatalogAvailable.value = libraryIndex.pull()
+                libraryIndex.pull()
             }
             // Nothing here and nothing has ever looked: read the folder. Setup has already settled
             // WHICH folder — this is the crawl that follows from it, and it is also what covers a
@@ -695,34 +709,6 @@ class HomeViewModel @Inject constructor(
                 // after a sign-out and back in, or a reinstall over the same folder, the audio is
                 // often already sitting there. Claim it rather than re-downloading it.
                 localMirror.adoptDownloads()
-            }
-        }
-    }
-
-    /**
-     * Runs the discovery sweep and refreshes the shared-catalog/owner hints for the current root
-     * from its result. Called when the Library & Sync sheet opens and by the Rediscover action.
-     */
-    /**
-     * Sweeps the server for Homer libraries. [force] is for the explicit Rediscover button; the
-     * automatic call when the sheet opens is throttled, because the sweep is dozens of requests
-     * and it used to re-run in full every single time the sheet was opened.
-     */
-    fun rediscover(force: Boolean = false) {
-        if (_discovering.value) return
-        val now = System.currentTimeMillis()
-        if (!force && _discovered.value.isNotEmpty() && now - lastDiscoveryAtMs < DISCOVERY_TTL_MS) return
-        viewModelScope.launch {
-            _discovering.value = true
-            try {
-                val libraries = discovery.discover()
-                _discovered.value = libraries
-                lastDiscoveryAtMs = now
-                val current = libraries.firstOrNull { it.isCurrentRoot }
-                _sharedCatalogAvailable.value = current?.hasSharedCatalog == true
-                _libraryOwner.value = current?.owner
-            } finally {
-                _discovering.value = false
             }
         }
     }
@@ -1117,20 +1103,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setProgressSyncEnabled(enabled) }
     }
 
-    /** Toggle the shared library catalog. Turning it on bootstraps from (or creates) the catalog. */
-    fun setSharedCatalog(enabled: Boolean) {
-        viewModelScope.launch {
-            librarySettings.setSharedCatalogEnabled(enabled)
-            if (enabled) {
-                // pull() first, always: it is the only thing that converts a v1 catalog, and
-                // probing for structure.json alone would miss one — publishing this device's view
-                // over it instead, and losing every duration the old index had measured.
-                if (!libraryIndex.pull()) libraryIndex.push()
-                _sharedCatalogAvailable.value = libraryIndex.exists()
-            }
-        }
-    }
-
     fun setSortMode(sort: LibrarySort) {
         viewModelScope.launch { librarySettings.setSortMode(sort.key) }
     }
@@ -1349,7 +1321,7 @@ class HomeViewModel @Inject constructor(
             // the same claim. Reporting the second as the first is the mistake `pullNow` already
             // warns about for 304s: it told the settings screen the library had vanished. Absence is
             // established by `libraryIndex.exists()`, which asks that question and only that one.
-            if (libraryIndex.sync()) _sharedCatalogAvailable.value = true
+            libraryIndex.sync()
         }
     }
 
@@ -1392,8 +1364,6 @@ class HomeViewModel @Inject constructor(
     private companion object {
         const val LISTENING_LIMIT = 12
 
-        /** How long a discovery sweep stays fresh enough to reuse (the button always forces). */
-        const val DISCOVERY_TTL_MS = 10 * 60_000L
         const val MIRROR_MARKER = "progress.json"
         const val TAG_STORAGE = "HomerStore"
 

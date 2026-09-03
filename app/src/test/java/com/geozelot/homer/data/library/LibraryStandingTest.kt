@@ -329,6 +329,23 @@ class LibraryStandingTest {
     }
 
     @Test
+    fun `writability is about the folder, not about whether anything is published there`() {
+        // The settings page says "read-only" from this. Reading mayPublishIndex instead told a
+        // read-only share with the index switched off that it could write.
+        val readOnlyPrivate = standing(WebDavKind.SHARE, writable = false, sharedIndexEnabled = false)
+        assertEquals(LibraryRole.PRIVATE, readOnlyPrivate.role)
+        assertFalse(readOnlyPrivate.backendWritable)
+        assertTrue(standing(WebDavKind.SHARE, writable = true, sharedIndexEnabled = false).backendWritable)
+    }
+
+    @Test
+    fun `publishing always implies the backend can be written`() {
+        forEveryCombination { standing ->
+            if (standing.mayPublishIndex) assertTrue(standing.toString(), standing.backendWritable)
+        }
+    }
+
+    @Test
     fun `the index is only ever locked for a device the rules bind`() {
         forEveryCombination { standing ->
             if (standing.sharedIndexLocked) {

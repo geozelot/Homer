@@ -1,12 +1,12 @@
 package com.geozelot.homer.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,171 +16,170 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
-import com.geozelot.homer.data.library.DiscoveredLibrary
-import com.geozelot.homer.data.library.IndexPass
+import com.geozelot.homer.data.auth.NextcloudCredentials
+import com.geozelot.homer.data.library.LibraryRole
+import com.geozelot.homer.data.library.LibraryStanding
+import com.geozelot.homer.data.library.Restriction
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
-import com.geozelot.homer.ui.components.DiscoveredLibraryCard
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
-import com.geozelot.homer.ui.components.SettingsCard
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsNote
-import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.components.TagChip
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.setup.SetupEntry
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
 
 /**
- * The library, in three sections that mirror the three facets of the shared index: where the books
- * come from, what Homer has managed to read about them, and what is shared with other devices.
+ * The library, as three facts and one way to change each: where the books are, which index is in
+ * use, and where the reader's place is saved.
  *
- * It replaces two pages — "Library source" and "Sync" — that split the same subject down the wrong
- * seam: the shared index appeared under source while the thing it shares appeared under sync, and
- * scanning was presented as one big button with three "if something looks wrong" repairs beneath it.
+ * ## Why it is three facts rather than five controls
  *
- * The middle section is the substance of the change. Reading a library is four separate jobs of
- * wildly different cost, they queue rather than cancel each other, and each one is either complete
- * or it isn't — so each gets a row that says how complete it is and one action to close the gap.
+ * It used to be a source card, an editable root field, a discovery list, a shared-index switch and
+ * a sync section — five controls for three things, several of which could contradict each other.
+ * Typing a folder into a field did not tell you whether it was writable, whether anything was
+ * there, or what its owner allowed; the switch beside it promised something the backend might
+ * refuse.
+ *
+ * Every *change* is now the setup flow, opened at the screen that answers the row: it probes, states
+ * what it found, and applies one decision. So there is nothing here that can be set to a value the
+ * library will not honour — and the three migrations the design asks for (start syncing progress,
+ * move a private library to a server, adopt the shared one instead of your own) cost no code beyond
+ * the flow that already exists.
+ *
+ * The rules panel is the exception, and it appears for the owner alone. Everyone else sees the two
+ * chips in the index row and nothing to press, which is what "only the owner can change this" looks
+ * like when it is expressed as absence rather than as a disabled switch with an explanation.
  */
 @Composable
 fun LibrarySyncScreen(
     viewModel: HomeViewModel,
-    onLinkSyncAccount: () -> Unit,
+    onChange: (SetupEntry) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
-    val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
-    val libraryWritable by viewModel.libraryWritable.collectAsStateWithLifecycle()
     val libraryRoot by viewModel.libraryRoot.collectAsStateWithLifecycle()
-    val sharedIndex by viewModel.sharedCatalogEnabled.collectAsStateWithLifecycle()
-    val sharedIndexAvailable by viewModel.sharedCatalogAvailable.collectAsStateWithLifecycle()
-    val libraryOwner by viewModel.libraryOwner.collectAsStateWithLifecycle()
-    val discovered by viewModel.discovered.collectAsStateWithLifecycle()
-    val discovering by viewModel.discovering.collectAsStateWithLifecycle()
+    val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
+    val standing by viewModel.standing.collectAsStateWithLifecycle()
     val syncAccount by viewModel.syncAccount.collectAsStateWithLifecycle()
     val progressSync by viewModel.progressSyncEnabled.collectAsStateWithLifecycle()
-    val queued by viewModel.indexQueued.collectAsStateWithLifecycle()
+    val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
 
-    // Sweep for Homer-bearing folders when the page opens; the sweep itself is throttled, and it
-    // also refreshes the shared-index / owner hints shown below.
-    LaunchedEffect(Unit) { viewModel.rediscover() }
+    // The rules are what every row below is qualified by, so they are worth being current when the
+    // page is opened rather than up to six hours old.
+    LaunchedEffect(Unit) { viewModel.refreshLibraryRules() }
 
+    // No status line under the title: what qualifies this page is the rules, and they are stated
+    // as chips on the row they qualify. "Last full crawl" belongs to Upkeep, beside the passes it
+    // authorises.
     SettingsScaffold(stringResource(R.string.set_sync_title), onBack, modifier) {
-        // ── Source ───────────────────────────────────────────────────────────
-        SettingsSectionHeader(stringResource(R.string.lib_section_source))
-        CurrentSourceCard(
-            login = account?.loginName,
-            host = account?.serverUrl?.substringAfter("://"),
-            isShare = libraryIsShare,
-            writable = libraryWritable,
+        // ── books ────────────────────────────────────────────────────────────
+        StateRow(
+            header = stringResource(R.string.lib_fact_books),
+            value = libraryRoot.ifEmpty { stringResource(R.string.sync_home_files_root) },
+            detail = booksDetail(account, libraryIsShare, standing, bookCount),
+            onChange = { onChange(SetupEntry.BOOKS) },
         )
-
-        // A share link points at exactly one folder — the share IS the library — so editing the
-        // folder would only break it.
-        OutlinedTextField(
-            value = libraryRoot,
-            onValueChange = viewModel::onLibraryRootChange,
-            label = { Text(stringResource(R.string.sync_library_folder)) },
-            placeholder = { Text(stringResource(R.string.sync_library_folder_placeholder)) },
-            singleLine = true,
-            enabled = IndexPass.BOOKS !in queued && !libraryIsShare,
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        )
-        if (libraryIsShare) {
-            SettingsNote(
-                stringResource(R.string.set_source_share_root_note),
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-
-        DiscoveredLibraries(
-            discovered = discovered,
-            discovering = discovering,
-            // The button is an explicit request: bypass the freshness throttle.
-            onRediscover = { viewModel.rediscover(force = true) },
-            onUse = viewModel::onLibraryRootChange,
-        )
-
 
         SettingsDivider()
 
-        // ── Sharing ──────────────────────────────────────────────────────────
-        SettingsSectionHeader(stringResource(R.string.lib_section_sharing))
-        // What the index is doing right now. The rows above cover the passes; this covers the two
-        // steps that are pure network and used to happen in complete silence.
+        // ── the index ────────────────────────────────────────────────────────
+        StateRow(
+            header = stringResource(R.string.lib_fact_index),
+            value = stringResource(
+                when {
+                    standing.role == LibraryRole.READER -> R.string.lib_index_reader
+                    standing.usesSharedIndex -> R.string.lib_index_shared
+                    bookCount > 0 -> R.string.lib_index_private
+                    else -> R.string.lib_index_none
+                },
+            ),
+            detail = indexDetail(standing, bookCount),
+            chips = ruleChips(standing),
+            onChange = { onChange(SetupEntry.INDEX) },
+        )
+        // What the index is doing right now. Both steps are pure network and used to happen in
+        // complete silence.
         when (indexActivity) {
             IndexActivity.READING -> SettingsNote(stringResource(R.string.home_reading_index))
             IndexActivity.PUBLISHING -> SettingsNote(stringResource(R.string.lib_index_publishing))
             IndexActivity.IDLE -> Unit
         }
-        SharedIndexSetting(
-            enabled = sharedIndex,
-            available = sharedIndexAvailable,
-            writable = libraryWritable,
-            owner = libraryOwner,
-            onChange = viewModel::setSharedCatalog,
-        )
+        // The one sentence that says why nothing is happening — the answer to every "X does
+        // nothing" report, resolved once rather than re-derived per screen.
+        whyText(standing)?.let { SettingsExplanation(it) }
 
         SettingsDivider()
 
-        // Hoisted above the branch: it names what BOTH halves are about — where your place is
-        // saved — and it was emitted by the share half only, so the ordinary case showed a bare
-        // switch under a divider with nothing saying what it belonged to.
-        SettingsSectionHeader(stringResource(R.string.set_sync_account_header))
-        if (libraryIsShare) {
-            // A share link is somebody else's storage: progress stays on this device until the
-            // user points it at an account of their own.
-            val sync = syncAccount
-            SettingsRow(
-                label = if (sync != null) {
-                    stringResource(
-                        R.string.settings_sync_to,
-                        "${sync.loginName}@${sync.serverUrl.substringAfter("://")}",
-                    )
+        // ── progress ─────────────────────────────────────────────────────────
+        val progressAccount = syncAccount?.takeIf { progressSync }
+        StateRow(
+            header = stringResource(R.string.lib_fact_progress),
+            value = progressAccount?.let {
+                stringResource(
+                    R.string.lib_progress_account,
+                    "${it.loginName}@${it.serverUrl.substringAfter("://")}",
+                )
+            } ?: stringResource(R.string.lib_progress_device),
+            detail = stringResource(
+                if (progressAccount != null) {
+                    R.string.lib_progress_desc_account
                 } else {
-                    stringResource(R.string.settings_sync_device)
+                    R.string.lib_progress_desc_device
                 },
+            ),
+            onChange = { onChange(SetupEntry.PROGRESS) },
+        )
+
+        // ── the rules, for the owner ─────────────────────────────────────────
+        if (standing.mayEditRules) {
+            SettingsDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                if (sync != null) {
-                    HomerTextButton(onClick = viewModel::unlinkSyncAccount, contentPadding = SettingsActionPadding) {
-                        Text(stringResource(R.string.settings_sync_stop))
-                    }
-                } else {
-                    HomerTextButton(onClick = onLinkSyncAccount, contentPadding = SettingsActionPadding) {
-                        Text(stringResource(R.string.settings_sync_link))
-                    }
-                }
+                SettingsSectionHeader(stringResource(R.string.lib_rules_header))
+                TagChip(stringResource(R.string.lib_rules_owner), OnAmber, Amber)
             }
-        } else {
             SettingsSwitchRow(
-                label = stringResource(R.string.sync_progress_switch),
-                checked = progressSync,
-                onCheckedChange = viewModel::setProgressSync,
-                description = if (progressSync) {
-                    stringResource(R.string.sync_progress_on_desc)
-                } else {
-                    stringResource(R.string.sync_progress_off_desc)
+                label = stringResource(R.string.setup_rule_require),
+                checked = standing.policy.sharedIndexRequired,
+                onCheckedChange = {
+                    viewModel.setLibraryRules(it, standing.policy.editsAllowed)
                 },
+                description = stringResource(R.string.setup_rule_require_desc),
             )
+            SettingsSwitchRow(
+                label = stringResource(R.string.setup_rule_edits),
+                checked = standing.policy.editsAllowed,
+                onCheckedChange = {
+                    viewModel.setLibraryRules(standing.policy.sharedIndexRequired, it)
+                },
+                description = stringResource(R.string.setup_rule_edits_desc),
+            )
+            SettingsExplanation(stringResource(R.string.setup_rules_honoured))
         }
 
         SettingsDivider()
@@ -201,118 +200,132 @@ fun LibrarySyncScreen(
     }
 }
 
-// ── source ───────────────────────────────────────────────────────────────────────────────────
+// ── the row ──────────────────────────────────────────────────────────────────────────────────
 
-/** Which server (and which kind of access) the library is being read from right now. */
+/**
+ * One fact about the library: what it is, a line qualifying it, any rules that apply, and the one
+ * way to change it.
+ *
+ * The action is a text button rather than the whole row being tappable. These rows are read far more
+ * often than they are acted on — the page exists to answer "what is this library?" — and a tappable
+ * row invites a tap on the way to reading it.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CurrentSourceCard(login: String?, host: String?, isShare: Boolean, writable: Boolean) {
-    SettingsCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = when {
-                    host == null -> stringResource(R.string.set_source_none)
-                    isShare -> stringResource(R.string.settings_library_share, host)
-                    else -> stringResource(R.string.settings_account, login.orEmpty(), host)
-                },
-                color = Parchment,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp),
-            )
-            if (!writable) {
-                TagChip(stringResource(R.string.set_source_readonly), OnAmber, Amber)
+private fun StateRow(
+    header: String,
+    value: String,
+    detail: String?,
+    onChange: () -> Unit,
+    chips: List<String> = emptyList(),
+) {
+    SettingsSectionHeader(header)
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp, bottom = 4.dp)) {
+            Text(value, color = Parchment, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            detail?.let {
+                Text(
+                    it,
+                    color = Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            if (chips.isNotEmpty()) {
+                FloatingChips(chips)
             }
         }
-        Text(
-            text = if (isShare) {
-                stringResource(R.string.set_source_share_desc)
-            } else {
-                stringResource(R.string.set_source_account_desc)
-            },
-            color = Muted,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+        HomerTextButton(onClick = onChange, contentPadding = SettingsActionPadding) {
+            Text(stringResource(R.string.lib_change))
+        }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FloatingChips(chips: List<String>) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(top = 8.dp),
+    ) {
+        chips.forEach { TagChip(it, Amber, AmberSoft) }
+    }
+}
+
+// ── the lines under each fact ────────────────────────────────────────────────────────────────
+
+/** Which server the books come from, how they are reached, and how many there are. */
+@Composable
+private fun booksDetail(
+    account: NextcloudCredentials?,
+    isShare: Boolean,
+    standing: LibraryStanding,
+    bookCount: Int,
+): String? {
+    val credentials = account ?: return null
+    val host = credentials.serverUrl.substringAfter("://")
+    val where = if (isShare) {
+        stringResource(R.string.lib_books_share, host)
+    } else {
+        stringResource(R.string.lib_books_account, credentials.loginName, host)
+    }
+    // The folder's own writability, not "are we publishing": a read-only share with the index
+    // switched off publishes nothing and is still read-only, and saying otherwise here would be
+    // the one line on the page that lies.
+    val access = stringResource(
+        if (standing.backendWritable) R.string.lib_access_write else R.string.lib_access_read,
+    )
+    val books = if (bookCount > 0) {
+        pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount)
+    } else {
+        null
+    }
+    return listOfNotNull(where, access, books).joinToString(" · ")
+}
+
+/** Who keeps the index, and how much is in it. */
+@Composable
+private fun indexDetail(standing: LibraryStanding, bookCount: Int): String? {
+    if (!standing.usesSharedIndex) return null
+    val owner = standing.policy.owner
+    val keeper = when {
+        standing.mayPublishIndex -> stringResource(R.string.lib_index_kept_by_you)
+        owner != null -> stringResource(R.string.lib_index_kept_by, owner)
+        else -> null
+    }
+    val books = if (bookCount > 0) {
+        pluralStringResource(R.plurals.sync_books_count, bookCount, bookCount)
+    } else {
+        null
+    }
+    return listOfNotNull(keeper, books).joinToString(" · ").ifEmpty { null }
 }
 
 /**
- * The shared library index, framed as what it actually buys the user: devices that don't have to
- * crawl the library or re-extract cover art. It carries no personal data and never a position.
+ * The rules in force, as chips.
+ *
+ * Shown to everyone, including the owner — the owner's switches are further down the page, and a
+ * rule that only appears where it can be edited would leave the reader's locked index row
+ * unexplained.
  */
 @Composable
-private fun SharedIndexSetting(
-    enabled: Boolean,
-    available: Boolean,
-    writable: Boolean,
-    owner: String?,
-    onChange: (Boolean) -> Unit,
-) {
-    val context = LocalContext.current
-    // A read-only share can read an index that's already there but can never write one, so the
-    // toggle would be a promise the backend can't keep.
-    val canToggle = writable || available
-    SettingsSwitchRow(
-        label = stringResource(R.string.set_shared_index_title),
-        checked = enabled,
-        onCheckedChange = onChange,
-        enabled = canToggle,
-        description = stringResource(R.string.set_shared_index_desc),
-    )
-    SettingsExplanation(
-        buildString {
-            append(
-                when {
-                    // Three situations, and the switch alone cannot tell them apart: reading an
-                    // index somebody else keeps is a different thing from keeping one, and both are
-                    // different from every device working it out for itself.
-                    enabled && !writable -> context.getString(R.string.set_shared_index_state_reader)
-                    enabled && available -> context.getString(R.string.set_shared_index_state_reading)
-                    enabled -> context.getString(R.string.set_shared_index_state_publishing)
-                    else -> context.getString(R.string.set_shared_index_state_off)
-                },
-            )
-            if (enabled && owner != null) append(context.getString(R.string.set_shared_index_owner, owner))
-        },
-    )
-    if (!writable) SettingsNote(stringResource(R.string.set_shared_index_readonly_note))
+private fun ruleChips(standing: LibraryStanding): List<String> = buildList {
+    if (!standing.policy.understood) {
+        add(stringResource(R.string.lib_chip_rules_unreadable))
+        return@buildList
+    }
+    if (standing.policy.sharedIndexRequired) add(stringResource(R.string.lib_chip_shared_required))
+    if (!standing.policy.editsAllowed) add(stringResource(R.string.lib_chip_edits_locked))
 }
 
-/** Other Homer libraries the discovery sweep found on the server, each adoptable as the root. */
+/** Why the expensive work, or a published edit, is not happening. Null when it is. */
 @Composable
-private fun DiscoveredLibraries(
-    discovered: List<DiscoveredLibrary>,
-    discovering: Boolean,
-    onRediscover: () -> Unit,
-    onUse: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingsSectionHeader(
-            stringResource(R.string.set_source_other_header),
-            modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp),
-        )
-        if (discovering) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
-        } else {
-            HomerTextButton(onClick = onRediscover, contentPadding = SettingsActionPadding) {
-                Text(stringResource(R.string.sync_rediscover))
-            }
-        }
+private fun whyText(standing: LibraryStanding): String? =
+    when (standing.restriction ?: standing.editRestriction) {
+        is Restriction.RulesUnreadable -> stringResource(R.string.lib_why_rules_unreadable)
+        Restriction.ReadOnlyLibrary -> stringResource(R.string.lib_why_reader)
+        is Restriction.EditsLocked -> stringResource(R.string.lib_why_edits_locked)
+        Restriction.NoLibrary, null -> null
     }
-    if (discovered.isEmpty()) {
-        SettingsNote(
-            if (discovering) {
-                stringResource(R.string.sync_discovering)
-            } else {
-                stringResource(R.string.sync_no_libraries)
-            },
-        )
-    } else {
-        discovered.forEach { lib -> DiscoveredLibraryCard(lib, onUse) }
-    }
-}

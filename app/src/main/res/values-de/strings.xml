@@ -641,4 +641,32 @@
     <string name="setup_progress_settled">Wird in %1$s gespeichert — jeder Homer von dir macht dort weiter, wo du aufgehört hast.</string>
     <string name="setup_progress_settled_alt">Doch nur auf diesem Gerät</string>
     <string name="setup_progress_finish">Losgehen</string>
+
+    <!-- ── Bibliothekseinstellungen: drei Fakten ───────────────────────── -->
+    <string name="lib_fact_books">HÖRBÜCHER</string>
+    <string name="lib_fact_index">BIBLIOTHEKSINDEX</string>
+    <string name="lib_fact_progress">HÖRFORTSCHRITT</string>
+    <string name="lib_change">Ändern…</string>
+    <string name="lib_books_account">%1$s auf %2$s</string>
+    <string name="lib_books_share">ein geteilter Link auf %1$s</string>
+    <string name="lib_access_write">Lesen &amp; Schreiben</string>
+    <string name="lib_access_read">nur Lesen</string>
+    <string name="lib_index_shared">Gemeinsam, in diesem Ordner</string>
+    <string name="lib_index_private">Nur auf diesem Gerät</string>
+    <string name="lib_index_reader">Gemeinsam — von einem anderen Gerät gepflegt</string>
+    <string name="lib_index_none">Noch keiner</string>
+    <string name="lib_index_kept_by_you">von diesem Gerät gepflegt</string>
+    <string name="lib_index_kept_by">von %1$s gepflegt</string>
+    <string name="lib_chip_shared_required">Gemeinsame Nutzung vorgegeben</string>
+    <string name="lib_chip_edits_locked">Änderungen gesperrt</string>
+    <string name="lib_chip_rules_unreadable">Regeln nicht lesbar</string>
+    <string name="lib_progress_account">%1$s</string>
+    <string name="lib_progress_device">Nur auf diesem Gerät</string>
+    <string name="lib_progress_desc_account">Dein Hörfortschritt, privat, auf jedem Homer, in dem du angemeldet bist.</string>
+    <string name="lib_progress_desc_device">Dein Hörfortschritt verlässt dieses Telefon nie.</string>
+    <string name="lib_rules_header">REGELN DIESER BIBLIOTHEK</string>
+    <string name="lib_rules_owner">gehört dir</string>
+    <string name="lib_why_reader">Dieses Gerät liest eine Bibliothek, in die es nicht schreiben kann — es durchsucht daher nichts und veröffentlicht nichts. Die schreibberechtigten Geräte halten sie aktuell.</string>
+    <string name="lib_why_rules_unreadable">Homer hat hier Regeln gefunden, die er nicht lesen konnte, und bleibt vorsichtig: Er liest die Bibliothek und veröffentlicht nichts.</string>
+    <string name="lib_why_edits_locked">Deine Korrekturen bleiben auf diesem Gerät — wem diese Bibliothek gehört, nimmt keine veröffentlichten Änderungen an.</string>
 </resources>

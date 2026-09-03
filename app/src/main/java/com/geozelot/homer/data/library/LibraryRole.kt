@@ -83,6 +83,14 @@ data class LibraryStanding(
      * claiming a library is open before anybody has looked.
      */
     val policyKnown: Boolean,
+    /**
+     * Whether the backend can be written to at all, index or no index.
+     *
+     * Distinct from [mayPublishIndex], which also requires the index to be in use. The UI wants
+     * both: "read-only" is a fact about the folder, and saying "read & write" of a folder merely
+     * because nothing is being published there would be wrong.
+     */
+    val backendWritable: Boolean,
     /** Whether the shared index is in use — by choice, or because the owner requires it. */
     val usesSharedIndex: Boolean,
     /**
@@ -121,6 +129,7 @@ data class LibraryStanding(
             isOwner = false,
             policy = PolicyInForce.OPEN,
             policyKnown = false,
+            backendWritable = false,
             usesSharedIndex = false,
             sharedIndexLocked = false,
             maintains = false,
@@ -194,6 +203,7 @@ data class LibraryStanding(
                 isOwner = isOwner,
                 policy = policy,
                 policyKnown = policyKnown,
+                backendWritable = backendWritable,
                 usesSharedIndex = usesSharedIndex,
                 sharedIndexLocked = requiresShared,
                 maintains = maintains,

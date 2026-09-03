@@ -662,4 +662,32 @@
     <string name="setup_progress_settled">Saved to %1$s, so every Homer of yours picks up where you left off.</string>
     <string name="setup_progress_settled_alt">Keep it on this device instead</string>
     <string name="setup_progress_finish">Start reading</string>
+
+    <!-- ── Library settings: three facts ───────────────────────────────── -->
+    <string name="lib_fact_books">BOOKS</string>
+    <string name="lib_fact_index">LIBRARY INDEX</string>
+    <string name="lib_fact_progress">PROGRESS</string>
+    <string name="lib_change">Change…</string>
+    <string name="lib_books_account">%1$s at %2$s</string>
+    <string name="lib_books_share">a shared link at %1$s</string>
+    <string name="lib_access_write">read &amp; write</string>
+    <string name="lib_access_read">read-only</string>
+    <string name="lib_index_shared">Shared, in this folder</string>
+    <string name="lib_index_private">Only on this device</string>
+    <string name="lib_index_reader">Shared — kept by another device</string>
+    <string name="lib_index_none">None yet</string>
+    <string name="lib_index_kept_by_you">kept by this device</string>
+    <string name="lib_index_kept_by">kept by %1$s</string>
+    <string name="lib_chip_shared_required">Shared use required</string>
+    <string name="lib_chip_edits_locked">Edits locked</string>
+    <string name="lib_chip_rules_unreadable">Rules unreadable</string>
+    <string name="lib_progress_account">%1$s</string>
+    <string name="lib_progress_device">Only on this device</string>
+    <string name="lib_progress_desc_account">Your place in each book, private to you, on every Homer you sign in to.</string>
+    <string name="lib_progress_desc_device">Your place in each book never leaves this phone.</string>
+    <string name="lib_rules_header">THIS LIBRARY\'S RULES</string>
+    <string name="lib_rules_owner">you own it</string>
+    <string name="lib_why_reader">This device reads a library it cannot write to, so it runs no scans and publishes nothing. The devices that can write it keep it up to date.</string>
+    <string name="lib_why_rules_unreadable">Homer found rules here it could not read, so it is being cautious: it reads the library and publishes nothing.</string>
+    <string name="lib_why_edits_locked">Corrections you make stay on this device — this library\'s owner does not accept published edits.</string>
 </resources>

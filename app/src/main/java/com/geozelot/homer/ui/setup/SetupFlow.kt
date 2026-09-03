@@ -77,6 +77,8 @@ import com.geozelot.homer.ui.theme.Surface1
  * @param firstRun true when this is the flow a new install cannot skip. It marks setup as under way
  *   so signing in does not eject the user into the library half way through — and it must stay false
  *   when setup is re-run from settings, or abandoning the re-run would strand them here.
+ * @param entry which step to open at. A re-run from settings starts at the screen that answers the
+ *   row the user tapped, which is what makes the migrations cost nothing beyond onboarding.
  * @param onDone called when everything is settled, and when a re-run is abandoned.
  */
 @Composable
@@ -84,11 +86,13 @@ fun SetupFlow(
     firstRun: Boolean,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    entry: SetupEntry = SetupEntry.BOOKS,
     viewModel: SetupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(firstRun) { if (firstRun) viewModel.beginFirstRun() }
+    LaunchedEffect(entry) { viewModel.enter(entry) }
     LaunchedEffect(state.done) { if (state.done) onDone() }
 
     // One handler for the whole flow: the steps are a stack in the ViewModel rather than in a nav
@@ -102,6 +106,7 @@ fun SetupFlow(
         SetupStep.WHERE -> WhereStep(
             onShareLink = viewModel::chooseShareLink,
             onAccount = viewModel::chooseAccount,
+            // No way back from the first screen of a first run; a re-run can be abandoned.
             onBack = onDone.takeUnless { firstRun },
             modifier = modifier,
         )

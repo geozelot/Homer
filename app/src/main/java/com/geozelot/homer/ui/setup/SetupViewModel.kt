@@ -53,6 +53,25 @@ enum class SetupStep {
 }
 
 /**
+ * Where the flow is entered.
+ *
+ * Setup re-run from settings is the same flow, opened at the step that answers the row the user
+ * tapped. That is what makes the three migrations in the design cost nothing beyond onboarding:
+ * moving the books, switching which index is used, and starting to sync progress are the three
+ * screens this flow already has.
+ */
+enum class SetupEntry {
+    /** The whole flow, from "where do your books live". */
+    BOOKS,
+
+    /** Straight to the findings for the folder already in use. */
+    INDEX,
+
+    /** Straight to the progress question. */
+    PROGRESS,
+}
+
+/**
  * Everything on screen, and nothing that is not.
  *
  * [outcome] is the whole of the findings screen: it came out of [decideSetup] and the screen renders
@@ -61,6 +80,14 @@ enum class SetupStep {
  */
 data class SetupUiState(
     val step: SetupStep = SetupStep.WHERE,
+    /**
+     * The step this run of the flow started at.
+     *
+     * Back stops here rather than at [SetupStep.WHERE]: a re-run entered at the progress question
+     * has no earlier screens of its own, and walking back into a findings screen that was never
+     * probed would show "nothing could be established" about a library that is working fine.
+     */
+    val entryStep: SetupStep = SetupStep.WHERE,
     val folder: String = "",
     val candidates: List<DiscoveredLibrary> = emptyList(),
     val discovering: Boolean = false,
@@ -85,7 +112,7 @@ data class SetupUiState(
      * which on a first run means leaving the app, and from settings means popping the destination.
      * Swallowing it there left the app with no way out but the home button.
      */
-    val canGoBack: Boolean get() = step != SetupStep.WHERE
+    val canGoBack: Boolean get() = step != entryStep
 }
 
 /**
@@ -151,6 +178,27 @@ class SetupViewModel @Inject constructor(
      */
     fun beginFirstRun() {
         viewModelScope.launch { librarySettings.setSetupState(SetupState.IN_PROGRESS) }
+    }
+
+    /**
+     * Opens the flow at the step that answers [entry], for a re-run from settings.
+     *
+     * Called once; re-entering while already past the entry step would throw away whatever the user
+     * had got to on a recomposition.
+     */
+    fun enter(entry: SetupEntry) {
+        if (_state.value.entryStep != SetupStep.WHERE || _state.value.step != SetupStep.WHERE) return
+        when (entry) {
+            SetupEntry.BOOKS -> Unit
+            SetupEntry.INDEX -> viewModelScope.launch {
+                val root = librarySettings.libraryRoot.first()
+                _state.update { it.copy(entryStep = SetupStep.FINDINGS, folder = root) }
+                look(root)
+            }
+            SetupEntry.PROGRESS -> _state.update {
+                it.copy(entryStep = SetupStep.PROGRESS, step = SetupStep.PROGRESS)
+            }
+        }
     }
 
     // ── where the books are ──────────────────────────────────────────────────────────────────
