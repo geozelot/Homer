@@ -3,7 +3,7 @@ package com.geozelot.homer.data.sync.facet
 import kotlinx.serialization.Serializable
 
 /**
- * The shared library index, split into three files under `<libraryRoot>/.homer/`.
+ * The shared library index, split into four files under `<libraryRoot>/.homer/`.
  *
  * They are peers, not layers. Each answers a different question, is produced by a different actor,
  * and therefore merges by a different rule:
@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
  *  - [DerivedFacet] — what devices **computed** by reading the files. Expensive, and the whole
  *    reason to share anything.
  *  - [CorrectionsFacet] — what a person **said**. Outranks everything detected.
+ *  - [LibraryPolicy] — what the **owner** allows. Written by one party and read by everyone else.
  *
  * Splitting them is also what ends the whole-catalog rewrite: fixing one book's title used to
  * republish every file entry in the library, several megabytes of it, on every edit.
@@ -25,6 +26,16 @@ object LibraryFacets {
     const val STRUCTURE_FILE = "structure.json"
     const val DERIVED_FILE = "derived.json"
     const val CORRECTIONS_FILE = "corrections.json"
+
+    /**
+     * The owner's rules for this library — see [LibraryPolicy].
+     *
+     * A fourth file rather than a field in [StructureFacet], because it is the one thing here that
+     * merges by "the owner said so" rather than by contribution, and `FacetMerge.structure` is
+     * exactly the code path that must never be able to touch it. It is also read on its own, from
+     * folders that have no index at all, and before the expensive read that decides everything else.
+     */
+    const val POLICY_FILE = "policy.json"
 }
 
 // ── structure ────────────────────────────────────────────────────────────────────────────────
@@ -268,3 +279,182 @@ data class BookCorrection(
     /** The device the edit was made on, so the UI can say where a change came from. */
     val editedBy: String? = null,
 )
+
+// ── policy ───────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The library owner's rules for every OTHER device that opens this folder.
+ *
+ * ## What it is for
+ *
+ * A library shared with several people is cheap to read and expensive to *establish*. Crawling it
+ * is one request per folder; measuring it is one per file, thousands of them. A device that points
+ * at somebody else's folder and builds its own private index therefore spends a night working out
+ * what the folder already knows — and shares none of it, so the next reader along does it again.
+ *
+ * This file lets the owner say "use the index that is here" once, and have every Homer honour it.
+ *
+ * ## Honoured, not enforced — and the UI must say so
+ *
+ * A file in a folder that the client can read cannot stop that client doing anything. A modified
+ * Homer, an rclone mount or a WebDAV drive ignores it completely. What it stops is *Homer's own
+ * default behaviour*, which is the whole of the problem: nobody sets out to re-crawl a shared
+ * library, they point the app at a folder and let it work. Every string that describes this says
+ * "honoured", never "enforced".
+ *
+ * ## It binds other devices, not the owner
+ *
+ * The owner wrote the rules and can change them in one tap, so applying them to their own device
+ * would be theatre. `LibraryPolicyRepository` resolves ownership separately and exempts it.
+ */
+@Serializable
+data class LibraryPolicy(
+    val version: Int = LibraryFacets.SCHEMA_VERSION,
+    /**
+     * The `oc:owner-id` of the folder when the rules were written.
+     *
+     * Stored as well as probed, so a device can notice that the folder has changed hands rather
+     * than silently trusting whatever a live probe answers. Null when the server did not expose it.
+     */
+    val ownerId: String? = null,
+    /**
+     * Devices here must read this library's index rather than establishing their own.
+     *
+     * A device that cannot publish becomes a reader: no crawl, no measure pass, no cover
+     * extraction. It is not a switch that reader can turn off — that is exactly the escape hatch
+     * this exists to close.
+     */
+    val sharedIndexRequired: Boolean = false,
+    /**
+     * Whether a write-capable device other than the owner may publish metadata corrections here.
+     *
+     * False suppresses the *publish*, never the local edit: somebody fixing a garbled title for
+     * their own shelf costs the owner nothing, and taking that away would be a worse app for no
+     * gain. What disappears is every affordance that promises the fix will travel.
+     */
+    val editsAllowed: Boolean = true,
+    val createdAt: Long = 0,
+    /** The device the rules were first written from, for "set from Pixel 7". */
+    val createdBy: String? = null,
+    val editedAt: Long = 0,
+) {
+    companion object {
+        /**
+         * How far up the tree a policy is looked for.
+         *
+         * A rule at `Audiobooks/.homer/policy.json` has to bind a device pointed at
+         * `Audiobooks/Krimis`, or the whole thing is bypassed by one tap in the folder picker. The
+         * cap keeps a cold resolve to a handful of small GETs; six levels is deeper than any real
+         * library nests below its own root.
+         */
+        const val MAX_LOOKUP_LEVELS = 6
+
+        /**
+         * The folders to look in, nearest first, for a library rooted at [root].
+         *
+         * Files-root-relative, so `""` is the account's files root — or, for a share link, the
+         * share itself, which is why the same walk works for both without a special case.
+         */
+        fun lookupFolders(root: String, maxLevels: Int = MAX_LOOKUP_LEVELS): List<String> {
+            val folders = mutableListOf<String>()
+            var current = root.trim('/')
+            while (folders.size < maxLevels) {
+                folders += current
+                if (current.isEmpty()) break
+                current = current.substringBeforeLast('/', "")
+            }
+            return folders
+        }
+    }
+}
+
+/**
+ * The rules actually in force here, resolved: what they say, who set them, and where they came from.
+ *
+ * Not serialised. It exists because three of the questions the UI asks — *may I?*, *who says so?*,
+ * *from which folder?* — cannot be answered by the file alone: the nearest of several candidates
+ * wins, the owner is a live probe, and an unreadable file still means something.
+ */
+data class PolicyInForce(
+    val sharedIndexRequired: Boolean,
+    val editsAllowed: Boolean,
+    /** The account the rules were set by, for captions. Null when the server exposed no owner. */
+    val owner: String?,
+    /** Files-root-relative folder the file was found in, or null when there is no file. */
+    val atFolder: String?,
+    /**
+     * False when a policy file is present but could not be read — a newer schema, or damage.
+     *
+     * Deliberately fails *closed*, unlike every other facet: [ofCurrentSchema] treats an unknown
+     * schema as absent, which for the other three means "rebuild it" and for this one would mean
+     * "the rules do not apply". A future build's stricter policy would then be ignored by this one,
+     * and the ignoring would look exactly like the crawl-everything problem it prevents. So an
+     * unreadable policy is read as the strictest one: use the shared index, publish nothing.
+     */
+    val understood: Boolean = true,
+) {
+    /** Whether anything at all was found — for "no rules here" versus "rules that say yes". */
+    val present: Boolean get() = atFolder != null
+
+    companion object {
+        /** No policy anywhere: exactly the behaviour of every library that exists today. */
+        val OPEN = PolicyInForce(
+            sharedIndexRequired = false,
+            editsAllowed = true,
+            owner = null,
+            atFolder = null,
+        )
+
+        fun of(policy: LibraryPolicy, atFolder: String, owner: String? = null): PolicyInForce =
+            PolicyInForce(
+                sharedIndexRequired = policy.sharedIndexRequired,
+                editsAllowed = policy.editsAllowed,
+                owner = owner ?: policy.ownerId,
+                atFolder = atFolder,
+            )
+
+        /** A policy file that is there but unreadable — see [understood]. */
+        fun unreadable(atFolder: String): PolicyInForce = PolicyInForce(
+            sharedIndexRequired = true,
+            editsAllowed = false,
+            owner = null,
+            atFolder = atFolder,
+            understood = false,
+        )
+    }
+}
+
+/**
+ * One resolve of a library's rules: what they say, whether this account owns the folder, and which
+ * root the answer describes.
+ *
+ * The root is the load-bearing field. A resolution is about one folder, and the library root changes
+ * — by adopting a shared library, by opening a share link, by editing the path — so an answer kept
+ * without its subject would quietly go on applying to somewhere else. Callers therefore get to tell
+ * "no rules here" from "nothing asked about here yet", and the second is answered by waiting for a
+ * resolve rather than by assuming the library is open.
+ */
+data class PolicyResolution(
+    /** The library root this describes, or null when nothing has ever been resolved. */
+    val forRoot: String?,
+    val policy: PolicyInForce,
+    /**
+     * Whether the signed-in account owns the folder: true, false, or null when the server exposed
+     * no owner at all. Null is not "somebody else's" — it is "unanswerable here", which is the
+     * ordinary case on a WebDAV server that is not Nextcloud.
+     */
+    val owned: Boolean?,
+    /** Wall-clock of the resolve; 0 = never. Throttles re-resolving. */
+    val checkedAt: Long,
+) {
+    /** Whether this answer is about [root]. */
+    fun describes(root: String): Boolean = forRoot != null && forRoot == root.trim('/')
+
+    /** The owner's own device, which the rules deliberately do not bind. */
+    val isOwner: Boolean get() = owned == true
+
+    companion object {
+        /** Nothing resolved yet. */
+        val NONE = PolicyResolution(forRoot = null, policy = PolicyInForce.OPEN, owned = null, checkedAt = 0)
+    }
+}

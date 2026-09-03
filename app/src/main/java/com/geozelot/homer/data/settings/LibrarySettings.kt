@@ -13,6 +13,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.geozelot.homer.data.sync.facet.PolicyInForce
+import com.geozelot.homer.data.sync.facet.PolicyResolution
 import com.geozelot.homer.data.update.UpdateChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -120,6 +122,79 @@ class LibrarySettings @Inject constructor(
 
     suspend fun setLibraryWritable(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_LIBRARY_WRITABLE] = value }
+    }
+
+    /**
+     * The library owner's rules, this device's ownership of the folder, and which root both were
+     * resolved for — one record, written in one edit.
+     *
+     * ## Why it is mirrored rather than read live
+     *
+     * The gates that consult it — may this device crawl, measure, publish an edit — are asked by
+     * workers that run offline, and rules that stop applying the moment the network drops would let
+     * through exactly the expensive pass they exist to withhold. They are also asked often, and the
+     * resolve behind them is several small GETs up the folder tree.
+     *
+     * ## Why the root is part of it
+     *
+     * A resolution describes one folder. Changing the library root — adopting a shared library,
+     * opening a share link, editing the path — makes it describe somewhere else, and the gap between
+     * the change and the next resolve is precisely when a scan gets enqueued. So the root is stored
+     * with it and callers can tell "no rules here" from "not asked yet about here"; the second is
+     * answered by waiting rather than by crawling.
+     */
+    val policyResolution: Flow<PolicyResolution> =
+        context.settingsDataStore.data.map { prefs ->
+            PolicyResolution(
+                forRoot = prefs[KEY_POLICY_ROOT],
+                owned = prefs[KEY_LIBRARY_OWNED],
+                policy = if (prefs[KEY_POLICY_PRESENT] != true) {
+                    PolicyInForce.OPEN
+                } else {
+                    PolicyInForce(
+                        sharedIndexRequired = prefs[KEY_POLICY_SHARED_REQUIRED] ?: false,
+                        editsAllowed = prefs[KEY_POLICY_EDITS_ALLOWED] ?: true,
+                        owner = prefs[KEY_POLICY_OWNER],
+                        // "" is a real answer — the files root, or a share's own root — so the
+                        // folder cannot double as the presence flag.
+                        atFolder = prefs[KEY_POLICY_AT].orEmpty(),
+                        understood = prefs[KEY_POLICY_UNDERSTOOD] ?: true,
+                    )
+                },
+                checkedAt = prefs[KEY_POLICY_CHECKED_AT] ?: 0L,
+            )
+        }
+
+    /**
+     * Records what was resolved for [forRoot]. [owned] is null when the server exposed no owner —
+     * distinct from false, which is a positive "somebody else's".
+     */
+    suspend fun setPolicyResolution(
+        forRoot: String,
+        policy: PolicyInForce,
+        owned: Boolean?,
+        checkedAt: Long = System.currentTimeMillis(),
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_POLICY_ROOT] = forRoot
+            prefs[KEY_POLICY_CHECKED_AT] = checkedAt
+            owned?.let { prefs[KEY_LIBRARY_OWNED] = it } ?: prefs.remove(KEY_LIBRARY_OWNED)
+            if (policy.atFolder == null) {
+                prefs[KEY_POLICY_PRESENT] = false
+                prefs.remove(KEY_POLICY_SHARED_REQUIRED)
+                prefs.remove(KEY_POLICY_EDITS_ALLOWED)
+                prefs.remove(KEY_POLICY_UNDERSTOOD)
+                prefs.remove(KEY_POLICY_OWNER)
+                prefs.remove(KEY_POLICY_AT)
+                return@edit
+            }
+            prefs[KEY_POLICY_PRESENT] = true
+            prefs[KEY_POLICY_SHARED_REQUIRED] = policy.sharedIndexRequired
+            prefs[KEY_POLICY_EDITS_ALLOWED] = policy.editsAllowed
+            prefs[KEY_POLICY_UNDERSTOOD] = policy.understood
+            prefs[KEY_POLICY_AT] = policy.atFolder
+            policy.owner?.let { prefs[KEY_POLICY_OWNER] = it } ?: prefs.remove(KEY_POLICY_OWNER)
+        }
     }
 
     /**
@@ -322,6 +397,16 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_LAST_COVER_SWEEP_ETAG)
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
+            // The rules and the ownership belong to the library being left, not to this device.
+            it.remove(KEY_POLICY_ROOT)
+            it.remove(KEY_POLICY_PRESENT)
+            it.remove(KEY_POLICY_SHARED_REQUIRED)
+            it.remove(KEY_POLICY_EDITS_ALLOWED)
+            it.remove(KEY_POLICY_UNDERSTOOD)
+            it.remove(KEY_POLICY_OWNER)
+            it.remove(KEY_POLICY_AT)
+            it.remove(KEY_POLICY_CHECKED_AT)
+            it.remove(KEY_LIBRARY_OWNED)
             // Nothing writes this any more — the language filter became a filter token, which is
             // held for the process rather than stored. Cleared here so an install that HAD one
             // does not carry it around for ever as a preference nothing reads.
@@ -343,6 +428,15 @@ class LibrarySettings @Inject constructor(
         val KEY_PROGRESS_SYNC = booleanPreferencesKey("progress_sync_enabled")
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
+        val KEY_LIBRARY_OWNED = booleanPreferencesKey("library_owned")
+        val KEY_POLICY_ROOT = stringPreferencesKey("policy_resolved_for_root")
+        val KEY_POLICY_PRESENT = booleanPreferencesKey("policy_present")
+        val KEY_POLICY_SHARED_REQUIRED = booleanPreferencesKey("policy_shared_index_required")
+        val KEY_POLICY_EDITS_ALLOWED = booleanPreferencesKey("policy_edits_allowed")
+        val KEY_POLICY_UNDERSTOOD = booleanPreferencesKey("policy_understood")
+        val KEY_POLICY_OWNER = stringPreferencesKey("policy_owner")
+        val KEY_POLICY_AT = stringPreferencesKey("policy_at_folder")
+        val KEY_POLICY_CHECKED_AT = longPreferencesKey("policy_checked_at")
         val KEY_LAST_PUSHED_REVISION = longPreferencesKey("sync_last_pushed_revision")
         val KEY_LAST_COVER_SWEEP_ETAG = stringPreferencesKey("last_cover_sweep_etag")
         val KEY_ONLINE_COVERS = booleanPreferencesKey("online_cover_lookup")
