@@ -35,7 +35,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geozelot.homer.data.library.genresToInput
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
@@ -82,7 +81,7 @@ data class EditableBook(
     val collection: String?,
     /** Position within that collection — Discworld #12, independent of the sub-series' own count. */
     val collectionIndex: Int?,
-    /** Every genre, primary first. Shown and typed as a comma-separated list, like the tags. */
+    /** Every genre, primary first — canonical keys, plus anything a file tag supplied. */
     val genres: List<String>,
     val language: String?,
     val tags: List<String>,
@@ -107,7 +106,7 @@ fun EditBookDialog(
         index: String,
         collection: String,
         collectionIndex: String,
-        genre: String,
+        genres: List<String>,
         language: String,
         tags: String,
         hidden: Boolean,
@@ -131,12 +130,9 @@ fun EditBookDialog(
     var collection by rememberSaveable { mutableStateOf(book.collection.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
     var collectionIndex by rememberSaveable { mutableStateOf(book.collectionIndex?.toString().orEmpty()) }
-    // Labels, not the stored keys — see `genresToInput`. Typing any recognised spelling in any
-    // language canonicalises back on save, so what is shown here is safe to edit freely.
-    val configuration = LocalConfiguration.current
-    var genre by rememberSaveable {
-        mutableStateOf(genresToInput(book.genres, configuration.locales[0]))
-    }
+    // Chosen, not typed: the vocabulary is closed, so there is no spelling to get wrong and no
+    // language in which the wrong shelf can be created.
+    var genres by rememberSaveable { mutableStateOf(book.genres) }
     var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
     var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by rememberSaveable { mutableStateOf(book.hidden) }
@@ -210,14 +206,10 @@ fun EditBookDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                OutlinedTextField(
-                    value = genre,
-                    onValueChange = { genre = it },
-                    label = { Text(stringResource(R.string.edit_field_genre)) },
-                    placeholder = { Text(stringResource(R.string.edit_genre_placeholder)) },
-                    supportingText = { Text(stringResource(R.string.edit_field_genre_desc)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                GenrePickerField(
+                    selected = genres,
+                    onChange = { genres = it },
+                    modifier = Modifier.padding(top = 12.dp),
                 )
                 OutlinedTextField(
                     value = tags,
@@ -260,7 +252,7 @@ fun EditBookDialog(
             HomerTextButton(onClick = {
                 onSave(
                     title, author, series, index, collection, collectionIndex,
-                    genre, language, tags, hidden, playMode,
+                    genres, language, tags, hidden, playMode,
                 )
             }) { Text(stringResource(R.string.action_save)) }
         },

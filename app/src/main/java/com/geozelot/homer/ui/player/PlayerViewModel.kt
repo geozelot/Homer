@@ -268,7 +268,7 @@ class PlayerViewModel @Inject constructor(
         seriesIndex: String,
         collection: String,
         collectionIndex: String,
-        genre: String,
+        genres: List<String>,
         language: String,
         tags: String,
         hidden: Boolean,
@@ -278,7 +278,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             bookEditor.saveOverride(
                 id, title, author, series, seriesIndex, collection, collectionIndex,
-                genre, language, tags, hidden, downloadOnPlay,
+                genres, language, tags, hidden, downloadOnPlay,
             )
         }
     }

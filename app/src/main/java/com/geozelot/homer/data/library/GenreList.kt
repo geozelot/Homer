@@ -1,7 +1,5 @@
 package com.geozelot.homer.data.library
 
-import com.geozelot.homer.data.metadata.BookGenre
-import java.util.Locale
 
 /**
  * A book's genres, which are now several rather than one.
@@ -27,10 +25,14 @@ import java.util.Locale
  *
  * ## Detected values are never split
  *
- * [decode] splits on newlines only. A tag reading "Fantasy, Humor" stays one genre, because a comma
- * inside an ID3 genre frame is the tagger's punctuation and not a delimiter we get to reinterpret.
- * Splitting on commas happens where somebody TYPES commas — [fromInput], driven by the edit dialog,
- * the same rule the tags field has always used.
+ * [decodeGenres] splits on newlines only. A tag reading "Fantasy, Humor" stays one genre, because a
+ * comma inside an ID3 genre frame is the tagger's punctuation and not a delimiter we get to
+ * reinterpret.
+ *
+ * Nothing here parses typed text any more. `genresFromInput`/`genresToInput` existed for a
+ * comma-separated field, and the field is a picker over `BookGenre` now — so the values arrive as a
+ * list that is already canonical, and the two functions went rather than staying as something the
+ * app no longer calls.
  */
 
 /** The stored form as a list, in order. Empty when there is nothing stored. */
@@ -48,36 +50,3 @@ fun encodeGenres(values: List<String>): String? =
  * heading and an empty string would sort in among the real ones.
  */
 fun primaryGenre(raw: String?): String? = decodeGenres(raw).firstOrNull()
-
-/**
- * What somebody typed into the genre field, as a stored value.
- *
- * Commas separate, whitespace around them does not count, and duplicates are dropped — typing
- * "Fantasy, fantasy" is a slip rather than two genres, and so is "Kurzgeschichten, Short Stories"
- * once both resolve to one entry in the vocabulary.
- */
-fun genresFromInput(input: String): String? {
-    val seen = LinkedHashMap<String, String>()
-    for (part in input.split(',')) {
-        // CANONICALISED, so an edit stores the vocabulary's key rather than the spelling that was
-        // typed: somebody entering "Kurzgeschichten" and somebody entering "Short Stories" file the
-        // book on the same shelf, in every interface language, without either of them being told
-        // which spelling was the blessed one. A genre the vocabulary does not know is kept verbatim.
-        val value = BookGenre.canonical(part)
-        if (value.isEmpty()) continue
-        // Keyed on the CANONICAL form, so the two spellings of one genre also cannot both survive
-        // as duplicates of each other.
-        seen.putIfAbsent(BookGenre.fold(value).ifEmpty { value.lowercase() }, value)
-    }
-    return encodeGenres(seen.values.toList())
-}
-
-/**
- * Stored genres as the edit field shows them: translated labels, comma-separated.
- *
- * Not the stored values. Those are canonical keys now, and a field reading `shortstories,
- * radioplay` is Homer's bookkeeping leaking onto the screen. A genre the vocabulary does not know
- * has no label and appears as written, which is what a tag supplied.
- */
-fun genresToInput(genres: List<String>, locale: Locale): String =
-    genres.joinToString(", ") { BookGenre.display(it, locale) }

@@ -1034,7 +1034,7 @@ class HomeViewModel @Inject constructor(
         seriesIndex: String,
         collection: String,
         collectionIndex: String,
-        genre: String,
+        genres: List<String>,
         language: String,
         tags: String,
         hidden: Boolean,
@@ -1043,7 +1043,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             bookEditor.saveOverride(
                 bookId, title, author, series, seriesIndex, collection, collectionIndex,
-                genre, language, tags, hidden, downloadOnPlay,
+                genres, language, tags, hidden, downloadOnPlay,
             )
         }
     }
@@ -1060,12 +1060,12 @@ class HomeViewModel @Inject constructor(
         bookIds: List<String>,
         name: String,
         author: String,
-        genre: String,
+        genres: List<String>,
         namesCollection: Boolean,
         collection: String,
     ) {
         viewModelScope.launch {
-            bookEditor.saveShelfOverride(bookIds, name, author, genre, namesCollection, collection)
+            bookEditor.saveShelfOverride(bookIds, name, author, genres, namesCollection, collection)
         }
     }
 

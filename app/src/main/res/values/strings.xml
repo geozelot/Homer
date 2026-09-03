@@ -5,6 +5,7 @@
 
     <!-- Shared actions / reused labels -->
     <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
     <string name="action_back">Back</string>
     <string name="action_save">Save</string>
     <string name="action_reset">Reset</string>
@@ -62,8 +63,6 @@
     <string name="edit_field_series">Series</string>
     <string name="edit_field_series_index">Series #</string>
     <string name="edit_field_genre">Genre</string>
-    <string name="edit_genre_placeholder">Fantasy, Humour</string>
-    <string name="edit_field_genre_desc">Comma-separated. The first one is the shelf it sits on; all of them can be filtered.</string>
     <string name="edit_field_language">Language</string>
     <string name="edit_language_placeholder">de, en, fr\u2026</string>
     <string name="edit_field_tags">Tags</string>
@@ -611,4 +610,11 @@
     <string name="filter_state_unmeasured">No length yet</string>
     <string name="filter_state_no_cover">No cover</string>
     <string name="home_section_library_filtered">Library · %1$d of %2$d</string>
+    <string name="edit_genre_add">Add a genre</string>
+    <string name="edit_genre_search">Search genres</string>
+    <string name="edit_genre_none">No genre yet</string>
+    <string name="edit_genre_primary_note">The first is the shelf this book sits on. Tap another to move it there.</string>
+    <string name="edit_genre_tag_note">The dimmed one came from a file tag and is not in Homer’s list. It can be removed, but not chosen again.</string>
+    <string name="genre_shelf_fiction">FICTION</string>
+    <string name="genre_shelf_nonfiction">NON-FICTION</string>
 </resources>

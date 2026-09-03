@@ -133,7 +133,6 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
-import com.geozelot.homer.data.library.genresToInput
 import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.storage.StorageMigrator
@@ -144,6 +143,7 @@ import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
+import com.geozelot.homer.ui.components.GenrePickerField
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.components.SettingsRow
@@ -551,10 +551,10 @@ fun HomeScreen(
     entries.findBook(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
-            onSave = { title, author, series, index, collection, collectionIndex, genre, language, tags, hidden, downloadOnPlay ->
+            onSave = { title, author, series, index, collection, collectionIndex, genres, language, tags, hidden, downloadOnPlay ->
                 viewModel.saveOverride(
                     book.id, title, author, series, index, collection, collectionIndex,
-                    genre, language, tags, hidden, downloadOnPlay,
+                    genres, language, tags, hidden, downloadOnPlay,
                 )
                 editingId = null
             },
@@ -618,12 +618,12 @@ fun HomeScreen(
     entries.findSeries(editingSeriesKey)?.let { series ->
         ShelfEditDialog(
             series = series,
-            onSave = { name, author, genre, collection ->
+            onSave = { name, author, genres, collection ->
                 viewModel.saveShelfOverride(
                     bookIds = series.books.map { it.id },
                     name = name,
                     author = author,
-                    genre = genre,
+                    genres = genres,
                     // The card knows what it drew. A collection card's name field names the
                     // COLLECTION, and writing it to `series` is what used to flatten the threads.
                     namesCollection = series.isCollection,
@@ -2932,7 +2932,7 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
 @Composable
 private fun ShelfEditDialog(
     series: LibraryEntry.Series,
-    onSave: (name: String, author: String, genre: String, collection: String) -> Unit,
+    onSave: (name: String, author: String, genres: List<String>, collection: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val namesCollection = series.isCollection
@@ -2944,10 +2944,11 @@ private fun ShelfEditDialog(
     // disagrees with itself starts empty and the user is choosing, not confirming.
     // The whole LIST, comma-separated, so a two-genre series prefills with both rather than losing
     // the second the moment somebody presses Save.
-    val locale = LocalConfiguration.current.locales[0]
-    var genre by rememberSaveable {
-        val agreed = series.books.map { it.genres }.distinct().singleOrNull()
-        mutableStateOf(agreed?.let { genresToInput(it, locale) }.orEmpty())
+    // Prefilled only when the whole shelf already agrees, on the same rule as the author above and
+    // for the same reason: a shelf that disagrees with itself starts empty, so Save is a choice
+    // rather than an accidental vote for whichever member happened to be first.
+    var genres by rememberSaveable {
+        mutableStateOf(series.books.map { it.genres }.distinct().singleOrNull().orEmpty())
     }
     // Same rule again, and unused on a collection — there, `name` IS the collection.
     var collection by rememberSaveable {
@@ -2999,12 +3000,10 @@ private fun ShelfEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                OutlinedTextField(
-                    value = genre,
-                    onValueChange = { genre = it },
-                    label = { Text(stringResource(R.string.edit_field_genre)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                GenrePickerField(
+                    selected = genres,
+                    onChange = { genres = it },
+                    modifier = Modifier.padding(top = 12.dp),
                 )
                 // Only for a plain series. On a collection there is no level above to join, and
                 // offering the field would invite exactly the confusion that caused the bug.
@@ -3027,7 +3026,7 @@ private fun ShelfEditDialog(
             }
         },
         confirmButton = {
-            HomerTextButton(onClick = { onSave(name, author, genre, collection) }) {
+            HomerTextButton(onClick = { onSave(name, author, genres, collection) }) {
                 Text(stringResource(R.string.action_save))
             }
         },

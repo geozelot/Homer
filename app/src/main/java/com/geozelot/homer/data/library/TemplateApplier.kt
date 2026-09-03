@@ -4,6 +4,7 @@ import android.util.Log
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.EditFields
+import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.flow.first
@@ -178,7 +179,10 @@ class TemplateApplier @Inject constructor(
                 seriesIndex = parsed[TemplateField.INDEX]?.toIntOrNull() ?: book.seriesIndex,
                 collection = parsed[TemplateField.COLLECTION] ?: book.collection,
                 collectionIndex = parsed[TemplateField.COLLECTION_INDEX]?.toIntOrNull() ?: book.collectionIndex,
-                genre = parsed[TemplateField.GENRE] ?: book.genre,
+                // Canonicalised like an edit is: a folder named "Kurzgeschichten" captured as a
+                // genre has to land on the same shelf as one named "Short Stories", or a template is
+                // one more way to split a genre in two.
+                genre = parsed[TemplateField.GENRE]?.let { BookGenre.canonical(it) } ?: book.genre,
                 // Normalised like every other language Homer stores, so a template capturing "German"
                 // and one capturing "de" produce the same shelf.
                 language = parsed[TemplateField.LANGUAGE]?.let { BookLanguage.normalise(it) } ?: book.language,

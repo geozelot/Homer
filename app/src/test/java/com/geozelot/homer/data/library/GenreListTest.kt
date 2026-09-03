@@ -1,6 +1,5 @@
 package com.geozelot.homer.data.library
 
-import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -50,42 +49,10 @@ class GenreListTest {
 
     @Test
     fun `reordering changes the stored value, so it counts as an edit`() {
-        // BookEditor compares the encoded form. If this were a Set, moving a genre to the front —
+        // BookEditor compares the encoded form. If this were a Set, promoting a genre to the front —
         // which is how the shelf is chosen — would be silently discarded as "no change".
-        assertEquals("humour\nfantasy", genresFromInput("Humour, Fantasy"))
-        assertEquals("fantasy\nhumour", genresFromInput("Fantasy, Humour"))
-    }
-
-    // ── typed input ──────────────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `commas separate what somebody typed`() {
-        assertEquals("fantasy\nhumour", genresFromInput("Fantasy, Humour"))
-    }
-
-    @Test
-    fun `whitespace and empty entries are forgiven`() {
-        assertEquals("fantasy\nhumour", genresFromInput("  Fantasy ,, Humour  ,  "))
-    }
-
-    @Test
-    fun `a duplicate is a slip, not a second genre`() {
-        assertEquals("fantasy", genresFromInput("Fantasy, fantasy, FANTASY"))
-    }
-
-    @Test
-    fun `an unknown genre keeps the spelling it was first given`() {
-        // Recognised genres no longer have this problem — every spelling of one becomes its key. It
-        // still matters for the ones the vocabulary does not know, where the typed text IS the value
-        // and the first occurrence is the one the shelf heading shows.
-        assertEquals("Hörbuchmagazin", genresFromInput("Hörbuchmagazin, hörbuchmagazin"))
-        assertEquals("Blues\nEurodance", genresFromInput("Blues, Eurodance, BLUES"))
-    }
-
-    @Test
-    fun `an empty field clears the genres`() {
-        assertNull(genresFromInput(""))
-        assertNull(genresFromInput("  ,  "))
+        assertEquals("humour\nfantasy", encodeGenres(listOf("humour", "fantasy")))
+        assertEquals("fantasy\nhumour", encodeGenres(listOf("fantasy", "humour")))
     }
 
     // ── detected values are not reinterpreted ────────────────────────────────────────────────
@@ -100,54 +67,5 @@ class GenreListTest {
     @Test
     fun `a semicolon is left alone too`() {
         assertEquals(listOf("Fantasy; Humor"), decodeGenres("Fantasy; Humor"))
-    }
-
-    // ── the display form ─────────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `the dialog shows translated labels, comma-separated`() {
-        // Not the stored keys: a field reading "shortstories, radioplay" is bookkeeping on screen.
-        assertEquals("Fantasy, Humour", genresToInput(listOf("fantasy", "humour"), Locale.ENGLISH))
-        assertEquals("Fantasy, Humor", genresToInput(listOf("fantasy", "humour"), Locale.GERMAN))
-        assertEquals("", genresToInput(emptyList(), Locale.ENGLISH))
-    }
-
-    @Test
-    fun `a genre the vocabulary does not know shows as written`() {
-        assertEquals("Blues", genresToInput(listOf("Blues"), Locale.GERMAN))
-    }
-
-    @Test
-    fun `what the dialog shows is what the dialog accepts, in either language`() {
-        // The round trip that makes the free-text field safe: whatever language it is displayed in,
-        // typing it straight back stores the same keys.
-        val stored = listOf("fantasy", "humour", "shortstories")
-        for (locale in listOf(Locale.ENGLISH, Locale.GERMAN)) {
-            assertEquals(
-                locale.toString(),
-                encodeGenres(stored),
-                genresFromInput(genresToInput(stored, locale)),
-            )
-        }
-    }
-
-    // ── canonicalising on the way in ─────────────────────────────────────────────────────────
-
-    @Test
-    fun `typing any spelling of a genre stores its key`() {
-        assertEquals("shortstories", genresFromInput("Kurzgeschichten"))
-        assertEquals("shortstories", genresFromInput("Short Stories"))
-        assertEquals("scifi", genresFromInput("Science-Fiction"))
-    }
-
-    @Test
-    fun `two spellings of one genre are one genre`() {
-        // The whole point of a closed vocabulary: nobody has to know which spelling was blessed.
-        assertEquals("shortstories", genresFromInput("Kurzgeschichten, Short Stories"))
-    }
-
-    @Test
-    fun `an unknown genre typed by hand is kept verbatim`() {
-        assertEquals("Blues", genresFromInput("Blues"))
     }
 }
