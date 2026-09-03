@@ -174,8 +174,13 @@ data class LibraryFilter(
     fun plus(token: FilterToken): LibraryFilter =
         if (token in tokens) this else copy(tokens = tokens + token)
 
-    fun minus(token: FilterToken): LibraryFilter = copy(tokens = tokens - token)
-
+    /**
+     * Adds free text.
+     *
+     * A convenience the app itself does not use — the ViewModel composes a filter from two flows, so
+     * it constructs one whole rather than deriving it. Kept because the tests read far better for it
+     * and it is one line; its sibling `minus` was removed, being used by nothing at all.
+     */
     fun withText(value: String): LibraryFilter = copy(text = value)
 
     /** Whether [book] survives every committed token and the free text. */

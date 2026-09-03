@@ -21,8 +21,6 @@
     <string name="action_share">Share</string>
     <string name="action_collapse">Collapse</string>
     <string name="action_expand">Expand</string>
-    <string name="action_decrease">Decrease</string>
-    <string name="action_increase">Increase</string>
     <string name="unknown_author">Unknown author</string>
     <string name="status_finished">finished</string>
     <string name="time_left">%1$s left</string>

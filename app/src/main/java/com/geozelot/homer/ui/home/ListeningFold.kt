@@ -37,9 +37,11 @@ import androidx.compose.runtime.setValue
  *  - **on a deliberate pull while the library is at its top.** Travel counts only while the list can
  *    go no further up, so scrolling home is not itself a pull — the count starts over every time the
  *    list is away from the top.
- *  - **A fling can fold it but never unfold it.** Folding on momentum is harmless; unfolding on
- *    momentum means the panel opens itself, which is the one thing it must not do — and it is what
- *    stops a single flick from both scrolling home and opening the panel.
+ *  - **Momentum cannot unfold it**, because momentum cannot reach it. There used to be a `fromUser`
+ *    flag here for exactly that rule, back when the input was nested-scroll deltas and a fling
+ *    arrived as one. The input is raw pointer travel now, so the only thing that gets here is a
+ *    finger — the rule holds by construction, and a parameter only one caller could set, only ever
+ *    to one value, was the kind of thing this codebase keeps having to delete.
  */
 internal class ListeningFold(expanded: Boolean = true) {
 
@@ -53,9 +55,8 @@ internal class ListeningFold(expanded: Boolean = true) {
     /**
      * The library scrolled.
      *
-     * [deltaY] is the RAW pointer movement before anything consumes it — positive when the finger
-     * travels down the screen, i.e. back towards the top of the list. [atTop] is whether the list can
-     * go no further up. [fromUser] separates a finger from a fling.
+     * [deltaY] is raw pointer travel — positive when the finger moves down the glass, i.e. back
+     * towards the top of the list. [atTop] is whether the list can go no further up.
      *
      * **Nothing here is latched across a gesture, and that is the fix.** The version before this
      * decided at a gesture's first delta whether that whole gesture was allowed to unfold, and reset
@@ -67,10 +68,10 @@ internal class ListeningFold(expanded: Boolean = true) {
      *
      * The cost, and it is worth naming: a slow drag that travels to the top and keeps going will
      * open the panel within that same gesture, where before it would have been refused until the
-     * finger lifted. A FLING home still cannot, which is the case that actually mattered — that is
-     * the one that would have scrolled home and opened the panel off a single flick.
+     * finger lifted. A flick home cannot, because the travel that reaches here ends when the finger
+     * lifts — which is the case that actually mattered.
      */
-    fun onScroll(deltaY: Float, atTop: Boolean, fromUser: Boolean, threshold: Float) {
+    fun onScroll(deltaY: Float, atTop: Boolean, threshold: Float) {
         // Folding first, and unconditionally: any travel into the library folds the panel, whether
         // the finger is still down or the list is coasting.
         if (deltaY < 0f) {
@@ -78,10 +79,10 @@ internal class ListeningFold(expanded: Boolean = true) {
             pulled = 0f
             return
         }
-        // Everything below is unfolding, which a fling is never allowed to do. Away from the top a
-        // downward delta is the list scrolling, not a pull against its end, so the count starts over
-        // — which is also what stops travel from two separate moments adding up.
-        if (!fromUser || expanded || !atTop) {
+        // Away from the top a downward delta is the list scrolling, not a pull against its end, so
+        // the count starts over — which is also what stops travel from two separate moments adding
+        // up.
+        if (expanded || !atTop) {
             pulled = 0f
             return
         }

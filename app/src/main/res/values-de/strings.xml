@@ -24,8 +24,6 @@
     <string name="action_share">Teilen</string>
     <string name="action_collapse">Zuklappen</string>
     <string name="action_expand">Aufklappen</string>
-    <string name="action_decrease">Verringern</string>
-    <string name="action_increase">Erhöhen</string>
     <string name="unknown_author">Unbekannter Autor</string>
     <string name="status_finished">fertig</string>
     <string name="time_left">%1$s übrig</string>

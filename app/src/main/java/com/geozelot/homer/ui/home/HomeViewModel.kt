@@ -869,7 +869,12 @@ class HomeViewModel @Inject constructor(
      * The count of corrections never falls, because a published edit is still an edit. Keying the
      * Publish control on it meant the control read as permanently pending however many times it had
      * run, which is indistinguishable from a publish that is silently failing.
+     *
+     * `flatMapLatest` is the experimental one, opted into here rather than left as the build's only
+     * compiler warning. Its contract is exactly what this needs: when the published-at mark moves,
+     * the count being collected for the OLD mark is cancelled rather than raced against.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     val unpublishedCorrections: StateFlow<Int> = librarySettings.correctionsPublishedAt
         .flatMapLatest { since ->
             combine(

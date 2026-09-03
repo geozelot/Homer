@@ -15,13 +15,16 @@ class ListeningFoldTest {
 
     private val threshold = 64f
 
-    /** One finger-drag delta. Positive travels back towards the top of the list. */
+    /**
+     * One finger-drag delta. Positive travels back towards the top of the list.
+     *
+     * There used to be a `fling` helper beside this, passing `fromUser = false`. Momentum cannot
+     * reach the fold any more — the input is raw pointer travel, so only a finger gets here — and the
+     * flag it set went with it. The rule it asserted, that a flick home must not open the panel,
+     * now holds because there is nothing for a flick to send.
+     */
     private fun ListeningFold.drag(dy: Float, atTop: Boolean = true) =
-        onScroll(dy, atTop = atTop, fromUser = true, threshold = threshold)
-
-    /** The same, as fling momentum rather than a finger. */
-    private fun ListeningFold.fling(dy: Float, atTop: Boolean = true) =
-        onScroll(dy, atTop = atTop, fromUser = false, threshold = threshold)
+        onScroll(dy, atTop = atTop, threshold = threshold)
 
     // ── where it starts ──────────────────────────────────────────────────────────────────────
 
@@ -47,13 +50,6 @@ class ListeningFoldTest {
         assertTrue(fold.expanded)
         // Scrolling down a second time must fold it again — there is no once-only latch.
         fold.drag(-30f, atTop = false)
-        assertFalse(fold.expanded)
-    }
-
-    @Test
-    fun `a fling downward folds it too`() {
-        val fold = ListeningFold()
-        fold.fling(-30f)
         assertFalse(fold.expanded)
     }
 
@@ -119,15 +115,6 @@ class ListeningFoldTest {
 
 
     @Test
-    fun `a fling can never unfold it, even from the top`() {
-        val fold = ListeningFold()
-        fold.onSearchOpened()
-        fold.fling(500f, atTop = true)
-        assertFalse("momentum must not open the panel", fold.expanded)
-    }
-
-
-    @Test
     fun `pulling while already expanded changes nothing`() {
         val fold = ListeningFold()
         fold.drag(500f, atTop = true)
@@ -173,7 +160,6 @@ class ListeningFoldTest {
         val fold = ListeningFold()
         fold.drag(-30f)
         fold.drag(30f, atTop = false)
-        fold.fling(500f, atTop = true)
         assertFalse(fold.expanded)
         fold.drag(70f, atTop = true)
         assertTrue(fold.expanded)
