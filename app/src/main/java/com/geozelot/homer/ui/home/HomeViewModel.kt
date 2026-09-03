@@ -682,8 +682,6 @@ class HomeViewModel @Inject constructor(
         // Surface an already-running playback session in the mini-player on cold start, before the
         // user opens a book (recovers the current book from the restored queue if present).
         connection.connect()
-        // Fill in covers for books missing one, in a foreground worker (survives backgrounding).
-        libraryIndexManager.fetchMissingCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
         // Shared index in use: pull it so the library is present without scanning. In the same
@@ -705,6 +703,13 @@ class HomeViewModel @Inject constructor(
                 // after a sign-out and back in, or a reinstall over the same folder, the audio is
                 // often already sitting there. Claim it rather than re-downloading it.
                 localMirror.adoptDownloads()
+                // Covers for whatever has no art — and only now, AFTER the pull. Asked for in
+                // `init` alongside it, this raced the pull and lost: on the first launch after
+                // adopting a shared index the pass ran against an empty database, found nothing to
+                // do, said so, and nothing ever asked again. The whole library stayed grey until
+                // the app was restarted. (The crawl branch above needs no such call — `scan()`
+                // already runs the cover pass in its own order.)
+                libraryIndexManager.fetchMissingCovers()
             }
         }
     }

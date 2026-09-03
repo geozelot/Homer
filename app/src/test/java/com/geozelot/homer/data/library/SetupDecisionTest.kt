@@ -338,3 +338,48 @@ class SetupDecisionTest {
         localBookCount = localBookCount,
     )
 }
+
+/**
+ * Whether the setup flow owns the screen.
+ *
+ * Four lines of logic, and every one of them has a way of being wrong that nothing shouts about.
+ * The middle case is the one that broke: signing in is a step *inside* the flow, so the credentials
+ * arriving must not end it — and the marker that says so has to survive sign-out's own teardown.
+ */
+class SetupIsDueTest {
+
+    @Test
+    fun `a fresh install with nothing configured needs setup`() {
+        assertTrue(setupIsDue(SetupState.NOT_STARTED, hasCredentials = false))
+    }
+
+    @Test
+    fun `an install from before the flow existed does not`() {
+        // It has credentials, a library and a shelf full of books. Showing it a wizard would be
+        // the worst possible upgrade.
+        assertFalse(setupIsDue(SetupState.NOT_STARTED, hasCredentials = true))
+    }
+
+    @Test
+    fun `signing in does not end a flow that is under way`() {
+        // The case that broke on a device: sign out, reconnect somewhere else, and the flow was
+        // dismissed the instant the credentials landed — before a folder had been chosen.
+        assertTrue(setupIsDue(SetupState.IN_PROGRESS, hasCredentials = true))
+        assertTrue(setupIsDue(SetupState.IN_PROGRESS, hasCredentials = false))
+    }
+
+    @Test
+    fun `a finished flow is finished, with or without credentials`() {
+        // Credentials can go missing — a revoked app password — and that is a re-authentication,
+        // not a reason to ask where the books live again.
+        assertFalse(setupIsDue(SetupState.DONE, hasCredentials = true))
+        assertFalse(setupIsDue(SetupState.DONE, hasCredentials = false))
+    }
+
+    @Test
+    fun `a state written by another build does not restart somebody's setup`() {
+        assertEquals(SetupState.NOT_STARTED, SetupState.of("SOMETHING_ELSE"))
+        assertEquals(SetupState.NOT_STARTED, SetupState.of(null))
+        assertEquals(SetupState.IN_PROGRESS, SetupState.of("IN_PROGRESS"))
+    }
+}

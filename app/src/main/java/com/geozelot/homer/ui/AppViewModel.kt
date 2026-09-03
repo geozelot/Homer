@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.auth.AuthState
 import com.geozelot.homer.data.library.SetupState
+import com.geozelot.homer.data.library.setupIsDue
 import com.geozelot.homer.data.settings.LibrarySettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,10 +36,6 @@ class AppViewModel @Inject constructor(
      */
     val needsSetup: StateFlow<Boolean> =
         combine(librarySettings.setupState, authRepository.credentials) { setup, credentials ->
-            when (setup) {
-                SetupState.DONE -> false
-                SetupState.IN_PROGRESS -> true
-                SetupState.NOT_STARTED -> credentials == null
-            }
+            setupIsDue(setup, hasCredentials = credentials != null)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 }

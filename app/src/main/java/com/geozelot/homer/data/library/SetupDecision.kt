@@ -239,3 +239,26 @@ enum class SetupState {
         fun of(name: String?): SetupState = entries.firstOrNull { it.name == name } ?: NOT_STARTED
     }
 }
+
+/**
+ * Whether the setup flow owns the screen.
+ *
+ * A function rather than three lines inside a ViewModel because getting it wrong is invisible in
+ * both directions and has already happened once: signing out reset the marker *after* clearing the
+ * credentials, so the flow — which marks itself [SetupState.IN_PROGRESS] the moment it appears —
+ * had its mark wiped, and was dismissed the instant new credentials landed. The user was dropped
+ * into the library with no folder chosen, every time. Whose bug that was is a question about
+ * ordering elsewhere; that this predicate has to be *checkable* is the lesson.
+ *
+ * The three cases and what each is for:
+ *  - [SetupState.DONE] — settled. Never ask again.
+ *  - [SetupState.IN_PROGRESS] — somewhere in the flow. Signing in is a *step*, so the credentials
+ *    arriving must not end it.
+ *  - [SetupState.NOT_STARTED] — nothing asked. Which for an install from before this flow existed
+ *    means "and nothing needs asking", because it has a library already.
+ */
+fun setupIsDue(state: SetupState, hasCredentials: Boolean): Boolean = when (state) {
+    SetupState.DONE -> false
+    SetupState.IN_PROGRESS -> true
+    SetupState.NOT_STARTED -> !hasCredentials
+}

@@ -402,6 +402,10 @@ class LibrarySettings @Inject constructor(
      * user likes their shelf arranged, where downloads live on this device, whether app lock and
      * pinning are switched on at all, and the device id — none of which belong to the account
      * being left.
+     *
+     * The setup marker is deliberately NOT here. `SignOut` resets it itself, and it has to do so
+     * *before* the credentials go: clearing those is what puts the setup flow on screen, the flow
+     * marks itself as running at once, and clearing the marker after that would dismiss it.
      */
     suspend fun clearLibraryState() {
         context.settingsDataStore.edit {
@@ -413,8 +417,6 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
             // The rules and the ownership belong to the library being left, not to this device.
-            // Signing out means the next launch has no library, so setup is due again.
-            it.remove(KEY_SETUP_STATE)
             it.remove(KEY_POLICY_ROOT)
             it.remove(KEY_POLICY_PRESENT)
             it.remove(KEY_POLICY_SHARED_REQUIRED)

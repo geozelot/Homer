@@ -4,6 +4,7 @@ import android.util.Log
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.library.IndexPassStore
 import com.geozelot.homer.data.library.LibraryIndexManager
+import com.geozelot.homer.data.library.SetupState
 import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +31,9 @@ import javax.inject.Singleton
  *
  * **The order is load-bearing.** Index passes are stopped first and the credentials go before the
  * database, so a worker that is still winding down cannot fetch anything, and therefore cannot
- * write books back into a table that has just been emptied.
+ * write books back into a table that has just been emptied. The setup marker is reset before the
+ * credentials, because clearing them is what puts the setup flow on screen and the flow immediately
+ * marks itself as running — see [invoke].
  */
 @Singleton
 class SignOut @Inject constructor(
@@ -58,6 +61,14 @@ class SignOut @Inject constructor(
             // write them into the table this is about to empty.
             libraryIndexManager.cancel()
             passes.clear()
+
+            // Setup is due again — recorded BEFORE the credentials go, and that ordering is the
+            // whole of it. Clearing the credentials is what makes the setup flow appear, and the
+            // flow's first act is to mark itself as under way; resetting the marker afterwards,
+            // which is what `clearLibraryState` used to do, wiped that mark. The flow was then
+            // dismissed the instant the new credentials landed — so signing out and connecting
+            // somewhere else dropped the user into the library with no folder chosen, every time.
+            librarySettings.setSetupState(SetupState.NOT_STARTED)
 
             // Before the database, so a worker still winding down has nothing to fetch with.
             credentialStore.clear()

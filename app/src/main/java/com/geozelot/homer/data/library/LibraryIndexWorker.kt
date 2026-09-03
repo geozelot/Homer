@@ -153,7 +153,17 @@ class LibraryIndexWorker @AssistedInject constructor(
                 // so; that is the whole difference between "working as designed" and "broken".
                 val pending = coverEnricher.pendingCount()
                 if (pending == 0) {
-                    Log.i(TAG, "no covers to fetch: every book without art has already been probed")
+                    // Two very different silences, and telling them apart matters: a library that
+                    // has nothing in it yet is a pass that arrived too early, which is exactly what
+                    // happened when this was asked for before the shared index had been read.
+                    Log.i(
+                        TAG,
+                        if (bookDao.count() == 0) {
+                            "no covers to fetch: there are no books yet"
+                        } else {
+                            "no covers to fetch: every book without art has already been probed"
+                        },
+                    )
                     return
                 }
                 Log.i(TAG, "fetching covers for $pending book(s)${if (readerOnly) " (shared cache only)" else ""}")
