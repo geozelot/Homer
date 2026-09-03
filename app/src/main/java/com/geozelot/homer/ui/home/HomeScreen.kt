@@ -330,9 +330,7 @@ fun HomeScreen(
      * The cost, stated: momentum no longer reaches the fold at all, so the panel does not fold on a
      * fling that follows a lift. It folds on the drag that produced the fling, which is the same
      * moment to a reader. The rule "a fling must never unfold it" is now true by construction rather
-     * than by a check — `fromUser` is passed `true` because a finger is the only thing that gets
-     * here, and it is kept as a parameter because `ListeningFoldTest` is where that rule is written
-     * down.
+     * than by a check, which is why `ListeningFold` no longer takes a flag for it.
      */
     val pullToExpand = Modifier.pointerInput(gridState, fold, pullToExpandPx) {
         awaitEachGesture {
@@ -347,7 +345,6 @@ fun HomeScreen(
                     fold.onScroll(
                         deltaY = dy,
                         atTop = !gridState.canScrollBackward,
-                        fromUser = true,
                         threshold = pullToExpandPx,
                     )
                 }
@@ -2069,48 +2066,18 @@ private fun bookMeta(
 /** Held off the card's border on every side, so the stack is in the cell rather than cropped by it. */
 private val StackPad = 4.dp
 
-/** At most four covers: the front one and three behind it. */
-private const val STACK_SHEETS = 3
-
-/**
- * How far each cover recedes from the one in front of it, in both directions.
- *
- * A dp rather than a fraction of the cell now, and deliberately small. It was proportional so the
- * grid and the list would fan alike — but with four real covers instead of two blank sheets the fan
- * is three steps deep rather than two, and a proportional step at that depth ate more of the front
- * cover than the whole exercise was trying to save. Real artwork is what makes a small step legible,
- * so the step gets to be small.
- */
-private val StackStep = 4.dp
-
 /** The cut between covers in the pile. */
 private val StackEdge = 1.5.dp
 
-// The same stack at row scale, with its own numbers — 46dp is a fifth of a grid cell, and a fan
-// scaled down from one would be three slivers of a millimetre each.
-
-/** A shelf row's whole stack footprint — a book row's cover exactly, so the two line up. */
-private val ShelfRowBox = 46.dp
-
 /**
- * Two covers behind the front one, not three.
- *
- * The grid's cap does not scale down: at row size a fourth cover is a hairline, and three of them
- * cost the front cover a fifth of its width to say something the count badge says better. The row
- * still adapts downward — a two-volume shelf draws one sheet — so the pile is honest, just shallower.
- */
-private const val ROW_STACK_SHEETS = 2
-private val RowStackStep = 3.dp
-private val RowStackPad = 2.dp
-private val RowStackEdge = 1.dp
-
-/**
- * The front cover on a row — square, and reserved for the maximum like the grid's.
+ * A shelf row's whole stack footprint — a book row's cover exactly, so the two line up.
  *
  * Square is right here rather than a compromise: a book row's own cover is 46dp square, so the list
  * crops everything to 1:1 already and a shelf that did otherwise would be the odd one out.
  */
-private val ShelfRowCover = ShelfRowBox - RowStackPad * 2 - RowStackStep * ROW_STACK_SHEETS
+private val ShelfRowBox = 46.dp
+private val RowStackPad = 2.dp
+private val RowStackEdge = 1.dp
 
 /** A series as a grid cell the same size as a book card: one cover with a pile receding behind it. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -2135,36 +2102,21 @@ private fun SeriesGridCard(
                 .border(1.dp, Line, RoundedCornerShape(10.dp)),
         ) {
             // The cell is square by construction, so one dimension is all of them.
-            val sheets = series.stackSheets(STACK_SHEETS)
-            // Reserved for the MAXIMUM, so the front cover is the same size on every series card
-            // whatever the shelf holds. What the missing sheets would have taken is then split
-            // evenly around the stack that IS drawn, rather than left as a gap in the top-right.
-            val cover = maxWidth - StackPad * 2 - StackStep * STACK_SHEETS
-            val origin = StackPad + StackStep * (STACK_SHEETS - sheets.size) / 2
-            // The front cover sits at the bottom-left of the drawn stack; each cover behind it steps
-            // up and to the right by one.
-            val bottom = origin + StackStep * sheets.size
-
-            // Deepest first, so each is overdrawn by the one in front of it.
-            for ((index, model) in sheets.withIndex().reversed()) {
-                val step = StackStep * (index + 1)
+            val sheets = series.stackSheets(CoverStack.GridSteps.size)
+            val pile = CoverStack.place(maxWidth, StackPad, CoverStack.GridSteps, sheets.size)
+            // Front-first from `place`, drawn in reverse so the deepest lands first and the front
+            // cover ends up on top.
+            val models = listOf(series.frontCover()) + sheets
+            for ((index, at) in pile.positions.withIndex().reversed()) {
                 CoverArt(
-                    model = model,
+                    model = models[index],
                     modifier = Modifier
-                        .offset(x = origin + step, y = bottom - step)
-                        .size(cover)
+                        .offset(x = at.x, y = at.y)
+                        .size(pile.cover)
                         .clip(RoundedCornerShape(9.dp))
                         .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
                 )
             }
-            CoverArt(
-                model = series.frontCover(),
-                modifier = Modifier
-                    .offset(x = origin, y = bottom)
-                    .size(cover)
-                    .clip(RoundedCornerShape(9.dp))
-                    .border(StackEdge, Studio, RoundedCornerShape(9.dp)),
-            )
             // The badges belong to the CELL, not to the front cover.
             //
             // They were briefly moved onto the front cover so they would hug the artwork instead of
@@ -2645,28 +2597,19 @@ private fun SeriesShelfRow(
             // 46dp square, which is a BOOK row's cover exactly — so a shelf sitting among those rows
             // lines up with them and does not make its own row taller. It was 52x56.
             Box(modifier = Modifier.size(ShelfRowBox)) {
-                val sheets = series.stackSheets(ROW_STACK_SHEETS)
-                val origin = RowStackPad + RowStackStep * (ROW_STACK_SHEETS - sheets.size) / 2
-                val bottom = origin + RowStackStep * sheets.size
-                for ((index, model) in sheets.withIndex().reversed()) {
-                    val step = RowStackStep * (index + 1)
+                val sheets = series.stackSheets(CoverStack.RowSteps.size)
+                val pile = CoverStack.place(ShelfRowBox, RowStackPad, CoverStack.RowSteps, sheets.size)
+                val models = listOf(series.frontCover()) + sheets
+                for ((index, at) in pile.positions.withIndex().reversed()) {
                     CoverArt(
-                        model = model,
+                        model = models[index],
                         modifier = Modifier
-                            .offset(x = origin + step, y = bottom - step)
-                            .size(ShelfRowCover)
+                            .offset(x = at.x, y = at.y)
+                            .size(pile.cover)
                             .clip(RoundedCornerShape(6.dp))
                             .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
                     )
                 }
-                CoverArt(
-                    model = series.frontCover(),
-                    modifier = Modifier
-                        .offset(x = origin, y = bottom)
-                        .size(ShelfRowCover)
-                        .clip(RoundedCornerShape(6.dp))
-                        .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
-                )
                 // On the ROW's cover space, like the grid's, so a shelf's corner is where a book's
                 // corner is. ONE corner, and it carries no number: the count is in the text beside
                 // the cover anyway ("8 books"), and the same number twice on one row two centimetres
