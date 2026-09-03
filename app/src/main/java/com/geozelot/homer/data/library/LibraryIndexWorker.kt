@@ -15,13 +15,11 @@ import androidx.work.workDataOf
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverEnricher
 import com.geozelot.homer.data.metadata.DurationEnricher
-import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -42,7 +40,6 @@ class LibraryIndexWorker @AssistedInject constructor(
     private val durationEnricher: DurationEnricher,
     private val bookDao: BookDao,
     private val libraryIndex: LibraryIndexRepository,
-    private val librarySettings: LibrarySettings,
     private val passes: IndexPassStore,
     private val maintenance: LibraryMaintenance,
 ) : CoroutineWorker(appContext, params) {
@@ -79,6 +76,21 @@ class LibraryIndexWorker @AssistedInject constructor(
      * scan.
      */
     private suspend fun runPass(request: PassRequest) {
+        // Asked again here, not only where the pass was requested. A token is durable: one queued
+        // before a library was adopted survives the adoption, and the library adopted may be one
+        // this device is only a reader of. Refusing at the point of request and not at the point of
+        // work is the shape of every "why did it do that anyway" bug in this app.
+        if (request.pass.needsMaintainer) {
+            val standing = maintenance.standingNow()
+            if (!standing.maintains) {
+                Log.i(
+                    TAG,
+                    "dropping the queued ${request.pass} pass: ${standing.role}" +
+                        (standing.restriction?.let { " ($it)" } ?: ""),
+                )
+                return
+            }
+        }
         when (request.pass) {
             IndexPass.BOOKS -> {
                 report(request.pass)
@@ -195,9 +207,15 @@ class LibraryIndexWorker @AssistedInject constructor(
         }
     }
 
-    /** Publishes this device's view, if the user has sharing on (a read-only share cannot). */
+    /**
+     * Publishes this device's view, when this device is one of the devices that may.
+     *
+     * The predicate is [LibraryMaintenance]'s, not a local reading of the sharing switch. It used to
+     * be the latter, which meant this gate and `LibraryIndexRepository.canPublish` were two
+     * different tests of the same thing — and only one of them knew about the owner's rules.
+     */
     private suspend fun publish(text: String) {
-        if (!librarySettings.sharedCatalogEnabled.first()) return
+        if (!maintenance.standingNow().mayPublishIndex) return
         setForegroundSafely(foregroundInfo(text, 0, 0))
         libraryIndex.push()
     }

@@ -7,13 +7,14 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.room.withTransaction
 import com.geozelot.homer.data.auth.CredentialStore
-import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
+import com.geozelot.homer.data.library.LibraryMaintenance
+import com.geozelot.homer.data.library.Restriction
 import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.mergeTemplateLines
 import com.geozelot.homer.data.metadata.CoverCache
@@ -63,6 +64,8 @@ class LibraryIndexRepository @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val credentialStore: CredentialStore,
     private val librarySettings: LibrarySettings,
+    private val maintenance: LibraryMaintenance,
+    private val policy: LibraryPolicyRepository,
     private val networkMonitor: NetworkMonitor,
     private val deviceIdentity: DeviceIdentity,
     private val webDavClient: WebDavClient,
@@ -163,8 +166,13 @@ class LibraryIndexRepository @Inject constructor(
      * pull. Whichever gets there first records the time and the other stands down.
      */
     private suspend fun pullOnForeground() {
-        // A device with sharing off has no shared index to read.
-        if (!librarySettings.sharedCatalogEnabled.first()) return
+        // The rules first, and outside the lock: they decide what this device is in this library,
+        // every gate below reads the answer, and the resolve is throttled to hours so the ordinary
+        // foreground costs nothing. An owner who tightened the rules this morning is honoured by
+        // lunchtime rather than at the next reinstall.
+        policy.refresh()
+        // A device with no shared index in use has nothing to read.
+        if (!maintenance.standingNow().usesSharedIndex) return
         // The throttle is checked INSIDE the lock, and that ordering is the point: at a cold start
         // this and the library ViewModel's own pull are both in flight, and if the check happened
         // outside, the loser would wait for the winner and then pull again anyway.
@@ -244,8 +252,22 @@ class LibraryIndexRepository @Inject constructor(
 
     /** [pushCorrections] without the lock. */
     private suspend fun pushCorrectionsNow(): Boolean {
-        if (!librarySettings.sharedCatalogEnabled.first()) return true
-        if (!networkMonitor.isOnline() || !canPublish()) return false
+        val standing = maintenance.standingNow()
+        if (!standing.mayPublishEdits) {
+            // A settled answer rather than a deferral, which is what the `true` means: sharing is
+            // off, this is a share that cannot be written, or the owner keeps edits where they are
+            // made. None of the three changes by trying again, and a caller holding a pending flag
+            // would otherwise retry for ever.
+            when (val why = standing.editRestriction) {
+                is Restriction.EditsLocked ->
+                    Log.i(TAG, "not publishing corrections: the library's owner keeps edits local")
+                is Restriction.RulesUnreadable ->
+                    Log.i(TAG, "not publishing corrections: this library's rules could not be read")
+                else -> Log.i(TAG, "not publishing corrections: nothing here may write them ($why)")
+            }
+            return true
+        }
+        if (!networkMonitor.isOnline()) return false
         // REPORTED, like every other network step. `_activity` was set by `pushNow` alone, so a
         // corrections publish — by far the more frequent of the two — happened with the UI reading
         // idle: the Sync row's spinner never appeared, its button stayed live mid-publish, and the
@@ -291,14 +313,15 @@ class LibraryIndexRepository @Inject constructor(
     /**
      * Whether this device may write the shared index.
      *
-     * A read-only share reads all three facets exactly like an account does and keeps whatever it
+     * A read-only share reads all four facets exactly like an account does and keeps whatever it
      * works out for itself locally — the only thing it cannot do is publish. That is the whole
      * difference between the two, which is why there is no separate share code path.
+     *
+     * It also answers "is the shared index switched on", which it did not use to: that check lived
+     * in the worker's own publish gate, so a `push()` from anywhere else could write a shared index
+     * the user had never asked for. One predicate, in one place — see [LibraryMaintenance].
      */
-    suspend fun canPublish(): Boolean {
-        val library = credentialStore.awaitCredentials() ?: return false
-        return if (library.kind == WebDavKind.SHARE) librarySettings.libraryWritable.first() else true
-    }
+    suspend fun canPublish(): Boolean = maintenance.standingNow().mayPublishIndex
 
     /** Whether a shared index is present at all, without downloading it. */
     suspend fun exists(): Boolean {

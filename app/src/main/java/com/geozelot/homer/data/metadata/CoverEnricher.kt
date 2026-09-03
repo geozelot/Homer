@@ -4,6 +4,7 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,7 @@ class CoverEnricher @Inject constructor(
     private val metadataExtractor: MetadataExtractor,
     private val coverCache: CoverCache,
     private val librarySettings: LibrarySettings,
+    private val maintenance: LibraryMaintenance,
     private val onlineCoverClient: OnlineCoverClient,
 ) {
     /** How many books still need a cover — lets the worker skip foregrounding when there's none. */
@@ -47,7 +49,10 @@ class CoverEnricher @Inject constructor(
     ) {
         val credentials = credentialStore.awaitCredentials() ?: return
         val libraryRoot = librarySettings.libraryRoot.first()
-        val sharedCatalog = librarySettings.sharedCatalogEnabled.first()
+        // The standing, not the switch: the owner may require the shared index, in which case it
+        // is in use whether or not this device asked for it — and the shared cover cache is the
+        // only art a reader ever gets.
+        val sharedCatalog = maintenance.standingNow().usesSharedIndex
         val onlineLookup = librarySettings.onlineCoverLookup.first()
 
         // With the shared cache on we want to retry books a local extraction gave up on, because

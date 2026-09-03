@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ class LibraryIndexManager @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val passes: IndexPassStore,
     private val maintenance: LibraryMaintenance,
+    private val policy: LibraryPolicyRepository,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -139,12 +141,23 @@ class LibraryIndexManager @Inject constructor(
      */
     fun request(pass: IndexPass, deep: Boolean = false) {
         scope.launch {
+            // The owner's rules, before deciding anything — and this is the ordering that makes
+            // them work at all. A resolution describes one folder, and the root changes precisely
+            // when a library is adopted, which is the same moment a scan is asked for; resolving
+            // here rather than hoping a background refresh got in first closes that race by
+            // construction. It is throttled to hours, so the everyday tap costs nothing.
+            policy.refresh()
             // Refused here, not merely hidden in the UI. `fetchMissingCovers()` runs on every app
             // open, so a reader device would otherwise start a pass on each launch however carefully
             // the screens were written — and the whole point of the rule is that the requests never
             // reach the server.
-            if (pass.needsMaintainer && !maintenance.maintainsNow()) {
-                Log.i(TAG, "not running the $pass pass: this device reads an index it cannot write")
+            val standing = maintenance.standingNow()
+            if (pass.needsMaintainer && !standing.maintains) {
+                Log.i(
+                    TAG,
+                    "not running the $pass pass: ${standing.role}" +
+                        (standing.restriction?.let { " ($it)" } ?: ""),
+                )
                 return@launch
             }
             passes.request(PassRequest(pass, deep))
