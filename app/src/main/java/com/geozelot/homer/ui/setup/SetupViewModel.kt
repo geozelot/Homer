@@ -318,7 +318,7 @@ class SetupViewModel @Inject constructor(
             _state.update { it.copy(pending = PendingConfirm.MERGE) }
             return
         }
-        apply(action)
+        applyDecision(action)
     }
 
     /** Goes ahead with whatever [take] or [createLibrary] held back. */
@@ -326,14 +326,21 @@ class SetupViewModel @Inject constructor(
         val pending = _state.value.pending ?: return
         _state.update { it.copy(pending = null) }
         when (pending) {
-            PendingConfirm.MERGE -> apply(SetupAction.USE_SHARED_INDEX)
+            PendingConfirm.MERGE -> applyDecision(SetupAction.USE_SHARED_INDEX)
             PendingConfirm.PUBLISH -> create()
         }
     }
 
     fun dismissPending() = _state.update { it.copy(pending = null) }
 
-    private fun apply(action: SetupAction) {
+    /**
+     * Applies a decision: adopt the folder, with or without its shared index, then move on to the
+     * progress question.
+     *
+     * Not named `apply` — a member of that name shadows the scope function for every unqualified
+     * call in the class, which is a trap for whoever edits this next.
+     */
+    private fun applyDecision(action: SetupAction) {
         val probe = _state.value.probe ?: return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
