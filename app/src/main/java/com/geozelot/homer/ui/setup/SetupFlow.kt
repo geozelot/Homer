@@ -47,6 +47,7 @@ import com.geozelot.homer.data.library.SetupAction
 import com.geozelot.homer.data.library.SetupFact
 import com.geozelot.homer.data.library.SetupOutcome
 import com.geozelot.homer.data.library.SetupSituation
+import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.DiscoveredLibraryCard
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsExplanation
@@ -101,6 +102,31 @@ fun SetupFlow(
     // the system, which is what leaves the app on a first run and pops the destination when setup
     // was re-run from settings.
     BackHandler(enabled = state.canGoBack) { viewModel.back() }
+
+    state.pending?.let { pending ->
+        val remote = state.probe?.remoteBookCount ?: 0
+        val local = state.probe?.localBookCount ?: 0
+        ConfirmDialog(
+            title = stringResource(
+                if (pending == PendingConfirm.MERGE) R.string.setup_merge_title else R.string.setup_publish_title,
+            ),
+            body = if (pending == PendingConfirm.MERGE) {
+                stringResource(
+                    R.string.setup_merge_body,
+                    pluralStringResource(R.plurals.sync_books_count, remote, remote),
+                    pluralStringResource(R.plurals.sync_books_count, local, local),
+                )
+            } else {
+                stringResource(
+                    R.string.setup_publish_body,
+                    pluralStringResource(R.plurals.sync_books_count, local, local),
+                )
+            },
+            confirmLabel = stringResource(R.string.action_continue),
+            onConfirm = viewModel::confirmPending,
+            onDismiss = viewModel::dismissPending,
+        )
+    }
 
     when (state.step) {
         SetupStep.WHERE -> WhereStep(

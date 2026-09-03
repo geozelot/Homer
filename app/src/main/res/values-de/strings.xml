@@ -328,7 +328,7 @@
     <string name="lib_lengths_complete">Jedes Buch hat eine Länge</string>
     <string name="lib_lengths_missing">%1$d ohne Länge · tausende kleine Anfragen, am besten über WLAN</string>
     <string name="lib_corrections_none">Noch nichts korrigiert</string>
-    <string name="lib_corrections_local">%1$s · bleibt auf diesem Gerät, weil das Teilen aus ist</string>
+    <string name="lib_corrections_local">%1$s · bleibt auf diesem Gerät</string>
     <string name="lib_crawl_this_device">Letzter vollständiger Durchlauf %1$s, von diesem Gerät</string>
     <string name="lib_crawl_named_device">Letzter vollständiger Durchlauf %1$s, von %2$s</string>
     <string name="lib_crawl_other_device">Letzter vollständiger Durchlauf %1$s, von einem anderen Gerät</string>
@@ -669,4 +669,10 @@
     <string name="lib_why_reader">Dieses Gerät liest eine Bibliothek, in die es nicht schreiben kann — es durchsucht daher nichts und veröffentlicht nichts. Die schreibberechtigten Geräte halten sie aktuell.</string>
     <string name="lib_why_rules_unreadable">Homer hat hier Regeln gefunden, die er nicht lesen konnte, und bleibt vorsichtig: Er liest die Bibliothek und veröffentlicht nichts.</string>
     <string name="lib_why_edits_locked">Deine Korrekturen bleiben auf diesem Gerät — wem diese Bibliothek gehört, nimmt keine veröffentlichten Änderungen an.</string>
+    <string name="action_continue">Weiter</string>
+    <string name="setup_merge_title">Mit der Bibliothek hier zusammenführen?</string>
+    <string name="setup_merge_body">Die Bibliothek in diesem Ordner enthält %1$s, dieses Gerät kennt %2$s. Homer führt beides zusammen — nichts wird gelöscht — und beides landet in deinem Regal.</string>
+    <string name="setup_publish_title">Bibliothek dieses Geräts veröffentlichen?</string>
+    <string name="setup_publish_body">Die %1$s, die dieses Gerät kennt, werden zur Bibliothek dieses Ordners — damit deine anderen Geräte nicht alles neu einlesen müssen. Nichts wird gelöscht.</string>
+    <string name="lib_corrections_locked">%1$s · bleibt auf diesem Gerät — diese Bibliothek nimmt keine veröffentlichten Änderungen an</string>
 </resources>

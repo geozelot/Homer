@@ -342,7 +342,7 @@
     <string name="lib_lengths_complete">Every book has a length</string>
     <string name="lib_lengths_missing">%1$d without a length · thousands of small requests, best on Wi\u2011Fi</string>
     <string name="lib_corrections_none">Nothing corrected yet</string>
-    <string name="lib_corrections_local">%1$s · kept on this device, because sharing is off</string>
+    <string name="lib_corrections_local">%1$s · kept on this device</string>
     <!-- The crawl marker, shown because it is what authorises deletion: a book only disappears on
          the word of a complete crawl that post-dates it. -->
     <string name="lib_crawl_this_device">Last full crawl %1$s, from this device</string>
@@ -690,4 +690,10 @@
     <string name="lib_why_reader">This device reads a library it cannot write to, so it runs no scans and publishes nothing. The devices that can write it keep it up to date.</string>
     <string name="lib_why_rules_unreadable">Homer found rules here it could not read, so it is being cautious: it reads the library and publishes nothing.</string>
     <string name="lib_why_edits_locked">Corrections you make stay on this device — this library\'s owner does not accept published edits.</string>
+    <string name="action_continue">Continue</string>
+    <string name="setup_merge_title">Merge with the library that\'s here?</string>
+    <string name="setup_merge_body">This folder\'s library holds %1$s, and this device knows %2$s. Homer merges the two — nothing is deleted — and both end up on your shelf.</string>
+    <string name="setup_publish_title">Publish this device\'s library?</string>
+    <string name="setup_publish_body">The %1$s this device knows become this folder\'s library, so your other devices don\'t have to read it all again. Nothing is deleted.</string>
+    <string name="lib_corrections_locked">%1$s · kept on this device — this library doesn\'t accept published edits</string>
 </resources>

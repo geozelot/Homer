@@ -33,6 +33,8 @@ import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.CrawlSummary
+import com.geozelot.homer.data.library.LibraryStanding
+import com.geozelot.homer.data.library.Restriction
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.HomerTextButton
@@ -75,8 +77,7 @@ fun LibraryUpkeepScreen(
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
-    val sharedIndex by viewModel.sharedCatalogEnabled.collectAsStateWithLifecycle()
-    val libraryWritable by viewModel.libraryWritable.collectAsStateWithLifecycle()
+    val standing by viewModel.standing.collectAsStateWithLifecycle()
     val readsOnly by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
     val queued by viewModel.indexQueued.collectAsStateWithLifecycle()
     val indexActive by viewModel.indexActive.collectAsStateWithLifecycle()
@@ -153,8 +154,7 @@ fun LibraryUpkeepScreen(
                 activity = indexActivity,
                 count = corrections,
                 unpublished = unpublished,
-                shared = sharedIndex,
-                canPublish = libraryWritable,
+                standing = standing,
                 onSync = viewModel::syncLibrary,
             )
 
@@ -391,8 +391,14 @@ private fun SyncRow(
     count: Int,
     /** Of those, the ones the shared index has not been told about. */
     unpublished: Int,
-    shared: Boolean,
-    canPublish: Boolean,
+    /**
+     * Where this device stands, rather than the two booleans this used to take.
+     *
+     * It read `libraryWritable`, which does not know about the owner's rules — so a library that
+     * accepts no published edits reported them as shared, and the row said everything was fine
+     * about corrections that were going nowhere.
+     */
+    standing: LibraryStanding,
     onSync: () -> Unit,
 ) {
     val counted = pluralStringResource(R.plurals.sync_books_count, count, count)
@@ -402,9 +408,13 @@ private fun SyncRow(
         summary = when {
             activity == IndexActivity.READING -> stringResource(R.string.home_reading_index)
             activity == IndexActivity.PUBLISHING -> stringResource(R.string.lib_index_publishing)
-            !shared -> stringResource(R.string.lib_sync_off)
+            !standing.usesSharedIndex -> stringResource(R.string.lib_sync_off)
             count == 0 -> stringResource(R.string.lib_corrections_none)
-            !canPublish -> stringResource(R.string.lib_corrections_local, counted)
+            // Named, where the reason is a rule rather than this device's access: "kept on this
+            // device" is true of both, and only one of them is something the reader could change.
+            standing.editRestriction is Restriction.EditsLocked ->
+                stringResource(R.string.lib_corrections_locked, counted)
+            !standing.mayPublishEdits -> stringResource(R.string.lib_corrections_local, counted)
             // Corrections publish themselves a few seconds after an edit, so "all shared" is the
             // normal resting state — and while the row could only ever say "N corrections" with a
             // live button, a working publish was indistinguishable from one silently failing.

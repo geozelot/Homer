@@ -72,6 +72,25 @@ enum class SetupEntry {
 }
 
 /**
+ * A decision that would carry this device's existing books somewhere, held for confirmation.
+ *
+ * Both merge rather than replace — `FacetMerge` cannot delete a book, and only a complete crawl
+ * can — so the damage is bounded either way. What the confirmation buys is the counts: *this folder
+ * has 313 books, this device knows 12* is the difference between a merge and a scare, and it is not
+ * a sentence anybody can reconstruct afterwards.
+ *
+ * Only ever raised when this device already holds books. On a first run there is nothing to carry
+ * and a dialog would be a speed bump in front of the one path everybody takes.
+ */
+enum class PendingConfirm {
+    /** Adopting an index that is already there, with a local library to fold into it. */
+    MERGE,
+
+    /** Making this folder's index out of what this device knows. */
+    PUBLISH,
+}
+
+/**
  * Everything on screen, and nothing that is not.
  *
  * [outcome] is the whole of the findings screen: it came out of [decideSetup] and the screen renders
@@ -99,6 +118,8 @@ data class SetupUiState(
     val requireSharedUse: Boolean = true,
     val editsAllowed: Boolean = false,
     val busy: Boolean = false,
+    /** A decision waiting on the counts being read — see [PendingConfirm]. */
+    val pending: PendingConfirm? = null,
     val libraryIsShare: Boolean = false,
     /** The signed-in account, for the progress screen's "every Homer of yours" line. */
     val account: String? = null,
@@ -290,6 +311,30 @@ class SetupViewModel @Inject constructor(
             _state.update { it.copy(step = SetupStep.CREATE) }
             return
         }
+        // Adopting an index while holding books of our own folds the two together. Bounded and
+        // reversible — nothing here can delete a book — but not something to do without the counts
+        // in front of the user.
+        if (action == SetupAction.USE_SHARED_INDEX && probe.localBookCount > 0) {
+            _state.update { it.copy(pending = PendingConfirm.MERGE) }
+            return
+        }
+        apply(action)
+    }
+
+    /** Goes ahead with whatever [take] or [createLibrary] held back. */
+    fun confirmPending() {
+        val pending = _state.value.pending ?: return
+        _state.update { it.copy(pending = null) }
+        when (pending) {
+            PendingConfirm.MERGE -> apply(SetupAction.USE_SHARED_INDEX)
+            PendingConfirm.PUBLISH -> create()
+        }
+    }
+
+    fun dismissPending() = _state.update { it.copy(pending = null) }
+
+    private fun apply(action: SetupAction) {
+        val probe = _state.value.probe ?: return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             // WAIT_FOR_OWNER adopts the folder with the index switched ON even though there is no
@@ -306,6 +351,17 @@ class SetupViewModel @Inject constructor(
 
     /** Creates the library: adopt the folder, then — if we own it — write its rules. */
     fun createLibrary() {
+        val probe = _state.value.probe ?: return
+        // Same reasoning as the merge: this device's books are about to become the folder's
+        // library, and the count is worth saying out loud once.
+        if (probe.localBookCount > 0) {
+            _state.update { it.copy(pending = PendingConfirm.PUBLISH) }
+            return
+        }
+        create()
+    }
+
+    private fun create() {
         val probe = _state.value.probe ?: return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
