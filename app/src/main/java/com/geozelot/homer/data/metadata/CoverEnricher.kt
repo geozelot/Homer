@@ -76,6 +76,8 @@ class CoverEnricher @Inject constructor(
         if (total == 0) return
         Log.i(TAG, "enriching covers for $total books")
         var found = 0
+        // Consecutive lookups that could not reach openlibrary.org — see MAX_ONLINE_OUTAGES.
+        var outages = 0
         for ((index, book) in books.withIndex()) {
             coroutineContext.ensureActive()
             onProgress(index, total)
@@ -140,15 +142,34 @@ class CoverEnricher @Inject constructor(
                 )
             }
             if (bytes == null) {
-                // No embedded/folder art. If the user opted in, try Open Library by title/author
-                // before giving up; either way remember we tried so we don't re-probe every run.
-                val online = if (onlineLookup) onlineCoverClient.fetchCover(book.title, book.author) else null
-                if (online != null) {
-                    bookDao.updateLocalCover(book.id, coverCache.write(book.id, online))
-                    found++
-                } else {
-                    bookDao.markCoverAttempted(book.id)
+                // No embedded and no folder art. If the user opted in, ask Open Library before
+                // giving up — unless it has already failed to answer several times running, in
+                // which case it is down and every remaining book would pay the same wait.
+                val online = when {
+                    !onlineLookup || outages >= MAX_ONLINE_OUTAGES -> OnlineCoverClient.Result.NotFound
+                    else -> onlineCoverClient.fetchCover(book.title, book.author)
                 }
+                when (online) {
+                    is OnlineCoverClient.Result.Found -> {
+                        outages = 0
+                        bookDao.updateLocalCover(book.id, coverCache.write(book.id, online.bytes))
+                        found++
+                    }
+                    OnlineCoverClient.Result.NotFound -> outages = 0
+                    OnlineCoverClient.Result.Unavailable -> {
+                        outages++
+                        if (outages == MAX_ONLINE_OUTAGES) {
+                            Log.w(TAG, "openlibrary.org is not answering; skipping it for the rest of this pass")
+                        }
+                    }
+                }
+                // Marked whatever the online half said, and that is a deliberate trade. The
+                // EMBEDDED probe genuinely happened and found nothing — it is what makes re-probing
+                // expensive, one ranged request into the first audio file per book — so leaving the
+                // book unmarked would re-stream all of them on every launch for as long as the
+                // third party stays down. Losing the online lookup instead costs one tap on the
+                // deep cover pass, which re-arms exactly this.
+                bookDao.markCoverAttempted(book.id)
                 continue
             }
             bookDao.updateLocalCover(book.id, coverCache.write(book.id, bytes))
@@ -186,5 +207,14 @@ class CoverEnricher @Inject constructor(
 
     private companion object {
         const val TAG = "HomerMeta"
+
+        /**
+         * How many lookups in a row may fail to reach openlibrary.org before the pass stops asking.
+         *
+         * Three is enough to tell a single dropped request from a host that is simply not there,
+         * and the difference matters: an unreachable openlibrary against a library of 313 art-less
+         * books meant 313 separate waits, one per book, in a foreground worker.
+         */
+        const val MAX_ONLINE_OUTAGES = 3
     }
 }

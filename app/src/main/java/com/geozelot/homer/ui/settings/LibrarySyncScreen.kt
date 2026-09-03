@@ -291,8 +291,13 @@ private fun indexDetail(standing: LibraryStanding, bookCount: Int): String? {
     if (!standing.usesSharedIndex) return null
     val owner = standing.policy.owner
     val keeper = when {
-        standing.mayPublishIndex -> stringResource(R.string.lib_index_kept_by_you)
+        // Whose library it is comes first, and only "somebody else's" is worth a name. On a
+        // writable share this row used to read "kept by this device" — true, in that this device
+        // can publish here, and it left out the one fact a reader of a shared library wants.
+        // Being able to write is the Books row's business, and it says so.
+        standing.isOwner -> stringResource(R.string.lib_index_kept_by_you)
         owner != null -> stringResource(R.string.lib_index_kept_by, owner)
+        standing.mayPublishIndex -> stringResource(R.string.lib_index_kept_by_you)
         else -> null
     }
     val books = if (bookCount > 0) {
