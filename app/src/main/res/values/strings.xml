@@ -210,10 +210,6 @@
     <string name="settings_title">Settings</string>
     <string name="settings_account">%1$s · %2$s</string>
     <string name="settings_library_share">Share · %1$s</string>
-    <string name="settings_sync_device">Progress: this device only</string>
-    <string name="settings_sync_to">Syncing to %1$s</string>
-    <string name="settings_sync_link">Sync to my account</string>
-    <string name="settings_sync_stop">Stop syncing</string>
     <string name="settings_storage_folder">Folder: %1$s</string>
     <string name="settings_storage_custom_folder">Custom folder: %1$s</string>
     <string name="settings_storage_default">App storage (default)</string>
@@ -263,9 +259,6 @@
     <string name="sync_detail_private_progress"> · private progress</string>
     <string name="sync_detail_owner"> · owner: %1$s</string>
     <string name="sync_use_as_library">Use as library folder</string>
-    <string name="sync_progress_switch">Sync my progress across my devices</string>
-    <string name="sync_progress_on_desc">Your place, bookmarks and edits are saved privately to your account and follow you across your devices.</string>
-    <string name="sync_progress_off_desc">Everything stays on this device only — nothing is written to your server.</string>
     <string name="sync_scan_folders_books">%1$d folders · %2$d books</string>
     <plurals name="sync_books_count">
         <item quantity="one">%1$d book</item>
@@ -297,30 +290,15 @@
     <string name="set_about_more_header">MORE ABOUT HOMER</string>
 
     <!-- Settings: library source -->
-    <string name="set_source_none">Not connected</string>
-    <string name="set_source_readonly">read-only</string>
-    <string name="set_source_account_desc">Your books are read from this account. Homer never moves, renames or deletes them.</string>
-    <string name="set_source_share_desc">Your books are read through this share link. Homer never moves, renames or deletes them.</string>
-    <string name="set_source_share_root_note">A share link points at a single folder, and that folder is the library. To use a different one, open a different share link.</string>
     <string name="set_source_other_header">OTHER LIBRARIES FOUND</string>
     <string name="set_detail_shared_index"> · shared index</string>
-    <string name="set_shared_index_title">Share the library index</string>
-    <string name="set_shared_index_desc">Lets your other devices — and anyone else reading this folder — skip scanning and re-fetching cover art, and shares the titles, authors and series you correct so nobody has to fix them twice. Library details only: never your listening position, bookmarks or hidden books.</string>
-    <string name="set_shared_index_state_reading">Reading the index in this folder, so this device doesn\'t have to scan.</string>
-    <string name="set_shared_index_state_publishing">Writing the index to this folder, so your other devices don\'t have to scan.</string>
-    <string name="set_shared_index_state_reader">Reading the index in this folder. This device does no scanning — whoever can write there keeps it up to date for everybody.</string>
-    <string name="set_shared_index_state_off">Every device scans the library and builds its own cover art.</string>
-    <string name="set_shared_index_owner">  Kept by %1$s.</string>
-    <string name="set_shared_index_readonly_note">This share link is read-only: it can use an index that is already there, but can\'t create or update one.</string>
     <string name="set_full_rescan_confirm_title">Rebuild the library?</string>
     <string name="set_full_rescan_confirm_body">Homer will re-read every folder on your server and fetch all cover art again. On a large library this takes a while. Your place, bookmarks and edits are kept.</string>
     <string name="set_full_rescan_confirm_action">Rebuild</string>
     <!-- Settings: the Library screen. Three sections, one per facet of the shared index: where the
          books come from, what Homer has managed to read about them, and what is shared. -->
-    <string name="lib_section_source">WHERE YOUR BOOKS COME FROM</string>
     <string name="lib_section_contents">KEEPING IT UP TO DATE</string>
     <string name="set_upkeep_view_header">VIEWING</string>
-    <string name="lib_section_sharing">SHARING WITH YOUR OTHER DEVICES</string>
     <string name="lib_section_retry">WHEN SOMETHING IS STILL MISSING</string>
     <string name="lib_try_covers">Try missing covers</string>
     <string name="lib_try_lengths">Try missing lengths</string>
@@ -386,7 +364,6 @@
     <string name="set_use_app_storage_confirm_action">Move</string>
 
     <!-- Settings: where a share library's progress goes (an account library uses its own). -->
-    <string name="set_sync_account_header">WHERE YOUR PLACE IS SAVED</string>
 
     <!-- Settings: playback -->
     <string name="settings_custom">Custom\u2026</string>

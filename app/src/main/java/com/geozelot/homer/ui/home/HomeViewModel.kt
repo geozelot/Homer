@@ -24,15 +24,12 @@ import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
-import com.geozelot.homer.data.library.DiscoveredLibrary
 import com.geozelot.homer.data.library.IndexPass
-import com.geozelot.homer.data.library.LibraryDiscovery
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
-import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.library.decodeGenres
@@ -289,7 +286,6 @@ class HomeViewModel @Inject constructor(
     private val bookEditor: BookEditor,
     private val connection: PlaybackConnection,
     private val libraryIndex: LibraryIndexRepository,
-    private val discovery: LibraryDiscovery,
     private val storageLocation: StorageLocation,
     private val storageMigrationManager: StorageMigrationManager,
     private val storageMigrator: StorageMigrator,

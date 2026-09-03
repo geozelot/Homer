@@ -202,10 +202,6 @@
     <string name="settings_title">Einstellungen</string>
     <string name="settings_account">%1$s · %2$s</string>
     <string name="settings_library_share">Freigabe · %1$s</string>
-    <string name="settings_sync_device">Fortschritt: nur dieses Gerät</string>
-    <string name="settings_sync_to">Synchronisiert mit %1$s</string>
-    <string name="settings_sync_link">Mit meinem Konto synchronisieren</string>
-    <string name="settings_sync_stop">Nicht mehr synchronisieren</string>
     <string name="settings_storage_folder">Ordner: %1$s</string>
     <string name="settings_storage_custom_folder">Eigener Ordner: %1$s</string>
     <string name="settings_storage_default">App-Speicher (Standard)</string>
@@ -253,9 +249,6 @@
     <string name="sync_detail_private_progress"> · privater Fortschritt</string>
     <string name="sync_detail_owner"> · Eigentümer: %1$s</string>
     <string name="sync_use_as_library">Als Bibliotheksordner verwenden</string>
-    <string name="sync_progress_switch">Meinen Fortschritt über meine Geräte synchronisieren</string>
-    <string name="sync_progress_on_desc">Deine Stelle, Lesezeichen und Korrekturen werden privat in deinem Konto gespeichert und folgen dir über deine Geräte.</string>
-    <string name="sync_progress_off_desc">Alles bleibt nur auf diesem Gerät — auf deinen Server wird nichts geschrieben.</string>
     <string name="sync_scan_folders_books">%1$d Ordner · %2$d Bücher</string>
     <plurals name="sync_books_count">
         <item quantity="one">%1$d Buch</item>
@@ -286,28 +279,13 @@
     <string name="set_about_more_header">MEHR ÜBER HOMER</string>
 
     <!-- Settings: library source -->
-    <string name="set_source_none">Nicht verbunden</string>
-    <string name="set_source_readonly">nur lesen</string>
-    <string name="set_source_account_desc">Deine Bücher werden aus diesem Konto gelesen. Homer verschiebt, umbenennt oder löscht sie nie.</string>
-    <string name="set_source_share_desc">Deine Bücher werden über diesen Freigabelink gelesen. Homer verschiebt, umbenennt oder löscht sie nie.</string>
-    <string name="set_source_share_root_note">Ein Freigabelink zeigt auf genau einen Ordner, und dieser Ordner ist die Bibliothek. Für einen anderen öffne einen anderen Freigabelink.</string>
     <string name="set_source_other_header">WEITERE GEFUNDENE BIBLIOTHEKEN</string>
     <string name="set_detail_shared_index"> · gemeinsamer Index</string>
-    <string name="set_shared_index_title">Bibliotheksindex teilen</string>
-    <string name="set_shared_index_desc">Erlaubt deinen anderen Geräten — und allen anderen, die diesen Ordner lesen — das Scannen und das erneute Holen der Cover zu überspringen, und teilt die Titel, Autoren und Serien, die du korrigiert hast, damit niemand dasselbe zweimal richten muss. Nur Angaben zur Bibliothek: niemals deine Hörposition, Lesezeichen oder ausgeblendeten Bücher.</string>
-    <string name="set_shared_index_state_reading">Liest den Index in diesem Ordner, damit dieses Gerät nicht scannen muss.</string>
-    <string name="set_shared_index_state_publishing">Schreibt den Index in diesen Ordner, damit deine anderen Geräte nicht scannen müssen.</string>
-    <string name="set_shared_index_state_reader">Liest den Index in diesem Ordner. Dieses Gerät scannt nicht selbst — wer dort schreiben darf, hält ihn für alle aktuell.</string>
-    <string name="set_shared_index_state_off">Jedes Gerät scannt die Bibliothek und baut seine eigenen Cover.</string>
-    <string name="set_shared_index_owner">  Gepflegt von %1$s.</string>
-    <string name="set_shared_index_readonly_note">Dieser Freigabelink ist nur lesbar: Er kann einen vorhandenen Index nutzen, aber keinen anlegen oder aktualisieren.</string>
     <string name="set_full_rescan_confirm_title">Bibliothek neu aufbauen?</string>
     <string name="set_full_rescan_confirm_body">Homer liest jeden Ordner auf deinem Server erneut und holt alle Cover noch einmal. Bei einer großen Bibliothek dauert das eine Weile. Deine Stelle, Lesezeichen und Korrekturen bleiben erhalten.</string>
     <string name="set_full_rescan_confirm_action">Neu aufbauen</string>
-    <string name="lib_section_source">WOHER DEINE BÜCHER KOMMEN</string>
     <string name="lib_section_contents">AUF DEM STAND HALTEN</string>
     <string name="set_upkeep_view_header">ANSICHT</string>
-    <string name="lib_section_sharing">TEILEN MIT DEINEN ANDEREN GERÄTEN</string>
     <string name="lib_section_retry">WENN NOCH ETWAS FEHLT</string>
     <string name="lib_try_covers">Fehlende Cover versuchen</string>
     <string name="lib_try_lengths">Fehlende Längen versuchen</string>
@@ -365,7 +343,6 @@
     <string name="set_use_app_storage_confirm_action">Verschieben</string>
 
     <!-- Settings: where a share library's progress goes -->
-    <string name="set_sync_account_header">WO DEINE STELLE GESPEICHERT WIRD</string>
 
     <!-- Settings: playback -->
     <string name="settings_custom">Eigener Wert…</string>
