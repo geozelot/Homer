@@ -11,33 +11,41 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.data.auth.AuthState
-import com.geozelot.homer.ui.login.LoginScreen
+import com.geozelot.homer.ui.setup.SetupFlow
 
 /**
- * Root of the app. Gates between the login flow and the library based on whether a
- * Nextcloud account is configured. Richer in-library navigation arrives with the
- * library UI phase.
+ * Root of the app: a spinner while the credential store loads, then either setup or the library.
+ *
+ * The gate is *setup*, not authentication. Signing in is a step inside setup — for a share link it
+ * is the whole of it — so an auth-state gate would hand over to the library the moment the
+ * credentials landed, before a folder had been chosen or the owner's rules read. See
+ * [AppViewModel.needsSetup].
  */
 @Composable
 fun HomerApp() {
     val viewModel: AppViewModel = hiltViewModel()
     val authState by viewModel.authState.collectAsStateWithLifecycle()
+    val needsSetup by viewModel.needsSetup.collectAsStateWithLifecycle()
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        when (authState) {
-            AuthState.Unknown -> Box(
+        // Once, as soon as there is anything to notify about — and hoisted above the branch so that
+        // handing over from setup to the library does not unmount it and ask again. A scan and a
+        // download both post a progress notification, and setup ends by starting a scan.
+        if (authState != AuthState.Unknown) NotificationPermissionRequest()
+
+        when {
+            // Still reading the Keystore. Never the setup flow: a cold start would otherwise flash
+            // "where do your books live?" at somebody whose library is already configured.
+            authState == AuthState.Unknown -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
-            AuthState.LoggedOut -> LoginScreen()
-            is AuthState.LoggedIn -> {
-                // Asked here, not at launch: there is nothing to notify about until an account
-                // exists, and asked BEFORE the library rather than by the player, because a scan
-                // and a download both notify long before anybody opens a book.
-                NotificationPermissionRequest()
-                LibraryNavHost()
-            }
+            // onDone is not a navigation here: needsSetup goes false when the flow records that
+            // it finished, and this composable is replaced.
+            needsSetup -> SetupFlow(firstRun = true, onDone = {})
+
+            else -> LibraryNavHost()
         }
     }
 }

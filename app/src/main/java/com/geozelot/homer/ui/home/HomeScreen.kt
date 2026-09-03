@@ -192,7 +192,6 @@ fun HomeScreen(
     val flatCollections by viewModel.flatCollections.collectAsStateWithLifecycle()
     val filterCount by viewModel.filterCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
-    val librarySetup by viewModel.librarySetup.collectAsStateWithLifecycle()
     val indexQueued by viewModel.indexQueued.collectAsStateWithLifecycle()
     val wifiOnlyDownloads by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     // A device reading an index somebody else keeps: it never crawls, so an empty shelf here means
@@ -476,15 +475,11 @@ fun HomeScreen(
                 // reader their shelf was empty and to try a different folder — the third time that
                 // wrong empty state has turned up, and this time reachable in two taps.
                 !filter.isEmpty -> EmptyResults(modifier = Modifier.weight(1f))
-                // Not "your shelf is empty" any more: on a first run this is where the library
-                // gets found, chosen or named. Only a scanned-and-genuinely-empty library still
-                // reads as empty, which is the one case where it is true.
+                // Not "your shelf is empty" whenever it is empty: a crawl that has been asked for
+                // and cannot start yet says so instead. Which library this is was settled by the
+                // setup flow, before the shelf was ever shown.
                 else ->
                     LibrarySetupPanel(
-                        setup = librarySetup,
-                        onAdopt = viewModel::adopt,
-                        onNameFolder = viewModel::setupNameFolder,
-                        isShare = libraryIsShare,
                         scanPending = IndexPass.BOOKS in indexQueued,
                         wifiOnly = wifiOnlyDownloads,
                         readsOnly = readsSharedIndex,

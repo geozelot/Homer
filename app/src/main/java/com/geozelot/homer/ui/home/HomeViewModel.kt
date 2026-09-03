@@ -676,16 +676,26 @@ class HomeViewModel @Inject constructor(
         libraryIndexManager.fetchMissingCovers()
         // Pull cross-device resume positions from the .homer manifest on open.
         viewModelScope.launch { homerSync.sync() }
-        // Shared index on: pull the catalog so the library is present without scanning. Never
-        // touch the network at tier 1 (on-device only). The first-run resolution runs after it, in
-        // the same coroutine rather than beside it — it decides on the book count, and racing the
-        // pull would make it look at an empty database that is about to fill.
+        // Shared index in use: pull it so the library is present without scanning. In the same
+        // coroutine as the crawl decision below rather than beside it — that decision is made on
+        // the book count, and racing the pull would have it look at an empty database that is
+        // about to fill.
         viewModelScope.launch {
-            if (librarySettings.sharedCatalogEnabled.first()) {
+            if (maintenance.standingNow().usesSharedIndex) {
                 // pull() reports whether a shared index exists, so this needs no second probe.
                 _sharedCatalogAvailable.value = libraryIndex.pull()
             }
-            resolveSetup()
+            // Nothing here and nothing has ever looked: read the folder. Setup has already settled
+            // WHICH folder — this is the crawl that follows from it, and it is also what covers a
+            // first launch after setup finished offline.
+            if (bookDao.count() == 0 && crawlDirDao.lastScanned() == null) {
+                libraryIndexManager.scan()
+            } else {
+                // Something is on the shelf, so nothing has looked at the storage folder — and
+                // after a sign-out and back in, or a reinstall over the same folder, the audio is
+                // often already sitting there. Claim it rather than re-downloading it.
+                localMirror.adoptDownloads()
+            }
         }
     }
 
@@ -715,102 +725,6 @@ class HomeViewModel @Inject constructor(
                 _discovering.value = false
             }
         }
-    }
-
-    private val _librarySetup = MutableStateFlow<LibrarySetup>(LibrarySetup.Unknown)
-
-    /**
-     * Whether this install has a library yet, and what to do about it if not.
-     *
-     * The old answer was an empty shelf and a button to settings, which is the worst possible
-     * outcome for the commonest case: a second device, with a finished index sitting on the server
-     * beside it, crawling twelve thousand files from scratch because the shared-index switch
-     * defaults to off. [LibraryDiscovery] has always been able to find that index; it was only ever
-     * used to populate a list in settings.
-     */
-    val librarySetup: StateFlow<LibrarySetup> = _librarySetup.asStateFlow()
-
-    /**
-     * Decides between adopting an existing library, asking which one, and asking where the books
-     * are — once, on launch, before an empty shelf is ever shown.
-     *
-     * Anything that already has books, or has ever crawled, is left alone: an empty library the user
-     * has actually scanned is a real answer, not a question.
-     */
-    private suspend fun resolveSetup() {
-        if (bookDao.count() > 0 || crawlDirDao.lastScanned() != null) {
-            _librarySetup.value = LibrarySetup.Ready
-            return
-        }
-        // A share link IS the library — the Library page says as much, since using a different
-        // folder means opening a different share. There is nothing to discover and no folder to
-        // ask for, so the only sensible first run is to read what the link points at.
-        if (account.value?.kind == WebDavKind.SHARE) {
-            libraryIndexManager.scan()
-            _librarySetup.value = LibrarySetup.Ready
-            return
-        }
-
-        _librarySetup.value = LibrarySetup.Looking
-        val candidates = runCatching { discovery.discover() }.getOrElse { emptyList() }
-        // The Library page shows the same list; priming it (and its freshness stamp) means opening
-        // that page straight after setup does not repeat a sweep that is dozens of requests.
-        _discovered.value = candidates
-        lastDiscoveryAtMs = System.currentTimeMillis()
-
-        // One indexed library of the user's OWN is adopted silently — the entire point is that they
-        // never learn there was a decision to make. A folder shared WITH them is not the same
-        // thing: it is someone else's library, and taking it over without a word is a bigger
-        // assumption than the one tap it costs to confirm.
-        val own = candidates.filter {
-            it.hasSharedCatalog && it.kind != DiscoveredLibrary.Kind.SHARED_FOLDER
-        }
-        if (own.size == 1) {
-            adopt(own.single().relativePath)
-            return
-        }
-        _librarySetup.value =
-            if (candidates.isNotEmpty()) LibrarySetup.Choose(candidates) else LibrarySetup.NothingFound
-    }
-
-    /**
-     * Takes [path] as the library: read the shared index if it has one, crawl if it does not.
-     *
-     * Sharing is switched on as part of adopting, and the setup screen says so before the tap. It is
-     * what makes the next device's adoption work, and leaving it off is how one device ended up
-     * doing all the work for ever. A share link is left alone — writing there is not this device's
-     * call, and [LibraryIndexRepository.canPublish] would refuse anyway.
-     */
-    fun adopt(path: String) {
-        viewModelScope.launch {
-            _librarySetup.value = LibrarySetup.Adopting
-            libraryRepository.setLibraryRoot(path)
-            _libraryRoot.value = path
-            if (account.value?.kind != WebDavKind.SHARE) librarySettings.setSharedCatalogEnabled(true)
-            _sharedCatalogAvailable.value = libraryIndex.pull()
-            if (bookDao.count() == 0) {
-                // No index there, or one that turned out to hold nothing: the folder still has to
-                // be read, and a crawl is the only thing that can do it.
-                libraryIndexManager.scan()
-            } else {
-                // The index filled the shelf without a crawl, so nothing has looked at the storage
-                // folder — and after a sign-out and back in, or a reinstall over the same folder,
-                // the audio is often already sitting there. Claim it rather than re-downloading it.
-                localMirror.adoptDownloads()
-            }
-            _librarySetup.value = LibrarySetup.Ready
-        }
-    }
-
-    /**
-     * Abandons the list of candidates for typing a folder in.
-     *
-     * Without it the choice is a dead end for the one user whose library is somewhere the sweep
-     * cannot see — a folder with no Homer marker in it yet, which is every library before Homer has
-     * ever read it.
-     */
-    fun setupNameFolder() {
-        _librarySetup.value = LibrarySetup.NothingFound
     }
 
     fun onLibraryRootChange(value: String) {
@@ -1494,26 +1408,6 @@ class HomeViewModel @Inject constructor(
  * It exists so that first install, second device and reinstall are one flow rather than three, and
  * so that none of them starts with an empty shelf and a pointer to settings.
  */
-sealed interface LibrarySetup {
-    /** Not decided yet — the launch path has not reached the question. */
-    data object Unknown : LibrarySetup
-
-    /** There is a library (or the user has scanned and it really is empty). Nothing to ask. */
-    data object Ready : LibrarySetup
-
-    /** Sweeping the server for something that looks like a library. */
-    data object Looking : LibrarySetup
-
-    /** Reading the library that was found or chosen. */
-    data object Adopting : LibrarySetup
-
-    /** Several plausible libraries; the user picks, with each one's book count in front of them. */
-    data class Choose(val candidates: List<DiscoveredLibrary>) : LibrarySetup
-
-    /** Nothing on the server carries a Homer index, so the folder has to be named. */
-    data object NothingFound : LibrarySetup
-}
-
 /** The five inputs that decide the list, bundled so the language filter can be a sixth. */
 private data class Arrangement(
     val books: List<BookListItem>,

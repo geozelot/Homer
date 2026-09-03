@@ -185,15 +185,6 @@
     <string name="home_empty_reader_title">Noch nichts geteilt</string>
     <string name="home_empty_reader_hint">Diese Bibliothek wird von einem anderen Gerät gepflegt, das seine Bücher noch nicht veröffentlicht hat. Sie erscheinen hier, sobald es das tut — du musst nichts tun.</string>
     <string name="setup_looking">Suche nach deiner Bibliothek…</string>
-    <string name="setup_adopting">Deine Bibliothek wird gelesen…</string>
-    <string name="setup_choose_title">Welche ist deine Bibliothek?</string>
-    <string name="setup_choose_body">Homer hat auf deinem Server mehr als einen Ordner gefunden, der es sein könnte. Wähle einen — du kannst das später ändern.</string>
-    <string name="setup_use_this">Diesen nehmen</string>
-    <string name="setup_none_of_these">Keiner davon — ich gebe den Ordner an</string>
-    <string name="setup_folder_title">Wo sind deine Bücher?</string>
-    <string name="setup_folder_body">Homer hat keine Bibliothek gefunden, die er schon kennt. Gib den Ordner auf deinem Server an, in dem deine Hörbücher liegen, oder lass das Feld leer, um alles zu lesen.</string>
-    <string name="setup_scan_folder">Diesen Ordner lesen</string>
-    <string name="setup_sharing_note">Homer legt in diesem Ordner einen kleinen Index ab, damit deine anderen Geräte nicht alles erneut lesen müssen. Darin stehen Titel, Längen und Cover — niemals deine Stelle in einem Buch.</string>
 
     <!-- Home: series edit -->
     <string name="home_series_edit_title">Serie bearbeiten</string>
@@ -594,4 +585,60 @@
     <string name="edit_genre_tag_note">Das ausgegraute kommt aus einem Datei-Tag und steht nicht in Homers Liste. Es lässt sich entfernen, aber nicht erneut wählen.</string>
     <string name="genre_shelf_fiction">BELLETRISTIK</string>
     <string name="genre_shelf_nonfiction">SACHBUCH</string>
+
+    <!-- ── Ersteinrichtung ─────────────────────────────────────────────── -->
+    <string name="setup_where_title">Wo liegen deine Hörbücher?</string>
+    <string name="setup_where_share">Ein geteilter Link</string>
+    <string name="setup_where_share_desc">Jemand hat dir einen Link zu seiner Bibliothek geschickt</string>
+    <string name="setup_where_account">Mein eigenes Konto</string>
+    <string name="setup_where_account_desc">Nextcloud — eigene Dateien oder ein mit dir geteilter Ordner</string>
+    <string name="setup_where_note">Dein Hörfortschritt bleibt privat, egal was du wählst. Danach fragt Homer, wo er gespeichert wird.</string>
+    <string name="setup_folder_title">Welcher Ordner?</string>
+    <string name="setup_folder_hint">Leer lassen, um das ganze Konto zu verwenden.</string>
+    <string name="setup_folder_look">Hier nachsehen</string>
+    <string name="setup_findings_title">Was hier liegt</string>
+    <string name="setup_unreachable">Homer konnte den Ordner nicht lesen. Prüfe den Pfad und deine Verbindung.</string>
+    <string name="setup_look_again">Nochmal nachsehen</string>
+    <string name="setup_fact_index">Eine gemeinsame Homer-Bibliothek</string>
+    <string name="setup_fact_index_owner">gepflegt von %1$s</string>
+    <string name="setup_fact_no_index">Hier noch keine Homer-Bibliothek</string>
+    <string name="setup_fact_required">Gemeinsame Nutzung vorgegeben</string>
+    <string name="setup_fact_required_by">festgelegt von %1$s</string>
+    <string name="setup_fact_required_at">für %1$s</string>
+    <string name="setup_fact_edits_locked">Änderungen bleiben auf deinem Gerät</string>
+    <string name="setup_fact_rules_unreadable">Die Regeln dieser Bibliothek waren nicht lesbar</string>
+    <string name="setup_fact_rules_unreadable_desc">Homer bleibt vorsichtig: Er liest die Bibliothek hier und veröffentlicht nichts.</string>
+    <string name="setup_fact_writable">Du kannst hier schreiben</string>
+    <string name="setup_fact_readonly">Du hast nur Lesezugriff</string>
+    <string name="setup_fact_local">Dieses Gerät kennt schon %1$s</string>
+    <string name="setup_use_library">Diese Bibliothek verwenden</string>
+    <string name="setup_body_join_maintain">Nichts zu durchsuchen — Cover und Längen sind schon ermittelt. Dieses Gerät hilft, sie aktuell zu halten.</string>
+    <string name="setup_body_join_reader">Du liest mit; die pflegenden Geräte machen die Arbeit. Von hier wird nichts durchsucht oder vermessen.</string>
+    <string name="setup_body_adopt">Nichts zu durchsuchen. Cover und Längen sind schon ermittelt.</string>
+    <string name="setup_create_action">Hier eine Homer-Bibliothek anlegen</string>
+    <string name="setup_body_create">Homer liest den Ordner einmal und lässt das Ergebnis hier liegen — damit deine anderen Geräte und alle, mit denen du teilst, es nicht wieder tun müssen.</string>
+    <string name="setup_keep_on_device">Nur auf diesem Gerät</string>
+    <string name="setup_body_device_only">Homer liest jede Datei, um Längen und Cover zu ermitteln. Auf fremden Servern sind das einige Tausend Anfragen, und das Ergebnis lässt sich mit niemandem teilen.</string>
+    <string name="setup_wait_for_owner">Auf die Bibliothek warten</string>
+    <string name="setup_body_blocked">Wer diesen Ordner besitzt, möchte, dass Geräte eine gemeinsame Bibliothek nutzen — und hat noch keine veröffentlicht. Homer übernimmt sie, sobald sie erscheint.</string>
+    <string name="setup_alt_keep_on_device">Lieber eine eigene aufbauen</string>
+    <string name="setup_create_title">Homer-Bibliothek anlegen</string>
+    <string name="setup_create_in">in %1$s</string>
+    <string name="setup_create_rules_header">REGELN FÜR ALLE ANDEREN GERÄTE HIER</string>
+    <string name="setup_rule_require">Gemeinsame Nutzung vorgeben</string>
+    <string name="setup_rule_require_desc">Geräte hier lesen diese Bibliothek statt den Ordner. So wird ein geteilter Ordner nicht für jeden Mitleser neu durchsucht.</string>
+    <string name="setup_rule_edits">Änderungen erlauben</string>
+    <string name="setup_rule_edits_desc">Aus: Andere Geräte können einen Titel für ihr eigenes Regal weiter korrigieren, die Korrektur aber nicht hier veröffentlichen.</string>
+    <string name="setup_rules_honoured">Homer hält sich daran. Alles andere, was den Ordner lesen kann, kann es ignorieren.</string>
+    <string name="setup_rules_not_owner">Nur das Konto, dem dieser Ordner gehört, kann seine Regeln festlegen.</string>
+    <string name="setup_create_confirm">Anlegen und einlesen</string>
+    <string name="setup_progress_title">Wo soll dein Hörfortschritt gespeichert werden?</string>
+    <string name="setup_progress_account">In meinem Konto</string>
+    <string name="setup_progress_account_desc">Jeder Homer von dir macht dort weiter, wo du aufgehört hast</string>
+    <string name="setup_progress_device">Nur auf diesem Gerät</string>
+    <string name="setup_progress_device_desc">Nichts verlässt das Telefon. Ein neues Telefon fängt von vorn an.</string>
+    <string name="setup_progress_note">In beiden Fällen wird er mit niemandem geteilt.</string>
+    <string name="setup_progress_settled">Wird in %1$s gespeichert — jeder Homer von dir macht dort weiter, wo du aufgehört hast.</string>
+    <string name="setup_progress_settled_alt">Doch nur auf diesem Gerät</string>
+    <string name="setup_progress_finish">Losgehen</string>
 </resources>

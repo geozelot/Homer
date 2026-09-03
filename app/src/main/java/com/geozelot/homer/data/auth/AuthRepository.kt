@@ -45,6 +45,10 @@ class AuthRepository @Inject constructor(
             loginName = result.loginName,
             appPassword = result.appPassword,
         )
+        // Nothing has probed this account's folder yet, so it starts from the default rather than
+        // from whatever a previous share left behind. Setup probes the folder it settles on and
+        // records the real answer — a folder shared INTO an account can be read-only.
+        librarySettings.setLibraryWritable(true)
         credentialStore.save(credentials)
         return credentials
     }

@@ -65,12 +65,21 @@ class LibraryStandingTest {
     }
 
     @Test
-    fun `an account is never a reader, whatever the writable flag says`() {
-        // The flag is only set from a share's write probe. An account's own folder is writable by
-        // the account that owns it, and reading the stale flag would make a whole library read-only.
+    fun `an account pointed at a folder it cannot write is a reader too`() {
+        // This used to be impossible by construction — the writable flag was read for shares only,
+        // on the reasoning that an account's own folder is writable by the account that owns it.
+        // True of its OWN folder, and false of a folder shared into it, which is reached with
+        // account credentials and is exactly the case nothing probed.
         val standing = standing(WebDavKind.ACCOUNT, writable = false, sharedIndexEnabled = true)
+        assertEquals(LibraryRole.READER, standing.role)
+        assertFalse(standing.mayPublishIndex)
+    }
+
+    @Test
+    fun `an unprobed library is writable, so nothing existing changes`() {
+        // The flag defaults to true wherever writability has never been established.
+        val standing = standing(WebDavKind.ACCOUNT, writable = true, sharedIndexEnabled = true)
         assertEquals(LibraryRole.MAINTAINER, standing.role)
-        assertTrue(standing.mayPublishIndex)
     }
 
     @Test
@@ -80,7 +89,7 @@ class LibraryStandingTest {
         assertTrue(standing.readsOnly)
         assertFalse(standing.maintains)
         assertFalse(standing.mayPublishIndex)
-        assertEquals(Restriction.ReadOnlyShare, standing.restriction)
+        assertEquals(Restriction.ReadOnlyLibrary, standing.restriction)
     }
 
     @Test
@@ -162,7 +171,7 @@ class LibraryStandingTest {
             policy = LibraryPolicy(editsAllowed = false),
         )
         // Not EditsLocked: the rule is beside the point when nothing here can write anything.
-        assertEquals(Restriction.ReadOnlyShare, standing.editRestriction)
+        assertEquals(Restriction.ReadOnlyLibrary, standing.editRestriction)
     }
 
     // ── the owner ────────────────────────────────────────────────────────────────────────────
@@ -310,6 +319,8 @@ class LibraryStandingTest {
 
     @Test
     fun `only a reader is ever refused the expensive work`() {
+        // Which no longer implies "only a share": an account can be pointed at a folder shared
+        // into it, and be just as unable to publish.
         forEveryCombination { standing ->
             if (!standing.maintains && standing.role != LibraryRole.NONE) {
                 assertEquals(standing.toString(), LibraryRole.READER, standing.role)

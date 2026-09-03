@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.geozelot.homer.data.library.SetupState
 import com.geozelot.homer.data.sync.facet.PolicyInForce
 import com.geozelot.homer.data.sync.facet.PolicyResolution
 import com.geozelot.homer.data.update.UpdateChannel
@@ -122,6 +123,20 @@ class LibrarySettings @Inject constructor(
 
     suspend fun setLibraryWritable(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_LIBRARY_WRITABLE] = value }
+    }
+
+    /**
+     * How far first-run setup has got.
+     *
+     * Persisted rather than held in a ViewModel because signing in is a step *inside* the flow, and
+     * the auth state flipping mid-flow would otherwise drop the user into a library they had not
+     * finished pointing at a folder. See [SetupState].
+     */
+    val setupState: Flow<SetupState> =
+        context.settingsDataStore.data.map { SetupState.of(it[KEY_SETUP_STATE]) }
+
+    suspend fun setSetupState(state: SetupState) {
+        context.settingsDataStore.edit { it[KEY_SETUP_STATE] = state.name }
     }
 
     /**
@@ -398,6 +413,8 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
             // The rules and the ownership belong to the library being left, not to this device.
+            // Signing out means the next launch has no library, so setup is due again.
+            it.remove(KEY_SETUP_STATE)
             it.remove(KEY_POLICY_ROOT)
             it.remove(KEY_POLICY_PRESENT)
             it.remove(KEY_POLICY_SHARED_REQUIRED)
@@ -429,6 +446,7 @@ class LibrarySettings @Inject constructor(
         val KEY_SHARED_CATALOG = booleanPreferencesKey("shared_catalog_enabled")
         val KEY_LIBRARY_WRITABLE = booleanPreferencesKey("library_writable")
         val KEY_LIBRARY_OWNED = booleanPreferencesKey("library_owned")
+        val KEY_SETUP_STATE = stringPreferencesKey("setup_state")
         val KEY_POLICY_ROOT = stringPreferencesKey("policy_resolved_for_root")
         val KEY_POLICY_PRESENT = booleanPreferencesKey("policy_present")
         val KEY_POLICY_SHARED_REQUIRED = booleanPreferencesKey("policy_shared_index_required")

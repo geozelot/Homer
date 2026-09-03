@@ -210,3 +210,32 @@ private fun factsOf(probe: SetupProbe, requiresShared: Boolean, canWrite: Boolea
         // be noise.
         if (probe.localBookCount > 0) add(SetupFact.LocalLibrary(probe.localBookCount))
     }
+
+/**
+ * How far the first-run flow has got — persisted, because the flow outlives the process.
+ *
+ * It exists because credentials cannot be the gate. Signing in is a *step* of setup, and the
+ * moment it succeeds the auth state flips; gating the wizard on "logged out" would therefore eject
+ * the user into the library half way through, before a folder had been chosen or the rules read.
+ *
+ * [NOT_STARTED] carries the upgrade: an install from before this flow existed has credentials and
+ * has never seen a wizard, and it must not be shown one — so "not started" only means "show setup"
+ * when there is nothing configured at all.
+ */
+enum class SetupState {
+    /** Nothing has been asked. Setup runs only if there are no credentials either. */
+    NOT_STARTED,
+
+    /** Somewhere in the flow. Setup runs regardless of what else is configured. */
+    IN_PROGRESS,
+
+    /** Finished, or never needed. */
+    DONE,
+    ;
+
+    companion object {
+        /** Tolerant of a value written by another build: an unknown state is not a reason to
+         *  restart somebody's setup. */
+        fun of(name: String?): SetupState = entries.firstOrNull { it.name == name } ?: NOT_STARTED
+    }
+}

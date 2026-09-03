@@ -39,8 +39,13 @@ sealed interface Restriction {
     /** Nothing is configured yet. */
     data object NoLibrary : Restriction
 
-    /** A share link that cannot be written to. The only backend that can be read-only. */
-    data object ReadOnlyShare : Restriction
+    /**
+     * The library cannot be written to.
+     *
+     * Not "a read-only share" any more: a folder shared *into* an account is reached with account
+     * credentials and can be just as read-only, which is the case nothing used to probe.
+     */
+    data object ReadOnlyLibrary : Restriction
 
     /** The owner allows edits for a reader's own shelf, but not published here. */
     data class EditsLocked(val owner: String?) : Restriction
@@ -130,8 +135,8 @@ data class LibraryStanding(
          * The whole derivation, as a function of facts — no Android, no flows, no network.
          *
          * @param kind how the library is reached, or null when nothing is configured.
-         * @param writable whether the backend can be written to. Only a share can be read-only; an
-         *   account's own folder is always writable by the account that owns it.
+         * @param writable whether the backend can be written to, as probed. Defaults to true
+         *   everywhere it has not been established, so an unprobed library keeps working.
          * @param sharedIndexEnabled the user's switch.
          * @param resolution the owner's rules as last resolved, with the root they describe.
          * @param libraryRoot the root in use, to check that [resolution] is about it.
@@ -145,7 +150,11 @@ data class LibraryStanding(
         ): LibraryStanding {
             if (kind == null) return NONE
 
-            val backendWritable = kind == WebDavKind.ACCOUNT || writable
+            // Not "an account is always writable". That was true of an account's OWN folder and
+            // false of a folder shared into it, which is reached with account credentials and can
+            // be read-only — the case nothing used to probe. The flag defaults to true, so an
+            // account that has never been probed behaves exactly as it always did.
+            val backendWritable = writable
             val policyKnown = resolution.describes(libraryRoot)
             // Unresolved reads as open — see LibraryStanding.policyKnown for why that is safe.
             val policy = if (policyKnown) resolution.policy else PolicyInForce.OPEN
@@ -177,7 +186,7 @@ data class LibraryStanding(
             val blocked: Restriction? = when {
                 role != LibraryRole.READER -> null
                 !policy.understood -> Restriction.RulesUnreadable(policy.atFolder)
-                else -> Restriction.ReadOnlyShare
+                else -> Restriction.ReadOnlyLibrary
             }
 
             return LibraryStanding(

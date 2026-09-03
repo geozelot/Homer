@@ -40,6 +40,16 @@ import com.geozelot.homer.ui.components.HomerTextButton
 fun LoginScreen(
     modifier: Modifier = Modifier,
     syncMode: Boolean = false,
+    /**
+     * Fixes which half of this screen is shown and hides the chips that switch between them.
+     *
+     * For the setup flow, whose first screen asks the same question — an account or a link — as its
+     * own full page. Leaving the chips visible there would let the answer be changed twice, in two
+     * places, one of which had already moved the flow on.
+     */
+    forcedMode: LoginViewModel.Mode? = null,
+    /** Back out, when this screen sits inside a flow that has somewhere to go back to. */
+    onBack: (() -> Unit)? = null,
     onLinked: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
@@ -47,6 +57,7 @@ fun LoginScreen(
     val context = LocalContext.current
 
     LaunchedEffect(syncMode) { viewModel.setSyncMode(syncMode) }
+    LaunchedEffect(forcedMode) { forcedMode?.let(viewModel::setMode) }
 
     // Open the Nextcloud login page in a Custom Tab when the flow is initiated.
     LaunchedEffect(Unit) {
@@ -101,7 +112,7 @@ fun LoginScreen(
             else -> {
                 // Two entry points: sign in to an account, or open a public share link. Hidden in
                 // sync mode — linking a progress account is always an account login.
-                if (!syncMode) {
+                if (!syncMode && forcedMode == null) {
                     Row(
                         modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).padding(bottom = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -190,6 +201,12 @@ fun LoginScreen(
                         Text(stringResource(R.string.login_share_button))
                     }
                 }
+            }
+        }
+
+        onBack?.let {
+            HomerTextButton(onClick = it, modifier = Modifier.padding(top = 20.dp)) {
+                Text(stringResource(R.string.action_back))
             }
         }
 

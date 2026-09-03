@@ -193,17 +193,6 @@
     <!-- First run: what replaces an empty shelf. The sweep that found these folders is the same
          one the Library page runs; it just happens before the shelf is shown rather than after. -->
     <string name="setup_looking">Looking for your library\u2026</string>
-    <string name="setup_adopting">Reading your library\u2026</string>
-    <string name="setup_choose_title">Which one is your library?</string>
-    <string name="setup_choose_body">Homer found more than one folder on your server that could be it. Pick one — you can change it later.</string>
-    <string name="setup_use_this">Use this one</string>
-    <string name="setup_none_of_these">None of these \u2014 let me name the folder</string>
-    <string name="setup_folder_title">Where are your books?</string>
-    <!-- Deliberately does not claim the server has no library: it reads the same when the sweep
-         found nothing and when it could not reach the server at all. -->
-    <string name="setup_folder_body">Homer hasn\'t found a library it already knows. Name the folder on your server that holds your audiobooks, or leave it blank to read everything.</string>
-    <string name="setup_scan_folder">Read this folder</string>
-    <string name="setup_sharing_note">Homer will keep a small index in that folder, so your other devices don\'t have to read it all again. It holds titles, lengths and cover art — never your place in a book.</string>
 
     <!-- Home: series edit -->
     <string name="home_series_edit_title">Edit series</string>
@@ -617,4 +606,60 @@
     <string name="edit_genre_tag_note">The dimmed one came from a file tag and is not in Homer’s list. It can be removed, but not chosen again.</string>
     <string name="genre_shelf_fiction">FICTION</string>
     <string name="genre_shelf_nonfiction">NON-FICTION</string>
+
+    <!-- ── first-run setup ─────────────────────────────────────────────── -->
+    <string name="setup_where_title">Where do your books live?</string>
+    <string name="setup_where_share">A shared link</string>
+    <string name="setup_where_share_desc">Somebody sent you a link to their library</string>
+    <string name="setup_where_account">My own account</string>
+    <string name="setup_where_account_desc">Nextcloud — your own files, or a folder shared with you</string>
+    <string name="setup_where_note">Your place in each book stays private, whichever you pick. Homer asks about that next.</string>
+    <string name="setup_folder_title">Which folder?</string>
+    <string name="setup_folder_hint">Leave it empty to use everything in your account.</string>
+    <string name="setup_folder_look">Look here</string>
+    <string name="setup_findings_title">What\'s here</string>
+    <string name="setup_unreachable">Homer couldn\'t read that folder. Check the path, and that you\'re online.</string>
+    <string name="setup_look_again">Look again</string>
+    <string name="setup_fact_index">A shared Homer library</string>
+    <string name="setup_fact_index_owner">kept by %1$s</string>
+    <string name="setup_fact_no_index">No Homer library here yet</string>
+    <string name="setup_fact_required">Shared use required</string>
+    <string name="setup_fact_required_by">set by %1$s</string>
+    <string name="setup_fact_required_at">on %1$s</string>
+    <string name="setup_fact_edits_locked">Edits stay on your own device</string>
+    <string name="setup_fact_rules_unreadable">This library\'s rules could not be read</string>
+    <string name="setup_fact_rules_unreadable_desc">Homer is being cautious: it will read the library here and publish nothing.</string>
+    <string name="setup_fact_writable">You can write here</string>
+    <string name="setup_fact_readonly">You have read-only access</string>
+    <string name="setup_fact_local">This device already knows %1$s</string>
+    <string name="setup_use_library">Use this library</string>
+    <string name="setup_body_join_maintain">Nothing to crawl — covers and lengths are already worked out. This device helps keep them current.</string>
+    <string name="setup_body_join_reader">You read it; the devices that keep it do the work. Nothing is crawled or measured from here.</string>
+    <string name="setup_body_adopt">Nothing to crawl. Covers and lengths are already worked out.</string>
+    <string name="setup_create_action">Create a Homer library here</string>
+    <string name="setup_body_create">Homer reads the folder once and leaves the result here, so your other devices — and anybody you share it with — don\'t have to.</string>
+    <string name="setup_keep_on_device">Keep it on this device</string>
+    <string name="setup_body_device_only">Homer reads every file to work out lengths and cover art. On somebody else\'s server that is a few thousand requests, and the result can\'t be shared with anyone.</string>
+    <string name="setup_wait_for_owner">Wait for the library</string>
+    <string name="setup_body_blocked">This folder\'s owner asks devices to use a shared library, and hasn\'t published one yet. Homer picks it up as soon as it appears.</string>
+    <string name="setup_alt_keep_on_device">Build my own instead</string>
+    <string name="setup_create_title">Create a Homer library</string>
+    <string name="setup_create_in">in %1$s</string>
+    <string name="setup_create_rules_header">RULES FOR EVERY OTHER DEVICE HERE</string>
+    <string name="setup_rule_require">Require shared use</string>
+    <string name="setup_rule_require_desc">Devices here read this library rather than the folder. Keeps a shared folder from being crawled once per reader.</string>
+    <string name="setup_rule_edits">Allow edits</string>
+    <string name="setup_rule_edits_desc">Off: other devices can still correct a title for their own shelf, but not publish the correction here.</string>
+    <string name="setup_rules_honoured">Honoured by Homer. Anything else that can read the folder can ignore it.</string>
+    <string name="setup_rules_not_owner">Only the account that owns this folder can set its rules.</string>
+    <string name="setup_create_confirm">Create and scan</string>
+    <string name="setup_progress_title">Where should your place in each book be saved?</string>
+    <string name="setup_progress_account">My account</string>
+    <string name="setup_progress_account_desc">Every Homer of yours picks up where you left off</string>
+    <string name="setup_progress_device">This device only</string>
+    <string name="setup_progress_device_desc">Nothing leaves the phone. A new phone starts over.</string>
+    <string name="setup_progress_note">Never shared with anyone else, either way.</string>
+    <string name="setup_progress_settled">Saved to %1$s, so every Homer of yours picks up where you left off.</string>
+    <string name="setup_progress_settled_alt">Keep it on this device instead</string>
+    <string name="setup_progress_finish">Start reading</string>
 </resources>
