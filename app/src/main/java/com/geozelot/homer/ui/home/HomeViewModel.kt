@@ -36,6 +36,7 @@ import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.library.hasMetadataEdit
+import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PlaybackSettings
@@ -192,6 +193,15 @@ sealed interface LibraryEntry {
          * grid's duplicate-title key) does not move when the interface language does.
          */
         val languageCode: String? = null,
+        /**
+         * A genre whose translated LABEL is the heading, on exactly the same terms.
+         *
+         * The value is whatever the books carry — a canonical key from `BookGenre`, or free text a
+         * tag supplied that the vocabulary does not know. `BookGenre.display` handles both: the
+         * known one becomes "Kurzgeschichten" or "Short Stories" as the reader's language demands,
+         * the unknown one is shown as written.
+         */
+        val genre: String? = null,
     ) : LibraryEntry
     data class Standalone(val book: BookListItem) : LibraryEntry
 
@@ -1538,11 +1548,19 @@ private fun buildEntries(
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
         LibraryShelving.AUTHOR ->
             sectioned(ordered, "Unknown author", R.string.home_shelf_unknown_author) { it.author }
-        LibraryShelving.GENRE -> sectioned(ordered, "No genre", R.string.home_shelf_no_genre) { unit ->
+        // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
+        // are one shelf rather than two that mean the same thing. The heading itself resolves to the
+        // reader's language when it draws — see LibraryEntry.Header.genre.
+        LibraryShelving.GENRE -> sectioned(
+            ordered,
+            "No genre",
+            R.string.home_shelf_no_genre,
+            asGenre = true,
+        ) { unit ->
             when (unit) {
                 is SortUnit.Solo -> unit.book.genre
                 is SortUnit.Ser -> seriesGenre(unit.series.books)
-            }
+            }?.let { BookGenre.canonical(it) }
         }
         // Shelved rather than only filtered: on a mixed library, seeing German and English as two
         // shelves is more use than hiding one of them.
@@ -1697,6 +1715,7 @@ private fun sectioned(
     @StringRes fallbackRes: Int,
     sortBy: (String) -> String = { it },
     asLanguage: Boolean = false,
+    asGenre: Boolean = false,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
     val byKey = units.groupBy(keyOf)
@@ -1711,6 +1730,7 @@ private fun sectioned(
                     title = key ?: fallback,
                     titleRes = if (key == null) fallbackRes else null,
                     languageCode = key.takeIf { asLanguage },
+                    genre = key.takeIf { asGenre },
                 ),
             )
             byKey.getValue(key).forEach { add(it.toEntry()) }

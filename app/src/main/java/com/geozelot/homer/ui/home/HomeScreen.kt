@@ -133,6 +133,8 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.genresToInput
+import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.facet.IndexActivity
@@ -160,6 +162,7 @@ import com.geozelot.homer.ui.theme.SageSoft
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifDisplay
 import com.geozelot.homer.ui.theme.SerifTitle
+import java.util.Locale
 import com.geozelot.homer.ui.theme.Studio
 import com.geozelot.homer.ui.theme.Surface0
 import com.geozelot.homer.ui.theme.Surface1
@@ -296,6 +299,10 @@ fun HomeScreen(
     // Every rule about when this panel folds lives in ListeningFold, with tests.
     val fold = rememberSaveable(saver = ListeningFold.Saver) { ListeningFold() }
     val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
+    // Read here rather than inside the grid: `libraryContent` runs in a LazyGridScope, which is not
+    // a composition, so a CompositionLocal is unreachable from it. Reading it in the composition
+    // that OWNS the grid is also what makes a language change rebuild the labels.
+    val interfaceLocale = LocalConfiguration.current.locales[0]
 
     /**
      * Folding and unfolding, driven by RAW POINTER TRAVEL rather than by nested scroll.
@@ -505,7 +512,12 @@ fun HomeScreen(
                     gridView = gridView,
                     flatCollections = flatCollections,
                     onCollectionOrder = viewModel::setCollectionFlat,
-                    ctx = RowContext(shelfMode, seriesMode, mixedLanguages = languages.size > 1),
+                    ctx = RowContext(
+                        shelving = shelfMode,
+                        series = seriesMode,
+                        mixedLanguages = languages.size > 1,
+                        locale = interfaceLocale,
+                    ),
                     expanded = expanded,
                     onBookClick = onBookClick,
                     actions = actions,
@@ -974,6 +986,7 @@ private fun headerLabel(entry: LibraryEntry.Header): String = when {
     entry.titleRes != null -> stringResource(entry.titleRes)
     entry.languageCode != null ->
         BookLanguage.displayName(entry.languageCode, LocalConfiguration.current.locales[0])
+    entry.genre != null -> BookGenre.display(entry.genre, LocalConfiguration.current.locales[0])
     else -> entry.title
 }
 
@@ -1961,6 +1974,14 @@ private data class RowContext(
      * the number has to be the collection's, even for a book that also belongs to a thread.
      */
     val collectionNumbered: Boolean = false,
+    /**
+     * The interface's locale, for the labels that are translated by Homer rather than by Android.
+     *
+     * Carried on the context rather than read where it is needed because `bookMeta` is not a
+     * composable — it builds strings for a row to draw, and a genre label has to re-resolve when
+     * the interface language changes, so the locale has to arrive from the composition that has it.
+     */
+    val locale: Locale = Locale.ENGLISH,
 )
 
 /**
@@ -2007,9 +2028,10 @@ private fun bookMeta(
         add(book.author ?: context.getString(R.string.unknown_author))
     }
     // Every genre it carries, not only the one it shelves under — a book that is Fantasy AND Humour
-    // says more about itself in the same amount of space.
+    // says more about itself in the same amount of space. Translated where the vocabulary knows the
+    // value, shown as written where it does not.
     if (ctx.shelving != LibraryShelving.GENRE && book.genres.isNotEmpty()) {
-        add(book.genres.joinToString(" · "))
+        add(book.genres.joinToString(" · ") { BookGenre.display(it, ctx.locale) })
     }
     // Only where it distinguishes something: on a single-language library this is the same two
     // letters on every row, and shelved BY language the heading above already says it.
@@ -2922,8 +2944,10 @@ private fun ShelfEditDialog(
     // disagrees with itself starts empty and the user is choosing, not confirming.
     // The whole LIST, comma-separated, so a two-genre series prefills with both rather than losing
     // the second the moment somebody presses Save.
+    val locale = LocalConfiguration.current.locales[0]
     var genre by rememberSaveable {
-        mutableStateOf(series.books.map { it.genres }.distinct().singleOrNull()?.joinToString(", ").orEmpty())
+        val agreed = series.books.map { it.genres }.distinct().singleOrNull()
+        mutableStateOf(agreed?.let { genresToInput(it, locale) }.orEmpty())
     }
     // Same rule again, and unused on a collection — there, `name` IS the collection.
     var collection by rememberSaveable {

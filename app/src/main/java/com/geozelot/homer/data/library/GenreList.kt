@@ -1,5 +1,8 @@
 package com.geozelot.homer.data.library
 
+import com.geozelot.homer.data.metadata.BookGenre
+import java.util.Locale
+
 /**
  * A book's genres, which are now several rather than one.
  *
@@ -50,18 +53,31 @@ fun primaryGenre(raw: String?): String? = decodeGenres(raw).firstOrNull()
  * What somebody typed into the genre field, as a stored value.
  *
  * Commas separate, whitespace around them does not count, and duplicates are dropped — typing
- * "Fantasy, fantasy" is a slip rather than two genres. Case is kept as typed on the FIRST
- * occurrence, since that one is the primary and its capitalisation is what the shelf heading shows.
+ * "Fantasy, fantasy" is a slip rather than two genres, and so is "Kurzgeschichten, Short Stories"
+ * once both resolve to one entry in the vocabulary.
  */
 fun genresFromInput(input: String): String? {
     val seen = LinkedHashMap<String, String>()
     for (part in input.split(',')) {
-        val value = part.trim()
+        // CANONICALISED, so an edit stores the vocabulary's key rather than the spelling that was
+        // typed: somebody entering "Kurzgeschichten" and somebody entering "Short Stories" file the
+        // book on the same shelf, in every interface language, without either of them being told
+        // which spelling was the blessed one. A genre the vocabulary does not know is kept verbatim.
+        val value = BookGenre.canonical(part)
         if (value.isEmpty()) continue
-        seen.putIfAbsent(value.lowercase(), value)
+        // Keyed on the CANONICAL form, so the two spellings of one genre also cannot both survive
+        // as duplicates of each other.
+        seen.putIfAbsent(BookGenre.fold(value).ifEmpty { value.lowercase() }, value)
     }
     return encodeGenres(seen.values.toList())
 }
 
-/** The stored form as the edit dialog shows it. */
-fun genresToInput(raw: String?): String = decodeGenres(raw).joinToString(", ")
+/**
+ * Stored genres as the edit field shows them: translated labels, comma-separated.
+ *
+ * Not the stored values. Those are canonical keys now, and a field reading `shortstories,
+ * radioplay` is Homer's bookkeeping leaking onto the screen. A genre the vocabulary does not know
+ * has no label and appears as written, which is what a tag supplied.
+ */
+fun genresToInput(genres: List<String>, locale: Locale): String =
+    genres.joinToString(", ") { BookGenre.display(it, locale) }

@@ -38,12 +38,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.SettingsActionPadding
@@ -60,16 +62,20 @@ import com.geozelot.homer.ui.theme.Surface2
  *
  * A state token stores a stable key — `downloaded`, `no-cover` — because that is what matching and
  * the saved form need. Showing that key would put an untranslated slug in the middle of a German
- * interface, so the pill and the suggestion row resolve it to the state's own label. Everything else
- * is a value out of the library and already reads the way the library does.
+ * interface, so the pill and the suggestion row resolve it to the state's own label.
+ *
+ * A GENRE token stores a key for the same reason and needs the same treatment: the vocabulary is
+ * closed and translated, so `shortstories` has to read "Short Stories" or "Kurzgeschichten". A genre
+ * the vocabulary does not know is shown as written — which is also what a tag supplied.
+ *
+ * Everything else is a value out of the library and already reads the way the library does.
  */
 @Composable
-internal fun displayValue(facet: FilterFacet, value: String): String =
-    if (facet == FilterFacet.STATE) {
-        BookState.from(value)?.let { stringResource(it.label) } ?: value
-    } else {
-        value
-    }
+internal fun displayValue(facet: FilterFacet, value: String): String = when (facet) {
+    FilterFacet.STATE -> BookState.from(value)?.let { stringResource(it.label) } ?: value
+    FilterFacet.GENRE -> BookGenre.display(value, LocalConfiguration.current.locales[0])
+    else -> value
+}
 
 /**
  * The committed filters, and what they have left.

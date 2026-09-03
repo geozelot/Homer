@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import androidx.annotation.StringRes
 import com.geozelot.homer.R
+import com.geozelot.homer.data.metadata.BookGenre
 import java.text.Normalizer
 
 /**
@@ -133,7 +134,12 @@ internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (fa
     // Every genre a book carries, not just the one it shelves under: `genre:Humor` should find a
     // book filed under Fantasy that is also funny. The shelf can only put it in one place; the
     // filter is under no such constraint.
-    FilterFacet.GENRE -> genres
+    //
+    // CANONICALISED, so one token finds every spelling of one genre. A book whose tag says
+    // "Kurzgeschichten" and one edited to `shortstories` are the same shelf and have to be the same
+    // filter — and the vocabulary the box offers is built from these same values, so canonicalising
+    // here is also what stops the suggestion list showing a genre twice under two names.
+    FilterFacet.GENRE -> genres.map { BookGenre.canonical(it) }
     FilterFacet.LANGUAGE -> listOfNotNull(language)
     FilterFacet.TAG -> tags
     // Every state that currently holds. A book is "downloaded" and "started" at once, and listing

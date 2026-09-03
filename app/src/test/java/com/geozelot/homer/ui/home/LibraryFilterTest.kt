@@ -198,7 +198,10 @@ class LibraryFilterTest {
             book("b", genre = "Fantasy"),
             book("c", genre = "Fanfic"),
         )
-        assertEquals("Fantasy", suggest(books, "Fan", emptyList()).first().value)
+        // `fantasy`, not "Fantasy": a genre token carries the vocabulary's key, and the pill turns it
+        // back into a label in the reader's language. "Fanfic" is not in the vocabulary, so it stays
+        // as the tag wrote it.
+        assertEquals("fantasy", suggest(books, "Fan", emptyList()).first().value)
     }
 
     @Test
@@ -466,7 +469,36 @@ class LibraryFilterTest {
     fun `the box offers every genre in the library`() {
         val funny = book("f1", author = "Pratchett").copy(genres = listOf("Fantasy", "Humour"))
         val offered = suggest(listOf(funny), "hum", emptyList())
-        assertTrue(offered.any { it.facet == FilterFacet.GENRE && it.value == "Humour" })
+        assertTrue(offered.any { it.facet == FilterFacet.GENRE && it.value == "humour" })
+    }
+
+    @Test
+    fun `two spellings of one genre are offered once, not twice`() {
+        // The reason genre values are canonicalised at the filter boundary. Before, a library where
+        // one book was tagged in German and another in English offered the same genre twice under
+        // two names, and each token found half the books.
+        val german = book("g1", author = "Pratchett").copy(genres = listOf("Kurzgeschichten"))
+        val english = book("e1", author = "Gaiman").copy(genres = listOf("Short Stories"))
+        val offered = suggest(listOf(german, english), "stories", emptyList())
+            .filter { it.facet == FilterFacet.GENRE }
+        assertEquals(1, offered.size)
+        assertEquals("shortstories", offered.single().value)
+    }
+
+    @Test
+    fun `one genre token finds both spellings`() {
+        val german = book("g1").copy(genres = listOf("Kurzgeschichten"))
+        val english = book("e1").copy(genres = listOf("Short Stories"))
+        val token = LibraryFilter(tokens = listOf(FilterToken(FilterFacet.GENRE, "shortstories")))
+        assertTrue(token.matches(german))
+        assertTrue(token.matches(english))
+    }
+
+    @Test
+    fun `a genre the vocabulary does not know is still offered as written`() {
+        val odd = book("b1", author = "Pratchett").copy(genres = listOf("Eurodance"))
+        val offered = suggest(listOf(odd), "euro", emptyList())
+        assertTrue(offered.any { it.facet == FilterFacet.GENRE && it.value == "Eurodance" })
     }
 
     @Test

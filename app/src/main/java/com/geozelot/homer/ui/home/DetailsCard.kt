@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.metadata.BookLanguage
@@ -159,7 +160,8 @@ fun BookDetailsCard(
                 // three tokens, and the first is the one the shelf agrees with.
                 Fact(
                     stringResource(R.string.details_genre),
-                    book.genres.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                    book.genres.takeIf { it.isNotEmpty() }
+                        ?.joinToString(" · ") { BookGenre.display(it, locale) },
                 ) {
                     book.genre?.let { onFilter(FilterToken(FilterFacet.GENRE, it)) }
                 }
@@ -273,7 +275,8 @@ fun SeriesDetailsCard(
                 }
                 Fact(
                     stringResource(R.string.details_genre),
-                    series.books.flatMap { it.genres }.distinct().takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                    series.books.flatMap { it.genres }.distinct().takeIf { it.isNotEmpty() }
+                        ?.joinToString(" · ") { BookGenre.display(it, locale) },
                 )
                 Fact(
                     stringResource(R.string.details_language),

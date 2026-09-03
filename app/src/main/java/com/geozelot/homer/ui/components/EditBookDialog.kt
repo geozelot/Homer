@@ -30,10 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.data.library.genresToInput
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
@@ -129,7 +131,12 @@ fun EditBookDialog(
     var collection by rememberSaveable { mutableStateOf(book.collection.orEmpty()) }
     var index by rememberSaveable { mutableStateOf(book.seriesIndex?.toString().orEmpty()) }
     var collectionIndex by rememberSaveable { mutableStateOf(book.collectionIndex?.toString().orEmpty()) }
-    var genre by rememberSaveable { mutableStateOf(book.genres.joinToString(", ")) }
+    // Labels, not the stored keys — see `genresToInput`. Typing any recognised spelling in any
+    // language canonicalises back on save, so what is shown here is safe to edit freely.
+    val configuration = LocalConfiguration.current
+    var genre by rememberSaveable {
+        mutableStateOf(genresToInput(book.genres, configuration.locales[0]))
+    }
     var language by rememberSaveable { mutableStateOf(book.language.orEmpty()) }
     var tags by rememberSaveable { mutableStateOf(book.tags.joinToString(", ")) }
     var hidden by rememberSaveable { mutableStateOf(book.hidden) }
