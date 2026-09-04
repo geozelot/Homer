@@ -102,6 +102,19 @@ object MetaChipSlot {
      * twice, because the alignment breaks silently the moment either number moves.
      */
     val TextInset: Dp = 7.dp
+
+    /**
+     * The gap between the title above and the chip.
+     *
+     * Bigger than the 2dp it started at, and the reason is what a chip IS: an outlined pill sitting
+     * against a line of bare text has its own edge, and that edge lands a good deal closer to the
+     * baseline above it than another line of text would. At a two-line title — which in the grid is
+     * every title, since the block reserves both — the descenders came down onto the pill's border.
+     *
+     * Named because three views set it and they have to agree, or a book in the grid and the same
+     * book in the list are spaced differently.
+     */
+    val TitleGap: Dp = 6.dp
 }
 
 /** Which fact the chip carries — see [MetaChipSlot] for why it is one or the other. */

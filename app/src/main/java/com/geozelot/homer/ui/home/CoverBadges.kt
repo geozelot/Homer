@@ -2,7 +2,7 @@ package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -296,34 +296,53 @@ internal fun VolumeIndexBadge(
 }
 
 /**
- * The overflow menu on a cover — the glyph alone, with no area cut behind it.
+ * The overflow menu on a cover: a floating disc, inset from the corner.
  *
- * Everything else in a corner is something to READ, and the cut scrim exists to make text legible
- * over artwork. This is something to HIT, and giving it the same treatment made a control look like
- * one more fact about the book — a third label in a row of labels, in the corner a reader is
- * supposed to reach for rather than scan.
+ * Not one of the cut corner panels, and not the bare glyph either — both were tried. The panel made
+ * a control look like a third label in a row of labels, in the corner a reader is meant to reach for
+ * rather than scan. The bare glyph fixed that and lost the other half of what the panel was doing:
+ * a scrim, without which three light dots vanish into light artwork.
  *
- * So it keeps the corner and loses the furniture: [Parchment] at the interface's brightest text
- * tone, a size up from the badges beside it, with the tap target padded out well past the glyph.
- * Long-pressing the card still opens the same menu, so this is the shortcut rather than the only way
- * in.
+ * A disc keeps the scrim and drops the panel's meaning. The corner areas are anchored to the cover's
+ * edges — that is what makes them read as part of the card's furniture — so a shape that floats
+ * clear of the edge is legible as something else: a control sitting ON the artwork rather than a
+ * label cut into it.
  */
 @Composable
 internal fun CoverMenuButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 5.dp),
+        // The inset is the whole difference between floating and anchored. Applied outside the
+        // circle so the shape keeps its own clean edge and the gap is real space, not padding the
+        // scrim paints over.
+        modifier = modifier.padding(5.dp),
     ) {
-        Icon(
-            Icons.Filled.MoreVert,
-            contentDescription = null,
-            tint = Parchment,
-            modifier = Modifier.size(20.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(CoverMenuDisc)
+                .clip(CircleShape)
+                .background(BadgeScrim)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = null,
+                tint = Parchment,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
+
+/**
+ * The disc's diameter.
+ *
+ * Under the 48dp guideline, deliberately: a grid cell is about 100dp across and a compliant target
+ * in its corner would cover a quarter of the artwork. Long-pressing the card opens the same menu,
+ * so the disc is the shortcut and not the only way in — the same trade the footer button made when
+ * it was 32dp wide, for the same reason.
+ */
+private val CoverMenuDisc = 28.dp
 
 /** How long a book or a whole shelf runs. */
 @Composable

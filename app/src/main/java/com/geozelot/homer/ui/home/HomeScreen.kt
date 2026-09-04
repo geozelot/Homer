@@ -1979,7 +1979,7 @@ private fun GridCardText(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 5.dp),
         )
-        chip()
+        Box(modifier = Modifier.padding(top = MetaChipSlot.TitleGap)) { chip() }
         Text(
             meta,
             color = Muted,
@@ -2632,7 +2632,7 @@ private fun BookListRow(
                 chip = bookChip(book, ctx),
                 ctx = ctx,
                 onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
             )
         }
         Box {
@@ -2771,7 +2771,7 @@ private fun SeriesShelfRow(
                         chip = shelfChip(series, ctx),
                         ctx = ctx,
                         onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
                     )
                 }
             }
