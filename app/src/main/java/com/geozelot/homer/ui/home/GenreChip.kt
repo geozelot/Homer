@@ -26,10 +26,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.data.metadata.BookGenre
-import com.geozelot.homer.ui.theme.Amber
-import com.geozelot.homer.ui.theme.AmberSoft
+import com.geozelot.homer.ui.theme.Faint
+import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.theme.Surface2
 
 /**
  * What a book or a shelf is, as one chip: the genre it sits under, and how many more it carries.
@@ -42,6 +43,13 @@ import com.geozelot.homer.ui.theme.Parchment
  * mid-word anyway. Here the primary is always legible, the rest are a number, and the meta line goes
  * back to being about the author.
  *
+ * ## Quiet on purpose
+ *
+ * Card furniture, not an accent: [Muted] on [Surface2] inside a [Line] hairline — the same tones the
+ * meta text and the card's own border already use. It was amber, which is the palette's one
+ * interaction colour, and a genre is a fact about the book rather than something happening to it —
+ * so every cover in the grid grew a small bright pill competing with the artwork it sat under.
+ *
  * ## It never wraps, and the space is always there
  *
  * [GenreChipSlot] reserves [SlotHeight] whether or not there is a chip in it, so every card in the
@@ -53,11 +61,10 @@ object GenreChipSlot {
     /**
      * The reserved height of the row, chip or no chip.
      *
-     * The chip's own height: 10sp of text in a 3dp/3dp pill. Named because two call sites reserve it
-     * and a card whose slot is a different height from its neighbour's is the one bug this whole
-     * arrangement exists to prevent.
+     * The chip's own height. Named because four call sites reserve it, and a card whose slot is a
+     * different height from its neighbour's is the one bug this whole arrangement exists to prevent.
      */
-    val SlotHeight: Dp = 18.dp
+    val SlotHeight: Dp = 15.dp
 }
 
 /**
@@ -115,19 +122,19 @@ private fun GenreChip(genres: List<String>, ctx: RowContext, onFilter: (String) 
             modifier = Modifier
                 .height(GenreChipSlot.SlotHeight)
                 .clip(RoundedCornerShape(999.dp))
-                .background(AmberSoft)
-                .border(1.dp, Amber, RoundedCornerShape(999.dp))
+                .background(Surface2)
+                .border(1.dp, Line, RoundedCornerShape(999.dp))
                 // Its own click, so it does not open the book underneath it. The card still opens
                 // everywhere else, and long-pressing the card still reaches the menu.
                 .clickable(enabled = genres.size > 1) { open = true }
-                .padding(horizontal = 7.dp),
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 BookGenre.display(genres.first(), ctx.locale),
-                color = Amber,
-                fontSize = 10.sp,
-                lineHeight = 10.sp,
+                color = Muted,
+                fontSize = 9.5.sp,
+                lineHeight = 9.5.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -139,11 +146,11 @@ private fun GenreChip(genres: List<String>, ctx: RowContext, onFilter: (String) 
             if (genres.size > 1) {
                 Text(
                     "+${genres.size - 1}",
-                    color = Muted,
-                    fontSize = 10.sp,
-                    lineHeight = 10.sp,
+                    color = Faint,
+                    fontSize = 9.5.sp,
+                    lineHeight = 9.5.sp,
                     maxLines = 1,
-                    modifier = Modifier.padding(start = 4.dp),
+                    modifier = Modifier.padding(start = 3.dp),
                 )
             }
         }
@@ -156,7 +163,7 @@ private fun GenreChip(genres: List<String>, ctx: RowContext, onFilter: (String) 
                     text = {
                         Text(
                             BookGenre.display(genre, ctx.locale),
-                            color = if (genre == genres.first()) Amber else Parchment,
+                            color = if (genre == genres.first()) Parchment else Muted,
                             fontSize = 13.sp,
                         )
                     },

@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -290,6 +292,31 @@ internal fun VolumeIndexBadge(
     // the corner reading as an icon with a number stuck to it rather than as a number — and the
     // distinction was never the question being asked here. "#3" is what a volume number looks like.
     CoverBadge(corner, modifier, size) { BadgeText("#$index", size) }
+}
+
+/**
+ * The overflow menu, as cover furniture.
+ *
+ * It used to sit in the footer beside the title, taking 32dp of a ~100dp cell away from the one
+ * thing the cell is short of — room for a name. On the cover it costs nothing the artwork was using:
+ * the bottom-right corner is furniture either way, and the duration it displaces moves to the free
+ * corner opposite.
+ *
+ * The glyph is oversized against its badge on purpose. Everything else in a corner is something to
+ * READ, sized to be legible; this is something to HIT, and at [BadgeSize.MEDIUM]'s own 15dp the
+ * target came out under 24dp. Long-pressing the card still opens the same menu, so the corner is the
+ * shortcut rather than the only way in.
+ */
+@Composable
+internal fun MenuBadge(
+    corner: CoverCorner = CoverCorner.BOTTOM_END,
+    modifier: Modifier = Modifier,
+    size: BadgeSize = BadgeSize.MEDIUM,
+    onClick: () -> Unit,
+) {
+    CoverBadge(corner, modifier.clickable(onClick = onClick), size) {
+        BadgeIcon(Icons.Filled.MoreVert, size, override = size.glyph + 4.dp)
+    }
 }
 
 /** How long a book or a whole shelf runs. */

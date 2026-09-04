@@ -1859,13 +1859,22 @@ private fun BookGridCard(
                     size = BadgeSize.LARGE,
                 )
             }
-            // The length, where the progress ring used to be. A ring said the same thing the bar
-            // below the cover now says, and said it in a corner that could hold a fact the card
-            // had nowhere else to put.
-            // MEDIUM while the two above are LARGE, deliberately: this one is text with no glyph
-            // to make legible, and it is the corner a reader consults least.
+            // The length, moved to the LEFT corner to make room for the menu opposite. Still the
+            // corner a reader consults least, and still MEDIUM while the two above are LARGE: it is
+            // text with no glyph to make legible.
             book.totalDurationMs?.let {
-                DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
+                DurationBadge(
+                    formatCompactDuration(it),
+                    corner = CoverCorner.BOTTOM_START,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                )
+            }
+            // The menu, off the footer and onto the cover — see MenuBadge. What the footer gets
+            // back is 32dp of width for the title, which is the thing a grid cell never has enough
+            // of.
+            Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                MenuBadge { menuOpen = true }
+                BookMenu(book, menuOpen, actions) { menuOpen = false }
             }
         }
         // Under the cover rather than on it, exactly as the listening strip has always drawn it —
@@ -1876,34 +1885,32 @@ private fun BookGridCard(
                 modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
             )
         }
-        Box {
-            GridCardText(
-                title = book.title,
-                meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
-                chip = {
-                    GenreChipSlot(
-                        genres = book.genres,
-                        ctx = ctx,
-                        onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
-                    )
-                },
-            ) {
-                menuOpen = true
-            }
-            BookMenu(book, menuOpen, actions) { menuOpen = false }
-        }
+        GridCardText(
+            title = book.title,
+            meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
+            chip = {
+                GenreChipSlot(
+                    genres = book.genres,
+                    ctx = ctx,
+                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                )
+            },
+        )
     }
 }
 
 /**
- * Title (2 reserved lines) + the genre chip's reserved row + meta (2 reserved lines) beside an
- * overflow button — a fixed-height block, so every grid card (book or series) is exactly the same
- * total height and their bottoms line up.
+ * Title (2 reserved lines) + the genre chip's reserved row + meta (2 reserved lines) — a
+ * fixed-height block, so every grid card (book or series) is exactly the same total height and
+ * their bottoms line up.
  *
- * The button is 32dp wide rather than the usual 48: a grid cell is only about 100dp across, and a
- * square target would take half of it away from the title. It is a full 48dp tall, the tap targets
- * either side of it are other cards 12dp away, and long-pressing the card still opens the same
- * menu — so the compromise is horizontal only and the affordance is reachable two ways.
+ * ## The overflow button is not here any more
+ *
+ * It was, and it took 32dp of a ~100dp cell away from the title — a compromise the old comment
+ * spent a paragraph defending, on a card whose scarcest resource is width for a name. It is a
+ * badge on the cover's bottom-right corner now, where the corners are furniture anyway and the
+ * duration it displaced had a free corner to move to. The footer is a plain column of text, and
+ * gets the whole cell.
  */
 @Composable
 private fun GridCardText(
@@ -1917,63 +1924,29 @@ private fun GridCardText(
      * same height or the grid stops lining up.
      */
     chip: @Composable () -> Unit,
-    onMenu: () -> Unit,
 ) {
-    // IntrinsicSize.Min so the overflow button can match the footer instead of guessing at it. A
-    // Row is as tall as its tallest child, which makes `fillMaxHeight` on one of them circular;
-    // measuring the row's intrinsic height first breaks the cycle and gives the button something
-    // to fill.
-    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                color = Parchment,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 13.sp,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            chip()
-            Text(
-                meta,
-                color = Muted,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // The full height of the footer, not a 48dp square floating at the top of it. Two lines of
-        // title and two of meta make this panel taller than the button was, so the dots sat against
-        // the title with dead strip beneath them — and the part of the footer that looked like it
-        // should open the menu did nothing.
-        //
-        // The BUTTON spans the footer; the glyph stays a glyph.
-        //
-        // Drawing the three dots across the full height was a literal reading of "stretch" and it
-        // looked like a control with its parts pulled apart — at 58dp the outer two sat a centimetre
-        // from the middle one and stopped reading as one mark. What the footer actually needed was a
-        // tap target the height of the panel and an icon in proportion to it, so this is Material's
-        // own glyph a size up, centred in the full-height target.
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .sizeIn(minWidth = 32.dp, minHeight = 48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onMenu),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.MoreVert,
-                contentDescription = stringResource(R.string.action_more),
-                tint = Faint,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            color = Parchment,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 13.sp,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        chip()
+        Text(
+            meta,
+            color = Muted,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -2177,27 +2150,32 @@ private fun SeriesGridCard(
                 )
             }
             seriesTotalMs(series)?.let {
-                DurationBadge(formatCompactDuration(it), modifier = Modifier.align(Alignment.BottomEnd))
+                DurationBadge(
+                    formatCompactDuration(it),
+                    corner = CoverCorner.BOTTOM_START,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                )
+            }
+            // Same corner as a book's, so the control a reader reaches for is in one place whatever
+            // kind of card they are looking at.
+            Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                MenuBadge { menuOpen = true }
+                SeriesMenu(series, menuOpen, actions) { menuOpen = false }
             }
         }
-        Box {
-            GridCardText(
-                title = series.name,
-                meta = seriesCardMeta(series, ctx, LocalContext.current),
-                // What most of its books shelve under, then everything else any of them carries —
-                // so a shelf can say "Krimi +3" where no single volume carries four.
-                chip = {
-                    GenreChipSlot(
-                        genres = series.books.shelfGenres(),
-                        ctx = ctx,
-                        onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
-                    )
-                },
-            ) {
-                menuOpen = true
-            }
-            SeriesMenu(series, menuOpen, actions) { menuOpen = false }
-        }
+        GridCardText(
+            title = series.name,
+            meta = seriesCardMeta(series, ctx, LocalContext.current),
+            // What most of its books shelve under, then everything else any of them carries —
+            // so a shelf can say "Krimi +3" where no single volume carries four.
+            chip = {
+                GenreChipSlot(
+                    genres = series.books.shelfGenres(),
+                    ctx = ctx,
+                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                )
+            },
+        )
     }
 }
 
