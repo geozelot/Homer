@@ -1155,26 +1155,15 @@ private fun LibraryControlBar(
                 onPickSuggestion = onPickSuggestion,
             )
         } else if (arrangeOpen) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // The way out, where the search glyph sits when the row is closed — so the control
-                // that leaves a mode is in the same place whichever mode you are in. Tapping the
-                // library or pressing back still work; this is the one that is visible.
-                ArrangeBackButton(onClick = onToggleArrange)
-                // The field takes what is left of the row. Between its neighbours it had about
-                // 190dp for three values, which fits them only by clipping the ones worth reading.
-                ArrangeField(
-                    sort = sort,
-                    shelving = shelving,
-                    series = series,
-                    onSortChange = onSortChange,
-                    onShelfChange = onShelfChange,
-                    onSeriesChange = onSeriesChange,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            ArrangeField(
+                sort = sort,
+                shelving = shelving,
+                series = series,
+                onSortChange = onSortChange,
+                onShelfChange = onShelfChange,
+                onSeriesChange = onSeriesChange,
+                onCollapse = onToggleArrange,
+            )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1269,26 +1258,6 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Leaves the arrange mode, from where the search glyph sits when the row is closed. */
-@Composable
-private fun ArrangeBackButton(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .sizeIn(minHeight = ControlTapHeight, minWidth = 40.dp)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = stringResource(R.string.action_back),
-            // Amber, because it belongs to the field beside it rather than to the row underneath:
-            // it is lit for as long as the mode is.
-            tint = Amber,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
 /**
  * The three settings, inside a field of their own.
  *
@@ -1349,6 +1318,7 @@ private fun ArrangeField(
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
+    onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
@@ -1368,6 +1338,21 @@ private fun ArrangeField(
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Inside the outline, in the search field's leading slot and at its width — so the control
+        // that leaves a mode is in the same place, and looks the same, in both of them.
+        Box(
+            modifier = Modifier
+                .size(width = LeadingActionWidth, height = ControlPillHeight)
+                .clickable(onClick = onCollapse),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.action_back),
+                tint = Muted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
         DropdownChip(
             label = stringResource(shelving.label),
             options = LibraryShelving.entries.toList(),
@@ -1583,10 +1568,15 @@ private fun InlineSearchField(
         // it, but a 16dp clickable is not a control anybody can hit; the row is 48dp and only the
         // pill is short, so each target takes the row's full height with its glyph centred in it.
         // Exactly the split DropdownChip makes: chip-height paint, full-height touch.
+        //
+        // ENCLOSED, they are the pill's own height instead — because these targets are children of
+        // the Box, so a 48dp one stretches it to 48 and centres the input line in the middle of
+        // that. Which is how the search field's text came to sit 10dp below the arrange field's,
+        // and below the icon it replaced. Inside the enclosure the slop is the enclosure's inset.
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(width = LeadingActionWidth, height = 48.dp)
+                .size(width = LeadingActionWidth, height = if (enclosed) ControlPillHeight else ControlTapHeight)
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
@@ -1603,7 +1593,7 @@ private fun InlineSearchField(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .size(width = TrailingActionWidth, height = 48.dp)
+                    .size(width = TrailingActionWidth, height = if (enclosed) ControlPillHeight else ControlTapHeight)
                     .clickable { onQueryChange("") },
                 contentAlignment = Alignment.Center,
             ) {

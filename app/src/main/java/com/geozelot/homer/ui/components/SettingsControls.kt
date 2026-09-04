@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -315,11 +316,18 @@ fun <T> DropdownChip(
         // beside.
         Box(
             modifier = Modifier
-                .sizeIn(minHeight = if (bordered) 48.dp else 0.dp)
-                // Borderless, the chip is one share of a field and the whole share should open it:
-                // a tap target the width of the words leaves dead space between three controls that
-                // look like they divide the field between them.
-                .then(if (bordered) Modifier else Modifier.fillMaxWidth())
+                // Borderless, the chip is one share of a field: it fills that share in both axes so
+                // its text sits on the field's own centre line rather than wherever its content
+                // happened to land, and so the whole share opens it — a target the width of the
+                // words leaves dead space between three controls that look like they divide the
+                // field between them.
+                .then(
+                    if (bordered) {
+                        Modifier.sizeIn(minHeight = 48.dp)
+                    } else {
+                        Modifier.fillMaxWidth().fillMaxHeight()
+                    },
+                )
                 .clickable { open = true },
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -395,7 +403,17 @@ fun <T> DropdownChip(
                         Modifier.weight(1f)
                     },
                 )
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
+                // No chevron where a category is named. Three of them across one field is three
+                // marks saying the same thing the field already says by being a field — and each
+                // one costs 16dp of the value beside it, which is the half that gives way.
+                if (category == null) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Faint,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
