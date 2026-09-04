@@ -218,6 +218,10 @@ fun HomeScreen(
     // lost while the query stayed in the ViewModel, leaving the library filtered with no search
     // field to clear it.
     var searching by rememberSaveable { mutableStateOf(false) }
+    // The arrange settings, which take the control row the same way search does — so they are the
+    // same kind of state, held in the same place, and dismissed by the same gesture. Never both:
+    // each opening closes the other, because one row cannot be two things.
+    var arranging by rememberSaveable { mutableStateOf(false) }
     // Open series shelves, anchored on the book ids they contain (see `isOpen` in libraryContent)
     // and saved across configuration changes — a rotation used to collapse every shelf the user
     // had opened.
@@ -235,7 +239,13 @@ fun HomeScreen(
     //
     // Committed pills survive it too, as they always did: they have their own row and their own
     // Clear, and undoing them on a gesture meaning "put the keyboard away" would undo visible work.
-    BackHandler(enabled = searching) {
+    BackHandler(enabled = searching || arranging) {
+        // Arrange first: it has nothing to commit, and if both were somehow open the panel on top
+        // is the one a back press is about.
+        if (arranging) {
+            arranging = false
+            return@BackHandler
+        }
         viewModel.commitSearchText()
         viewModel.setSearchQuery("")
         searching = false
@@ -278,11 +288,12 @@ fun HomeScreen(
     // AFTER the gesture is drained. Keyed on `searching`, clearing it mid-gesture tore this block
     // down and the remaining move events reached the list anyway.
     val searchingNow by rememberUpdatedState(searching)
+    val arrangingNow by rememberUpdatedState(arranging)
     val dismissSearch = Modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            // Not searching: leave the event entirely alone, so every ordinary tap behaves.
-            if (!searchingNow) return@awaitEachGesture
+            // Neither panel open: leave the event entirely alone, so every ordinary tap behaves.
+            if (!searchingNow && !arrangingNow) return@awaitEachGesture
             down.consume()
             var pressed = true
             while (pressed) {
@@ -292,6 +303,10 @@ fun HomeScreen(
             }
             // Same rule as the back gesture: a tap on the library ends the typing, it does not
             // discard it. See the BackHandler above.
+            if (arrangingNow) {
+                arranging = false
+                return@awaitEachGesture
+            }
             viewModel.commitSearchText()
             viewModel.setSearchQuery("")
             searching = false
@@ -441,8 +456,16 @@ fun HomeScreen(
                     total = filterCount.second,
                     query = searchQuery,
                     searchOpen = searching,
+                    arrangeOpen = arranging,
                     onQueryChange = viewModel::setSearchQuery,
-                    onOpenSearch = { searching = true },
+                    onOpenSearch = {
+                        arranging = false
+                        searching = true
+                    },
+                    onToggleArrange = {
+                        searching = false
+                        arranging = !arranging
+                    },
                     onCloseSearch = {
                         viewModel.commitSearchText()
                         viewModel.setSearchQuery("")
@@ -1066,8 +1089,11 @@ private fun LibraryControlBar(
     total: Int,
     query: String,
     searchOpen: Boolean,
+    /** Whether the row is currently showing the three settings instead of the chips. */
+    arrangeOpen: Boolean,
     onQueryChange: (String) -> Unit,
     onOpenSearch: () -> Unit,
+    onToggleArrange: () -> Unit,
     onCloseSearch: () -> Unit,
     onRemoveToken: (FilterToken) -> Unit,
     onClearFilter: () -> Unit,
@@ -1081,9 +1107,6 @@ private fun LibraryControlBar(
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Hoisted out of the row: the band it controls is drawn below that row, and a state owned by
-    // the row would go out of scope before the thing it opens.
-    var arranging by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth().padding(start = 2.dp, bottom = 6.dp)) {
         SectionLabelRow(
             // Always "Library". It titles the same region whatever is filtered, and renaming it to
@@ -1113,6 +1136,20 @@ private fun LibraryControlBar(
                 suggestions = suggestions,
                 onPickSuggestion = onPickSuggestion,
             )
+        } else if (arrangeOpen) {
+            // The settings TAKE the row, exactly as the field does. They were tried in the segment
+            // between the search glyph and the view toggle, which is about 190dp on a small phone
+            // — three chips carrying real values do not fit it, and a scrolling run of three is a
+            // worse control than a still one. The row is 330dp, which they do fit.
+            ArrangeSettings(
+                sort = sort,
+                shelving = shelving,
+                series = series,
+                onSortChange = onSortChange,
+                onShelfChange = onShelfChange,
+                onSeriesChange = onSeriesChange,
+                onCollapse = onToggleArrange,
+            )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1120,38 +1157,13 @@ private fun LibraryControlBar(
             // Drawn as a chip like its neighbours, but filled rather than outlined: it is the only
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
-            SearchChip(
-                active = tokens.isNotEmpty(),
-                onClick = {
-                    // Closed rather than merely hidden: reopening search later must not bring back
-                    // a band the reader had finished with three screens ago.
-                    arranging = false
-                    onOpenSearch()
-                },
-            )
+            SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
             // ONE control where there were three, until it is asked — see [ArrangeSettings].
-            //
-            // It expands into the row rather than under it: the space between the search glyph and
-            // the view toggle is dead when nothing is arranged, and the settings are three chips
-            // that belong beside their neighbours rather than in a panel of their own. Nothing
-            // moves down the screen to make room, which is the whole reason the dialog went.
             Box(
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                if (arranging) {
-                    ArrangeSettings(
-                        sort = sort,
-                        shelving = shelving,
-                        series = series,
-                        onSortChange = onSortChange,
-                        onShelfChange = onShelfChange,
-                        onSeriesChange = onSeriesChange,
-                        onCollapse = { arranging = false },
-                    )
-                } else {
-                    ArrangeChip(open = false, onClick = { arranging = true })
-                }
+                ArrangeChip(open = false, onClick = onToggleArrange)
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1255,12 +1267,17 @@ private fun ArrangeChip(
  * is being arranged, and these are three chips that belong beside their neighbours rather than in a
  * container of their own.
  *
- * ## What it costs, and what pays for it
+ * ## It takes the row, because it needs the row
  *
- * That segment is about 190dp on a small phone, and three chips carrying real values are wider than
- * that — "Gestapelt" is not a short word. So it scrolls, with the same edge fade the suggestion row
- * uses, and the glyph that opened it stays at the head of the run as the way back. Values are what
- * a reader is here to read; truncating them to fit would leave three chips that all say nothing.
+ * Tried first in the segment between the search glyph and the view toggle — about 190dp on a small
+ * phone, where three chips carrying real values do not fit and the run had to scroll. A scrolling
+ * row of three settings is a worse control than a still one, and truncating the values instead
+ * would leave three chips that all say nothing, when the value is the entire reason to open it.
+ * The whole row is about 330dp, which they fit.
+ *
+ * The glyph that opened it stays at the head of the run: lit, so the row is visibly a mode rather
+ * than a new set of controls, and tappable, so there is a way back that is not a guess. Tapping the
+ * library closes it too, on the same gesture that dismisses search.
  *
  * [DropdownChip]'s icon mode carries the category, so each chip reads as its value alone — that
  * mode exists because this control bar once carried four of these permanently, which is exactly
