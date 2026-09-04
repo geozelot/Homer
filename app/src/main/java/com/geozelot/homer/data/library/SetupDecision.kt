@@ -172,7 +172,13 @@ fun decideSetup(probe: SetupProbe): SetupOutcome {
         // Locked by the rules: offering a way out that Homer would then refuse to take is worse
         // than offering nothing.
         SetupSituation.JOIN_AND_MAINTAIN, SetupSituation.JOIN_AS_READER -> emptyList()
-        SetupSituation.ADOPT_OR_OWN, SetupSituation.CREATE_HERE -> listOf(SetupAction.KEEP_ON_DEVICE)
+        SetupSituation.ADOPT_OR_OWN -> listOf(SetupAction.KEEP_ON_DEVICE)
+        // Creating one here honours a rule requiring shared use; keeping it to yourself is the
+        // exact thing that rule forbids, and `LibraryStanding` forces the index back on anyway —
+        // so the choice would have been taken away again the moment it was made. A rule can reach
+        // this situation from an ancestor folder even though there is no index here yet.
+        SetupSituation.CREATE_HERE ->
+            if (requiresShared) emptyList() else listOf(SetupAction.KEEP_ON_DEVICE)
         // Nothing else is possible. "Ask the owner to set one up" is a sentence, not an action
         // Homer can take.
         SetupSituation.DEVICE_ONLY, SetupSituation.BLOCKED -> emptyList()

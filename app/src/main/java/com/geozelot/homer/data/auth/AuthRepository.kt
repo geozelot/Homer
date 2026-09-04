@@ -62,6 +62,19 @@ class AuthRepository @Inject constructor(
         val link = ShareLink.parse(rawUrl) ?: return ShareResolver.Result.NotFound
         val result = shareResolver.resolve(link, password)
         if (result is ShareResolver.Result.Ok) {
+            // Where progress was going, before the library slot is overwritten.
+            //
+            // `syncAccount` is DERIVED from the library credentials while the library is an
+            // account, so replacing them with a share silently emptied it: somebody switching
+            // their books to a shared link stopped syncing their place in every book, with nothing
+            // said and nothing on screen about it. Where the BOOKS come from and where the
+            // PROGRESS goes are two different questions, and only one of them was being answered.
+            //
+            // Carried rather than assumed permanent: the flow still asks, and answering "this
+            // device only" unlinks it.
+            credentialStore.credentials.value
+                ?.takeIf { it.kind == WebDavKind.ACCOUNT }
+                ?.let { credentialStore.setSyncAccount(it) }
             librarySettings.setLibraryRoot("") // the share root IS the library
             librarySettings.setLibraryWritable(result.writable)
             librarySettings.setSharedCatalogEnabled(true) // consume a prebuilt catalog if present

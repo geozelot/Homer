@@ -247,18 +247,39 @@ class SetupDecisionTest {
     }
 
     @Test
-    fun `nobody is ever offered a private crawl of a library whose owner forbade it`() {
-        // The one rule the whole feature exists for. Every path to KEEP_ON_DEVICE — primary or
-        // alternative — has to be checked, not just the recommendation.
+    fun `keeping it to yourself is never offered where the rules require sharing`() {
+        // The one rule the whole feature exists for, and every path to KEEP_ON_DEVICE has to be
+        // checked — the alternative as well as the recommendation.
+        //
+        // This used to allow it wherever the device could write, on the reasoning that publishing
+        // the result is not a private crawl. True of what such a device *would* do if it created
+        // the library, and not true of the option being offered, which is explicitly not to. And
+        // `LibraryStanding` forces the index back on in that case regardless, so the choice was
+        // taken away again the moment it was made — a control that does nothing.
         forEveryCombination { outcome, probe ->
-            val offersCrawl = outcome.primary == SetupAction.KEEP_ON_DEVICE ||
-                SetupAction.KEEP_ON_DEVICE in outcome.alternatives
-            if (offersCrawl && probe.policy.sharedIndexRequired && !probe.isOwner) {
-                // Only where this device could publish the result — then it is not a private crawl,
-                // it is maintaining the library the owner asked for.
-                assertTrue(outcome.toString(), probe.writable)
-            }
+            val boundByRules = probe.policy.sharedIndexRequired &&
+                !(probe.kind == WebDavKind.ACCOUNT && probe.isOwner)
+            if (!boundByRules) return@forEveryCombination
+            assertFalse(outcome.toString(), outcome.primary == SetupAction.KEEP_ON_DEVICE)
+            assertFalse(outcome.toString(), SetupAction.KEEP_ON_DEVICE in outcome.alternatives)
         }
+    }
+
+    @Test
+    fun `a rule inherited from a parent folder reaches a folder with no index of its own`() {
+        // The path that exposed it: nothing here to adopt, this device can write, and the rule
+        // comes from a folder further up. Creating the library is the only thing on offer.
+        val outcome = decideSetup(
+            probe(
+                hasSharedIndex = false,
+                writable = true,
+                policy = LibraryPolicy(sharedIndexRequired = true),
+                policyAtFolder = "Media",
+            ),
+        )
+        assertEquals(SetupSituation.CREATE_HERE, outcome.situation)
+        assertEquals(SetupAction.CREATE_LIBRARY, outcome.primary)
+        assertEquals(emptyList<SetupAction>(), outcome.alternatives)
     }
 
     @Test

@@ -17,6 +17,7 @@ import com.geozelot.homer.data.library.decideSetup
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,8 +133,14 @@ data class SetupUiState(
      * Read by the back handler so that on the first screen the press falls through to the system —
      * which on a first run means leaving the app, and from settings means popping the destination.
      * Swallowing it there left the app with no way out but the home button.
+     *
+     * [SetupStep.WHERE] is checked as well as the entry step, and not only for tidiness: a flow
+     * entered at the findings can still walk *back* to WHERE — "Look again" on an unreachable
+     * folder does exactly that for a share link — and there the two tests disagree. `step !=
+     * entryStep` would enable the handler while `back()` has nowhere to go, so the gesture was
+     * swallowed and did nothing at all.
      */
-    val canGoBack: Boolean get() = step != entryStep
+    val canGoBack: Boolean get() = step != entryStep && step != SetupStep.WHERE
 }
 
 /**
@@ -164,6 +171,9 @@ class SetupViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
+
+    /** The probe in flight, so a second folder cancels the first rather than racing it. */
+    private var probeJob: Job? = null
 
     init {
         // Signing in is a step INSIDE this flow, so the credentials arriving is a transition rather
@@ -198,6 +208,12 @@ class SetupViewModel @Inject constructor(
      * the user in setup, and abandoning a re-run would strand them there.
      */
     fun beginFirstRun() {
+        // Started over, not resumed. On the first run this ViewModel is scoped to the activity
+        // rather than to a destination, so it outlives the flow: signing out re-showed setup with
+        // the *previous* run's state still in it — `done` true, so the first composition
+        // immediately reported itself finished, on the progress screen of a library that had just
+        // been forgotten.
+        if (_state.value != SetupUiState()) _state.value = SetupUiState()
         viewModelScope.launch { librarySettings.setSetupState(SetupState.IN_PROGRESS) }
     }
 
@@ -211,10 +227,16 @@ class SetupViewModel @Inject constructor(
         if (_state.value.entryStep != SetupStep.WHERE || _state.value.step != SetupStep.WHERE) return
         when (entry) {
             SetupEntry.BOOKS -> Unit
-            SetupEntry.INDEX -> viewModelScope.launch {
-                val root = librarySettings.libraryRoot.first()
-                _state.update { it.copy(entryStep = SetupStep.FINDINGS, folder = root) }
-                look(root)
+            SetupEntry.INDEX -> {
+                // Claimed synchronously, before the suspend below: the guard above is what stops a
+                // second call re-entering, and it cannot do that while the only thing that would
+                // trip it is still waiting on a DataStore read.
+                _state.update { it.copy(entryStep = SetupStep.FINDINGS, step = SetupStep.FINDINGS, probing = true) }
+                viewModelScope.launch {
+                    val root = librarySettings.libraryRoot.first()
+                    _state.update { it.copy(folder = root) }
+                    look(root)
+                }
             }
             SetupEntry.PROGRESS -> _state.update {
                 it.copy(entryStep = SetupStep.PROGRESS, step = SetupStep.PROGRESS)
@@ -267,7 +289,11 @@ class SetupViewModel @Inject constructor(
 
     /** Probes [folder] and moves to the findings. */
     fun look(folder: String = _state.value.folder) {
-        viewModelScope.launch {
+        // One probe at a time. Tapping a second discovered folder while the first is still being
+        // read left two probes racing to write the findings, and the one that answered last won —
+        // which on a slow link is not the one the user asked for.
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch {
             _state.update {
                 it.copy(step = SetupStep.FINDINGS, probing = true, unreachable = false, outcome = null)
             }
