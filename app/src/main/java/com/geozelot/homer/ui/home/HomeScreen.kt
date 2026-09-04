@@ -1129,29 +1129,31 @@ private fun LibraryControlBar(
                     onOpenSearch()
                 },
             )
-            // ONE control where there were three — see [ArrangeBand] for what it opens and why the
-            // three cannot simply be one menu.
+            // ONE control where there were three, until it is asked — see [ArrangeSettings].
+            //
+            // It expands into the row rather than under it: the space between the search glyph and
+            // the view toggle is dead when nothing is arranged, and the settings are three chips
+            // that belong beside their neighbours rather than in a panel of their own. Nothing
+            // moves down the screen to make room, which is the whole reason the dialog went.
             Box(
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                ArrangeChip(open = arranging, onClick = { arranging = !arranging })
+                if (arranging) {
+                    ArrangeSettings(
+                        sort = sort,
+                        shelving = shelving,
+                        series = series,
+                        onSortChange = onSortChange,
+                        onShelfChange = onShelfChange,
+                        onSeriesChange = onSeriesChange,
+                        onCollapse = { arranging = false },
+                    )
+                } else {
+                    ArrangeChip(open = false, onClick = { arranging = true })
+                }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
-        }
-        // Under the controls, where the search field's own offers go — the two are the same move
-        // and are drawn the same way, so opening one teaches the other. Never both at once: search
-        // takes the whole row, and a band belonging to a chip that is no longer on screen would be
-        // a panel with nothing responsible for it.
-        if (arranging && !searchOpen) {
-            ArrangeBand(
-                sort = sort,
-                shelving = shelving,
-                series = series,
-                onSortChange = onSortChange,
-                onShelfChange = onShelfChange,
-                onSeriesChange = onSeriesChange,
-            )
         }
         // BELOW the controls, not above them. Above, they pushed the chips away from the header
         // every time one was added; below, the bar keeps its place and the pills grow into the gap
@@ -1194,10 +1196,15 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
 
 /** The one control that opens [ArrangeBand]. Shows no value: the band is where values are read. */
 @Composable
-private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
+private fun ArrangeChip(
+    open: Boolean,
+    onClick: () -> Unit,
+    /** Glyph only. Open, it heads a run of settings that need every dp of the segment. */
+    compact: Boolean = false,
+) {
     Box(
         modifier = Modifier
-            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .sizeIn(minHeight = 48.dp, minWidth = if (compact) 36.dp else 44.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -1219,65 +1226,70 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
                 tint = if (open) Amber else Muted,
                 modifier = Modifier.size(14.dp),
             )
-            Text(
-                stringResource(R.string.home_chip_arrange),
-                color = if (open) Amber else Muted,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
-                maxLines = 1,
-            )
+            if (!compact) {
+                Text(
+                    stringResource(R.string.home_chip_arrange),
+                    color = if (open) Amber else Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
 
 /**
- * How the library is arranged, as a band under the controls rather than a card over them.
+ * The three settings, unfurled along the control row itself.
  *
- * ## Why it stopped being a dialog
+ * ## Why it is not a panel
  *
  * The three axes are genuinely orthogonal — sections, depth, order — so they cannot be merged into
  * one menu without multiplying: four shelvings times three depths is twelve entries to pick one
  * thing from. They were folded into a dialog to stop three dropdowns standing open across a third
  * of the bar at all times, and that fixed the crowding at the cost of putting a modal in front of
  * the library to change how the library looks — you could not see what you were arranging while you
- * arranged it.
+ * arranged it. A band under the row fixed that and still moved the shelf down to appear.
  *
- * A band is the middle: nothing is on screen until it is asked for, and once it is, it sits in the
- * page with the shelf still visible under it. It is the same move the search field makes one row
- * above, which is also why it is drawn the same way — a reader who has opened one has learned the
- * other.
+ * This moves nothing. The space between the search glyph and the view toggle is dead while nothing
+ * is being arranged, and these are three chips that belong beside their neighbours rather than in a
+ * container of their own.
  *
- * ## Icons, not category words
+ * ## What it costs, and what pays for it
  *
- * Three chips reading "Shelve: Author · Depth: Stacked · Sort: Recent" do not fit a phone. The
- * category is the constant and the value is what changes, so [DropdownChip]'s icon mode carries the
- * category and the chip reads as the value alone. That mode exists because the control bar used to
- * carry four of these side by side, which is exactly what this is again — only asked for rather
- * than always there.
+ * That segment is about 190dp on a small phone, and three chips carrying real values are wider than
+ * that — "Gestapelt" is not a short word. So it scrolls, with the same edge fade the suggestion row
+ * uses, and the glyph that opened it stays at the head of the run as the way back. Values are what
+ * a reader is here to read; truncating them to fit would leave three chips that all say nothing.
+ *
+ * [DropdownChip]'s icon mode carries the category, so each chip reads as its value alone — that
+ * mode exists because this control bar once carried four of these permanently, which is exactly
+ * what this is again, only asked for rather than always there.
  */
 @Composable
-private fun ArrangeBand(
+private fun ArrangeSettings(
     sort: LibrarySort,
     shelving: LibraryShelving,
     series: LibraryDepth,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
+    onCollapse: () -> Unit,
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
+    val scroll = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Surface1)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp),
+            .scrollEdgeFade(scroll)
+            .horizontalScroll(scroll),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // The chip that opened this, still here and lit, because it is also the way back — and
+        // because a run of settings that appeared from nothing should visibly belong to something.
+        ArrangeChip(open = true, onClick = onCollapse, compact = true)
         DropdownChip(
             label = stringResource(shelving.label),
             options = LibraryShelving.entries.toList(),

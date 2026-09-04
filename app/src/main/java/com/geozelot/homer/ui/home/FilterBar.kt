@@ -225,7 +225,7 @@ private fun FilterPill(token: FilterToken, onRemove: () -> Unit) {
  * behind the row rather than to one assumed background colour, which matters here because the
  * control bar sits on a vertical wash rather than a flat fill.
  */
-private fun Modifier.scrollEdgeFade(state: ScrollState, vertical: Boolean = false): Modifier =
+internal fun Modifier.scrollEdgeFade(state: ScrollState, vertical: Boolean = false): Modifier =
     graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
         drawContent()
         // Nothing to say when nothing can move — and saying it would mean two gradient stops sharing
