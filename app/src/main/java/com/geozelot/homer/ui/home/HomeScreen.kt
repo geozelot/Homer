@@ -2278,7 +2278,7 @@ private val SeriesEnclosurePad = 12.dp
  * The same inset in list view. Matches [SeriesShelfRow]'s own padding, so expanding a shelf slips
  * a border around it without nudging its contents sideways.
  */
-private val SeriesListEnclosurePad = 10.dp
+private val SeriesListEnclosurePad = 8.dp
 
 /**
  * Half the grid's `verticalArrangement` spacing. Each slice paints this far into the gaps above
@@ -2582,6 +2582,16 @@ private fun BookListRow(
                     modifier = Modifier.align(Alignment.TopStart),
                     size = BadgeSize.SMALL,
                 )
+                // Back on the cover, because the meta line that used to carry the word is gone.
+                // The grid card has always said it here; the list row said it in text only because
+                // it had a line spare, and it does not any more.
+                if (book.isDownloaded) {
+                    OfflineBadge(
+                        CoverCorner.TOP_END,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                        size = BadgeSize.SMALL,
+                    )
+                }
             }
             // Same bar, same place, whatever view a book appears in.
             if (book.hasVisibleProgress()) {
@@ -2594,64 +2604,56 @@ private fun BookListRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp),
+                .padding(start = 10.dp),
         ) {
-            // Two reserved lines, because at one line books whose names share a long prefix were
-            // indistinguishable — but a fixed-height box rather than minLines, so a title that
-            // needs only one line sits in the MIDDLE of the reserved space instead of clinging to
-            // its top edge with a gap beneath. The meta line below is unaffected and stays put, so
-            // rows are still all the same height.
-            Box(
-                // heightIn, not height: a Box does not clip, so a hard height would let two lines
-                // of a script whose fallback metrics run taller than the 16sp line box spill out
-                // and draw over the meta line below. As a minimum it is identical for every title
-                // that fits — which is what keeps rows a uniform height — and simply pushes the
-                // row down for one that doesn't.
-                modifier = Modifier.heightIn(
-                    min = with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
-                ),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    book.title,
-                    color = Parchment,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = ListRowTitleLineHeight,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
-                )
-            }
-            // The same slot the grid card reserves, in the same place relative to the title, so a
-            // book reads the same way in both views and switching between them moves nothing about.
+            // One line, ellipsised.
+            //
+            // It was two reserved lines, on the reasoning that books whose names share a long
+            // prefix are indistinguishable at one. That was true when the row had a meta line
+            // underneath carrying the author — the block was going to be two lines tall regardless,
+            // so the title might as well have both. With the row down to a title and a chip, two
+            // reserved lines is a blank line on most rows, and it made every row taller than the
+            // cover beside it for the sake of the few titles that use it.
+            Text(
+                book.title,
+                color = Parchment,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = ListRowTitleLineHeight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = MetaChipSlot.TextInset),
+            )
+            // The chip, and nothing else. Everything the meta line used to carry is either on the
+            // cover (the length, offline, the volume number), in the chip (author or genre), or
+            // drawn rather than written (progress). What was left was tags and a percentage, and
+            // neither is worth a second line on every row in the library.
             MetaChipSlot(
                 chip = bookChip(book, ctx),
                 ctx = ctx,
                 onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 modifier = Modifier.padding(top = 2.dp),
             )
-            Text(
-                text = bookMeta(
-                    book,
-                    ctx,
-                    LocalContext.current,
-                    withStatus = true,
-                    withOffline = true,
-                    // Off the row for now: it led the line, and it is the fact a scannable list
-                    // needs least once every row also carries a chip. It will find a better place.
-                    withDuration = false,
-                ),
-                color = Muted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
-            )
         }
         Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
+            // Not an IconButton. Its 48dp minimum was what actually set a list row's height — the
+            // 46dp cover beside it never got the chance — so every row in the library was as tall
+            // as a control nobody looks at. 40dp is still a comfortable target, the row is 46dp
+            // regardless because the cover governs now, and long-pressing anywhere on the row opens
+            // the same menu.
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(50))
+                    .clickable { menuOpen = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = stringResource(R.string.action_more),
+                    tint = Muted,
+                    modifier = Modifier.size(20.dp),
+                )
             }
             BookMenu(book, menuOpen, actions) { menuOpen = false }
         }
@@ -2741,52 +2743,37 @@ private fun SeriesShelfRow(
                     .weight(1f)
                     .padding(start = 12.dp),
             ) {
-                // The same reserved two-line block a book row uses, so a shelf standing among
-                // books is exactly as tall as they are whether its name runs to one line or two.
-                Box(
-                    modifier = Modifier.heightIn(
-                        min = with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
-                    ),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
+                Text(
+                    series.name,
+                    // The book rows' face and size, one line, ellipsised — see BookListRow.
+                    color = Parchment,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = ListRowTitleLineHeight,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
+                )
+                // Folded, a shelf is one item among books and carries what they carry: a chip and
+                // nothing else. Opened, it becomes the header of what is underneath, and says what
+                // it holds — the one place in the list a second line of text earns its height.
+                if (expanded) {
                     Text(
-                        series.name,
-                        // The book rows' face AND their size now, not a size up: a shelf reserves
-                        // the same two title lines a book does, and at 15sp against their 13 the
-                        // two could not share one reserved block without one looking mis-set.
-                        color = Parchment,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = ListRowTitleLineHeight,
-                        maxLines = 2,
+                        text = seriesMeta(series, ctx, LocalContext.current, expanded = true),
+                        color = Muted,
+                        fontSize = 11.sp,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = MetaChipSlot.TextInset),
+                        modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 2.dp),
+                    )
+                } else {
+                    MetaChipSlot(
+                        chip = shelfChip(series, ctx),
+                        ctx = ctx,
+                        onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-                // Folded, a shelf is one thing among books and says what a book says. Opened, the
-                // books themselves are on screen saying it — so the row switches to what it holds:
-                // how many, how long, how much of it is here.
-                MetaChipSlot(
-                    chip = if (expanded) null else shelfChip(series, ctx),
-                    ctx = ctx,
-                    onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                // Skipped entirely when empty rather than drawn blank — shelved by author with an
-                // unmeasured series there is nothing left for it to say, and an empty Text still
-                // takes a line's height.
-                seriesMeta(series, ctx, LocalContext.current, expanded = expanded)
-                    .takeIf { it.isNotEmpty() }
-                    ?.let {
-                        Text(
-                            text = it,
-                            color = Muted,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
-                        )
-                    }
             }
             // Only while open: folded, the shelf is one card and how its insides are arranged is not
             // yet a question the reader has asked.
@@ -2805,8 +2792,20 @@ private fun SeriesShelfRow(
                 tint = Faint,
             )
             Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Faint)
+                // The same 40dp target a book row uses, for the same reason — see BookListRow.
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(50))
+                        .clickable { menuOpen = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.action_more),
+                        tint = Muted,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
                 SeriesMenu(series, menuOpen, actions) { menuOpen = false }
             }
