@@ -33,39 +33,56 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface2
 
 /**
- * What a book or a shelf is, as one chip: the genre it sits under, and how many more it carries.
+ * The one fact under an item's title that the shelf it is standing on does not already say.
+ *
+ * ## Genre or author, never both, never the one overhead
+ *
+ * Shelved by author, the heading names the author, so the chip is the genre. Shelved by genre it is
+ * the other way round. Unshelved, the genre leads and the author stays in the meta line beneath.
+ * The rule is the same one `bookMeta` has always followed — say what the arrangement does not — and
+ * making the chip follow it too is what stops a card repeating its own heading back at the reader.
  *
  * ## Why a chip rather than more words in the meta line
  *
- * The genres used to be part of the meta string — joined with the author, the length and the tags by
- * `·`, competing for the same two ellipsised lines. A book that was Krimi *and* Thriller *and*
- * Hörspiel spent its whole meta line saying so, and on a narrow grid cell the third one was cut off
- * mid-word anyway. Here the primary is always legible, the rest are a number, and the meta line goes
- * back to being about the author.
+ * These used to be part of the meta string — joined with the length and the tags by `·`, competing
+ * for the same two ellipsised lines. A book that was Krimi *and* Thriller *and* Hörspiel spent its
+ * whole meta line saying so, and on a narrow grid cell the third one was cut off mid-word anyway.
+ * Here the primary is always legible, the rest are a number.
  *
  * ## Quiet on purpose
  *
  * Card furniture, not an accent: [Muted] on [Surface2] inside a [Line] hairline — the same tones the
  * meta text and the card's own border already use. It was amber, which is the palette's one
- * interaction colour, and a genre is a fact about the book rather than something happening to it —
- * so every cover in the grid grew a small bright pill competing with the artwork it sat under.
+ * interaction colour, and what a book IS is a fact about it rather than something happening to it.
  *
  * ## It never wraps, and the space is always there
  *
- * [GenreChipSlot] reserves [SlotHeight] whether or not there is a chip in it, so every card in the
+ * [MetaChipSlot] reserves [SlotHeight] whether or not there is a chip in it, so every card in the
  * grid is the same height and their bottoms line up — which is the property the whole footer block
- * is built around. A book with no genres leaves the space empty rather than pulling the meta line up
- * into it.
+ * is built around. An item with nothing to say leaves the space empty rather than pulling the meta
+ * line up into it.
  */
-object GenreChipSlot {
+object MetaChipSlot {
     /**
      * The reserved height of the row, chip or no chip.
      *
-     * The chip's own height. Named because four call sites reserve it, and a card whose slot is a
-     * different height from its neighbour's is the one bug this whole arrangement exists to prevent.
+     * Named because every item view reserves it, and a card whose slot is a different height from
+     * its neighbour's is the one bug this whole arrangement exists to prevent.
      */
     val SlotHeight: Dp = 15.dp
+
+    /**
+     * How far the chip's TEXT sits from the chip's left edge: the hairline plus its padding.
+     *
+     * The title above is indented by this, so the two read as one left edge and the chip's outline
+     * hangs into the margin rather than shunting the text it belongs to. Derived rather than typed
+     * twice, because the alignment breaks silently the moment either number moves.
+     */
+    val TextInset: Dp = 7.dp
 }
+
+/** Which fact the chip carries — see [MetaChipSlot] for why it is one or the other. */
+internal enum class MetaChipKind { GENRE, AUTHOR }
 
 /**
  * The genres of a shelf, in the order a chip should say them.
@@ -89,63 +106,91 @@ internal fun List<BookListItem>.shelfGenres(): List<String> {
 }
 
 /**
- * The slot under an item's title: the genre chip, or the space it would have taken.
+ * What a card's chip should say, given what the shelf overhead already says.
  *
- * @param genres every genre this item carries, primary first — see [shelfGenres] for a shelf's.
- * @param onFilter applies a genre as a library filter. What makes the expanded list worth opening:
- *   the chip stops being a label and becomes the way to see everything else like it.
+ * Null where there is nothing left worth saying: no genre and no author, or the one fact this item
+ * has is the heading it is sitting under.
+ */
+internal fun metaChipFor(
+    genres: List<String>,
+    author: String?,
+    shelving: LibraryShelving,
+): Pair<MetaChipKind, List<String>>? = when (shelving) {
+    // The heading is the author, so the chip is the genre.
+    LibraryShelving.AUTHOR -> genres.takeIf { it.isNotEmpty() }?.let { MetaChipKind.GENRE to it }
+    // …and the other way round. This used to be blank, on the reasoning that the heading said it
+    // all — but the row was reserved anyway, and an author is exactly the fact a genre shelf
+    // strips out.
+    LibraryShelving.GENRE -> author?.let { MetaChipKind.AUTHOR to listOf(it) }
+    // Nothing overhead: the genre leads and the author stays in the meta line beneath it.
+    else -> genres.takeIf { it.isNotEmpty() }?.let { MetaChipKind.GENRE to it }
+}
+
+/**
+ * The slot under an item's title: the chip, or the space it would have taken.
+ *
+ * @param onFilter commits the value as a library filter. What makes the chip worth tapping: it
+ *   stops being a label and becomes the way to see everything else like it.
  */
 @Composable
-internal fun GenreChipSlot(
-    genres: List<String>,
+internal fun MetaChipSlot(
+    chip: Pair<MetaChipKind, List<String>>?,
     ctx: RowContext,
-    onFilter: (String) -> Unit,
+    onFilter: (MetaChipKind, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.heightIn(min = GenreChipSlot.SlotHeight),
+        modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
         contentAlignment = Alignment.CenterStart,
     ) {
-        // Nothing to say, or nothing worth saying: shelved BY genre the heading overhead already
-        // names it, and repeating it on every card underneath would spend the row on the one fact
-        // the reader cannot be in any doubt about.
-        if (genres.isEmpty() || ctx.shelving == LibraryShelving.GENRE) return@Box
-        GenreChip(genres, ctx, onFilter)
+        if (chip == null) return@Box
+        MetaChip(chip.first, chip.second, ctx, onFilter)
     }
 }
 
 @Composable
-private fun GenreChip(genres: List<String>, ctx: RowContext, onFilter: (String) -> Unit) {
+private fun MetaChip(
+    kind: MetaChipKind,
+    values: List<String>,
+    ctx: RowContext,
+    onFilter: (MetaChipKind, String) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
+    val label = { value: String ->
+        if (kind == MetaChipKind.GENRE) BookGenre.display(value, ctx.locale) else value
+    }
     Box {
         Row(
             modifier = Modifier
-                .height(GenreChipSlot.SlotHeight)
+                .height(MetaChipSlot.SlotHeight)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Surface2)
                 .border(1.dp, Line, RoundedCornerShape(999.dp))
                 // Its own click, so it does not open the book underneath it. The card still opens
-                // everywhere else, and long-pressing the card still reaches the menu.
-                .clickable(enabled = genres.size > 1) { open = true }
+                // everywhere else, and long-pressing the card still reaches the menu. One value is
+                // committed straight to the filter; several open the list first.
+                .clickable {
+                    if (values.size > 1) open = true else onFilter(kind, values.first())
+                }
                 .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                BookGenre.display(genres.first(), ctx.locale),
+                label(values.first()),
                 color = Muted,
                 fontSize = 9.5.sp,
                 lineHeight = 9.5.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                // weight(1f, fill = false) so a long genre gives way before the count does: on a
+                // weight(1f, fill = false) so a long value gives way before the count does: on a
                 // ~100dp cell "Kurzgeschichten +2" does not fit, and the half worth keeping is the
                 // number — a truncated word still reads, a missing "+2" is a lie.
                 modifier = Modifier.weight(1f, fill = false),
             )
-            if (genres.size > 1) {
+            if (values.size > 1) {
                 Text(
-                    "+${genres.size - 1}",
+                    "+${values.size - 1}",
                     color = Faint,
                     fontSize = 9.5.sp,
                     lineHeight = 9.5.sp,
@@ -158,18 +203,18 @@ private fun GenreChip(genres: List<String>, ctx: RowContext, onFilter: (String) 
         // arrangement rules out — and in a grid whose cards are a fixed height it would push every
         // neighbour down to show one card's second genre.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for (genre in genres) {
+            for (value in values) {
                 DropdownMenuItem(
                     text = {
                         Text(
-                            BookGenre.display(genre, ctx.locale),
-                            color = if (genre == genres.first()) Parchment else Muted,
+                            label(value),
+                            color = if (value == values.first()) Parchment else Muted,
                             fontSize = 13.sp,
                         )
                     },
                     onClick = {
                         open = false
-                        onFilter(genre)
+                        onFilter(kind, value)
                     },
                 )
             }

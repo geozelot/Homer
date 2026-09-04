@@ -12,6 +12,8 @@ val Surface0 = Color(0xFF1A1511)    // pinned chrome — a step off the ground, 
 val Surface1 = Color(0xFF211B16)    // cards, bars
 val Surface2 = Color(0xFF2C241D)    // raised surfaces, menus, track backgrounds
 val Line = Color(0xFF3A2F26)        // hairline borders / dividers
+val LineShelf = Color(0xFF4C3E31)   // a shelf's border — one step up from Line, so a stack of books
+                                    // is distinguishable from a book without being a second accent
 
 val Parchment = Color(0xFFEFE6D6)   // primary text
 val Muted = Color(0xFFA2917B)       // secondary text

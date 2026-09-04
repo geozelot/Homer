@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -295,27 +296,32 @@ internal fun VolumeIndexBadge(
 }
 
 /**
- * The overflow menu, as cover furniture.
+ * The overflow menu on a cover — the glyph alone, with no area cut behind it.
  *
- * It used to sit in the footer beside the title, taking 32dp of a ~100dp cell away from the one
- * thing the cell is short of — room for a name. On the cover it costs nothing the artwork was using:
- * the bottom-right corner is furniture either way, and the duration it displaces moves to the free
- * corner opposite.
+ * Everything else in a corner is something to READ, and the cut scrim exists to make text legible
+ * over artwork. This is something to HIT, and giving it the same treatment made a control look like
+ * one more fact about the book — a third label in a row of labels, in the corner a reader is
+ * supposed to reach for rather than scan.
  *
- * The glyph is oversized against its badge on purpose. Everything else in a corner is something to
- * READ, sized to be legible; this is something to HIT, and at [BadgeSize.MEDIUM]'s own 15dp the
- * target came out under 24dp. Long-pressing the card still opens the same menu, so the corner is the
- * shortcut rather than the only way in.
+ * So it keeps the corner and loses the furniture: [Parchment] at the interface's brightest text
+ * tone, a size up from the badges beside it, with the tap target padded out well past the glyph.
+ * Long-pressing the card still opens the same menu, so this is the shortcut rather than the only way
+ * in.
  */
 @Composable
-internal fun MenuBadge(
-    corner: CoverCorner = CoverCorner.BOTTOM_END,
-    modifier: Modifier = Modifier,
-    size: BadgeSize = BadgeSize.MEDIUM,
-    onClick: () -> Unit,
-) {
-    CoverBadge(corner, modifier.clickable(onClick = onClick), size) {
-        BadgeIcon(Icons.Filled.MoreVert, size, override = size.glyph + 4.dp)
+internal fun CoverMenuButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+    ) {
+        Icon(
+            Icons.Filled.MoreVert,
+            contentDescription = null,
+            tint = Parchment,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

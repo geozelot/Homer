@@ -155,6 +155,7 @@ import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Sage
@@ -1911,7 +1912,7 @@ private fun BookGridCard(
             // back is 32dp of width for the title, which is the thing a grid cell never has enough
             // of.
             Box(modifier = Modifier.align(Alignment.BottomEnd)) {
-                MenuBadge { menuOpen = true }
+                CoverMenuButton { menuOpen = true }
                 BookMenu(book, menuOpen, actions) { menuOpen = false }
             }
         }
@@ -1927,10 +1928,10 @@ private fun BookGridCard(
             title = book.title,
             meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
             chip = {
-                GenreChipSlot(
-                    genres = book.genres,
+                MetaChipSlot(
+                    chip = bookChip(book, ctx),
                     ctx = ctx,
-                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 )
             },
         )
@@ -1964,6 +1965,9 @@ private fun GridCardText(
     chip: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Indented to where the chip's TEXT starts, not to where its outline does. The pill's
+        // hairline hangs into the margin instead of shunting the words it belongs to sideways, so
+        // the title, the chip's label and the meta line share one left edge.
         Text(
             title,
             color = Parchment,
@@ -1973,7 +1977,7 @@ private fun GridCardText(
             minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 5.dp),
         )
         chip()
         Text(
@@ -1981,12 +1985,35 @@ private fun GridCardText(
             color = Muted,
             fontSize = 10.sp,
             lineHeight = 13.sp,
-            minLines = 2,
-            maxLines = 2,
+            minLines = 1,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
         )
     }
 }
+
+
+/**
+ * The chip a book card shows, and the token tapping it commits.
+ *
+ * Factored out because four item views ask the same two questions and answering them at each call
+ * site is how the grid and the list end up disagreeing about what a card says.
+ */
+@Composable
+private fun bookChip(book: BookListItem, ctx: RowContext) =
+    metaChipFor(book.genres, book.author, ctx.shelving)
+
+/** The same, for a shelf: what most of its books agree on. */
+@Composable
+private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
+    metaChipFor(series.books.shelfGenres(), series.author, ctx.shelving)
+
+/** A chip's value as a filter token. */
+private fun chipToken(kind: MetaChipKind, value: String): FilterToken = FilterToken(
+    if (kind == MetaChipKind.GENRE) FilterFacet.GENRE else FilterFacet.AUTHOR,
+    value,
+)
 
 /** What the arrangement already tells the reader, so a row can say something else instead. */
 @Immutable
@@ -2053,7 +2080,10 @@ private fun bookMeta(
     // Then whether this device HAS it, which is the other half of "can I listen to this now" and so
     // belongs beside the length rather than after the tags. Same slot in seriesMeta — see there.
     if (withOffline && book.isDownloaded) add(context.getString(R.string.details_offline))
-    if (ctx.shelving != LibraryShelving.AUTHOR) {
+    // Only where the chip is not already carrying it. Shelved by genre the chip IS the author;
+    // shelved by author the heading is. What is left is the unshelved case, where the chip has the
+    // genre and this line has the name.
+    if (ctx.shelving != LibraryShelving.AUTHOR && ctx.shelving != LibraryShelving.GENRE) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
     // The genres are the chip's, and only the chip's. They used to be joined into this line with
@@ -2146,7 +2176,8 @@ private fun SeriesGridCard(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, Line, RoundedCornerShape(10.dp)),
+                // See SeriesShelfRow: a shelf's cell is outlined a step brighter than a book's.
+                .border(1.dp, LineShelf, RoundedCornerShape(10.dp)),
         ) {
             // The cell is square by construction, so one dimension is all of them.
             val sheets = series.stackSheets(CoverStack.GridSteps.size)
@@ -2197,7 +2228,7 @@ private fun SeriesGridCard(
             // Same corner as a book's, so the control a reader reaches for is in one place whatever
             // kind of card they are looking at.
             Box(modifier = Modifier.align(Alignment.BottomEnd)) {
-                MenuBadge { menuOpen = true }
+                CoverMenuButton { menuOpen = true }
                 SeriesMenu(series, menuOpen, actions) { menuOpen = false }
             }
         }
@@ -2207,10 +2238,10 @@ private fun SeriesGridCard(
             // What most of its books shelve under, then everything else any of them carries —
             // so a shelf can say "Krimi +3" where no single volume carries four.
             chip = {
-                GenreChipSlot(
-                    genres = series.books.shelfGenres(),
+                MetaChipSlot(
+                    chip = shelfChip(series, ctx),
                     ctx = ctx,
-                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 )
             },
         )
@@ -2449,6 +2480,14 @@ private fun seriesMeta(
     series: LibraryEntry.Series,
     ctx: RowContext,
     context: android.content.Context,
+    /**
+     * Whether the shelf is open.
+     *
+     * Open, the author is redundant — the books are on screen underneath saying it — so the line
+     * becomes purely what the shelf HOLDS: how many, how long, how much of it is on this device.
+     * Folded, the shelf is one item among books and reads like one.
+     */
+    expanded: Boolean = false,
 ): String = buildList {
     // Same running order as a book row — length, then what this device has of it, then who wrote it
     // — so a shelf and a book sitting next to each other in the same list read the same way round.
@@ -2472,9 +2511,9 @@ private fun seriesMeta(
         downloaded == series.books.size -> add(context.getString(R.string.details_offline))
         else -> add(context.getString(R.string.details_offline_some, downloaded, series.books.size))
     }
-    // Dropped when the author is the heading overhead, exactly as bookMeta drops it — see
-    // seriesCardMeta.
-    if (ctx.shelving != LibraryShelving.AUTHOR) {
+    // Dropped when the author is the heading overhead, when the chip beside it is carrying the
+    // name, and when the shelf is open and its books are saying it for themselves.
+    if (!expanded && ctx.shelving != LibraryShelving.AUTHOR && ctx.shelving != LibraryShelving.GENRE) {
         add(series.author ?: context.getString(R.string.unknown_author))
     }
 }.joinToString(" · ")
@@ -2590,23 +2629,33 @@ private fun BookListRow(
                     lineHeight = ListRowTitleLineHeight,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
                 )
             }
             // The same slot the grid card reserves, in the same place relative to the title, so a
             // book reads the same way in both views and switching between them moves nothing about.
-            GenreChipSlot(
-                genres = book.genres,
+            MetaChipSlot(
+                chip = bookChip(book, ctx),
                 ctx = ctx,
-                onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 modifier = Modifier.padding(top = 2.dp),
             )
             Text(
-                text = bookMeta(book, ctx, LocalContext.current, withStatus = true, withOffline = true),
+                text = bookMeta(
+                    book,
+                    ctx,
+                    LocalContext.current,
+                    withStatus = true,
+                    withOffline = true,
+                    // Off the row for now: it led the line, and it is the fact a scannable list
+                    // needs least once every row also carries a chip. It will find a better place.
+                    withDuration = false,
+                ),
                 color = Muted,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 1.dp),
+                modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
             )
         }
         Box {
@@ -2652,9 +2701,12 @@ private fun SeriesShelfRow(
                             ),
                         )
                 } else {
+                    // A shelf's own border tone — one step up from a book's, so a stack is
+                    // distinguishable from a single book at a glance without becoming a second
+                    // accent colour on a screen that already has one.
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
-                        .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
+                        .border(1.dp, LineShelf, RoundedCornerShape(SeriesEnclosureRadius))
                         .background(Surface1)
                 },
             )
@@ -2698,29 +2750,52 @@ private fun SeriesShelfRow(
                     .weight(1f)
                     .padding(start = 12.dp),
             ) {
-                Text(
-                    series.name,
-                    // The book rows' own face, not the serif: a shelf sits among those rows and
-                    // reads as one of them, a size up. The serif at 18sp made it a heading.
-                    color = Parchment,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                GenreChipSlot(
-                    genres = series.books.shelfGenres(),
+                // The same reserved two-line block a book row uses, so a shelf standing among
+                // books is exactly as tall as they are whether its name runs to one line or two.
+                Box(
+                    modifier = Modifier.heightIn(
+                        min = with(LocalDensity.current) { (ListRowTitleLineHeight * 2).toDp() },
+                    ),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        series.name,
+                        // The book rows' face AND their size now, not a size up: a shelf reserves
+                        // the same two title lines a book does, and at 15sp against their 13 the
+                        // two could not share one reserved block without one looking mis-set.
+                        color = Parchment,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = ListRowTitleLineHeight,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = MetaChipSlot.TextInset),
+                    )
+                }
+                // Folded, a shelf is one thing among books and says what a book says. Opened, the
+                // books themselves are on screen saying it — so the row switches to what it holds:
+                // how many, how long, how much of it is here.
+                MetaChipSlot(
+                    chip = if (expanded) null else shelfChip(series, ctx),
                     ctx = ctx,
-                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                     modifier = Modifier.padding(top = 2.dp),
                 )
                 // Skipped entirely when empty rather than drawn blank — shelved by author with an
                 // unmeasured series there is nothing left for it to say, and an empty Text still
                 // takes a line's height.
-                seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
-                    Text(text = it, color = Muted, fontSize = 11.5.sp)
-                }
+                seriesMeta(series, ctx, LocalContext.current, expanded = expanded)
+                    .takeIf { it.isNotEmpty() }
+                    ?.let {
+                        Text(
+                            text = it,
+                            color = Muted,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
+                        )
+                    }
             }
             // Only while open: folded, the shelf is one card and how its insides are arranged is not
             // yet a question the reader has asked.
