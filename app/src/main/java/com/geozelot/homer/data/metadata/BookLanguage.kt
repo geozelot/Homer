@@ -131,9 +131,6 @@ object BookLanguage {
             .ifBlank { code.uppercase(Locale.ROOT) }
             .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
 
-    /** The short marker a library row shows — the code itself, upper-cased. */
-    fun shortLabel(code: String): String = code.uppercase(Locale.ROOT)
-
     /**
      * Anything a tag or a name might carry, reduced to a stored two-letter code — or null.
      *

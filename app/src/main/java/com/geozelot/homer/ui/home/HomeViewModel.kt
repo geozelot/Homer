@@ -485,14 +485,6 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryDepth.SERIES)
 
     /**
-     * Every language the library actually holds, so nothing about languages is offered until there
-     * is a choice to make. On a single-language library the filter chip and the row marker are the
-     * same word on all 309 rows, which is noise rather than information.
-     */
-    val languages: StateFlow<List<String>> = bookDao.observeLanguages()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /**
      * Everything the input box is currently asking for: committed facet tokens, plus free text.
      *
      * Deliberately NOT persisted. A filter you have forgotten is a library that looks broken, and

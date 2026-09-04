@@ -108,10 +108,6 @@ interface BookDao {
     @Query("UPDATE books SET language = :language WHERE id = :bookId")
     suspend fun updateLanguage(bookId: String, language: String)
 
-    /** The languages actually present, so a filter only appears when it distinguishes something. */
-    @Query("SELECT DISTINCT language FROM books WHERE language IS NOT NULL ORDER BY language")
-    fun observeLanguages(): Flow<List<String>>
-
     @Query("UPDATE books SET chapterTier = :tier WHERE id = :bookId")
     suspend fun updateChapterTier(bookId: String, tier: Int)
 

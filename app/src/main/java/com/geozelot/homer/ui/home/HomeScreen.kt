@@ -135,7 +135,6 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.metadata.BookGenre
-import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
@@ -187,7 +186,6 @@ fun HomeScreen(
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
-    val languages by viewModel.languages.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val flatCollections by viewModel.flatCollections.collectAsStateWithLifecycle()
@@ -540,7 +538,6 @@ fun HomeScreen(
                         ctx = RowContext(
                             shelving = shelfMode,
                             series = seriesMode,
-                            mixedLanguages = languages.size > 1,
                             locale = interfaceLocale,
                         ),
                         expanded = expanded,
@@ -2207,8 +2204,6 @@ private fun chipToken(kind: MetaChipKind, value: String): FilterToken = when (ki
 internal data class RowContext(
     val shelving: LibraryShelving,
     val series: LibraryDepth,
-    /** Whether the library holds more than one language — see [bookMeta]. */
-    val mixedLanguages: Boolean = false,
     /**
      * Whether the shelf these books are sitting on is counting the COLLECTION rather than the series.
      *
@@ -2276,11 +2271,12 @@ private fun bookMeta(
     }
     // Genres are the chip's, and only the chip's. They used to be joined into this line with the
     // author and the tags, which on a narrow cell meant three ellipsised genres and no author.
-    // Only where it distinguishes something: on a single-language library this is the same two
-    // letters on every row.
-    if (ctx.mixedLanguages) {
-        book.language?.let { add(BookLanguage.shortLabel(it)) }
-    }
+    //
+    // The language used to sit here too, as a two-letter marker shown only on a library holding
+    // more than one. It was the odd one out: every other fact on the line is about the book as a
+    // thing to listen to, and a row that carries "DE" on some libraries and not on others is a fact
+    // that comes and goes by context. It is a search filter, which is where a language is actually
+    // useful — `language:de` — and it will get a place of its own when there is one worth giving it.
     if (withIndex && ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
         add(context.getString(R.string.home_meta_series_position, book.seriesIndex))
     }
