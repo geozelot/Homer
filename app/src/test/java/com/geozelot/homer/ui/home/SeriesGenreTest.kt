@@ -118,29 +118,6 @@ class SeriesGenreTest {
         assertEquals("Sci-Fi", seriesGenre(listOf(book("a", "Sci-Fi"), book("b", "Fantasy"))))
     }
 
-    // ── which language shelf ──────────────────────────────────────────────────
-
-    @Test
-    fun `a series shelves under the language its books agree on`() {
-        assertEquals(
-            "de",
-            seriesLanguage(listOf(book("a", language = "de"), book("b", language = "de"))),
-        )
-    }
-
-    @Test
-    fun `a partly tagged series shelves under the language it does have`() {
-        assertEquals("de", seriesLanguage(listOf(book("a"), book("b", language = "de"))))
-    }
-
-    @Test
-    fun `a series with no language at all has none`() {
-        // The state of a whole library before anything has read a tag, and it must stay null rather
-        // than pick a language for books nothing has said anything about.
-        assertNull(seriesLanguage(listOf(book("a"), book("b"))))
-        assertNull(seriesLanguage(emptyList()))
-    }
-
     @Test
     fun `a series with no genre at all has none`() {
         assertNull(seriesGenre(listOf(book("a", null), book("b", null))))

@@ -1021,8 +1021,6 @@ private fun LazyGridScope.libraryContent(
 @Composable
 private fun headerLabel(entry: LibraryEntry.Header): String = when {
     entry.titleRes != null -> stringResource(entry.titleRes)
-    entry.languageCode != null ->
-        BookLanguage.displayName(entry.languageCode, LocalConfiguration.current.locales[0])
     entry.genre != null -> BookGenre.display(entry.genre, LocalConfiguration.current.locales[0])
     else -> entry.title
 }
@@ -2007,6 +2005,20 @@ private fun bookChip(book: BookListItem, ctx: RowContext) =
 private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
     metaChipFor(series.books.shelfGenres(), series.author, ctx.shelving)
 
+/**
+ * The chip an OPENED shelf wears: what it is, rather than what it is about.
+ *
+ * A reader who has just opened a shelf can see its books; what the header still has to answer is
+ * whether this is a collection or one series, which the cover stack used to imply and no longer
+ * does in list view.
+ */
+@Composable
+private fun shelfKindChip(series: LibraryEntry.Series) = MetaChipKind.SHELF to listOf(
+    stringResource(
+        if (series.isCollection) R.string.filter_facet_collection else R.string.filter_facet_series,
+    ),
+)
+
 /** A chip's value as a filter token. */
 private fun chipToken(kind: MetaChipKind, value: String): FilterToken = FilterToken(
     if (kind == MetaChipKind.GENRE) FilterFacet.GENRE else FilterFacet.AUTHOR,
@@ -2088,8 +2100,8 @@ private fun bookMeta(
     // Genres are the chip's, and only the chip's. They used to be joined into this line with the
     // author and the tags, which on a narrow cell meant three ellipsised genres and no author.
     // Only where it distinguishes something: on a single-language library this is the same two
-    // letters on every row, and shelved BY language the heading above already says it.
-    if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
+    // letters on every row.
+    if (ctx.mixedLanguages) {
         book.language?.let { add(BookLanguage.shortLabel(it)) }
     }
     if (withIndex && ctx.series == LibraryDepth.FLAT && book.series != null && book.seriesIndex != null) {
@@ -2363,15 +2375,22 @@ private fun ExpandedSeriesHeader(
                     // identically whichever view it is in. The serif stays for the empty states,
                     // which are the only headings on this screen that aren't a row of something.
                     color = Parchment,
-                    fontSize = 15.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp,
+                    lineHeight = ListRowTitleLineHeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
                 )
-                seriesMeta(series, ctx, LocalContext.current).takeIf { it.isNotEmpty() }?.let {
-                    Text(it, color = Muted, fontSize = 11.5.sp)
-                }
+                // The same header the list view draws, built the same way: what this shelf is,
+                // then what it holds, on one line.
+                MetaChipSlot(
+                    chip = shelfKindChip(series),
+                    ctx = ctx,
+                    onFilter = { _, _ -> },
+                    trailing = seriesMeta(series, ctx, LocalContext.current, expanded = true),
+                    modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
+                )
             }
             if (series.hasThreads()) {
                 // Held off the chevron: the two were touching, so a chip that is a control and an
@@ -2495,10 +2514,16 @@ private fun seriesMeta(
         val downloaded = series.books.count { it.isDownloaded }
         when {
             downloaded == 0 -> Unit
-            // "Offline" unqualified only when the WHOLE shelf is here; a partial count has to say
-            // so, or a series with one downloaded volume claims to be listenable on a train.
+            // "Offline" unqualified only when the WHOLE shelf is here; a partial count says how
+            // many, or a series with one downloaded volume claims to be listenable on a train.
             downloaded == series.books.size -> add(context.getString(R.string.details_offline))
-            else -> add(context.getString(R.string.details_offline_some, downloaded, series.books.size))
+            else -> add(
+                context.resources.getQuantityString(
+                    R.plurals.home_meta_offline_count,
+                    downloaded,
+                    downloaded,
+                ),
+            )
         }
         return@buildList
     }
@@ -2754,26 +2779,20 @@ private fun SeriesShelfRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = MetaChipSlot.TextInset),
                 )
-                // Folded, a shelf is one item among books and carries what they carry: a chip and
-                // nothing else. Opened, it becomes the header of what is underneath, and says what
-                // it holds — the one place in the list a second line of text earns its height.
-                if (expanded) {
-                    Text(
-                        text = seriesMeta(series, ctx, LocalContext.current, expanded = true),
-                        color = Muted,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 2.dp),
-                    )
-                } else {
-                    MetaChipSlot(
-                        chip = shelfChip(series, ctx),
-                        ctx = ctx,
-                        onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
-                        modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
-                    )
-                }
+                // One slot, one height, both states — which is what stops the title and the line
+                // under it stepping up and down as a shelf is opened and closed. Folded it carries
+                // what a book carries; opened, the kind of shelf this is and what it holds.
+                MetaChipSlot(
+                    chip = if (expanded) shelfKindChip(series) else shelfChip(series, ctx),
+                    ctx = ctx,
+                    onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
+                    trailing = if (expanded) {
+                        seriesMeta(series, ctx, LocalContext.current, expanded = true)
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
+                )
             }
             // Only while open: folded, the shelf is one card and how its insides are arranged is not
             // yet a question the reader has asked.

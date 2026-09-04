@@ -146,7 +146,6 @@
     <string name="shelve_item">Item</string>
     <string name="shelve_author">Author</string>
     <string name="shelve_genre">Genre</string>
-    <string name="shelve_language">Language</string>
     <string name="depth_collection">Collections</string>
     <string name="depth_series">Series</string>
     <string name="depth_flat">Flat</string>
@@ -157,7 +156,6 @@
     <!-- The two shelf headings Homer writes itself, for books that name neither. -->
     <string name="home_shelf_unknown_author">Unknown author</string>
     <string name="home_shelf_no_genre">No genre</string>
-    <string name="home_shelf_no_language">No language</string>
     <string name="home_chip_arrange">Arrange</string>
     <string name="arrange_shelve">Shelve</string>
     <string name="arrange_group">Group</string>
@@ -673,4 +671,8 @@
     <string name="setup_publish_title">Publish this device\'s library?</string>
     <string name="setup_publish_body">The %1$s this device knows become this folder\'s library, so your other devices don\'t have to read it all again. Nothing is deleted.</string>
     <string name="lib_corrections_locked">%1$s · kept on this device — this library doesn\'t accept published edits</string>
+    <plurals name="home_meta_offline_count">
+        <item quantity="one">%1$d offline</item>
+        <item quantity="other">%1$d offline</item>
+    </plurals>
 </resources>

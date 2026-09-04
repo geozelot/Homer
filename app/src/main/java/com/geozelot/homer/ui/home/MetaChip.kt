@@ -118,7 +118,21 @@ object MetaChipSlot {
 }
 
 /** Which fact the chip carries — see [MetaChipSlot] for why it is one or the other. */
-internal enum class MetaChipKind { GENRE, AUTHOR }
+internal enum class MetaChipKind {
+    GENRE,
+    AUTHOR,
+
+    /**
+     * What this shelf IS — "Collection" or "Series" — on an opened header.
+     *
+     * The one kind that is a label rather than a way somewhere: filtering by the collection you are
+     * currently standing inside would narrow the library to what is already on screen. So it is not
+     * clickable, and it is drawn the same as the others because it occupies the same slot and a
+     * header that changed shape on opening is the vertical shift this arrangement is trying to
+     * avoid.
+     */
+    SHELF,
+}
 
 /**
  * The genres of a shelf, in the order a chip should say them.
@@ -189,13 +203,33 @@ internal fun MetaChipSlot(
     ctx: RowContext,
     onFilter: (MetaChipKind, String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Facts set beside the chip on the same line, already joined.
+     *
+     * Beside it rather than under it, because a line of text below would make the block a different
+     * height from a book's — and an opened shelf changing height is exactly the jump this slot
+     * exists to prevent. The chip is the tallest thing in the row either way, so adding text costs
+     * nothing.
+     */
+    trailing: String? = null,
 ) {
-    Box(
+    Row(
         modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
-        contentAlignment = Alignment.CenterStart,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (chip == null) return@Box
-        MetaChip(chip.first, chip.second, ctx, onFilter)
+        if (chip != null) MetaChip(chip.first, chip.second, ctx, onFilter)
+        if (trailing.isNullOrBlank()) return@Row
+        Text(
+            // The separator belongs to the join, not to the caller: every one of these lines is
+            // mid-dots and building it at four call sites is how one of them ends up with a comma.
+            if (chip == null) trailing else " · $trailing",
+            color = Muted,
+            fontSize = 10.sp,
+            lineHeight = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = if (chip == null) MetaChipSlot.TextInset else 4.dp),
+        )
     }
 }
 
@@ -220,7 +254,7 @@ private fun MetaChip(
                 // Its own click, so it does not open the book underneath it. The card still opens
                 // everywhere else, and long-pressing the card still reaches the menu. One value is
                 // committed straight to the filter; several open the list first.
-                .clickable {
+                .clickable(enabled = kind != MetaChipKind.SHELF) {
                     if (values.size > 1) open = true else onFilter(kind, values.first())
                 }
                 .padding(horizontal = 6.dp),

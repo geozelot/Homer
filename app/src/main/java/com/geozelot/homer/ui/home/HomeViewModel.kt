@@ -191,7 +191,6 @@ sealed interface LibraryEntry {
          * same reason [titleRes] is. `title` keeps the code, so the header's identity (and the
          * grid's duplicate-title key) does not move when the interface language does.
          */
-        val languageCode: String? = null,
         /**
          * A genre whose translated LABEL is the heading, on exactly the same terms.
          *
@@ -257,11 +256,15 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
 enum class LibraryShelving(val key: String, @StringRes val label: Int) {
     ITEM("none", R.string.shelve_item),
     AUTHOR("author", R.string.shelve_author),
-    GENRE("genre", R.string.shelve_genre),
-    LANGUAGE("language", R.string.shelve_language);
+    GENRE("genre", R.string.shelve_genre);
 
     companion object {
-        fun from(key: String?) = values().firstOrNull { it.key == key } ?: ITEM
+        /**
+         * Tolerant of a key this build does not have, which is what carries the removal of
+         * shelving by language: an install that had it stored falls back to the unshelved list
+         * rather than to an empty screen, and never sees the option again.
+         */
+        fun from(key: String?) = entries.firstOrNull { it.key == key } ?: ITEM
     }
 }
 
@@ -1427,26 +1430,6 @@ private fun buildEntries(
                 is SortUnit.Ser -> seriesGenre(unit.series.books)
             }?.let { BookGenre.canonical(it) }
         }
-        // Shelved rather than only filtered: on a mixed library, seeing German and English as two
-        // shelves is more use than hiding one of them.
-        LibraryShelving.LANGUAGE ->
-            sectioned(
-                units = ordered,
-                fallback = "No language",
-                fallbackRes = R.string.home_shelf_no_language,
-                // Ordered by the NAME the reader will see, not by the code behind it: sorting on
-                // the code puts GERMAN above ENGLISH on an English interface. Read from the default
-                // locale here rather than passed in, so the ordering can lag a language change until
-                // the list next rebuilds — a stale ORDER being a great deal less wrong than the
-                // stale TEXT that baking the label in would produce.
-                sortBy = { BookLanguage.displayName(it) },
-                asLanguage = true,
-            ) { unit ->
-                when (unit) {
-                    is SortUnit.Solo -> unit.book.language
-                    is SortUnit.Ser -> seriesLanguage(unit.series.books)
-                }
-            }
     }
 }
 
@@ -1560,26 +1543,12 @@ internal fun seriesGenre(books: List<BookListItem>): String? =
         .maxByOrNull { it.value }
         ?.key
 
-/**
- * The language a series shelves under — the same rule as [seriesGenre], for the same reason.
- *
- * A series is one work in one language far more reliably than it is one genre, so agreement is
- * near-universal here and the tie-break barely ever runs.
- */
-internal fun seriesLanguage(books: List<BookListItem>): String? =
-    books.mapNotNull { it.language }
-        .groupingBy { it }
-        .eachCount()
-        .maxByOrNull { it.value }
-        ?.key
-
 /** Groups [units] into sections keyed by [keyOf] (nulls last under [fallback]) with headers. */
 private fun sectioned(
     units: List<SortUnit>,
     fallback: String,
     @StringRes fallbackRes: Int,
     sortBy: (String) -> String = { it },
-    asLanguage: Boolean = false,
     asGenre: Boolean = false,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
@@ -1594,7 +1563,6 @@ private fun sectioned(
                 LibraryEntry.Header(
                     title = key ?: fallback,
                     titleRes = if (key == null) fallbackRes else null,
-                    languageCode = key.takeIf { asLanguage },
                     genre = key.takeIf { asGenre },
                 ),
             )

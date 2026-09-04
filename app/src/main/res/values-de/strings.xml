@@ -145,7 +145,6 @@
     <string name="shelve_item">Ohne</string>
     <string name="shelve_author">Autor</string>
     <string name="shelve_genre">Genre</string>
-    <string name="shelve_language">Sprache</string>
     <string name="depth_collection">Kollektionen</string>
     <string name="depth_series">Serien</string>
     <string name="depth_flat">Einzeln</string>
@@ -155,7 +154,6 @@
     <string name="sort_duration">Länge</string>
     <string name="home_shelf_unknown_author">Unbekannter Autor</string>
     <string name="home_shelf_no_genre">Ohne Genre</string>
-    <string name="home_shelf_no_language">Ohne Sprache</string>
     <string name="home_chip_arrange">Anordnen</string>
     <string name="arrange_shelve">Regal</string>
     <string name="arrange_group">Gruppierung</string>
@@ -652,4 +650,8 @@
     <string name="setup_publish_title">Bibliothek dieses Geräts veröffentlichen?</string>
     <string name="setup_publish_body">Die %1$s, die dieses Gerät kennt, werden zur Bibliothek dieses Ordners — damit deine anderen Geräte nicht alles neu einlesen müssen. Nichts wird gelöscht.</string>
     <string name="lib_corrections_locked">%1$s · bleibt auf diesem Gerät — diese Bibliothek nimmt keine veröffentlichten Änderungen an</string>
+    <plurals name="home_meta_offline_count">
+        <item quantity="one">%1$d offline</item>
+        <item quantity="other">%1$d offline</item>
+    </plurals>
 </resources>
