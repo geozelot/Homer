@@ -94,20 +94,43 @@ data class FilterToken(val facet: FilterFacet, val value: String) {
  * [key] is what a token stores and what the suggestion list offers, so it is deliberately a plain
  * lower-case word rather than an enum name: `is:downloaded` reads as something a person wrote.
  */
+/**
+ * What KIND of thing a state says, which is the order the at-rest suggestions come in.
+ *
+ * With nothing typed the box offers every state that would leave something behind, and enum
+ * declaration order put "Downloaded" between "Finished" and "Series" — not random, but not a
+ * reason either, so the list read as an arbitrary heap. Grouped, it reads as four short answers to
+ * four different questions, and a state added later lands in the right place without anyone
+ * remembering to insert it at the right line.
+ */
+enum class StateGroup {
+    /** Where the reader is in it. */
+    READING,
+
+    /** Whether this device has it. */
+    DEVICE,
+
+    /** What it is part of. */
+    STRUCTURE,
+
+    /** What Homer still owes it — the gaps, and what somebody has already fixed. */
+    UPKEEP,
+}
+
 enum class BookState(
     val key: String,
     @StringRes val label: Int,
+    val group: StateGroup,
     val holds: (BookListItem) -> Boolean,
 ) {
-    DOWNLOADED("downloaded", R.string.filter_state_downloaded, { it.isDownloaded }),
-    STARTED("started", R.string.filter_state_started, { it.started && !it.finished }),
-    FINISHED("finished", R.string.filter_state_finished, { it.finished }),
-
+    DOWNLOADED("downloaded", R.string.filter_state_downloaded, StateGroup.DEVICE, { it.isDownloaded }),
     /** Never opened. Not the same as "not finished" — this is the unread shelf. */
-    UNSTARTED("unstarted", R.string.filter_state_unstarted, { !it.started && !it.finished }),
+    UNSTARTED("unstarted", R.string.filter_state_unstarted, StateGroup.READING, { !it.started && !it.finished }),
+    STARTED("started", R.string.filter_state_started, StateGroup.READING, { it.started && !it.finished }),
+    FINISHED("finished", R.string.filter_state_finished, StateGroup.READING, { it.finished }),
 
     /** Carries a correction somebody made, which is how you find what you have already fixed. */
-    EDITED("edited", R.string.filter_state_edited, { it.hasEdits }),
+    EDITED("edited", R.string.filter_state_edited, StateGroup.UPKEEP, { it.hasEdits }),
 
     /**
      * Part of a numbered run.
@@ -118,16 +141,16 @@ enum class BookState(
      * series with no collection above it). Narrowed, so each says only what it says. The old
      * combined meaning is now two tokens, which OR together exactly as states always have.
      */
-    IN_SERIES("series", R.string.filter_state_in_series, { it.series != null }),
+    IN_SERIES("series", R.string.filter_state_in_series, StateGroup.STRUCTURE, { it.series != null }),
 
     /** Under a parent grouping — see [IN_SERIES] for why this is its own state. */
-    IN_COLLECTION("collection", R.string.filter_state_in_collection, { it.collection != null }),
+    IN_COLLECTION("collection", R.string.filter_state_in_collection, StateGroup.STRUCTURE, { it.collection != null }),
 
     /** Length unknown, so it has never been measured. The books a measure pass would work on. */
-    UNMEASURED("unmeasured", R.string.filter_state_unmeasured, { it.totalDurationMs == null }),
+    UNMEASURED("unmeasured", R.string.filter_state_unmeasured, StateGroup.UPKEEP, { it.totalDurationMs == null }),
 
     /** No artwork resolved — the books a cover pass would work on. */
-    NO_COVER("no-cover", R.string.filter_state_no_cover, { it.coverModel == null }),
+    NO_COVER("no-cover", R.string.filter_state_no_cover, StateGroup.UPKEEP, { it.coverModel == null }),
     ;
 
     companion object {
@@ -426,6 +449,9 @@ internal fun suggest(
     if (needle.isEmpty()) {
         return BookState.entries
             .filter { FilterFacet.STATE to it.key !in taken }
+            // By what the state is ABOUT, then by declaration inside the group — where reading
+            // order is the reading order: unstarted, started, finished.
+            .sortedWith(compareBy({ it.group.ordinal }, { it.ordinal }))
             .map { state -> FilterSuggestion(FilterFacet.STATE, state.key, books.count(state.holds)) }
             .filter { it.count > 0 }
     }

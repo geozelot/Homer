@@ -1096,24 +1096,23 @@ private fun LibraryControlBar(
             // anything that collapses — it titles the list being scrolled, so it holds its size.
             large = true,
         )
-        Row(
+        // Open, the field REPLACES the chips in place — same position, no back arrow. It used to
+        // be a full OutlinedTextField, half again as tall as the row it sat in, so opening search
+        // shunted the whole library down the screen and closing it shunted it back. A control that
+        // moves everything else to appear is a control you brace for.
+        if (searchOpen) {
+            SearchEnclosure(
+                query = query,
+                onQueryChange = onQueryChange,
+                onClose = onCloseSearch,
+                onCommit = onCommitQuery,
+                suggestions = suggestions,
+                onPickSuggestion = onPickSuggestion,
+            )
+        } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Open, the field REPLACES the chips in place — same row, same height, no back arrow.
-            // It used to be a full OutlinedTextField, half again as tall as the row it sat in, so
-            // opening search shunted the whole library down the screen and closing it shunted it
-            // back. A control that moves everything else to appear is a control you brace for.
-            if (searchOpen) {
-                InlineSearchField(
-                    query = query,
-                    onQueryChange = onQueryChange,
-                    onClose = onCloseSearch,
-                    onCommit = onCommitQuery,
-                    modifier = Modifier.weight(1f),
-                )
-                return@Row
-            }
             // Drawn as a chip like its neighbours, but filled rather than outlined: it is the only
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
@@ -1149,12 +1148,6 @@ private fun LibraryControlBar(
                 )
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
-        }
-        // Offers first, then what has been taken. The suggestion row sits directly under the field
-        // that produces it and the committed pills sit under THAT, so the three lines read top to
-        // bottom as one thought: what you are typing, what it could become, what it already is.
-        if (searchOpen) {
-            FilterSuggestions(suggestions = suggestions, onPick = onPickSuggestion)
         }
         // BELOW the controls, not above them. Above, they pushed the chips away from the header
         // every time one was added; below, the bar keeps its place and the pills grow into the gap
@@ -1356,6 +1349,60 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
  * text. It no longer has to double as the close button, so it is drawn only when there is something
  * to clear, and its label is simply true.
  */
+/**
+ * The search field and what it is offering, inside one outline.
+ *
+ * ## Why they share a box
+ *
+ * Suggestions and committed filters were the same shape in the same place, distinguished only by
+ * colour — so which band did what had to be learned, and could not be seen. Enclosing the offers
+ * makes the distinction structural: the box IS the search, everything inside it is something search
+ * is proposing, and the chips left outside it are the only ones actually doing anything to the
+ * library. That reads before the convention is known, and it survives a dim screen.
+ *
+ * It matters most with nothing typed, which is the state a reader meets first: a bare field over a
+ * loose band of chips gives no clue what the chips are, where a field that visibly contains them
+ * does.
+ *
+ * The field inside draws no border of its own — the enclosure carries it — or the box would have a
+ * box in it.
+ */
+@Composable
+private fun SearchEnclosure(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onCommit: () -> Unit,
+    suggestions: List<FilterSuggestion>,
+    onPickSuggestion: (FilterSuggestion) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface2)
+            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
+    ) {
+        InlineSearchField(
+            query = query,
+            onQueryChange = onQueryChange,
+            onClose = onClose,
+            onCommit = onCommit,
+            enclosed = true,
+        )
+        // Only when there is something to offer: an empty band under a rule is a box that looks
+        // broken rather than one that has nothing to say.
+        if (suggestions.isNotEmpty()) {
+            HorizontalDivider(color = Line)
+            FilterSuggestions(
+                suggestions = suggestions,
+                onPick = onPickSuggestion,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun InlineSearchField(
     query: String,
@@ -1363,20 +1410,29 @@ private fun InlineSearchField(
     onClose: () -> Unit,
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Drawn inside [SearchEnclosure], which carries the outline — so this one draws none. */
+    enclosed: Boolean = false,
 ) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Box(
-        modifier = modifier.sizeIn(minHeight = 48.dp),
+        modifier = modifier.sizeIn(minHeight = if (enclosed) ControlPillHeight else 48.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ControlPillHeight)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Surface2)
-                .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
+                .then(
+                    if (enclosed) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Surface2)
+                            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
+                    },
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Holds the arrow's width open, the same way the trailing spacer does for the X.

@@ -144,6 +144,23 @@ class LibraryFilterTest {
     }
 
     @Test
+    fun `at rest the states come grouped by what they are about`() {
+        // Not the enum's declaration order, which put "Downloaded" between "Finished" and
+        // "Series" — not random, but not a reason either, so the list read as a heap.
+        val offered = suggest(all, "", emptyList()).mapNotNull { BookState.from(it.value) }
+        val groups = offered.map { it.group }
+        assertEquals("grouped, not interleaved", groups.distinct(), groups.dropConsecutiveRepeats())
+        // And within reading, the order somebody actually reads in — of those that survive the
+        // "would leave something behind" filter, which on this fixture is not all three.
+        val reading = offered.filter { it.group == StateGroup.READING }
+        val readingOrder = listOf(BookState.UNSTARTED, BookState.STARTED, BookState.FINISHED)
+        assertEquals(readingOrder.filter { it in reading }, reading)
+    }
+
+    private fun <T> List<T>.dropConsecutiveRepeats(): List<T> =
+        filterIndexed { index, value -> index == 0 || this[index - 1] != value }
+
+    @Test
     fun `a state already committed is not offered again`() {
         val committed = listOf(FilterToken(FilterFacet.STATE, BookState.UNSTARTED.key))
         assertTrue(suggest(all, "", committed).none { it.value == BookState.UNSTARTED.key })

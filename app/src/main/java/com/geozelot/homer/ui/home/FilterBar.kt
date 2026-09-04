@@ -281,9 +281,10 @@ fun FilterSuggestions(
     if (suggestions.isEmpty()) return
     val scroll = rememberScrollState()
     Row(
+        // No padding of its own: where it sits is the caller's business, and it now sits in two
+        // quite different places — loose under the controls, or inside the search field's own box.
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 6.dp)
             .scrollEdgeFade(scroll)
             .horizontalScroll(scroll),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
