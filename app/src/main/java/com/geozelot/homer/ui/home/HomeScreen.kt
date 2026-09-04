@@ -811,6 +811,27 @@ private fun gridColumnsFor(width: Dp): Int {
     return (usable / each).toInt().coerceIn(2, 6)
 }
 
+/**
+ * The height a control's tap target claims, whatever the pill inside it measures.
+ *
+ * Named because the control row's alignment is built on the difference between the two.
+ */
+private val ControlTapHeight = 48.dp
+
+/**
+ * How far below the row's top edge a collapsed pill actually starts.
+ *
+ * A chip is a 28dp pill centred in a 48dp target, so its outline begins 10dp down. A field that
+ * replaces that chip and starts at the row's own top edge therefore begins 10dp HIGHER than the
+ * chip it replaced — the control appears to jump upward on opening, which is the one thing an
+ * in-place expansion is supposed not to do. Both expanded fields carry this inset, so their top
+ * border lands exactly where the icons' did.
+ *
+ * Applied top and bottom, so the arrange field — which is one pill tall — also leaves the row
+ * exactly as high as it was and the library below it does not shift.
+ */
+private val ControlRowInset = (ControlTapHeight - ControlPillHeight) / 2
+
 /** Gap between grid cells, both axes. The series enclosure paints across half of it. */
 private val LibraryGridSpacing = 12.dp
 
@@ -1207,7 +1228,7 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
 private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -1296,6 +1317,9 @@ private fun ArrangeField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Same inset as the search field, and for the same reason — see ControlRowInset. With
+            // it the field measures 48dp overall, exactly the row it replaced.
+            .padding(vertical = ControlRowInset)
             .height(ControlPillHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(Surface2)
@@ -1352,7 +1376,7 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             // Chip-height pill inside a full-height tap target, the same split DropdownChip makes.
-            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -1430,6 +1454,8 @@ private fun SearchEnclosure(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // Before the shape, so the BORDER moves down rather than the content inside it.
+            .padding(vertical = ControlRowInset)
             .clip(RoundedCornerShape(8.dp))
             .background(Surface2)
             .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
@@ -1467,7 +1493,7 @@ private fun InlineSearchField(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Box(
-        modifier = modifier.sizeIn(minHeight = if (enclosed) ControlPillHeight else 48.dp),
+        modifier = modifier.sizeIn(minHeight = if (enclosed) ControlPillHeight else ControlTapHeight),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(
@@ -1591,7 +1617,7 @@ private fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit, modi
     )
     Box(
         modifier = modifier
-            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
+            .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
             .clickable { onChange(!flat) },
         contentAlignment = Alignment.Center,
     ) {
