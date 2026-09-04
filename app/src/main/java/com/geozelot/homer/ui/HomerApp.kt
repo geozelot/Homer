@@ -34,16 +34,18 @@ fun HomerApp() {
         if (authState != AuthState.Unknown) NotificationPermissionRequest()
 
         when {
-            // Still reading the Keystore. Never the setup flow: a cold start would otherwise flash
-            // "where do your books live?" at somebody whose library is already configured.
-            authState == AuthState.Unknown -> Box(
+            // Still reading the Keystore, or setup has not answered yet. Neither branch may be
+            // guessed at: guessing "configured" flashes "where do your books live?" at somebody
+            // whose library is fine, and guessing "not configured" mounts the whole library graph
+            // — ViewModel, player connection, a crawl request — a moment before setup replaces it.
+            authState == AuthState.Unknown || needsSetup == null -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
             // onDone is not a navigation here: needsSetup goes false when the flow records that
             // it finished, and this composable is replaced.
-            needsSetup -> SetupFlow(firstRun = true, onDone = {})
+            needsSetup == true -> SetupFlow(firstRun = true, onDone = {})
 
             else -> LibraryNavHost()
         }

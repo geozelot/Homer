@@ -102,16 +102,16 @@ class LibrarySetupProbe @Inject constructor(
     }
 
     /**
-     * MKCOL on the folder the index would live in: created or already there means writable, and any
-     * refusal means not.
+     * A write, to answer a question about writing — see [WebDavClient.canWrite] for why MKCOL alone
+     * is not one.
      *
-     * A write to answer a question about writing, which is how `ShareResolver` has always tested
-     * this. On a folder that is then not adopted it leaves an empty `.homer` behind — the cheapest
-     * possible litter, and the alternative is guessing from credentials, which is the assumption
-     * that made a folder shared into an account look writable when it was not.
+     * On a folder that is then not adopted this leaves an empty `.homer` behind with a zero-byte
+     * probe file in it: the cheapest possible litter, and the alternative is guessing from
+     * credentials, which is the assumption that made a folder shared into an account look writable
+     * when it was not.
      */
     private suspend fun probeWritable(folder: String): Boolean =
-        runCatching { webDavClient.mkcol(pathOf(folder, null)); true }.getOrDefault(false)
+        webDavClient.canWrite(pathOf(folder, null))
 
     private suspend fun countBooks(structurePath: String): Int? = try {
         webDavClient.getText(structurePath)?.content

@@ -33,9 +33,17 @@ class AppViewModel @Inject constructor(
      * And [SetupState.NOT_STARTED] has to carry the upgrade: an install from before this flow
      * existed has credentials, a library and a shelf full of books, and must never be shown a
      * wizard — so "not started" only means setup when there is nothing configured either.
+     *
+     * ## Null is "not known yet", and it is not the same as "no"
+     *
+     * The initial value used to be `false`, which reads as "go to the library" — and on a cold
+     * start the auth state can resolve before the first DataStore read arrives, so a fresh install
+     * with nothing configured mounted the whole library graph for a moment before setup replaced
+     * it. Long enough to build `HomeViewModel`, connect the player, and request a crawl that was
+     * then refused with "NONE (NoLibrary)". Harmless, and visible in a log as work nobody asked for.
      */
-    val needsSetup: StateFlow<Boolean> =
+    val needsSetup: StateFlow<Boolean?> =
         combine(librarySettings.setupState, authRepository.credentials) { setup, credentials ->
             setupIsDue(setup, hasCredentials = credentials != null)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 }

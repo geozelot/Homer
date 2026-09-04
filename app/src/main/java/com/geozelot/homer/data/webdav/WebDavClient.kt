@@ -204,6 +204,31 @@ class WebDavClient @Inject constructor(
         }
     }
 
+    /**
+     * Whether this device can actually write into [dirPath] — established by writing.
+     *
+     * The obvious test is MKCOL on the directory, and it is wrong in the one case that matters.
+     * [mkcol] treats `405 Method Not Allowed` as success, because for creating a directory
+     * "it is already there" is the same outcome as "I made it" — but as a *permission* test 405
+     * means only that the collection exists, and a server answers it before considering whether
+     * the caller may write. So a read-only share of a library that already has its `.homer`
+     * directory — which is every library with an index in it, the commonest thing there is —
+     * reported itself as writable, and the device went on to promise publishing it could not do.
+     *
+     * A PUT is the honest question, because it is the thing being asked about. The MKCOL stays as
+     * a first step: the probe file needs somewhere to go, and a refusal there is already an answer.
+     * The file is zero bytes, hidden, inside Homer's own directory, and overwritten rather than
+     * accumulated.
+     */
+    suspend fun canWrite(dirPath: String, credentials: NextcloudCredentials? = null): Boolean {
+        val reachable = runCatching { mkcol(dirPath, credentials) }.isSuccess
+        if (!reachable) return false
+        return runCatching {
+            putText("$dirPath/$WRITE_PROBE_FILE", "", credentials = credentials)
+            true
+        }.getOrDefault(false)
+    }
+
     /** Creates a collection (directory); a no-op if it already exists. */
     suspend fun mkcol(relativePath: String, credentials: NextcloudCredentials? = null): Unit = withContext(Dispatchers.IO) {
         val creds = credentials ?: credentialStore.awaitCredentials() ?: throw NotAuthenticatedException()
@@ -338,6 +363,14 @@ class WebDavClient @Inject constructor(
     }
 
     companion object {
+        /**
+         * The file [canWrite] writes to find out whether it can.
+         *
+         * Named and fixed rather than random, so repeated probes overwrite one file instead of
+         * leaving a trail of them in somebody else's folder.
+         */
+        private const val WRITE_PROBE_FILE = ".write-probe"
+
         private const val PROPFIND_BODY =
             """<?xml version="1.0" encoding="utf-8"?>""" +
                 """<d:propfind xmlns:d="DAV:"><d:prop>""" +

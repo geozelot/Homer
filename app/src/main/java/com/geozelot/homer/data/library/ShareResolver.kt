@@ -55,7 +55,7 @@ class ShareResolver @Inject constructor(
      * which is exactly where the shared catalog + covers live.
      */
     private suspend fun probeWritable(credentials: NextcloudCredentials): Boolean =
-        runCatching { webDavClient.mkcol(SHARED_CACHE_DIR, credentials); true }.getOrDefault(false)
+        webDavClient.canWrite(SHARED_CACHE_DIR, credentials)
 
     private companion object {
         const val SHARED_CACHE_DIR = ".homer"
