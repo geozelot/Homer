@@ -1136,20 +1136,6 @@ private fun LibraryControlBar(
                 suggestions = suggestions,
                 onPickSuggestion = onPickSuggestion,
             )
-        } else if (arrangeOpen) {
-            // The settings TAKE the row, exactly as the field does. They were tried in the segment
-            // between the search glyph and the view toggle, which is about 190dp on a small phone
-            // — three chips carrying real values do not fit it, and a scrolling run of three is a
-            // worse control than a still one. The row is 330dp, which they do fit.
-            ArrangeSettings(
-                sort = sort,
-                shelving = shelving,
-                series = series,
-                onSortChange = onSortChange,
-                onShelfChange = onShelfChange,
-                onSeriesChange = onSeriesChange,
-                onCollapse = onToggleArrange,
-            )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1158,12 +1144,24 @@ private fun LibraryControlBar(
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
             SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
-            // ONE control where there were three, until it is asked — see [ArrangeSettings].
+            // One chip, until it is asked to be three — see [ArrangeField]. It expands in place,
+            // between the glyph on its left and the toggle on its right, both of which stay put.
             Box(
-                modifier = Modifier.weight(1f).padding(start = 8.dp),
+                modifier = Modifier.weight(1f).padding(start = 8.dp, end = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                ArrangeChip(open = false, onClick = onToggleArrange)
+                if (arrangeOpen) {
+                    ArrangeField(
+                        sort = sort,
+                        shelving = shelving,
+                        series = series,
+                        onSortChange = onSortChange,
+                        onShelfChange = onShelfChange,
+                        onSeriesChange = onSeriesChange,
+                    )
+                } else {
+                    ArrangeChip(open = false, onClick = onToggleArrange)
+                }
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1208,15 +1206,10 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
 
 /** The one control that opens [ArrangeBand]. Shows no value: the band is where values are read. */
 @Composable
-private fun ArrangeChip(
-    open: Boolean,
-    onClick: () -> Unit,
-    /** Glyph only. Open, it heads a run of settings that need every dp of the segment. */
-    compact: Boolean = false,
-) {
+private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .sizeIn(minHeight = 48.dp, minWidth = if (compact) 36.dp else 44.dp)
+            .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -1238,60 +1231,52 @@ private fun ArrangeChip(
                 tint = if (open) Amber else Muted,
                 modifier = Modifier.size(14.dp),
             )
-            if (!compact) {
-                Text(
-                    stringResource(R.string.home_chip_arrange),
-                    color = if (open) Amber else Muted,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    maxLines = 1,
-                )
-            }
+            Text(
+                stringResource(R.string.home_chip_arrange),
+                color = if (open) Amber else Muted,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+            )
         }
     }
 }
 
 /**
- * The three settings, unfurled along the control row itself.
+ * The three settings, inside a field of their own.
  *
- * ## Why it is not a panel
+ * ## What it is
  *
- * The three axes are genuinely orthogonal — sections, depth, order — so they cannot be merged into
- * one menu without multiplying: four shelvings times three depths is twelve entries to pick one
- * thing from. They were folded into a dialog to stop three dropdowns standing open across a third
- * of the bar at all times, and that fixed the crowding at the cost of putting a modal in front of
- * the library to change how the library looks — you could not see what you were arranging while you
- * arranged it. A band under the row fixed that and still moved the shelf down to appear.
+ * The Arrange chip, expanded: same height, same corner, same place in the row, now stretched across
+ * the segment between the search glyph and the view toggle with the settings laid out inside it.
+ * Search and the view toggle stay exactly where they were — this replaces one control, not the row.
  *
- * This moves nothing. The space between the search glyph and the view toggle is dead while nothing
- * is being arranged, and these are three chips that belong beside their neighbours rather than in a
- * container of their own.
+ * ## Why the settings inside it wear no outline
  *
- * ## It takes the row, because it needs the row
+ * A box inside a box reads as two controls, and three of them reads as four. Without their own
+ * pills the field is the control and these are its parts. It is also what buys the width: that
+ * segment is about 190dp on a small phone, and three outlined chips carrying real values —
+ * "Gestapelt" is not a short word — do not fit it. Borderless they very nearly do, and what is left
+ * over scrolls behind the same edge fade the suggestion row uses.
  *
- * Tried first in the segment between the search glyph and the view toggle — about 190dp on a small
- * phone, where three chips carrying real values do not fit and the run had to scroll. A scrolling
- * row of three settings is a worse control than a still one, and truncating the values instead
- * would leave three chips that all say nothing, when the value is the entire reason to open it.
- * The whole row is about 330dp, which they fit.
+ * ## Why the three cannot simply be one menu
  *
- * The glyph that opened it stays at the head of the run: lit, so the row is visibly a mode rather
- * than a new set of controls, and tappable, so there is a way back that is not a guess. Tapping the
- * library closes it too, on the same gesture that dismisses search.
+ * Shelve, depth and sort are orthogonal — sections, depth, order — so merging them multiplies:
+ * four shelvings times three depths is twelve entries to pick one thing from. They were a dialog
+ * once, which fixed the crowding by putting a modal in front of the library to change how the
+ * library looks; you could not see what you were arranging while you arranged it.
  *
- * [DropdownChip]'s icon mode carries the category, so each chip reads as its value alone — that
- * mode exists because this control bar once carried four of these permanently, which is exactly
- * what this is again, only asked for rather than always there.
+ * [DropdownChip]'s icon mode carries the category so each reads as its value alone, which is the
+ * mode that exists because this bar once carried four of them permanently.
  */
 @Composable
-private fun ArrangeSettings(
+private fun ArrangeField(
     sort: LibrarySort,
     shelving: LibraryShelving,
     series: LibraryDepth,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
-    onCollapse: () -> Unit,
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
@@ -1299,14 +1284,17 @@ private fun ArrangeSettings(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(ControlPillHeight)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface2)
+            // Amber, like the search field it is a sibling of: both are a chip that became a field,
+            // and the accent is what this app uses to mean "this is live".
+            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
             .scrollEdgeFade(scroll)
-            .horizontalScroll(scroll),
+            .horizontalScroll(scroll)
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // The chip that opened this, still here and lit, because it is also the way back — and
-        // because a run of settings that appeared from nothing should visibly belong to something.
-        ArrangeChip(open = true, onClick = onCollapse, compact = true)
         DropdownChip(
             label = stringResource(shelving.label),
             options = LibraryShelving.entries.toList(),
@@ -1315,6 +1303,7 @@ private fun ArrangeSettings(
             onSelect = onShelfChange,
             icon = Icons.Filled.Layers,
             iconDescription = stringResource(R.string.arrange_shelve),
+            bordered = false,
         )
         DropdownChip(
             label = stringResource(series.label),
@@ -1324,6 +1313,7 @@ private fun ArrangeSettings(
             onSelect = onSeriesChange,
             icon = HomerIcons.Spines,
             iconDescription = stringResource(R.string.arrange_group),
+            bordered = false,
         )
         // Only the sorts that still do something — see LibrarySort.offeredFor.
         DropdownChip(
@@ -1334,6 +1324,7 @@ private fun ArrangeSettings(
             onSelect = onSortChange,
             icon = Icons.AutoMirrored.Filled.Sort,
             iconDescription = stringResource(R.string.arrange_sort),
+            bordered = false,
         )
     }
 }

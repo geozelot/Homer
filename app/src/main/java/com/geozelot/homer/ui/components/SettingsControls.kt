@@ -289,6 +289,14 @@ fun <T> DropdownChip(
      */
     icon: ImageVector? = null,
     iconDescription: String? = null,
+    /**
+     * Drops the pill's own outline and fill, for a chip that sits INSIDE a bordered field.
+     *
+     * A box in a box reads as two controls, and three of them in one field reads as three. Without
+     * the outline the field is the control and these are its parts — which is also what buys the
+     * width for three of them to sit in a segment of a phone's control row.
+     */
+    bordered: Boolean = true,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -297,16 +305,28 @@ fun <T> DropdownChip(
         // beside.
         Box(
             modifier = Modifier
-                .sizeIn(minHeight = 48.dp)
+                .sizeIn(minHeight = if (bordered) 48.dp else 0.dp)
                 .clickable { open = true },
             contentAlignment = Alignment.Center,
         ) {
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, Line, RoundedCornerShape(8.dp))
-                    .background(Surface1)
-                    .padding(start = if (icon != null) 7.dp else 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+                    .then(
+                        if (bordered) {
+                            Modifier
+                                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                                .background(Surface1)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(
+                        start = if (bordered) (if (icon != null) 7.dp else 10.dp) else 4.dp,
+                        end = if (bordered) 6.dp else 2.dp,
+                        top = 5.dp,
+                        bottom = 5.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 icon?.let {
