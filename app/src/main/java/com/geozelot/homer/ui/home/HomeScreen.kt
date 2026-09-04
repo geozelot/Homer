@@ -54,8 +54,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
@@ -1359,7 +1361,9 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onShelfChange,
             modifier = Modifier.weight(1f),
-            category = stringResource(R.string.arrange_shelve),
+            icon = Icons.Filled.Category,
+            iconDescription = stringResource(R.string.arrange_shelve),
+            menuHeader = stringResource(R.string.arrange_shelve_by),
             bordered = false,
         )
         DropdownChip(
@@ -1369,7 +1373,9 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onSeriesChange,
             modifier = Modifier.weight(1f),
-            category = stringResource(R.string.arrange_group),
+            icon = Icons.Filled.Layers,
+            iconDescription = stringResource(R.string.arrange_group),
+            menuHeader = stringResource(R.string.arrange_group_by),
             bordered = false,
         )
         // Only the sorts that still do something — see LibrarySort.offeredFor.
@@ -1380,7 +1386,9 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onSortChange,
             modifier = Modifier.weight(1f),
-            category = stringResource(R.string.arrange_sort),
+            icon = Icons.AutoMirrored.Filled.Sort,
+            iconDescription = stringResource(R.string.arrange_sort),
+            menuHeader = stringResource(R.string.arrange_sort_by),
             bordered = false,
         )
     }

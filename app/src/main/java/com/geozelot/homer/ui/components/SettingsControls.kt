@@ -49,9 +49,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -262,34 +262,34 @@ fun <T> DropdownChip(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * The part of [label] that is the current setting, emphasised so the chip weights what changes
-     * the same way the open menu bolds the selected row.
-     *
-     * A substring of the already-formatted label rather than a second piece to append: the
-     * separator between the two belongs to the translator, not to this function. If a locale
-     * renders the value in a form that isn't in the label verbatim, the span simply isn't applied
-     * and the chip reads as plain text.
-     */
-    value: String? = null,
-    /**
      * Appends a "Custom…" item below the presets. Present only where a free value is meaningful —
      * a preset list is a shortcut, not the limit of what the setting can hold, and the presets that
      * suit most people are not the ones that suit everybody.
      */
     onCustom: (() -> Unit)? = null,
     /**
-     * Replaces the category words with a glyph — "Shelve: Author" becomes an icon and "Author".
+     * Names the axis with a glyph instead of words — "Shelve: Author" becomes an icon and "Author".
      *
-     * The library's control bar carries four of these side by side, and repeating the category in
-     * every one of them is what pushed the row onto a second line on a narrower screen. The
-     * category is the constant; the value is the part that changes and the part worth reading. With
-     * an icon set, the label is the value alone and is emphasised throughout, since there is no
-     * longer a prefix to distinguish it from.
+     * The axis is the constant; the value is the part that changes and the part worth reading. Set
+     * in words, the three axes in the library's arrange field spent about half the field repeating
+     * themselves, and the values — which is what somebody opens that field to check — were the half
+     * that gave way. The glyph says the same thing in 14dp, and [menuHeader] says it in full the
+     * moment the chip is opened, which is the moment it matters.
      *
-     * [iconDescription] carries what the glyph replaces, for anyone who cannot see it.
+     * With an icon set, the label is the value alone and is emphasised throughout, since there is
+     * no longer a prefix to distinguish it from. [iconDescription] carries what the glyph replaces,
+     * for anyone who cannot see it.
      */
     icon: ImageVector? = null,
     iconDescription: String? = null,
+    /**
+     * Heads the open menu — "Shelve by", above Item / Author / Genre.
+     *
+     * Where the chip is only a glyph and a value, this is the one place the axis is written out. It
+     * is also what makes the menu legible on its own: three menus of short nouns, opened from three
+     * glyphs, otherwise rely on the reader remembering which one they tapped.
+     */
+    menuHeader: String? = null,
     /**
      * Drops the pill's own outline and fill, for a chip that sits INSIDE a bordered field.
      *
@@ -298,16 +298,6 @@ fun <T> DropdownChip(
      * width for three of them to sit in a segment of a phone's control row.
      */
     bordered: Boolean = true,
-    /**
-     * Names the axis in front of the value — "Shelve: Author" — instead of leaving it to an icon.
-     *
-     * Rendered as its OWN text rather than folded into [label] so the two halves can be given
-     * different priorities. The category is fixed and the VALUE gives way: three chips whose
-     * categories are all fully drawn line up as three settings, where three shortened categories
-     * read as three different things. A clipped value is still recognisable — and the chip opens to
-     * show it in full, which is what the chip is for.
-     */
-    category: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -362,57 +352,39 @@ fun <T> DropdownChip(
                         it,
                         contentDescription = iconDescription,
                         tint = Muted,
-                        modifier = Modifier.size(14.dp).padding(end = 0.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                     Spacer(Modifier.size(5.dp))
                 }
-                category?.let {
-                    Text(
-                        "$it:",
-                        color = Faint,
-                        fontSize = 11.sp,
-                        // Sized to the glyphs. Without it the line box is the 24sp one inherited
-                        // from the theme's body style, and Compose hands the 13sp of leftover to
-                        // ascent and descent in proportion — four fifths of it above the letters.
-                        // The box is then centred in the field and the words sit visibly low in it.
-                        lineHeight = 13.sp,
-                        maxLines = 1,
-                    )
-                    Spacer(Modifier.size(4.dp))
-                }
-                // Shrinkable, so a chip sharing a row with others (the library control bar) gives
-                // way instead of pushing its neighbours off a narrow screen. fill = false keeps it
-                // at its natural width whenever there is room, which is everywhere else.
                 Text(
-                    // Not shrinkable when a category is carrying the give — see [category].
-                    text = buildAnnotatedString {
-                        append(label)
-                        // With an icon the whole label IS the value, so it is emphasised as a whole
-                        // rather than searched for inside a longer phrase.
-                        val start = if (icon != null) 0 else value?.let { label.lastIndexOf(it) } ?: -1
-                        if (start >= 0) {
-                            addStyle(
-                                SpanStyle(color = Parchment, fontWeight = FontWeight.SemiBold),
-                                start,
-                                if (icon != null) label.length else start + value!!.length,
-                            )
-                        }
+                    // With an icon the whole label IS the value, so it is emphasised as a whole
+                    // rather than searched for inside a longer phrase.
+                    text = if (icon == null) {
+                        AnnotatedString(label)
+                    } else {
+                        AnnotatedString(
+                            label,
+                            SpanStyle(color = Parchment, fontWeight = FontWeight.SemiBold),
+                        )
                     },
                     color = Muted,
                     fontSize = 11.sp,
-                    // Matches the category beside it — see there for what an unset one does.
+                    // Sized to the glyphs. Without it the line box is the 24sp one inherited from
+                    // the theme's body style, and Compose hands the 13sp of leftover to ascent and
+                    // descent in proportion — four fifths of it above the letters. The box is then
+                    // centred in the field and the words sit visibly low in it.
                     lineHeight = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // Shrinkable but never stretched: a short value leaves its cell's content
-                    // centred, and a long one gives way rather than pushing the category out of the
-                    // cell beside it.
+                    // centred, and a long one gives way rather than pushing its neighbour out of
+                    // the cell beside it.
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                // No chevron where a category is named. Three of them across one field is three
-                // marks saying the same thing the field already says by being a field — and each
-                // one costs 16dp of the value beside it, which is the half that gives way.
-                if (category == null) {
+                // No chevron inside a field. Three of them across one is three marks saying what
+                // the field already says by being a field — and each costs 16dp of the value beside
+                // it, which is the half that gives way.
+                if (bordered) {
                     Icon(
                         Icons.Filled.KeyboardArrowDown,
                         contentDescription = null,
@@ -423,6 +395,16 @@ fun <T> DropdownChip(
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            menuHeader?.let {
+                Text(
+                    it,
+                    style = SectionLabel,
+                    color = Faint,
+                    // Indented to the menu items' own text, so the heading reads as their heading
+                    // rather than as a row above them that happens to be greyed out.
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
+                )
+            }
             options.forEach { option ->
                 DropdownMenuItem(
                     text = {
