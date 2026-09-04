@@ -444,13 +444,16 @@ class SetupViewModel @Inject constructor(
      * it points at is somebody else's and cannot hold one person's position.
      */
     fun syncProgressToAccount() {
-        if (credentialStore.syncAccount.value != null) {
-            viewModelScope.launch {
+        // Awaited rather than read: the slot is null until the Keystore-backed load finishes, and
+        // reading it eagerly cannot tell "no account" from "not read yet". Entered from settings on
+        // a cold start, that difference is a sign-in screen shown to somebody already signed in.
+        viewModelScope.launch {
+            if (credentialStore.awaitSyncAccount() != null) {
                 librarySettings.setProgressSyncEnabled(true)
                 finish()
+            } else {
+                _state.update { it.copy(step = SetupStep.SYNC_LOGIN) }
             }
-        } else {
-            _state.update { it.copy(step = SetupStep.SYNC_LOGIN) }
         }
     }
 

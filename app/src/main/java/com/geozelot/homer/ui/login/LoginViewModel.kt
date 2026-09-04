@@ -1,9 +1,11 @@
 package com.geozelot.homer.ui.login
 
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import com.geozelot.homer.R
 import com.geozelot.homer.data.auth.AuthRepository
 import com.geozelot.homer.data.library.ShareResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,7 +41,14 @@ class LoginViewModel @Inject constructor(
         val shareUrl: String = "",
         val sharePassword: String = "",
         val status: Status = Status.Idle,
-        val error: String? = null,
+        /**
+         * What went wrong, as a resource rather than a sentence.
+         *
+         * These are the only messages the setup flow shows that a person acts on — "the password is
+         * wrong", "check the URL" — and they were written here as English literals, so on a German
+         * phone the one screen that has to be understood was the one screen that was not translated.
+         */
+        @StringRes val error: Int? = null,
     ) {
         val canSubmit: Boolean get() = serverUrl.isNotBlank() && status == Status.Idle
         val canSubmitShare: Boolean get() = shareUrl.isNotBlank() && status == Status.Idle
@@ -64,7 +73,10 @@ class LoginViewModel @Inject constructor(
 
     fun setSyncMode(enabled: Boolean) {
         syncMode = enabled
-        if (enabled) _uiState.value = _uiState.value.copy(mode = Mode.ACCOUNT)
+        // The error goes with the mode. This ViewModel is one instance for the whole setup flow, so
+        // without clearing it a failed share link a step ago is still on screen under a form that
+        // has nothing to do with it.
+        if (enabled) _uiState.value = _uiState.value.copy(mode = Mode.ACCOUNT, error = null)
     }
 
     fun setMode(mode: Mode) {
@@ -92,15 +104,15 @@ class LoginViewModel @Inject constructor(
             try {
                 when (val result = authRepository.useShare(_uiState.value.shareUrl, _uiState.value.sharePassword)) {
                     is ShareResolver.Result.Ok -> Unit // AuthState flips; app navigates away
-                    ShareResolver.Result.PasswordRequired -> fail("This share needs a password, or the password is wrong.")
-                    ShareResolver.Result.NotFound -> fail("No share found at that link. Check the URL.")
-                    ShareResolver.Result.Unreachable -> fail("Couldn't reach the server. Check your connection and the link.")
+                    ShareResolver.Result.PasswordRequired -> fail(R.string.login_err_share_password)
+                    ShareResolver.Result.NotFound -> fail(R.string.login_err_share_not_found)
+                    ShareResolver.Result.Unreachable -> fail(R.string.login_err_unreachable)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "openShare failed", e)
-                fail("Couldn't open the share link. Check the URL and try again.")
+                fail(R.string.login_err_share_failed)
             }
         }
     }
@@ -140,13 +152,16 @@ class LoginViewModel @Inject constructor(
                     elapsed += POLL_INTERVAL_MS
                 }
                 Log.w(TAG, "startLogin: timed out")
-                fail("Login timed out. Please try again.")
+                fail(R.string.login_err_timeout)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Only reached for setup failures (e.g. an unreachable server address).
                 Log.e(TAG, "startLogin failed", e)
-                fail(e.message ?: "Login failed. Check the server address and try again.")
+                // The exception's own message was preferred here, which meant an OkHttp
+                // string in whatever language OkHttp has — none — reaching a user in place of a
+                // sentence. It goes to the log, where it is useful, and the screen says what to do.
+                fail(R.string.login_err_login_failed)
             }
         }
     }
@@ -156,7 +171,7 @@ class LoginViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(status = Status.Idle, error = null)
     }
 
-    private fun fail(message: String) {
+    private fun fail(@StringRes message: Int) {
         _uiState.value = _uiState.value.copy(status = Status.Idle, error = message)
     }
 

@@ -1127,7 +1127,10 @@ private fun LibraryControlBar(
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth().padding(start = 2.dp, bottom = 6.dp)) {
+    // No inset of its own. The bar carries the grid's own horizontal padding from its call site, so
+    // an extra 2dp here put the search chip 2dp right of the covers it filters and the header 4dp
+    // right of both — the section label keeps its own 2dp, which every header on the screen shares.
+    Column(modifier = modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         SectionLabelRow(
             // Always "Library". It titles the same region whatever is filtered, and renaming it to
             // "Results" made the shelf look like a different place rather than the same one with

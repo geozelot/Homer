@@ -44,6 +44,14 @@
     <string name="login_share_placeholder">https://cloud.example.com/s/…</string>
     <string name="login_share_password_label">Share password (if any)</string>
     <string name="login_share_hint">Paste a Nextcloud share link to your audiobook folder. Your listening progress stays on this device unless you also sign in to an account.</string>
+    <!-- What the sign-in step says when something went wrong. Every one of them is acted on, so
+         they say what to do rather than what failed. -->
+    <string name="login_err_share_password">This share needs a password, or the password is wrong.</string>
+    <string name="login_err_share_not_found">No share found at that link. Check the URL.</string>
+    <string name="login_err_unreachable">Couldn\'t reach the server. Check your connection and the link.</string>
+    <string name="login_err_share_failed">Couldn\'t open the share link. Check the URL and try again.</string>
+    <string name="login_err_timeout">Login timed out. Please try again.</string>
+    <string name="login_err_login_failed">Login failed. Check the server address and try again.</string>
     <string name="login_share_button">Open share</string>
 
     <!-- App lock -->
@@ -632,6 +640,7 @@
     <string name="setup_rule_edits">Allow edits</string>
     <string name="setup_rule_edits_desc">Off: other devices can still correct a title for their own shelf, but not publish the correction here.</string>
     <string name="setup_rules_honoured">Honoured by Homer. Anything else that can read the folder can ignore it.</string>
+    <string name="lib_rules_write_failed">The rules could not be saved. They are unchanged on the server — check your connection and try again.</string>
     <string name="setup_rules_not_owner">Only the account that owns this folder can set its rules.</string>
     <string name="setup_create_confirm">Create and scan</string>
     <string name="setup_progress_title">Where should your place in each book be saved?</string>

@@ -334,15 +334,30 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryStanding.NONE)
 
     /**
+     * Whether the last attempt to write the rules failed, until another is made.
+     *
+     * Bound to a line under the switches. Without it a refused write was completely silent: the
+     * switches are fed by [standing], which is fed by the resolution the write updates, so offline
+     * the switch flicks under the finger and settles back where it was with nothing said. That
+     * reads as a broken control rather than as a failed write, and the two want different actions.
+     */
+    private val _ruleWriteFailed = MutableStateFlow(false)
+    val ruleWriteFailed: StateFlow<Boolean> = _ruleWriteFailed.asStateFlow()
+
+    /**
      * Writes this library's rules. Owner only, and refused by
      * [com.geozelot.homer.data.sync.facet.LibraryPolicyRepository] if it turns out not to be.
      *
      * The switches on the page are bound to [standing], which is fed by the resolution the write
      * updates — so a failed write leaves them where they were rather than showing a state the
-     * server does not hold.
+     * server does not hold, and [ruleWriteFailed] says so.
      */
     fun setLibraryRules(sharedIndexRequired: Boolean, editsAllowed: Boolean) {
-        viewModelScope.launch { libraryPolicy.write(sharedIndexRequired, editsAllowed) }
+        viewModelScope.launch {
+            _ruleWriteFailed.value = false
+            val result = libraryPolicy.write(sharedIndexRequired, editsAllowed)
+            _ruleWriteFailed.value = result != LibraryPolicyRepository.WriteResult.Written
+        }
     }
 
     /**
@@ -352,7 +367,11 @@ class HomeViewModel @Inject constructor(
      * pass and wrong for a page whose whole subject it is.
      */
     fun refreshLibraryRules() {
-        viewModelScope.launch { libraryPolicy.refresh(force = true) }
+        viewModelScope.launch {
+            // Whatever failed last time is answered by what the server says now.
+            _ruleWriteFailed.value = false
+            libraryPolicy.refresh(force = true)
+        }
     }
 
     /** Live playback snapshot for the docked mini-player. */

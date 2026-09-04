@@ -83,6 +83,7 @@ fun LibrarySyncScreen(
     val progressSync by viewModel.progressSyncEnabled.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
+    val ruleWriteFailed by viewModel.ruleWriteFailed.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
 
@@ -180,6 +181,10 @@ fun LibrarySyncScreen(
                 description = stringResource(R.string.setup_rule_edits_desc),
             )
             SettingsExplanation(stringResource(R.string.setup_rules_honoured))
+            // The switches show what the SERVER holds, so a refused write leaves them where they
+            // were — correct, and indistinguishable from a control that does nothing. This is the
+            // difference.
+            if (ruleWriteFailed) SettingsNote(stringResource(R.string.lib_rules_write_failed))
         }
 
         SettingsDivider()

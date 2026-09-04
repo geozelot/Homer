@@ -48,7 +48,9 @@ class LibrarySetupProbe @Inject constructor(
     suspend fun probe(root: String): SetupProbe? = withContext(Dispatchers.IO) {
         val credentials = credentialStore.awaitCredentials() ?: return@withContext null
         if (!networkMonitor.isOnline()) return@withContext null
-        val folder = root.trim('/')
+        // Whitespace as well as slashes: this comes from a text field, and " Books/" typed with a
+        // stray leading space is a 404 that reads as "the folder is not there".
+        val folder = root.trim().trim('/')
 
         // Reachability first: a wrong folder makes every answer below meaningless, and 404 here is
         // the ordinary result of a typed path.

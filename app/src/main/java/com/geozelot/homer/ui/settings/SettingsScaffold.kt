@@ -24,6 +24,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.LeadingIconInset
+import com.geozelot.homer.ui.components.ScreenInset
 import com.geozelot.homer.ui.theme.Ground
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
@@ -64,7 +66,9 @@ fun SettingsScaffold(
             .navigationBarsPadding(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, start = LeadingIconInset, end = ScreenInset),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -99,7 +103,7 @@ fun SettingsScaffold(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = ScreenInset)
                 .padding(top = 8.dp, bottom = 32.dp),
             content = content,
         )

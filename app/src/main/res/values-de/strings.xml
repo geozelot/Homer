@@ -47,6 +47,12 @@
     <string name="login_share_placeholder">https://cloud.beispiel.de/s/…</string>
     <string name="login_share_password_label">Passwort der Freigabe (falls vorhanden)</string>
     <string name="login_share_hint">Füge einen Nextcloud-Freigabelink zu deinem Hörbuch-Ordner ein. Dein Hörfortschritt bleibt auf diesem Gerät, solange du dich nicht zusätzlich mit einem Konto anmeldest.</string>
+    <string name="login_err_share_password">Diese Freigabe braucht ein Passwort, oder das Passwort stimmt nicht.</string>
+    <string name="login_err_share_not_found">Unter diesem Link ist keine Freigabe zu finden. Prüfe die URL.</string>
+    <string name="login_err_unreachable">Server nicht erreichbar. Prüfe deine Verbindung und den Link.</string>
+    <string name="login_err_share_failed">Der Freigabelink konnte nicht geöffnet werden. Prüfe die URL und versuche es erneut.</string>
+    <string name="login_err_timeout">Zeitüberschreitung bei der Anmeldung. Bitte versuche es erneut.</string>
+    <string name="login_err_login_failed">Anmeldung fehlgeschlagen. Prüfe die Serveradresse und versuche es erneut.</string>
     <string name="login_share_button">Freigabe öffnen</string>
 
     <!-- App lock -->
@@ -609,6 +615,7 @@
     <string name="setup_rule_edits">Änderungen erlauben</string>
     <string name="setup_rule_edits_desc">Aus: Andere Geräte können einen Titel für ihr eigenes Regal weiter korrigieren, die Korrektur aber nicht hier veröffentlichen.</string>
     <string name="setup_rules_honoured">Homer hält sich daran. Alles andere, was den Ordner lesen kann, kann es ignorieren.</string>
+    <string name="lib_rules_write_failed">Die Regeln konnten nicht gespeichert werden. Auf dem Server sind sie unverändert — prüfe deine Verbindung und versuche es erneut.</string>
     <string name="setup_rules_not_owner">Nur das Konto, dem dieser Ordner gehört, kann seine Regeln festlegen.</string>
     <string name="setup_create_confirm">Anlegen und einlesen</string>
     <string name="setup_progress_title">Wo soll dein Hörfortschritt gespeichert werden?</string>

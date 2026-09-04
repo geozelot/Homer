@@ -550,6 +550,23 @@ fun ConfirmDialog(
 val SettingsActionPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
 
 /**
+ * The left and right edge every full-page screen sets its content against.
+ *
+ * Shared by the settings scaffold and the setup flow's, which had drifted to 20dp and 24dp — two
+ * page frames a person walks between in one tap, each starting its text somewhere else.
+ */
+val ScreenInset = 20.dp
+
+/**
+ * What a leading [androidx.compose.material3.IconButton] needs so its GLYPH lands on [ScreenInset].
+ *
+ * The button is a 48dp box around a 24dp icon, so the icon starts 12dp inside it. Put the button
+ * flush against the edge — which is what both scaffolds did — and the arrow sits 12dp in while
+ * every word below it starts at 20, which is visible as a header that leans left of its own page.
+ */
+val LeadingIconInset = ScreenInset - 12.dp
+
+/**
  * A text button that looks like a button.
  *
  * Homer's actions were bare tinted words — Save, Publish, Reset, Clear, Use this folder. A word that

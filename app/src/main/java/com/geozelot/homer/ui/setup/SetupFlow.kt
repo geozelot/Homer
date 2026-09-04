@@ -50,6 +50,8 @@ import com.geozelot.homer.data.library.SetupSituation
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.DiscoveredLibraryCard
 import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.LeadingIconInset
+import com.geozelot.homer.ui.components.ScreenInset
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsNote
 import com.geozelot.homer.ui.components.SettingsSectionHeader
@@ -235,7 +237,10 @@ private fun SetupScaffold(
     ) {
         // Reserved whether or not there is a button, so the question below does not jump between
         // screens that have one and screens that do not.
-        Row(modifier = Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(48.dp).padding(start = LeadingIconInset),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
                     Icon(
@@ -251,7 +256,7 @@ private fun SetupScaffold(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = ScreenInset)
                 .padding(bottom = 32.dp),
             content = content,
         )
@@ -281,6 +286,7 @@ private fun ChoiceCard(
     description: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = modifier
@@ -289,7 +295,7 @@ private fun ChoiceCard(
             .clip(RoundedCornerShape(12.dp))
             .background(Surface1)
             .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(start = 14.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -530,16 +536,21 @@ private fun ColumnScope.Findings(
     outcome.alternatives.forEach { alternative ->
         HomerTextButton(
             onClick = { onTake(alternative) },
+            // Dead while the recommendation is being applied. Both write the same settings, and
+            // tapping the alternative under a spinner ran a second decision over the first.
+            enabled = !busy,
             modifier = Modifier.padding(top = 4.dp),
         ) {
             Text(
-                stringResource(
-                    if (alternative == SetupAction.KEEP_ON_DEVICE) {
-                        R.string.setup_alt_keep_on_device
-                    } else {
-                        R.string.setup_keep_on_device
-                    },
-                ),
+                // The alternative's OWN label. Only KEEP_ON_DEVICE is offered as one today, and it
+                // is phrased differently down here than it is as a recommendation — but the branch
+                // that gave every other action that same phrasing would have mislabelled the first
+                // alternative anyone adds, silently and in the one place a decision is made.
+                if (alternative == SetupAction.KEEP_ON_DEVICE) {
+                    stringResource(R.string.setup_alt_keep_on_device)
+                } else {
+                    actionLabel(alternative)
+                },
             )
         }
     }
@@ -709,18 +720,26 @@ private fun ProgressStep(
                 enabled = !state.busy,
                 onClick = onUseAccount,
             )
-            HomerTextButton(onClick = onKeepOnDevice, modifier = Modifier.padding(top = 4.dp)) {
+            HomerTextButton(
+                onClick = onKeepOnDevice,
+                enabled = !state.busy,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
                 Text(stringResource(R.string.setup_progress_settled_alt))
             }
         } else {
+            // Inert while the answer is being applied. Either card finishes setup, and finishing
+            // pulls progress — long enough on a slow link for a second tap to land on the other one.
             ChoiceCard(
                 title = stringResource(R.string.setup_progress_account),
                 description = stringResource(R.string.setup_progress_account_desc),
+                enabled = !state.busy,
                 onClick = onUseAccount,
             )
             ChoiceCard(
                 title = stringResource(R.string.setup_progress_device),
                 description = stringResource(R.string.setup_progress_device_desc),
+                enabled = !state.busy,
                 onClick = onKeepOnDevice,
             )
         }
