@@ -2742,7 +2742,11 @@ private fun SeriesShelfRow(
             //
             // 46dp square, which is a BOOK row's cover exactly — so a shelf sitting among those rows
             // lines up with them and does not make its own row taller. It was 52x56.
-            Box(modifier = Modifier.size(ShelfRowBox)) {
+            // Gone the moment the shelf opens: its books are on screen underneath, each with its
+            // own cover, so a pile of three of them at the top is the same picture twice — and the
+            // 46dp it was taking is exactly what a long collection name has too little of. The grid
+            // view's open header has never drawn one, so this is also the two views agreeing.
+            if (!expanded) Box(modifier = Modifier.size(ShelfRowBox)) {
                 val sheets = series.stackSheets(CoverStack.RowSteps.size)
                 val pile = CoverStack.place(ShelfRowBox, RowStackPad, CoverStack.RowSteps, sheets.size)
                 val models = listOf(series.frontCover()) + sheets
@@ -2768,7 +2772,8 @@ private fun SeriesShelfRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp),
+                    // No cover to sit beside once the shelf is open, so no gap to hold it off.
+                    .padding(start = if (expanded) 0.dp else 10.dp),
             ) {
                 Text(
                     series.name,

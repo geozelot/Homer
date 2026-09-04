@@ -94,7 +94,20 @@ data class FilterToken(val facet: FilterFacet, val value: String) {
  * [key] is what a token stores and what the suggestion list offers, so it is deliberately a plain
  * lower-case word rather than an enum name: `is:downloaded` reads as something a person wrote.
  */
-enum class BookState(val key: String, @StringRes val label: Int, val holds: (BookListItem) -> Boolean) {
+enum class BookState(
+    val key: String,
+    @StringRes val label: Int,
+    val holds: (BookListItem) -> Boolean,
+    /**
+     * What a CHIP calls this state, where the label would be a sentence about the book rather than
+     * a name for the thing.
+     *
+     * "In a collection" is right in the filter list, which is a list of conditions to apply. It is
+     * wrong on a shelf's own header, which is not describing a condition — it is saying what this
+     * shelf is. Defaults to [label], so a state only needs one when the two genuinely differ.
+     */
+    @StringRes val chipLabel: Int = label,
+) {
     DOWNLOADED("downloaded", R.string.filter_state_downloaded, { it.isDownloaded }),
     STARTED("started", R.string.filter_state_started, { it.started && !it.finished }),
     FINISHED("finished", R.string.filter_state_finished, { it.finished }),
@@ -114,10 +127,20 @@ enum class BookState(val key: String, @StringRes val label: Int, val holds: (Boo
      * series with no collection above it). Narrowed, so each says only what it says. The old
      * combined meaning is now two tokens, which OR together exactly as states always have.
      */
-    IN_SERIES("series", R.string.filter_state_in_series, { it.series != null }),
+    IN_SERIES(
+        "series",
+        R.string.filter_state_in_series,
+        { it.series != null },
+        chipLabel = R.string.filter_facet_series,
+    ),
 
     /** Under a parent grouping — see [IN_SERIES] for why this is its own state. */
-    IN_COLLECTION("collection", R.string.filter_state_in_collection, { it.collection != null }),
+    IN_COLLECTION(
+        "collection",
+        R.string.filter_state_in_collection,
+        { it.collection != null },
+        chipLabel = R.string.filter_facet_collection,
+    ),
 
     /** Length unknown, so it has never been measured. The books a measure pass would work on. */
     UNMEASURED("unmeasured", R.string.filter_state_unmeasured, { it.totalDurationMs == null }),

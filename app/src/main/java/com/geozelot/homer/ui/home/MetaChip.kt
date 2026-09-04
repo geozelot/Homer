@@ -123,7 +123,7 @@ internal enum class MetaChipKind {
     AUTHOR,
 
     /**
-     * What this shelf IS — "In a collection" or "In a series" — on an opened header.
+     * What this shelf IS — "Collection" or "Series" — on an opened header.
      *
      * It carries a [BookState] key rather than a display string, because tapping it narrows the
      * library to everything of that kind. That is the one filter a header can offer which is not
@@ -246,7 +246,7 @@ private fun MetaChip(
         when (kind) {
             MetaChipKind.GENRE -> BookGenre.display(value, ctx.locale)
             MetaChipKind.SHELF ->
-                BookState.from(value)?.let { stringResource(it.label) } ?: value
+                BookState.from(value)?.let { stringResource(it.chipLabel) } ?: value
             MetaChipKind.AUTHOR -> value
         }
     }
