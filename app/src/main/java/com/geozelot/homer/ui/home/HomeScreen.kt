@@ -258,6 +258,7 @@ fun HomeScreen(
             onRemoveSeries = { series -> viewModel.deleteDownloads(series.books.map { it.id }) },
             onPause = viewModel::pauseDownload,
             onResume = viewModel::resumeDownload,
+            onFilter = viewModel::addFilterToken,
         )
     }
 
@@ -695,6 +696,8 @@ private class BookActions(
     val onRemoveSeries: (LibraryEntry.Series) -> Unit,
     val onPause: (String) -> Unit,
     val onResume: (String) -> Unit,
+    /** Narrows the library to one genre — what expanding a genre chip is for. */
+    val onFilter: (FilterToken) -> Unit,
 )
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
@@ -1877,6 +1880,13 @@ private fun BookGridCard(
             GridCardText(
                 title = book.title,
                 meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
+                chip = {
+                    GenreChipSlot(
+                        genres = book.genres,
+                        ctx = ctx,
+                        onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    )
+                },
             ) {
                 menuOpen = true
             }
@@ -1886,9 +1896,9 @@ private fun BookGridCard(
 }
 
 /**
- * Title (2 reserved lines) + meta (2 reserved lines) beside an overflow button — a fixed-height
- * block, so every grid card (book or series) is exactly the same total height and their bottoms
- * line up.
+ * Title (2 reserved lines) + the genre chip's reserved row + meta (2 reserved lines) beside an
+ * overflow button — a fixed-height block, so every grid card (book or series) is exactly the same
+ * total height and their bottoms line up.
  *
  * The button is 32dp wide rather than the usual 48: a grid cell is only about 100dp across, and a
  * square target would take half of it away from the title. It is a full 48dp tall, the tap targets
@@ -1896,7 +1906,19 @@ private fun BookGridCard(
  * menu — so the compromise is horizontal only and the affordance is reachable two ways.
  */
 @Composable
-private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
+private fun GridCardText(
+    title: String,
+    meta: String,
+    /**
+     * The genre chip's row, reserved whether or not there is a chip in it.
+     *
+     * A slot rather than a value, because what goes in it differs per item — a book carries its own
+     * genres, a shelf carries what most of its books agree on — and both have to occupy exactly the
+     * same height or the grid stops lining up.
+     */
+    chip: @Composable () -> Unit,
+    onMenu: () -> Unit,
+) {
     // IntrinsicSize.Min so the overflow button can match the footer instead of guessing at it. A
     // Row is as tall as its tallest child, which makes `fillMaxHeight` on one of them circular;
     // measuring the row's intrinsic height first breaks the cycle and gives the button something
@@ -1914,6 +1936,7 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            chip()
             Text(
                 meta,
                 color = Muted,
@@ -1956,7 +1979,7 @@ private fun GridCardText(title: String, meta: String, onMenu: () -> Unit) {
 
 /** What the arrangement already tells the reader, so a row can say something else instead. */
 @Immutable
-private data class RowContext(
+internal data class RowContext(
     val shelving: LibraryShelving,
     val series: LibraryDepth,
     /** Whether the library holds more than one language — see [bookMeta]. */
@@ -2022,12 +2045,8 @@ private fun bookMeta(
     if (ctx.shelving != LibraryShelving.AUTHOR) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
-    // Every genre it carries, not only the one it shelves under — a book that is Fantasy AND Humour
-    // says more about itself in the same amount of space. Translated where the vocabulary knows the
-    // value, shown as written where it does not.
-    if (ctx.shelving != LibraryShelving.GENRE && book.genres.isNotEmpty()) {
-        add(book.genres.joinToString(" · ") { BookGenre.display(it, ctx.locale) })
-    }
+    // The genres are the chip's, and only the chip's. They used to be joined into this line with
+    // the author and the tags, which on a narrow cell meant three ellipsised genres and no author.
     // Only where it distinguishes something: on a single-language library this is the same two
     // letters on every row, and shelved BY language the heading above already says it.
     if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
@@ -2162,7 +2181,19 @@ private fun SeriesGridCard(
             }
         }
         Box {
-            GridCardText(title = series.name, meta = seriesCardMeta(series, ctx, LocalContext.current)) {
+            GridCardText(
+                title = series.name,
+                meta = seriesCardMeta(series, ctx, LocalContext.current),
+                // What most of its books shelve under, then everything else any of them carries —
+                // so a shelf can say "Krimi +3" where no single volume carries four.
+                chip = {
+                    GenreChipSlot(
+                        genres = series.books.shelfGenres(),
+                        ctx = ctx,
+                        onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    )
+                },
+            ) {
                 menuOpen = true
             }
             SeriesMenu(series, menuOpen, actions) { menuOpen = false }
@@ -2543,6 +2574,14 @@ private fun BookListRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // The same slot the grid card reserves, in the same place relative to the title, so a
+            // book reads the same way in both views and switching between them moves nothing about.
+            GenreChipSlot(
+                genres = book.genres,
+                ctx = ctx,
+                onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                modifier = Modifier.padding(top = 2.dp),
+            )
             Text(
                 text = bookMeta(book, ctx, LocalContext.current, withStatus = true, withOffline = true),
                 color = Muted,
@@ -2651,6 +2690,12 @@ private fun SeriesShelfRow(
                     lineHeight = 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                GenreChipSlot(
+                    genres = series.books.shelfGenres(),
+                    ctx = ctx,
+                    onFilter = { actions.onFilter(FilterToken(FilterFacet.GENRE, it)) },
+                    modifier = Modifier.padding(top = 2.dp),
                 )
                 // Skipped entirely when empty rather than drawn blank — shelved by author with an
                 // unmeasured series there is nothing left for it to say, and an empty Text still
