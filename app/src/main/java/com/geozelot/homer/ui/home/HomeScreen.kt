@@ -488,36 +488,42 @@ fun HomeScreen(
                     )
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(if (gridView) LibraryGridColumns else 1),
-                state = gridState,
-                modifier = Modifier
-                    .weight(1f)
-                    // Before dismissSearch, and consuming nothing — see `pullToExpand`.
-                    .then(pullToExpand)
-                    .fillMaxWidth()
-                    .then(dismissSearch),
-                contentPadding = PaddingValues(
-                    start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
-                ),
-                horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
-                verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
-            ) {
-                libraryContent(
-                    entries = entries,
-                    gridView = gridView,
-                    flatCollections = flatCollections,
-                    onCollectionOrder = viewModel::setCollectionFlat,
-                    ctx = RowContext(
-                        shelving = shelfMode,
-                        series = seriesMode,
-                        mixedLanguages = languages.size > 1,
-                        locale = interfaceLocale,
+            // The column count comes from the width rather than from a literal, and it is needed in
+            // two places — the grid's own cells, and the rows an opened shelf lays out inside a
+            // full-span item, which have to match them. One BoxWithConstraints, one answer.
+            BoxWithConstraints(modifier = Modifier.weight(1f)) {
+                val columns = if (gridView) gridColumnsFor(maxWidth) else 1
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    state = gridState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Before dismissSearch, and consuming nothing — see `pullToExpand`.
+                        .then(pullToExpand)
+                        .then(dismissSearch),
+                    contentPadding = PaddingValues(
+                        start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
                     ),
-                    expanded = expanded,
-                    onBookClick = onBookClick,
-                    actions = actions,
-                )
+                    horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                    verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                ) {
+                    libraryContent(
+                        entries = entries,
+                        gridView = gridView,
+                        columns = columns,
+                        flatCollections = flatCollections,
+                        onCollectionOrder = viewModel::setCollectionFlat,
+                        ctx = RowContext(
+                            shelving = shelfMode,
+                            series = seriesMode,
+                            mixedLanguages = languages.size > 1,
+                            locale = interfaceLocale,
+                        ),
+                        expanded = expanded,
+                        onBookClick = onBookClick,
+                        actions = actions,
+                    )
+                }
             }
         }
 
@@ -754,7 +760,34 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.withAmber(s: String
 // ── Library content (single scrolling grid) ───────────────────────────────────
 
 /** Columns in grid view. Shared with the expanded-series rows, which lay out their own cells. */
-private const val LibraryGridColumns = 3
+/**
+ * The width a grid cell aims for, and what the column count is derived from.
+ *
+ * Chosen so a 360dp phone still gets the three columns the grid was designed around; anything wider
+ * gets more rather than three stretched ones. It is a *target*, not a minimum — the cells share out
+ * whatever is left over, so the real width lands within about 15dp of this either way.
+ */
+private val LibraryGridTargetCell = 100.dp
+
+/**
+ * How many columns fit in [width].
+ *
+ * The count used to be the literal 3, which is the right answer for the screen it was written on and
+ * wrong at both ends: on a small phone three cells left ~95dp each for a cover, a two-line title and
+ * a meta line, and on a tablet the same three sat in the middle of a very wide sheet.
+ *
+ * Note what this does NOT do: it does not scale anything with density. A `dp` is already a physical
+ * size — a 100dp cell is the same width in millimetres on every screen — so the thing that actually
+ * varies between devices is how many of them fit, which is exactly what this counts. Type follows
+ * the OS font scale on its own, because it is all `sp`.
+ *
+ * Floored at two, because one column of cover-plus-footer is a worse list than list view already is.
+ */
+private fun gridColumnsFor(width: Dp): Int {
+    val usable = width - LibraryGridPadding * 2 + LibraryGridSpacing
+    val each = LibraryGridTargetCell + LibraryGridSpacing
+    return (usable / each).toInt().coerceIn(2, 6)
+}
 
 /** Gap between grid cells, both axes. The series enclosure paints across half of it. */
 private val LibraryGridSpacing = 12.dp
@@ -767,13 +800,17 @@ private val LibraryGridPadding = 16.dp
  * the collapsed listening strip can size itself against a real cover instead of guessing at a
  * literal dp that drifts the moment the grid's padding or column count changes.
  */
-private fun gridCellWidth(totalWidth: Dp): Dp =
-    ((totalWidth - LibraryGridPadding * 2 - LibraryGridSpacing * (LibraryGridColumns - 1)) / LibraryGridColumns)
+private fun gridCellWidth(totalWidth: Dp): Dp {
+    val columns = gridColumnsFor(totalWidth)
+    return ((totalWidth - LibraryGridPadding * 2 - LibraryGridSpacing * (columns - 1)) / columns)
         .coerceAtLeast(0.dp)
+}
 
 private fun LazyGridScope.libraryContent(
     entries: List<LibraryEntry>,
     gridView: Boolean,
+    /** How many columns the grid resolved to — see [gridColumnsFor]. */
+    columns: Int,
     /** Collections the reader has asked to see as one numbered run — see [LibrarySettings]. */
     flatCollections: Set<String>,
     onCollectionOrder: (collection: String, flat: Boolean) -> Unit,
@@ -858,7 +895,7 @@ private fun LazyGridScope.libraryContent(
                         }
                         // An opened COLLECTION breaks into its threads; an opened plain series is
                         // one run, exactly as before. See `expandedRows`.
-                        val rows = entry.expandedRows(LibraryGridColumns, flat = flat)
+                        val rows = entry.expandedRows(columns, flat = flat)
                         itemsIndexed(
                             rows,
                             span = { _, _ -> GridItemSpan(maxLineSpan) },
@@ -879,6 +916,7 @@ private fun LazyGridScope.libraryContent(
                                 ShelfRow.LooseHeader ->
                                     ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = last)
                                 is ShelfRow.Books -> ExpandedSeriesRow(
+                                    columns = columns,
                                     books = row.books,
                                     last = last,
                                     ctx = shelfCtx,
@@ -2341,7 +2379,7 @@ private fun ExpandedSeriesHeader(
 /**
  * One row of episodes inside the enclosure. Episodes are emitted a row at a time rather than as
  * individual grid cells because the enclosure has to be drawn by the items themselves — and a row
- * is still lazy, so at most [LibraryGridColumns] cards compose at once instead of the whole series.
+ * is still lazy, so at most one row of cards composes at once instead of the whole series.
  */
 /**
  * A sub-series heading inside an opened collection.
@@ -2373,6 +2411,8 @@ private fun ExpandedSubHeader(label: String, last: Boolean) {
 private fun ExpandedSeriesRow(
     books: List<BookListItem>,
     last: Boolean,
+    /** The grid's column count, so a short last row pads out to the same cell width as a full one. */
+    columns: Int,
     ctx: RowContext,
     onOpen: (String) -> Unit,
     actions: BookActions,
@@ -2394,7 +2434,7 @@ private fun ExpandedSeriesRow(
             }
         }
         // Hold the last row's cards to the same width as a full row's.
-        repeat(LibraryGridColumns - books.size) { Spacer(modifier = Modifier.weight(1f)) }
+        repeat(columns - books.size) { Spacer(modifier = Modifier.weight(1f)) }
     }
 }
 
