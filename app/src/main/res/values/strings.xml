@@ -570,8 +570,8 @@
     <string name="filter_state_finished">Finished</string>
     <string name="filter_state_unstarted">Not started</string>
     <string name="filter_state_edited">Edited</string>
-    <string name="filter_state_in_series">In a series</string>
-    <string name="filter_state_in_collection">In a collection</string>
+    <string name="filter_state_in_series">Series</string>
+    <string name="filter_state_in_collection">Collection</string>
     <string name="filter_state_unmeasured">No length yet</string>
     <string name="filter_state_no_cover">No cover</string>
     <string name="home_section_library_filtered">Library · %1$d of %2$d</string>

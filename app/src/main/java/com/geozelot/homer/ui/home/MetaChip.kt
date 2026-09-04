@@ -246,7 +246,7 @@ private fun MetaChip(
         when (kind) {
             MetaChipKind.GENRE -> BookGenre.display(value, ctx.locale)
             MetaChipKind.SHELF ->
-                BookState.from(value)?.let { stringResource(it.chipLabel) } ?: value
+                BookState.from(value)?.let { stringResource(it.label) } ?: value
             MetaChipKind.AUTHOR -> value
         }
     }
