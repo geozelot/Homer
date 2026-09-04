@@ -100,7 +100,21 @@ class CoverEnricher @Inject constructor(
             // fetching the folder image, streaming the first file for embedded art, asking Open
             // Library — and none of it can be published from here, so every reader would pay for
             // the same extraction and keep the result to itself.
-            if (sharedOnly) continue
+            //
+            // MARKED as tried on the way out, which the reader path used to skip — and skipping it
+            // is what made this pass run in full on every single launch. `booksNeedingCover` is
+            // "no art and never attempted", so a reader that never set the flag asked the server
+            // for the same 171 missing covers every time the app opened: a minute and a half of
+            // 404s against somebody else's storage, finding nothing, for ever. Exactly the shape of
+            // waste the library's own rules exist to prevent, done to itself.
+            //
+            // Safe to record precisely because the sweep above un-records it: when the shared cover
+            // folder's ETag changes, `booksWithoutArt` re-arms every art-less book regardless of
+            // the flag, so art published later is still picked up on the next pass.
+            if (sharedOnly) {
+                bookDao.markCoverAttempted(book.id)
+                continue
+            }
             // A cover image sitting in the book's folder on the server: fetch that one small file
             // and cache it. This is both the cheapest source (no audio streaming, unlike embedded
             // extraction) and the fix for it otherwise being re-downloaded on every display and
