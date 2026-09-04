@@ -54,7 +54,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Check
@@ -140,7 +139,6 @@ import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
-import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
@@ -1279,8 +1277,10 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  * once, which fixed the crowding by putting a modal in front of the library to change how the
  * library looks; you could not see what you were arranging while you arranged it.
  *
- * [DropdownChip]'s icon mode carries the category so each reads as its value alone, which is the
- * mode that exists because this bar once carried four of them permanently.
+ * Each chip names its axis in words rather than with a glyph. A glyph was what fitted while the
+ * field sat between its neighbours, and it asks the reader to know what a stack of layers means;
+ * across the row there is room to say "Shelve". The category is the half that gives way when there
+ * is not — see [DropdownChip.category] — so the value stays whole either way.
  */
 @Composable
 private fun ArrangeField(
@@ -1312,8 +1312,7 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onShelfChange,
             modifier = Modifier.weight(1f),
-            icon = Icons.Filled.Layers,
-            iconDescription = stringResource(R.string.arrange_shelve),
+            category = stringResource(R.string.arrange_shelve),
             bordered = false,
         )
         DropdownChip(
@@ -1323,8 +1322,7 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onSeriesChange,
             modifier = Modifier.weight(1f),
-            icon = HomerIcons.Spines,
-            iconDescription = stringResource(R.string.arrange_group),
+            category = stringResource(R.string.arrange_group),
             bordered = false,
         )
         // Only the sorts that still do something — see LibrarySort.offeredFor.
@@ -1335,8 +1333,7 @@ private fun ArrangeField(
             labelOf = { context.getString(it.label) },
             onSelect = onSortChange,
             modifier = Modifier.weight(1f),
-            icon = Icons.AutoMirrored.Filled.Sort,
-            iconDescription = stringResource(R.string.arrange_sort),
+            category = stringResource(R.string.arrange_sort),
             bordered = false,
         )
     }

@@ -297,6 +297,16 @@ fun <T> DropdownChip(
      * width for three of them to sit in a segment of a phone's control row.
      */
     bordered: Boolean = true,
+    /**
+     * Names the axis in front of the value — "Shelve: Author" — instead of leaving it to an icon.
+     *
+     * Rendered as its OWN text rather than folded into [label], because the two halves have to give
+     * way in opposite orders. A single string ellipsises from the end, which cuts the value and
+     * keeps the category: "Shelve: Aut…" tells you the one thing you already knew. Here the
+     * category is the shrinkable half and the value is not, so a narrow chip degrades to
+     * "Grupp…  Gestapelt" — the word that matters survives whole.
+     */
+    category: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -342,10 +352,24 @@ fun <T> DropdownChip(
                     )
                     Spacer(Modifier.size(5.dp))
                 }
+                category?.let {
+                    Text(
+                        // The colon travels with the word, so a category that has to shrink loses
+                        // its punctuation too — "Gruppie…  Gestapelt" rather than "Gruppie…:".
+                        "$it:",
+                        color = Faint,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Spacer(Modifier.size(4.dp))
+                }
                 // Shrinkable, so a chip sharing a row with others (the library control bar) gives
                 // way instead of pushing its neighbours off a narrow screen. fill = false keeps it
                 // at its natural width whenever there is room, which is everywhere else.
                 Text(
+                    // Not shrinkable when a category is carrying the give — see [category].
                     text = buildAnnotatedString {
                         append(label)
                         // With an icon the whole label IS the value, so it is emphasised as a whole
@@ -363,7 +387,7 @@ fun <T> DropdownChip(
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = if (category == null) Modifier.weight(1f, fill = false) else Modifier,
                 )
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
             }
