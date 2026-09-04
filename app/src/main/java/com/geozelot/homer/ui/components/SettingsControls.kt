@@ -300,11 +300,11 @@ fun <T> DropdownChip(
     /**
      * Names the axis in front of the value — "Shelve: Author" — instead of leaving it to an icon.
      *
-     * Rendered as its OWN text rather than folded into [label], because the two halves have to give
-     * way in opposite orders. A single string ellipsises from the end, which cuts the value and
-     * keeps the category: "Shelve: Aut…" tells you the one thing you already knew. Here the
-     * category is the shrinkable half and the value is not, so a narrow chip degrades to
-     * "Grupp…  Gestapelt" — the word that matters survives whole.
+     * Rendered as its OWN text rather than folded into [label] so the two halves can be given
+     * different priorities. The category is fixed and the VALUE gives way: three chips whose
+     * categories are all fully drawn line up as three settings, where three shortened categories
+     * read as three different things. A clipped value is still recognisable — and the chip opens to
+     * show it in full, which is what the chip is for.
      */
     category: String? = null,
 ) {
@@ -335,6 +335,9 @@ fun <T> DropdownChip(
                             Modifier
                         },
                     )
+                    // Borderless, the chip IS its share of the field, so it spans it: the text
+                    // starts at the share's left edge and the chevron ends at its right.
+                    .then(if (bordered) Modifier else Modifier.fillMaxWidth())
                     .padding(
                         start = if (bordered) (if (icon != null) 7.dp else 10.dp) else 4.dp,
                         end = if (bordered) 6.dp else 2.dp,
@@ -354,14 +357,10 @@ fun <T> DropdownChip(
                 }
                 category?.let {
                     Text(
-                        // The colon travels with the word, so a category that has to shrink loses
-                        // its punctuation too — "Gruppie…  Gestapelt" rather than "Gruppie…:".
                         "$it:",
                         color = Faint,
                         fontSize = 11.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
                     )
                     Spacer(Modifier.size(4.dp))
                 }
@@ -387,7 +386,14 @@ fun <T> DropdownChip(
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = if (category == null) Modifier.weight(1f, fill = false) else Modifier,
+                    // Filled weight when a category is present, so the value takes what is left and
+                    // the chevron is pushed to the chip's own right edge — which is what puts all
+                    // three chevrons on the same three tick marks across the field.
+                    modifier = if (category == null) {
+                        Modifier.weight(1f, fill = false)
+                    } else {
+                        Modifier.weight(1f)
+                    },
                 )
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Faint, modifier = Modifier.size(16.dp))
             }

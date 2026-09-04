@@ -1155,18 +1155,26 @@ private fun LibraryControlBar(
                 onPickSuggestion = onPickSuggestion,
             )
         } else if (arrangeOpen) {
-            // The field takes the row. Between its neighbours it had about 190dp for three values,
-            // which fits them only by ellipsising the ones worth reading — and a setting you cannot
-            // read is a setting you have to open to check. The row is about 330dp, so a third each
-            // is a comfortable 110.
-            ArrangeField(
-                sort = sort,
-                shelving = shelving,
-                series = series,
-                onSortChange = onSortChange,
-                onShelfChange = onShelfChange,
-                onSeriesChange = onSeriesChange,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The way out, where the search glyph sits when the row is closed — so the control
+                // that leaves a mode is in the same place whichever mode you are in. Tapping the
+                // library or pressing back still work; this is the one that is visible.
+                ArrangeBackButton(onClick = onToggleArrange)
+                // The field takes what is left of the row. Between its neighbours it had about
+                // 190dp for three values, which fits them only by clipping the ones worth reading.
+                ArrangeField(
+                    sort = sort,
+                    shelving = shelving,
+                    series = series,
+                    onSortChange = onSortChange,
+                    onShelfChange = onShelfChange,
+                    onSeriesChange = onSeriesChange,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1261,6 +1269,26 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Leaves the arrange mode, from where the search glyph sits when the row is closed. */
+@Composable
+private fun ArrangeBackButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .sizeIn(minHeight = ControlTapHeight, minWidth = 40.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.action_back),
+            // Amber, because it belongs to the field beside it rather than to the row underneath:
+            // it is lit for as long as the mode is.
+            tint = Amber,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
 /**
  * The three settings, inside a field of their own.
  *
@@ -1283,7 +1311,18 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  * segment is about 190dp on a small phone, and three outlined chips carrying real values —
  * "Gestapelt" is not a short word — do not fit it.
  *
- * ## An even third each, and why that is also what made the values appear at all
+ * ## An even third each
+ *
+ * Each setting takes `weight(1f)`, and inside its share the chip spans the full width: the category
+ * begins at the share's left edge and the chevron ends at its right. So the three chevrons land on
+ * the same three tick marks whatever the values happen to say, which is what makes the row read as
+ * evenly divided rather than as three chips of assorted lengths.
+ *
+ * The value is the half that gives way. Three fully-drawn categories read as three settings, where
+ * three shortened ones read as three different things — and a clipped value is still recognisable,
+ * with the chip a tap away from showing it whole.
+ *
+ * ## Why fixed shares are also what made the values appear at all
  *
  * The run scrolled first, and inside a `horizontalScroll` a Row is measured against an infinite
  * width — under which `DropdownChip`'s label, which is `weight(1f, fill = false)` so it can give
@@ -1300,8 +1339,7 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  *
  * Each chip names its axis in words rather than with a glyph. A glyph was what fitted while the
  * field sat between its neighbours, and it asks the reader to know what a stack of layers means;
- * across the row there is room to say "Shelve". The category is the half that gives way when there
- * is not — see [DropdownChip.category] — so the value stays whole either way.
+ * across the row there is room to say "Shelve".
  */
 @Composable
 private fun ArrangeField(
@@ -1311,11 +1349,12 @@ private fun ArrangeField(
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             // Same inset as the search field, and for the same reason — see ControlRowInset. With
             // it the field measures 48dp overall, exactly the row it replaced.
