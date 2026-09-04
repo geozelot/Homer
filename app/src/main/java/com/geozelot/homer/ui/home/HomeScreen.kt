@@ -1135,6 +1135,19 @@ private fun LibraryControlBar(
                 suggestions = suggestions,
                 onPickSuggestion = onPickSuggestion,
             )
+        } else if (arrangeOpen) {
+            // The field takes the row. Between its neighbours it had about 190dp for three values,
+            // which fits them only by ellipsising the ones worth reading — and a setting you cannot
+            // read is a setting you have to open to check. The row is about 330dp, so a third each
+            // is a comfortable 110.
+            ArrangeField(
+                sort = sort,
+                shelving = shelving,
+                series = series,
+                onSortChange = onSortChange,
+                onShelfChange = onShelfChange,
+                onSeriesChange = onSeriesChange,
+            )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1143,24 +1156,12 @@ private fun LibraryControlBar(
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
             SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
-            // One chip, until it is asked to be three — see [ArrangeField]. It expands in place,
-            // between the glyph on its left and the toggle on its right, both of which stay put.
+            // One chip, until it is asked to be three — see [ArrangeField].
             Box(
                 modifier = Modifier.weight(1f).padding(start = 8.dp, end = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                if (arrangeOpen) {
-                    ArrangeField(
-                        sort = sort,
-                        shelving = shelving,
-                        series = series,
-                        onSortChange = onSortChange,
-                        onShelfChange = onShelfChange,
-                        onSeriesChange = onSeriesChange,
-                    )
-                } else {
-                    ArrangeChip(open = false, onClick = onToggleArrange)
-                }
+                ArrangeChip(open = false, onClick = onToggleArrange)
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
         }
@@ -1246,9 +1247,15 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  *
  * ## What it is
  *
- * The Arrange chip, expanded: same height, same corner, same place in the row, now stretched across
- * the segment between the search glyph and the view toggle with the settings laid out inside it.
- * Search and the view toggle stay exactly where they were — this replaces one control, not the row.
+ * The Arrange chip, expanded: same height, same corner, now stretched across the whole control row
+ * with the settings laid out inside it — exactly as the search field does one state over, which is
+ * also why it is drawn like one.
+ *
+ * It was tried in the segment between the search glyph and the view toggle, keeping both neighbours
+ * in place. That segment is about 190dp on a small phone, and three values fit it only by
+ * ellipsising the ones worth reading — a setting you cannot read is a setting you have to open to
+ * check, which is the opposite of what putting them on the bar was for. Across the row each gets a
+ * comfortable 110dp, and the neighbours come back the moment it closes.
  *
  * ## Why the settings inside it wear no outline
  *
@@ -1257,7 +1264,7 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  * segment is about 190dp on a small phone, and three outlined chips carrying real values —
  * "Gestapelt" is not a short word — do not fit it.
  *
- * ## An even third each, and why that is also what makes the values appear
+ * ## An even third each, and why that is also what made the values appear at all
  *
  * The run scrolled first, and inside a `horizontalScroll` a Row is measured against an infinite
  * width — under which `DropdownChip`'s label, which is `weight(1f, fill = false)` so it can give
