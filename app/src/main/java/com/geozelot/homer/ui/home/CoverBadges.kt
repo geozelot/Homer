@@ -314,14 +314,21 @@ internal fun CoverMenuButton(modifier: Modifier = Modifier, onClick: () -> Unit)
         // The inset is the whole difference between floating and anchored. Applied outside the
         // circle so the shape keeps its own clean edge and the gap is real space, not padding the
         // scrim paints over.
-        modifier = modifier.padding(5.dp),
+        //
+        // The TAP is taken out here rather than on the disc, which makes the target the disc plus
+        // its inset — 38dp instead of 28 — for a control that is otherwise a small circle floating
+        // on a cover that opens the book when missed. Clipped to a circle first, so the ripple is a
+        // disc concentric with the visible one rather than a square appearing around it.
+        modifier = modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .padding(5.dp),
     ) {
         Box(
             modifier = Modifier
                 .size(CoverMenuDisc)
                 .clip(CircleShape)
-                .background(BadgeScrim)
-                .clickable(onClick = onClick),
+                .background(BadgeScrim),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

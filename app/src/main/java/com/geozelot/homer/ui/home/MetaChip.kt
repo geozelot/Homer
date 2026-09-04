@@ -388,15 +388,23 @@ private fun MetaChipStrip(
             }
             // The way out that is not "tap somewhere else" — the strip covers the row it came from,
             // so the card underneath is not a safe place to aim at.
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = stringResource(R.string.action_close),
-                tint = Faint,
+            Box(
+                // The glyph stays 16dp; the target is 28. This is the strip's stated way out — the
+                // row it came from is covered, so there is nowhere safe to tap instead — and a
+                // 16dp target for the one control that has to be hittable was the wrong size for
+                // the job it is doing.
                 modifier = Modifier
-                    .padding(start = 2.dp)
-                    .size(16.dp)
-                    .clickable(onClick = onDismiss),
-            )
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(6.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.action_close),
+                    tint = Faint,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
