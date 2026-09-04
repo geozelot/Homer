@@ -371,6 +371,11 @@ fun <T> DropdownChip(
                         "$it:",
                         color = Faint,
                         fontSize = 11.sp,
+                        // Sized to the glyphs. Without it the line box is the 24sp one inherited
+                        // from the theme's body style, and Compose hands the 13sp of leftover to
+                        // ascent and descent in proportion — four fifths of it above the letters.
+                        // The box is then centred in the field and the words sit visibly low in it.
+                        lineHeight = 13.sp,
                         maxLines = 1,
                     )
                     Spacer(Modifier.size(4.dp))
@@ -395,6 +400,8 @@ fun <T> DropdownChip(
                     },
                     color = Muted,
                     fontSize = 11.sp,
+                    // Matches the category beside it — see there for what an unset one does.
+                    lineHeight = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // Shrinkable but never stretched: a short value leaves its cell's content

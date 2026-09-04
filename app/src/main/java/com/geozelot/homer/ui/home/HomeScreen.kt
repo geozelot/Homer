@@ -1543,13 +1543,17 @@ private fun InlineSearchField(
                         stringResource(R.string.home_search_placeholder),
                         color = Faint,
                         fontSize = 12.sp,
+                        // The field below builds its style from scratch and so gets the font's own
+                        // line box; this one inherits the theme's 24sp one. Unset, the placeholder
+                        // and the text replacing it sat on two different lines.
+                        lineHeight = 14.sp,
                     )
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = TextStyle(color = Parchment, fontSize = 12.sp),
+                    textStyle = TextStyle(color = Parchment, fontSize = 12.sp, lineHeight = 14.sp),
                     cursorBrush = SolidColor(Amber),
                     // The key that was doing nothing. On a single-line field the IME shows an action
                     // in place of a newline, and it went unhandled — so pressing it dismissed the
