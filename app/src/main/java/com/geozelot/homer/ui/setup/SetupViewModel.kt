@@ -15,6 +15,7 @@ import com.geozelot.homer.data.library.SetupProbe
 import com.geozelot.homer.data.library.SetupState
 import com.geozelot.homer.data.library.decideSetup
 import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -167,6 +168,7 @@ class SetupViewModel @Inject constructor(
     private val setupProbe: LibrarySetupProbe,
     private val policyRepository: LibraryPolicyRepository,
     private val discovery: LibraryDiscovery,
+    private val homerSync: HomerSyncRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SetupUiState())
@@ -471,8 +473,27 @@ class SetupViewModel @Inject constructor(
     }
 
     private suspend fun finish() {
+        // Awaited, not fired and forgotten: this scope dies with the flow, and a sync launched
+        // into it would be cancelled the moment the screen went away. So the last screen shows it
+        // is working rather than sitting there looking ignored.
+        _state.update { it.copy(busy = true) }
         librarySettings.setSetupState(SetupState.DONE)
         val root = librarySettings.libraryRoot.first()
+        // Progress is pulled HERE, and not left to whatever happens next.
+        //
+        // `HomeViewModel` reconciles the manifest in its `init`, which is fine for a first run and
+        // useless for a re-run from settings: that ViewModel belongs to the library destination and
+        // was built long ago, so linking an account changed the setting and nothing went to look.
+        // Nothing else covers it either — `PositionSyncer` pulls on a playback resume, and the
+        // manifest has no foreground observer of its own. The positions turned up on the next cold
+        // start, which reads as "it did not work".
+        //
+        // Forced, because the throttle exists to stop repeat syncs and this is the one moment the
+        // user is waiting for the answer.
+        if (librarySettings.progressSyncEnabled.first()) {
+            runCatching { homerSync.sync(force = true) }
+                .onFailure { Log.w(TAG, "could not read progress after setup", it) }
+        }
         Log.i(TAG, "setup finished on '$root'")
         _state.update { it.copy(done = true) }
     }
