@@ -3,7 +3,6 @@ package com.geozelot.homer.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -1256,8 +1255,15 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
  * A box inside a box reads as two controls, and three of them reads as four. Without their own
  * pills the field is the control and these are its parts. It is also what buys the width: that
  * segment is about 190dp on a small phone, and three outlined chips carrying real values —
- * "Gestapelt" is not a short word — do not fit it. Borderless they very nearly do, and what is left
- * over scrolls behind the same edge fade the suggestion row uses.
+ * "Gestapelt" is not a short word — do not fit it.
+ *
+ * ## An even third each, and why that is also what makes the values appear
+ *
+ * The run scrolled first, and inside a `horizontalScroll` a Row is measured against an infinite
+ * width — under which `DropdownChip`'s label, which is `weight(1f, fill = false)` so it can give
+ * way on a crowded bar, resolves to no width at all. The values were not merely cramped, they were
+ * absent. Three fixed thirds constrain the labels properly, so each one is shown and ellipsised
+ * within its own share instead of vanishing into an unbounded row.
  *
  * ## Why the three cannot simply be one menu
  *
@@ -1280,7 +1286,6 @@ private fun ArrangeField(
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
-    val scroll = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1290,8 +1295,6 @@ private fun ArrangeField(
             // Amber, like the search field it is a sibling of: both are a chip that became a field,
             // and the accent is what this app uses to mean "this is live".
             .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
-            .scrollEdgeFade(scroll)
-            .horizontalScroll(scroll)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1301,6 +1304,7 @@ private fun ArrangeField(
             selected = shelving,
             labelOf = { context.getString(it.label) },
             onSelect = onShelfChange,
+            modifier = Modifier.weight(1f),
             icon = Icons.Filled.Layers,
             iconDescription = stringResource(R.string.arrange_shelve),
             bordered = false,
@@ -1311,6 +1315,7 @@ private fun ArrangeField(
             selected = series,
             labelOf = { context.getString(it.label) },
             onSelect = onSeriesChange,
+            modifier = Modifier.weight(1f),
             icon = HomerIcons.Spines,
             iconDescription = stringResource(R.string.arrange_group),
             bordered = false,
@@ -1322,6 +1327,7 @@ private fun ArrangeField(
             selected = sort,
             labelOf = { context.getString(it.label) },
             onSelect = onSortChange,
+            modifier = Modifier.weight(1f),
             icon = Icons.AutoMirrored.Filled.Sort,
             iconDescription = stringResource(R.string.arrange_sort),
             bordered = false,

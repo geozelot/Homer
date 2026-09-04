@@ -306,8 +306,12 @@ fun <T> DropdownChip(
         Box(
             modifier = Modifier
                 .sizeIn(minHeight = if (bordered) 48.dp else 0.dp)
+                // Borderless, the chip is one share of a field and the whole share should open it:
+                // a tap target the width of the words leaves dead space between three controls that
+                // look like they divide the field between them.
+                .then(if (bordered) Modifier else Modifier.fillMaxWidth())
                 .clickable { open = true },
-            contentAlignment = Alignment.Center,
+            contentAlignment = Alignment.CenterStart,
         ) {
             Row(
                 modifier = Modifier
