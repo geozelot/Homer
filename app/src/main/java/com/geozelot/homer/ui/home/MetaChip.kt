@@ -123,13 +123,11 @@ internal enum class MetaChipKind {
     AUTHOR,
 
     /**
-     * What this shelf IS — "Collection" or "Series" — on an opened header.
+     * What this shelf IS — "In a collection" or "In a series" — on an opened header.
      *
-     * The one kind that is a label rather than a way somewhere: filtering by the collection you are
-     * currently standing inside would narrow the library to what is already on screen. So it is not
-     * clickable, and it is drawn the same as the others because it occupies the same slot and a
-     * header that changed shape on opening is the vertical shift this arrangement is trying to
-     * avoid.
+     * It carries a [BookState] key rather than a display string, because tapping it narrows the
+     * library to everything of that kind. That is the one filter a header can offer which is not
+     * about the shelf you are standing in: not "this collection", but every book that is in one.
      */
     SHELF,
 }
@@ -241,8 +239,16 @@ private fun MetaChip(
     onFilter: (MetaChipKind, String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
-    val label = { value: String ->
-        if (kind == MetaChipKind.GENRE) BookGenre.display(value, ctx.locale) else value
+    // Resolved here rather than by the caller: a chip's VALUE is what a filter needs — a genre key,
+    // a state key — and its label is what a reader needs, and the two are only the same string for
+    // an author.
+    val label: @Composable (String) -> String = { value ->
+        when (kind) {
+            MetaChipKind.GENRE -> BookGenre.display(value, ctx.locale)
+            MetaChipKind.SHELF ->
+                BookState.from(value)?.let { stringResource(it.label) } ?: value
+            MetaChipKind.AUTHOR -> value
+        }
     }
     Box {
         Row(
@@ -254,7 +260,7 @@ private fun MetaChip(
                 // Its own click, so it does not open the book underneath it. The card still opens
                 // everywhere else, and long-pressing the card still reaches the menu. One value is
                 // committed straight to the filter; several open the list first.
-                .clickable(enabled = kind != MetaChipKind.SHELF) {
+                .clickable {
                     if (values.size > 1) open = true else onFilter(kind, values.first())
                 }
                 .padding(horizontal = 6.dp),
@@ -342,7 +348,7 @@ private object MetaChipStripPosition : PopupPositionProvider {
 @Composable
 private fun MetaChipStrip(
     values: List<String>,
-    label: (String) -> String,
+    label: @Composable (String) -> String,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {

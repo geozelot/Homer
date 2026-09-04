@@ -149,6 +149,53 @@ class LibraryFilterTest {
         assertTrue(suggest(all, "", committed).none { it.value == BookState.UNSTARTED.key })
     }
 
+    // ── a series and a collection are different claims ───────────────────────────────────────
+
+    @Test
+    fun `in a series means in a series, not in anything`() {
+        // It used to mean "series OR collection", as the counterpart of a standalone — so a book
+        // with no series at all matched a filter that says "In a series".
+        val loose = book("l", collection = "Discworld")
+        val volume = book("v", series = "TKKG")
+        val f = LibraryFilter().plus(FilterToken(FilterFacet.STATE, BookState.IN_SERIES.key))
+        assertTrue(f.matches(volume))
+        assertFalse(f.matches(loose))
+    }
+
+    @Test
+    fun `in a collection is its own state`() {
+        val loose = book("l", collection = "Discworld")
+        val volume = book("v", series = "TKKG")
+        val f = LibraryFilter().plus(FilterToken(FilterFacet.STATE, BookState.IN_COLLECTION.key))
+        assertTrue(f.matches(loose))
+        assertFalse(f.matches(volume))
+    }
+
+    @Test
+    fun `a book can be in both, and each state finds it`() {
+        // The ordinary shape of a threaded collection: a volume of a series that sits under a
+        // parent grouping. Both chips lead to it, which is the point of them being separate.
+        val threaded = book("t", series = "TKKG", collection = "Krimis")
+        assertTrue(
+            LibraryFilter().plus(FilterToken(FilterFacet.STATE, BookState.IN_SERIES.key)).matches(threaded),
+        )
+        assertTrue(
+            LibraryFilter().plus(FilterToken(FilterFacet.STATE, BookState.IN_COLLECTION.key)).matches(threaded),
+        )
+    }
+
+    @Test
+    fun `the two together mean both, because states AND`() {
+        // Worth pinning: they do NOT restore the old "either" meaning. Nothing does — this filter
+        // language has no OR — and that is the price of the two being distinguishable at all.
+        val f = LibraryFilter()
+            .plus(FilterToken(FilterFacet.STATE, BookState.IN_SERIES.key))
+            .plus(FilterToken(FilterFacet.STATE, BookState.IN_COLLECTION.key))
+        assertTrue(f.matches(book("t", series = "TKKG", collection = "Krimis")))
+        assertFalse(f.matches(book("v", series = "TKKG")))
+        assertFalse(f.matches(book("l", collection = "Krimis")))
+    }
+
     @Test
     fun `two states AND together, which is what makes them worth combining`() {
         // A book IS several states at once, so this is the combination AND was wanted for:

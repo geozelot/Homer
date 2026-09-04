@@ -105,8 +105,19 @@ enum class BookState(val key: String, @StringRes val label: Int, val holds: (Boo
     /** Carries a correction somebody made, which is how you find what you have already fixed. */
     EDITED("edited", R.string.filter_state_edited, { it.hasEdits }),
 
-    /** In a series or a collection — the counterpart of a standalone. */
-    IN_SERIES("series", R.string.filter_state_in_series, { it.series != null || it.collection != null }),
+    /**
+     * Part of a numbered run.
+     *
+     * It used to mean "in a series OR a collection", as the counterpart of a standalone — which
+     * made the two indistinguishable, and they are not the same claim: a collection is a parent
+     * grouping somebody expressed, and a book can be in one without being in a series (or in a
+     * series with no collection above it). Narrowed, so each says only what it says. The old
+     * combined meaning is now two tokens, which OR together exactly as states always have.
+     */
+    IN_SERIES("series", R.string.filter_state_in_series, { it.series != null }),
+
+    /** Under a parent grouping — see [IN_SERIES] for why this is its own state. */
+    IN_COLLECTION("collection", R.string.filter_state_in_collection, { it.collection != null }),
 
     /** Length unknown, so it has never been measured. The books a measure pass would work on. */
     UNMEASURED("unmeasured", R.string.filter_state_unmeasured, { it.totalDurationMs == null }),

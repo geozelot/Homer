@@ -891,6 +891,7 @@ private fun LazyGridScope.libraryContent(
                                 ctx = ctx,
                                 flat = flat,
                                 onOrderChange = { onCollectionOrder(entry.name, it) },
+                                onFilter = actions.onFilter,
                                 onCollapse = { close(entry) },
                             )
                         }
@@ -2012,18 +2013,18 @@ private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
  * whether this is a collection or one series, which the cover stack used to imply and no longer
  * does in list view.
  */
-@Composable
 private fun shelfKindChip(series: LibraryEntry.Series) = MetaChipKind.SHELF to listOf(
-    stringResource(
-        if (series.isCollection) R.string.filter_facet_collection else R.string.filter_facet_series,
-    ),
+    (if (series.isCollection) BookState.IN_COLLECTION else BookState.IN_SERIES).key,
 )
 
 /** A chip's value as a filter token. */
-private fun chipToken(kind: MetaChipKind, value: String): FilterToken = FilterToken(
-    if (kind == MetaChipKind.GENRE) FilterFacet.GENRE else FilterFacet.AUTHOR,
-    value,
-)
+private fun chipToken(kind: MetaChipKind, value: String): FilterToken = when (kind) {
+    MetaChipKind.GENRE -> FilterToken(FilterFacet.GENRE, value)
+    MetaChipKind.AUTHOR -> FilterToken(FilterFacet.AUTHOR, value)
+    // Not `collection:TKKG`, which would narrow the library to the shelf already on screen — the
+    // state, so it answers "show me everything that is in a collection".
+    MetaChipKind.SHELF -> FilterToken(FilterFacet.STATE, value)
+}
 
 /** What the arrangement already tells the reader, so a row can say something else instead. */
 @Immutable
@@ -2348,6 +2349,7 @@ private fun ExpandedSeriesHeader(
     ctx: RowContext,
     flat: Boolean,
     onOrderChange: (Boolean) -> Unit,
+    onFilter: (FilterToken) -> Unit,
     onCollapse: () -> Unit,
 ) {
     Column(
@@ -2387,7 +2389,7 @@ private fun ExpandedSeriesHeader(
                 MetaChipSlot(
                     chip = shelfKindChip(series),
                     ctx = ctx,
-                    onFilter = { _, _ -> },
+                    onFilter = { kind, value -> onFilter(chipToken(kind, value)) },
                     trailing = seriesMeta(series, ctx, LocalContext.current, expanded = true),
                     modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
                 )
