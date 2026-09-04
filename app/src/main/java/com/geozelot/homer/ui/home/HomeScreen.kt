@@ -2000,12 +2000,10 @@ private fun GridCardText(
  * Factored out because four item views ask the same two questions and answering them at each call
  * site is how the grid and the list end up disagreeing about what a card says.
  */
-@Composable
 private fun bookChip(book: BookListItem, ctx: RowContext) =
     metaChipFor(book.genres, book.author, ctx.shelving)
 
 /** The same, for a shelf: what most of its books agree on. */
-@Composable
 private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
     metaChipFor(series.books.shelfGenres(), series.author, ctx.shelving)
 
@@ -2080,14 +2078,15 @@ private fun bookMeta(
     // Then whether this device HAS it, which is the other half of "can I listen to this now" and so
     // belongs beside the length rather than after the tags. Same slot in seriesMeta — see there.
     if (withOffline && book.isDownloaded) add(context.getString(R.string.details_offline))
-    // Only where the chip is not already carrying it. Shelved by genre the chip IS the author;
-    // shelved by author the heading is. What is left is the unshelved case, where the chip has the
-    // genre and this line has the name.
-    if (ctx.shelving != LibraryShelving.AUTHOR && ctx.shelving != LibraryShelving.GENRE) {
+    // The author, unless something else on the card is already saying it: the heading overhead when
+    // the shelf IS the author, or the chip when it took the name. Asked of `metaChipFor` rather
+    // than re-derived here — one rule, subtracted, so the two cannot drift into printing the name
+    // twice or dropping it from both.
+    if (ctx.shelving != LibraryShelving.AUTHOR && !bookChip(book, ctx).carriesAuthor()) {
         add(book.author ?: context.getString(R.string.unknown_author))
     }
-    // The genres are the chip's, and only the chip's. They used to be joined into this line with
-    // the author and the tags, which on a narrow cell meant three ellipsised genres and no author.
+    // Genres are the chip's, and only the chip's. They used to be joined into this line with the
+    // author and the tags, which on a narrow cell meant three ellipsised genres and no author.
     // Only where it distinguishes something: on a single-language library this is the same two
     // letters on every row, and shelved BY language the heading above already says it.
     if (ctx.mixedLanguages && ctx.shelving != LibraryShelving.LANGUAGE) {
@@ -2249,26 +2248,17 @@ private fun SeriesGridCard(
 }
 
 /**
- * The line under a stacked shelf's cover.
+ * The line under a stacked shelf's cover in the grid.
  *
- * The volume count, the downloaded count and now the length are all drawn on the cover itself, so
- * the only thing left for the text is the one fact a corner cannot hold: who wrote it.
- *
- * Which means that shelved BY author there is nothing left to say — and saying it anyway is what
- * [bookMeta] has always refused to do one row below. A shelf carried the author under every cover
- * while the section heading above already named them, so the two views disagreed about the same
- * rule. Empty is correct here: the card's meta line is `minLines = 2` either way, so nothing moves.
+ * A folded shelf in the grid and a folded shelf in the list are the same object saying the same
+ * thing, so this is [seriesMeta]'s folded form and nothing else. It used to be its own two-branch
+ * rule about the author, which is how the two views came to disagree the moment either was touched.
  */
 private fun seriesCardMeta(
     series: LibraryEntry.Series,
     ctx: RowContext,
     context: android.content.Context,
-): String =
-    if (ctx.shelving == LibraryShelving.AUTHOR) {
-        ""
-    } else {
-        series.author ?: context.getString(R.string.unknown_author)
-    }
+): String = seriesMeta(series, ctx, context, expanded = false)
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -2481,39 +2471,40 @@ private fun seriesMeta(
     ctx: RowContext,
     context: android.content.Context,
     /**
-     * Whether the shelf is open.
+     * Whether the shelf is open, which changes what the line is ABOUT.
      *
-     * Open, the author is redundant — the books are on screen underneath saying it — so the line
-     * becomes purely what the shelf HOLDS: how many, how long, how much of it is on this device.
-     * Folded, the shelf is one item among books and reads like one.
+     * Folded, a shelf is one item standing among books and reads like one: the same chip above it,
+     * and beneath it the same kind of line a book has. Opened, its books are on screen saying all of
+     * that for themselves — so the line stops describing the shelf's contents one by one and starts
+     * describing the shelf: how many, how long, how much of it is on this device.
+     *
+     * The counts used to be on BOTH, which is why a folded shelf carried a length, a book count, a
+     * download count and an author while the book beside it carried a name.
      */
     expanded: Boolean = false,
 ): String = buildList {
-    // Same running order as a book row — length, then what this device has of it, then who wrote it
-    // — so a shelf and a book sitting next to each other in the same list read the same way round.
-    // The author used to lead here and trail there, which is the sort of thing nobody can name but
-    // everybody has to re-read.
-    //
-    // The first two came off the cover: at 38x52 the corner badges were a smudge. See SeriesShelfRow.
-    seriesTotalMs(series)?.let { add(formatCompactDuration(it)) }
-    add(
-        context.resources.getQuantityString(
-            R.plurals.home_series_book_count,
-            series.books.size,
-            series.books.size,
-        ),
-    )
-    val downloaded = series.books.count { it.isDownloaded }
-    when {
-        downloaded == 0 -> Unit
-        // "Offline" unqualified only when the WHOLE shelf is here; a partial count has to say so,
-        // or a series with one downloaded volume claims to be listenable on a train.
-        downloaded == series.books.size -> add(context.getString(R.string.details_offline))
-        else -> add(context.getString(R.string.details_offline_some, downloaded, series.books.size))
+    if (expanded) {
+        add(
+            context.resources.getQuantityString(
+                R.plurals.home_series_book_count,
+                series.books.size,
+                series.books.size,
+            ),
+        )
+        seriesTotalMs(series)?.let { add(formatCompactDuration(it)) }
+        val downloaded = series.books.count { it.isDownloaded }
+        when {
+            downloaded == 0 -> Unit
+            // "Offline" unqualified only when the WHOLE shelf is here; a partial count has to say
+            // so, or a series with one downloaded volume claims to be listenable on a train.
+            downloaded == series.books.size -> add(context.getString(R.string.details_offline))
+            else -> add(context.getString(R.string.details_offline_some, downloaded, series.books.size))
+        }
+        return@buildList
     }
-    // Dropped when the author is the heading overhead, when the chip beside it is carrying the
-    // name, and when the shelf is open and its books are saying it for themselves.
-    if (!expanded && ctx.shelving != LibraryShelving.AUTHOR && ctx.shelving != LibraryShelving.GENRE) {
+    // Folded: exactly what a book row says, by the same rule — the author, unless the heading or
+    // the chip is already carrying it.
+    if (ctx.shelving != LibraryShelving.AUTHOR && !shelfChip(series, ctx).carriesAuthor()) {
         add(series.author ?: context.getString(R.string.unknown_author))
     }
 }.joinToString(" · ")

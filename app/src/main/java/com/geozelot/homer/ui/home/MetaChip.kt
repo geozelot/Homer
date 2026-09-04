@@ -1,16 +1,28 @@
 package com.geozelot.homer.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,16 +32,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import com.geozelot.homer.R
 import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
 
 /**
@@ -106,25 +129,40 @@ internal fun List<BookListItem>.shelfGenres(): List<String> {
 }
 
 /**
- * What a card's chip should say, given what the shelf overhead already says.
+ * What a card's chip says — the single rule every item view and every meta line reads.
  *
- * Null where there is nothing left worth saying: no genre and no author, or the one fact this item
- * has is the heading it is sitting under.
+ * One value, and never the one the heading overhead already gives:
+ *
+ * | Shelved by | Chip    | Because                                    |
+ * |------------|---------|--------------------------------------------|
+ * | author     | genre   | the heading is the author                  |
+ * | genre      | author  | the heading is the genre                   |
+ * | anything   | genre, or author when there is no genre    |
+ *
+ * Null when the item has neither, or when its only fact is the heading it is standing under.
+ *
+ * **`bookMeta` and `seriesMeta` subtract exactly what this returns**, rather than re-deriving the
+ * same conditions on their own side. Two sides of one rule is how a card ends up printing its author
+ * twice — once in the chip and once in the line beneath — or dropping it from both.
  */
 internal fun metaChipFor(
     genres: List<String>,
     author: String?,
     shelving: LibraryShelving,
-): Pair<MetaChipKind, List<String>>? = when (shelving) {
-    // The heading is the author, so the chip is the genre.
-    LibraryShelving.AUTHOR -> genres.takeIf { it.isNotEmpty() }?.let { MetaChipKind.GENRE to it }
-    // …and the other way round. This used to be blank, on the reasoning that the heading said it
-    // all — but the row was reserved anyway, and an author is exactly the fact a genre shelf
-    // strips out.
-    LibraryShelving.GENRE -> author?.let { MetaChipKind.AUTHOR to listOf(it) }
-    // Nothing overhead: the genre leads and the author stays in the meta line beneath it.
-    else -> genres.takeIf { it.isNotEmpty() }?.let { MetaChipKind.GENRE to it }
+): Pair<MetaChipKind, List<String>>? {
+    val genre = genres.takeIf { it.isNotEmpty() }
+    val named = author?.takeIf { it.isNotBlank() }
+    return when (shelving) {
+        LibraryShelving.AUTHOR -> genre?.let { MetaChipKind.GENRE to it }
+        LibraryShelving.GENRE -> named?.let { MetaChipKind.AUTHOR to listOf(it) }
+        else -> genre?.let { MetaChipKind.GENRE to it }
+            ?: named?.let { MetaChipKind.AUTHOR to listOf(it) }
+    }
 }
+
+/** Whether [metaChipFor] took the author, so a meta line knows not to print it again. */
+internal fun Pair<MetaChipKind, List<String>>?.carriesAuthor(): Boolean =
+    this?.first == MetaChipKind.AUTHOR
 
 /**
  * The slot under an item's title: the chip, or the space it would have taken.
@@ -199,25 +237,113 @@ private fun MetaChip(
                 )
             }
         }
-        // A popup rather than growing in place. Inline expansion would wrap — the one thing this
-        // arrangement rules out — and in a grid whose cards are a fixed height it would push every
-        // neighbour down to show one card's second genre.
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for (value in values) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            label(value),
-                            color = if (value == values.first()) Parchment else Muted,
-                            fontSize = 13.sp,
-                        )
-                    },
-                    onClick = {
+        // The expansion, as the chip growing sideways rather than as a menu dropping out of it.
+        //
+        // A `Popup` because it has to be drawn over the grid, not in it: anything laid out inline
+        // would push every card below it down to show one card's genres, and the whole arrangement
+        // exists to keep those cards where they are. The provider pins it to the chip's own line and
+        // to the window's left edge, so what a reader sees is this chip stretching across the
+        // screen — which also settles where it should sit when the tapped card is in the right-hand
+        // column: nowhere in particular, because it spans the whole width either way.
+        if (open) {
+            Popup(
+                popupPositionProvider = MetaChipStripPosition,
+                onDismissRequest = { open = false },
+            ) {
+                MetaChipStrip(
+                    values = values,
+                    label = label,
+                    onPick = {
                         open = false
-                        onFilter(kind, value)
+                        onFilter(kind, it)
                     },
+                    onDismiss = { open = false },
                 )
             }
+        }
+    }
+}
+
+/**
+ * Pins the strip to the chip's line, at the window's left edge.
+ *
+ * The y comes from the anchor and the x does not — that asymmetry IS the effect: the strip appears
+ * exactly where the chip is, and reaches across everything either side of it.
+ */
+private object MetaChipStripPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset(
+        x = 0,
+        // Centred on the chip rather than hung below it, so the strip replaces the chip in place
+        // instead of appearing to be a second thing underneath it.
+        y = (anchorBounds.top - (popupContentSize.height - anchorBounds.height) / 2)
+            .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+    )
+}
+
+/**
+ * Every value on one line, scrolling sideways.
+ *
+ * One line always. A shelf can carry six genres and wrapping them would make the strip a block that
+ * covers the row it came from — so the overflow scrolls, which is the one gesture that costs the
+ * layout nothing.
+ */
+@Composable
+private fun MetaChipStrip(
+    values: List<String>,
+    label: (String) -> String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val width = LocalConfiguration.current.screenWidthDp.dp
+    AnimatedVisibility(
+        visibleState = remember { MutableTransitionState(false).apply { targetState = true } },
+        enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
+        exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+    ) {
+        Row(
+            modifier = Modifier
+                .width(width)
+                .background(Surface2)
+                .border(1.dp, Line)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (value in values) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Surface1)
+                        .border(1.dp, if (value == values.first()) LineShelf else Line, RoundedCornerShape(999.dp))
+                        .clickable { onPick(value) }
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        label(value),
+                        color = if (value == values.first()) Parchment else Muted,
+                        fontSize = 11.sp,
+                        lineHeight = 11.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+            // The way out that is not "tap somewhere else" — the strip covers the row it came from,
+            // so the card underneath is not a safe place to aim at.
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.action_close),
+                tint = Faint,
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .size(16.dp)
+                    .clickable(onClick = onDismiss),
+            )
         }
     }
 }
