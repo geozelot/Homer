@@ -498,9 +498,18 @@ class SetupViewModel @Inject constructor(
         _state.update { it.copy(done = true) }
     }
 
-    /** Steps back one screen, or reports that there is nowhere to go. */
+    /**
+     * Steps back one screen, or reports that there is nowhere to go inside the flow.
+     *
+     * The "nowhere to go" test is [SetupUiState.canGoBack] and nothing else, so the arrow on screen
+     * and the system gesture cannot disagree — which they did: the gesture knew about the entry
+     * step and the arrow did not, so backing out of a re-run opened at the findings walked *into*
+     * the wizard instead of out to settings, and from the progress question it walked into a
+     * findings screen that had never been probed.
+     */
     fun back(): Boolean {
         val current = _state.value
+        if (!current.canGoBack) return false
         val previous = when (current.step) {
             SetupStep.WHERE -> return false
             SetupStep.SHARE, SetupStep.ACCOUNT -> SetupStep.WHERE

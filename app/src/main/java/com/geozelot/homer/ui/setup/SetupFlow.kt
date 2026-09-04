@@ -98,10 +98,26 @@ fun SetupFlow(
 
     // One handler for the whole flow: the steps are a stack in the ViewModel rather than in a nav
     // graph, because two of them are entered by the credentials arriving rather than by a tap.
-    // Disabled on the first screen rather than swallowed there: the press then falls through to
+    // Disabled on the entry screen rather than swallowed there: the press then falls through to
     // the system, which is what leaves the app on a first run and pops the destination when setup
     // was re-run from settings.
     BackHandler(enabled = state.canGoBack) { viewModel.back() }
+
+    // The arrow on screen, and it answers the same question the gesture does.
+    //
+    // It used to call `back()` unconditionally, so the two disagreed wherever the flow had been
+    // entered part-way: a re-run opened at the findings walked *into* the wizard's folder question
+    // instead of out to settings, and one opened at the progress question walked into a findings
+    // screen that had never been probed. On the entry step there is nothing behind us that belongs
+    // to this flow, so the way back is out — which is [onDone], the caller's own "pop me".
+    //
+    // Null only on the first screen of a first run, where there is genuinely nowhere to go and the
+    // arrow should not be drawn at all.
+    val goBack: (() -> Unit)? = when {
+        state.canGoBack -> ({ viewModel.back(); Unit })
+        firstRun && state.step == SetupStep.WHERE -> null
+        else -> onDone
+    }
 
     state.pending?.let { pending ->
         val remote = state.probe?.remoteBookCount ?: 0
@@ -132,8 +148,7 @@ fun SetupFlow(
         SetupStep.WHERE -> WhereStep(
             onShareLink = viewModel::chooseShareLink,
             onAccount = viewModel::chooseAccount,
-            // No way back from the first screen of a first run; a re-run can be abandoned.
-            onBack = onDone.takeUnless { firstRun },
+            onBack = goBack,
             modifier = modifier,
         )
 
@@ -141,13 +156,13 @@ fun SetupFlow(
         // flow's first screen now.
         SetupStep.SHARE -> LoginScreen(
             forcedMode = LoginViewModel.Mode.SHARE,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
         SetupStep.ACCOUNT -> LoginScreen(
             forcedMode = LoginViewModel.Mode.ACCOUNT,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
@@ -157,7 +172,7 @@ fun SetupFlow(
             onLook = { viewModel.look() },
             onUse = { viewModel.look(it) },
             onRediscover = { viewModel.discover(force = true) },
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
@@ -165,7 +180,7 @@ fun SetupFlow(
             state = state,
             onTake = viewModel::take,
             onLookAgain = viewModel::reconsider,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
@@ -174,7 +189,7 @@ fun SetupFlow(
             onRequireSharedUse = viewModel::setRequireSharedUse,
             onEditsAllowed = viewModel::setEditsAllowed,
             onCreate = viewModel::createLibrary,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
@@ -182,14 +197,14 @@ fun SetupFlow(
             state = state,
             onUseAccount = viewModel::syncProgressToAccount,
             onKeepOnDevice = viewModel::keepProgressOnDevice,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
 
         SetupStep.SYNC_LOGIN -> LoginScreen(
             syncMode = true,
             onLinked = viewModel::onSyncAccountLinked,
-            onBack = { viewModel.back() },
+            onBack = goBack,
             modifier = modifier,
         )
     }
@@ -376,7 +391,7 @@ private fun FolderStep(
     onLook: () -> Unit,
     onUse: (String) -> Unit,
     onRediscover: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     SetupScaffold(onBack, modifier) {
@@ -438,7 +453,7 @@ private fun FindingsStep(
     state: SetupUiState,
     onTake: (SetupAction) -> Unit,
     onLookAgain: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     SetupScaffold(onBack, modifier) {
@@ -617,7 +632,7 @@ private fun CreateStep(
     onRequireSharedUse: (Boolean) -> Unit,
     onEditsAllowed: (Boolean) -> Unit,
     onCreate: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     SetupScaffold(onBack, modifier) {
@@ -676,7 +691,7 @@ private fun ProgressStep(
     state: SetupUiState,
     onUseAccount: () -> Unit,
     onKeepOnDevice: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     SetupScaffold(onBack, modifier) {
