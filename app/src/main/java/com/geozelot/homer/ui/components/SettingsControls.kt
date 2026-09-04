@@ -329,7 +329,10 @@ fun <T> DropdownChip(
                     },
                 )
                 .clickable { open = true },
-            contentAlignment = Alignment.CenterStart,
+            // Centred in its share when borderless: three cells whose contents are each centred
+            // read as three equal cells, where three left-aligned ones of different widths read as
+            // a row that starts tidily and trails off.
+            contentAlignment = if (bordered) Alignment.CenterStart else Alignment.Center,
         ) {
             Row(
                 modifier = Modifier
@@ -343,9 +346,9 @@ fun <T> DropdownChip(
                             Modifier
                         },
                     )
-                    // Borderless, the chip IS its share of the field, so it spans it: the text
-                    // starts at the share's left edge and the chevron ends at its right.
-                    .then(if (bordered) Modifier else Modifier.fillMaxWidth())
+                    // Wraps its content in both cases. It used to span the share so a chevron could
+                    // be pinned to its right edge; with the chevron gone there is nothing to pin,
+                    // and spanning is what kept the content pressed against the left.
                     .padding(
                         start = if (bordered) (if (icon != null) 7.dp else 10.dp) else 4.dp,
                         end = if (bordered) 6.dp else 2.dp,
@@ -394,14 +397,10 @@ fun <T> DropdownChip(
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    // Filled weight when a category is present, so the value takes what is left and
-                    // the chevron is pushed to the chip's own right edge — which is what puts all
-                    // three chevrons on the same three tick marks across the field.
-                    modifier = if (category == null) {
-                        Modifier.weight(1f, fill = false)
-                    } else {
-                        Modifier.weight(1f)
-                    },
+                    // Shrinkable but never stretched: a short value leaves its cell's content
+                    // centred, and a long one gives way rather than pushing the category out of the
+                    // cell beside it.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 // No chevron where a category is named. Three of them across one field is three
                 // marks saying the same thing the field already says by being a field — and each

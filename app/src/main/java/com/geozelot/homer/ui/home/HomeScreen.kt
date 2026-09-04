@@ -1334,8 +1334,7 @@ private fun ArrangeField(
             .background(Surface2)
             // Amber, like the search field it is a sibling of: both are a chip that became a field,
             // and the accent is what this app uses to mean "this is live".
-            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp))
-            .padding(horizontal = 4.dp),
+            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Inside the outline, in the search field's leading slot and at its width — so the control
