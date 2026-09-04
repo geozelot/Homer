@@ -3,6 +3,7 @@ package com.geozelot.homer.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -140,6 +141,7 @@ import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
@@ -1080,6 +1082,9 @@ private fun LibraryControlBar(
     onToggleView: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Hoisted out of the row: the band it controls is drawn below that row, and a state owned by
+    // the row would go out of scope before the thing it opens.
+    var arranging by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth().padding(start = 2.dp, bottom = 6.dp)) {
         SectionLabelRow(
             // Always "Library". It titles the same region whatever is filtered, and renaming it to
@@ -1116,38 +1121,38 @@ private fun LibraryControlBar(
             // Drawn as a chip like its neighbours, but filled rather than outlined: it is the only
             // control here that changes what the list CONTAINS — the others only rearrange it — and
             // the fill is what says so at a glance. Amber once anything is filtered.
-            SearchChip(active = tokens.isNotEmpty(), onClick = onOpenSearch)
-            // ONE control where there were three.
-            //
-            // Shelve, depth and sort are genuinely orthogonal — sections, grouping, order — so their
-            // menus cannot be merged without multiplying: four shelvings times three depths is
-            // twelve entries to pick one thing from. What CAN be merged is the chrome. The three
-            // dropdowns spent a third of a phone's width standing open at all times to show three
-            // values that change rarely, on a row that also has to hold search and the view toggle.
-            // They are one chip and a sheet now, and the row stopped needing to scroll at all.
-            //
-            // The cost, stated because it is real: the current arrangement is no longer legible at a
-            // glance and takes a tap to see. That is the trade — the row is for reaching things, the
-            // sheet is for reading them.
-            var arranging by remember { mutableStateOf(false) }
+            SearchChip(
+                active = tokens.isNotEmpty(),
+                onClick = {
+                    // Closed rather than merely hidden: reopening search later must not bring back
+                    // a band the reader had finished with three screens ago.
+                    arranging = false
+                    onOpenSearch()
+                },
+            )
+            // ONE control where there were three — see [ArrangeBand] for what it opens and why the
+            // three cannot simply be one menu.
             Box(
                 modifier = Modifier.weight(1f).padding(start = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                ArrangeChip(onClick = { arranging = true })
-            }
-            if (arranging) {
-                ArrangeSheet(
-                    sort = sort,
-                    shelving = shelving,
-                    series = series,
-                    onSortChange = onSortChange,
-                    onShelfChange = onShelfChange,
-                    onSeriesChange = onSeriesChange,
-                    onDismiss = { arranging = false },
-                )
+                ArrangeChip(open = arranging, onClick = { arranging = !arranging })
             }
             ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
+        }
+        // Under the controls, where the search field's own offers go — the two are the same move
+        // and are drawn the same way, so opening one teaches the other. Never both at once: search
+        // takes the whole row, and a band belonging to a chip that is no longer on screen would be
+        // a panel with nothing responsible for it.
+        if (arranging && !searchOpen) {
+            ArrangeBand(
+                sort = sort,
+                shelving = shelving,
+                series = series,
+                onSortChange = onSortChange,
+                onShelfChange = onShelfChange,
+                onSeriesChange = onSeriesChange,
+            )
         }
         // BELOW the controls, not above them. Above, they pushed the chips away from the header
         // every time one was added; below, the bar keeps its place and the pills grow into the gap
@@ -1188,9 +1193,9 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
     )
 }
 
-/** The one control that opens [ArrangeSheet]. Shows no value: the sheet is where values are read. */
+/** The one control that opens [ArrangeBand]. Shows no value: the band is where values are read. */
 @Composable
-private fun ArrangeChip(onClick: () -> Unit) {
+private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .sizeIn(minHeight = 48.dp, minWidth = 44.dp)
@@ -1201,8 +1206,10 @@ private fun ArrangeChip(onClick: () -> Unit) {
             modifier = Modifier
                 .height(ControlPillHeight)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Surface1)
-                .border(1.dp, Line, RoundedCornerShape(8.dp))
+                // Lit while its band is open, the same way the search chip is lit while filtering:
+                // the control that produced the thing below stays visibly responsible for it.
+                .background(if (open) AmberSoft else Surface1)
+                .border(1.dp, if (open) AmberDeep else Line, RoundedCornerShape(8.dp))
                 .padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1210,12 +1217,12 @@ private fun ArrangeChip(onClick: () -> Unit) {
             Icon(
                 Icons.Filled.Tune,
                 contentDescription = null,
-                tint = Muted,
+                tint = if (open) Amber else Muted,
                 modifier = Modifier.size(14.dp),
             )
             Text(
                 stringResource(R.string.home_chip_arrange),
-                color = Muted,
+                color = if (open) Amber else Muted,
                 fontSize = 11.sp,
                 lineHeight = 13.sp,
                 maxLines = 1,
@@ -1225,67 +1232,82 @@ private fun ArrangeChip(onClick: () -> Unit) {
 }
 
 /**
- * Everything about how the library is arranged, in one place and labelled.
+ * How the library is arranged, as a band under the controls rather than a card over them.
  *
- * Each row names its axis, which the chips could not: in German the shelving's "no sections" and the
- * depth's "every book loose" are one word apart from each other by accident, and two glyph-and-value
- * chips side by side gave a reader nothing to tell them apart with. A row that says "Shelve" before
- * its value cannot have that problem.
+ * ## Why it stopped being a dialog
  *
- * Changes apply as they are made — there is no Save, because there is nothing here to get wrong and
- * nothing that needs confirming. The dialog closes when the reader is done looking.
+ * The three axes are genuinely orthogonal — sections, depth, order — so they cannot be merged into
+ * one menu without multiplying: four shelvings times three depths is twelve entries to pick one
+ * thing from. They were folded into a dialog to stop three dropdowns standing open across a third
+ * of the bar at all times, and that fixed the crowding at the cost of putting a modal in front of
+ * the library to change how the library looks — you could not see what you were arranging while you
+ * arranged it.
+ *
+ * A band is the middle: nothing is on screen until it is asked for, and once it is, it sits in the
+ * page with the shelf still visible under it. It is the same move the search field makes one row
+ * above, which is also why it is drawn the same way — a reader who has opened one has learned the
+ * other.
+ *
+ * ## Icons, not category words
+ *
+ * Three chips reading "Shelve: Author · Depth: Stacked · Sort: Recent" do not fit a phone. The
+ * category is the constant and the value is what changes, so [DropdownChip]'s icon mode carries the
+ * category and the chip reads as the value alone. That mode exists because the control bar used to
+ * carry four of these side by side, which is exactly what this is again — only asked for rather
+ * than always there.
  */
 @Composable
-private fun ArrangeSheet(
+private fun ArrangeBand(
     sort: LibrarySort,
     shelving: LibraryShelving,
     series: LibraryDepth,
     onSortChange: (LibrarySort) -> Unit,
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.home_chip_arrange)) },
-        text = {
-            Column {
-                SettingsRow(label = stringResource(R.string.arrange_shelve)) {
-                    DropdownChip(
-                        label = stringResource(shelving.label),
-                        options = LibraryShelving.values().toList(),
-                        selected = shelving,
-                        labelOf = { context.getString(it.label) },
-                        onSelect = onShelfChange,
-                    )
-                }
-                SettingsRow(label = stringResource(R.string.arrange_group)) {
-                    DropdownChip(
-                        label = stringResource(series.label),
-                        options = LibraryDepth.entries.toList(),
-                        selected = series,
-                        labelOf = { context.getString(it.label) },
-                        onSelect = onSeriesChange,
-                    )
-                }
-                // Only the sorts that still do something — see LibrarySort.offeredFor.
-                SettingsRow(label = stringResource(R.string.arrange_sort)) {
-                    DropdownChip(
-                        label = stringResource(sort.label),
-                        options = LibrarySort.offeredFor(shelving),
-                        selected = sort,
-                        labelOf = { context.getString(it.label) },
-                        onSelect = onSortChange,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
-        },
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface1)
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        DropdownChip(
+            label = stringResource(shelving.label),
+            options = LibraryShelving.entries.toList(),
+            selected = shelving,
+            labelOf = { context.getString(it.label) },
+            onSelect = onShelfChange,
+            icon = Icons.Filled.Layers,
+            iconDescription = stringResource(R.string.arrange_shelve),
+        )
+        DropdownChip(
+            label = stringResource(series.label),
+            options = LibraryDepth.entries.toList(),
+            selected = series,
+            labelOf = { context.getString(it.label) },
+            onSelect = onSeriesChange,
+            icon = HomerIcons.Spines,
+            iconDescription = stringResource(R.string.arrange_group),
+        )
+        // Only the sorts that still do something — see LibrarySort.offeredFor.
+        DropdownChip(
+            label = stringResource(sort.label),
+            options = LibrarySort.offeredFor(shelving),
+            selected = sort,
+            labelOf = { context.getString(it.label) },
+            onSelect = onSortChange,
+            icon = Icons.AutoMirrored.Filled.Sort,
+            iconDescription = stringResource(R.string.arrange_sort),
+        )
+    }
 }
 
 /**
