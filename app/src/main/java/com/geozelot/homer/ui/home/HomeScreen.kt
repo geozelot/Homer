@@ -148,7 +148,6 @@ import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.GenrePickerField
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.components.MiniPlayer
-import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.rememberTextWidth
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
