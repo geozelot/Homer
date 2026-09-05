@@ -162,8 +162,6 @@ fun PlayerScreen(
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val volumeMode by viewModel.volumeMode.collectAsStateWithLifecycle()
-    val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
-    val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
@@ -1233,8 +1231,6 @@ private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean, context: andro
     remainingMs != null -> formatTime(remainingMs)
     else -> context.getString(R.string.player_sleep)
 }
-
-// ── Sleep settings (advanced: shake-extend + fade) ────────────────────────────
 
 /**
  * Types an exact playback speed.

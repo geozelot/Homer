@@ -728,10 +728,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun onLibraryRootChange(value: String) {
-        _libraryRoot.value = value
-    }
-
     fun scan() {
         viewModelScope.launch {
             // Persist the root first; the worker reads it. Scan + covers (+ shared-index publish)
@@ -1111,11 +1107,6 @@ class HomeViewModel @Inject constructor(
         localMirror.import()
         localMirror.adoptDownloads()
         libraryIndexManager.fetchMissingCovers()
-    }
-
-    /** Toggle syncing my listening progress to my account's `.homer/index.json`. */
-    fun setProgressSync(enabled: Boolean) {
-        viewModelScope.launch { librarySettings.setProgressSyncEnabled(enabled) }
     }
 
     fun setSortMode(sort: LibrarySort) {

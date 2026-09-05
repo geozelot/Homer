@@ -28,7 +28,7 @@ android {
         // CI passes -PversionCode / -PversionName (derived from the release tag); the literals
         // are the fallback for local builds.
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
-        versionName = (project.findProperty("versionName") as String?) ?: "2.1.0-BETA"
+        versionName = (project.findProperty("versionName") as String?) ?: "2.1.0"
 
         // Where the in-app updater looks for releases. A fork changes this one line and its own
         // builds start tracking its own releases instead of upstream's.

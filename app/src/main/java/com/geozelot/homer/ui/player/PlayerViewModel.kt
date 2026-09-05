@@ -108,12 +108,6 @@ class PlayerViewModel @Inject constructor(
     val volumeMode: StateFlow<String> = playbackSettings.volumeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "normal")
 
-    val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
-
-    val sleepExtend: StateFlow<String> = playbackSettings.sleepExtend
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "15")
-
     val bookmarks: StateFlow<List<BookmarkEntity>> = bookId
         .flatMapLatest { id ->
             if (id == null) flowOf(emptyList()) else bookmarkDao.observeForBook(id)
@@ -272,12 +266,6 @@ class PlayerViewModel @Inject constructor(
     fun startSleepTimer(durationMs: Long) = connection.startSleepTimer(durationMs)
     fun startSleepTimerEndOfChapter() = connection.startSleepTimerEndOfChapter()
     fun cancelSleepTimer() = connection.cancelSleepTimer()
-    fun setSleepFadeOut(seconds: Int) {
-        viewModelScope.launch { playbackSettings.setSleepFadeOutSeconds(seconds) }
-    }
-    fun setSleepExtend(mode: String) {
-        viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
-    }
     /** Jumps to a chapter: a within-file seek (embedded marks) or a media-item jump (multi-file). */
     fun jumpToChapter(chapter: PlayerChapter) {
         when {

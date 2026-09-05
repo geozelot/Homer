@@ -183,14 +183,27 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.0**, and **2.1 is in beta** under the moving tag `v2.1.0-BETA`. A moving tag is
-replaced by each build rather than added to, so there is one beta release to follow; the release
-title carries the actual build (`2.1.0-BETA.57`) while the APK keeps a stable name. In-app update
-checks only offer a pre-release to devices on the beta channel.
+Homer is at **2.1**. Betas run under a moving tag (`v2.1.0-BETA` was the last), replaced by each
+build rather than added to, so there is one pre-release to follow; its title carries the actual
+build (`2.1.0-BETA.57`) while the APK keeps a stable name. In-app update checks only offer a
+pre-release to devices on the beta channel.
 
-2.1 reorganises the library: collections above series, a search box that also filters, path
-templates for folders that are not laid out `Author / Series / Book`, and a details card behind
-every book and shelf.
+2.1 is about finding your way around a library and setting one up.
+
+- **Setup is a wizard.** Where the books live, a look at the folder, what was found there and one
+  recommendation, then where your listening position is saved. Re-run from settings at whichever
+  step answers the question you have — which is what makes moving a private library to a server,
+  or adopting a shared one instead of your own, cost nothing beyond onboarding.
+- **A shared library can carry rules.** Its owner can require that devices use the shared index
+  rather than each crawling the server for themselves, and can keep published edits to themselves.
+  Everyone else is told what applies and why, and a read-only reader still keeps their own edits
+  locally.
+- **The library reorganises**: collections above series, a search box that also filters, path
+  templates for folders not laid out `Author / Series / Book`, a details card behind every book and
+  shelf, genre chips on items, and a grid whose column count follows the screen.
+- **The player states where you are**: the book, what it belongs to, and a chapter list carrying
+  each chapter's length and its place in the book — measured off the device itself once a book is
+  downloaded, so it holds up offline.
 
 2.0 reworks how the library is indexed and synced. Two things to know before updating from 1.x:
 
