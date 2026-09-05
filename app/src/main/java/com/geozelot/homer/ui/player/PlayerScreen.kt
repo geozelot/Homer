@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.player
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -95,6 +96,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -1410,18 +1412,46 @@ private fun ChapterPickerDialog(
     onDismiss: () -> Unit,
 ) {
     val listState = rememberLazyListState()
-    // Open scrolled to the current chapter so it's visible in a long list.
+    // Opens CENTRED on the current chapter, not with it at the top edge.
+    //
+    // Where you are is a place in a list, and a place has two sides: the chapters just gone are as
+    // much of the answer as the ones coming. Pinned to the top, the list said "you are at the
+    // beginning of what is left", which is a different — and wrong — claim, and it hid the row
+    // above the one thing most people open this to reach: the chapter they just finished.
+    //
+    // Two steps, because scrollToItem lands the item at the start: put it there, then measure it
+    // and push it down by half the gap it leaves. Measuring after the fact is what makes this
+    // right at any row height and any font scale.
     LaunchedEffect(Unit) {
         val current = chapters.indexOfFirst { it.isCurrent }
-        if (current > 0) listState.scrollToItem(current)
+        if (current < 0) return@LaunchedEffect
+        listState.scrollToItem(current)
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == current } ?: return@LaunchedEffect
+        val viewport = info.viewportEndOffset - info.viewportStartOffset
+        // Negative scrolls back towards the start; clamped by the list itself at either end, so the
+        // first and last chapters simply stay where they are rather than leaving a gap.
+        listState.scrollBy(-(viewport - item.size) / 2f)
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Wider than a stock dialog. Every row is one line of "Chapter 7 of 21 · 42:15 (at 2:10:05
+        // · 24%)" — a sentence of numbers that means nothing truncated — and the platform default
+        // is sized for a paragraph of prose with a button under it.
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.94f),
         title = { Text(stringResource(R.string.player_chapters)) },
         text = {
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = dialogContentMaxHeight())) {
                 itemsIndexed(chapters) { index, chapter ->
                     val chapterFallback = stringResource(R.string.chapter_numbered, index + 1)
+                    // A file name is not a chapter title. A multi-file book's chapters ARE its
+                    // files, so its "titles" are whatever the folder happens to be called —
+                    // "Der_Schwarm_007", the book's name repeated twenty times, a track number
+                    // already said by the line above. Only a mark a book carries INSIDE it is a
+                    // name somebody chose, and only that is worth a second line.
+                    val title = chapter.title
+                        .takeIf { chapter.mediaItemIndex == null && it.isNotBlank() && it != chapterFallback }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1429,19 +1459,15 @@ private fun ChapterPickerDialog(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            "${index + 1}",
-                            modifier = Modifier.width(28.dp),
-                            color = if (chapter.isCurrent) Amber else Muted,
-                            fontSize = 12.sp,
-                        )
                         Column(modifier = Modifier.weight(1f)) {
                             // The row's NAME is the template: which chapter, how long it runs,
                             // where it begins and what fraction of the book that is. This is the
                             // one screen where those numbers are what you are choosing on — "the
-                            // short one", "the one an hour in" — and it is also where a name is
-                            // least likely to be worth reading, since a multi-file book's chapter
-                            // titles are its file names.
+                            // short one", "the one an hour in".
+                            //
+                            // No number column beside it any more: it read "7" against a line
+                            // beginning "Chapter 7 of 21", which is the same fact twice, 28dp
+                            // apart, on a row that would rather spend the space on the sentence.
                             Text(
                                 chapterRowName(
                                     number = index + 1,
@@ -1455,10 +1481,7 @@ private fun ChapterPickerDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            // The chapter's own title underneath, and only when it is one: an
-                            // embedded mark that carries "Kapitel 12" says nothing the line above
-                            // does not already say, and a file named after the book says less.
-                            chapter.title.takeIf { it.isNotBlank() && it != chapterFallback }?.let {
+                            title?.let {
                                 Text(
                                     it,
                                     color = Muted,
