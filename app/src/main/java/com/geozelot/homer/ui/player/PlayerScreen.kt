@@ -282,7 +282,10 @@ fun PlayerScreen(
                     color = Faint,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp),
+                    // Set apart from the pill above rather than tucked under it. The pill is a
+                    // control and this is a reading; at 8dp they read as one two-line control, and
+                    // the eye kept trying to tap the sentence.
+                    modifier = Modifier.padding(top = 16.dp),
                 )
             }
 
@@ -772,12 +775,18 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(Surface2)
-                .padding(horizontal = 18.dp, vertical = 7.dp),
+                .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
-            Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(15.dp))
+            Text(
+                stringResource(R.string.player_chapters),
+                color = Parchment,
+                fontSize = 11.5.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
@@ -824,8 +833,8 @@ private fun BookHeader(
                 Text(
                     it,
                     color = Muted,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -843,7 +852,7 @@ private fun BookHeader(
         ) {
             Text(
                 title,
-                style = SerifTitle.copy(fontSize = 20.sp),
+                style = SerifTitle.copy(fontSize = 22.sp, lineHeight = 27.sp),
                 color = Parchment,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -854,7 +863,10 @@ private fun BookHeader(
             book?.series?.takeIf { it.isNotBlank() }?.let {
                 LineageChip(
                     label = withVolume(it, book.seriesIndex),
-                    border = Amber,
+                    // The same hairline the collection wears. Two different borders made them read
+                    // as two different KINDS of thing, where they are one kind at two distances —
+                    // which the fill and the text tone already say, quietly.
+                    border = LineShelf,
                     background = AmberSoft,
                     text = Parchment,
                     onClick = { onFilter(FilterToken(FilterFacet.SERIES, it)) },
@@ -907,10 +919,10 @@ private fun withVolume(name: String, index: Int?): String =
     if (index == null) name else stringResource(R.string.player_series_volume, name, index)
 
 /** The author's line, reserved whether or not there is one. */
-private val BookHeaderAuthorLine = 18.dp
+private val BookHeaderAuthorLine = 20.dp
 
-/** Two lines of the serif title at 20sp, so a one-line title does not shorten the block. */
-private val BookHeaderTitleBlock = 56.dp
+/** Two lines of the serif title at 22sp, so a one-line title does not shorten the block. */
+private val BookHeaderTitleBlock = 60.dp
 
 /** One relation chip, reserved. Two of these, so a standalone book is as tall as a nested one. */
 private val BookHeaderChipRow = 24.dp
