@@ -233,11 +233,20 @@ fun PlayerScreen(
         )
     }
     val controls: @Composable (Modifier) -> Unit = { slotModifier ->
-        // Title, chapter + book-time-left, scrubber, transport, quick-select.
+        // Everything under the cover, in three regions:
+        //
+        //  - **Info** — who wrote it, what it is called, what it belongs to. Facts about the book.
+        //  - **Player** — the chapter picker, where you are, the scrubber, the transport. Facts
+        //    about this listening, and the controls for it.
+        //  - **Playback** — sleep, the three at-play settings, mark. Settings, not position.
+        //
+        // The seams between them are the only generous gaps on the screen; inside a region things
+        // sit close, because that is what says they belong to each other.
         Column(
             modifier = slotModifier,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // ── Info ─────────────────────────────────────────────────────────────────────
             val loadingLabel = stringResource(R.string.player_loading)
             BookHeader(
                 book = editableBook,
@@ -253,15 +262,23 @@ fun PlayerScreen(
                 if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
                 else state.chapterIndex + 1
 
-            // Chapter picker: a wide pill below the title, above the chapter/progress line.
+            // ── Player ───────────────────────────────────────────────────────────────────
+            // The picker heads it: choosing a chapter, then the line saying where you are in one,
+            // then the scrubber and the transport. The gap above is the seam between this and the
+            // Info block — the pill belongs to the controls under it, not to the title over it,
+            // and at 10dp it read as one more line of the header.
             if (hasPicker) {
-                ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 10.dp))
+                ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 20.dp))
             }
 
-            // Info line. The chapter part is conditional (a single-file book with no embedded
-            // chapters has none), the time-left part is NOT — it used to live inside the chapter
-            // branch, which lost the remaining-time readout for exactly those books.
-            val infoLine = buildString {
+            // Where you are: which chapter, and how much of the book is left. Named for what it
+            // says rather than "info", which is the block of facts ABOUT the book two regions up —
+            // and calling both of them info is how a gap meant for one of them landed on the other.
+            //
+            // The chapter part is conditional (a single-file book with no embedded chapters has
+            // none), the time-left part is NOT — it used to live inside the chapter branch, which
+            // lost the remaining-time readout for exactly those books.
+            val positionLine = buildString {
                 if (chapterCount > 0) {
                     append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
                 }
@@ -276,16 +293,13 @@ fun PlayerScreen(
                     )
                 }
             }
-            if (infoLine.isNotEmpty()) {
+            if (positionLine.isNotEmpty()) {
                 Text(
-                    text = infoLine,
+                    text = positionLine,
                     color = Faint,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
-                    // Set apart from the pill above rather than tucked under it. The pill is a
-                    // control and this is a reading; at 8dp they read as one two-line control, and
-                    // the eye kept trying to tap the sentence.
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
 
@@ -311,6 +325,7 @@ fun PlayerScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
 
+            // ── Playback ─────────────────────────────────────────────────────────────────
             ToolRow(
                 speed = state.playbackSpeed,
                 sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter, context),
