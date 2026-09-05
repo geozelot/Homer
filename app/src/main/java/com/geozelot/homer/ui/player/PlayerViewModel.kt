@@ -43,12 +43,24 @@ import javax.inject.Inject
 /**
  * One entry in the player's chapter picker. Exactly one of [startMs] (embedded mark — seek within
  * the current file) or [mediaItemIndex] (multi-file — jump to that file) is set.
+ *
+ * ## Why [lengthMs] and [startInBookMs] are nullable, and what that means on screen
+ *
+ * A single-file book's marks answer both for free: a chapter runs until the next one begins, and
+ * where it begins in the book is the mark itself. A multi-file book cannot — its chapters are
+ * files, and a file's length is only known once that file has been probed. So both are null until
+ * every file of the book is measured, and the player says less rather than guessing: "chapter 7 of
+ * 21" with no numbers beside it is true, and a number derived from a partial sum is not.
  */
 data class PlayerChapter(
     val title: String,
     val mediaItemIndex: Int?,
     val startMs: Long?,
     val isCurrent: Boolean,
+    /** How long this chapter runs, when that is known. */
+    val lengthMs: Long? = null,
+    /** Where this chapter begins measured from the start of the BOOK, when that is known. */
+    val startInBookMs: Long? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -139,22 +151,47 @@ class PlayerViewModel @Inject constructor(
                 embedded.isNotEmpty() -> {
                     // Single file: the current mark is the last one starting at/before the position.
                     val current = embedded.indexOfLast { it.startMs <= s.positionMs }.coerceAtLeast(0)
+                    // The file's own length ends the last chapter. Taken from the playback state
+                    // rather than from the book row: the player knows the loaded file's duration
+                    // immediately, where the book's total waits on the measuring pass.
+                    val fileEnd = s.durationMs.takeIf { it > 0 }
+                        ?: files.firstOrNull()?.durationMs
                     embedded.mapIndexed { i, c ->
+                        // A mark runs until the next one starts. Nothing has to be measured for
+                        // this — the marks themselves carry it — which is why a single-file book
+                        // shows its chapter lengths while streaming and a multi-file one does not.
+                        val end = embedded.getOrNull(i + 1)?.startMs ?: fileEnd
                         PlayerChapter(
                             title = c.title?.ifBlank { null } ?: "Chapter ${i + 1}",
                             mediaItemIndex = null,
                             startMs = c.startMs,
                             isCurrent = i == current,
+                            lengthMs = end?.minus(c.startMs)?.takeIf { it > 0 },
+                            // The same number twice, and not by accident: embedded marks only
+                            // exist for a book that is ONE file (see DurationEnricher), so a
+                            // mark's offset into the file is its offset into the book.
+                            startInBookMs = c.startMs,
                         )
                     }
                 }
-                files.size > 1 -> files.map { f ->
-                    PlayerChapter(
-                        title = f.fileName.substringBeforeLast('.'),
-                        mediaItemIndex = f.sortIndex,
-                        startMs = null,
-                        isCurrent = f.sortIndex == s.chapterIndex,
-                    )
+                files.size > 1 -> {
+                    // All or nothing: a running sum over a list with a hole in it is wrong for
+                    // every chapter after the hole, and wrong quietly. Until the whole book is
+                    // measured the picker says which chapter, not where it sits.
+                    val measured = files.all { it.durationMs != null }
+                    var elapsed = 0L
+                    files.map { f ->
+                        val startInBook = if (measured) elapsed else null
+                        if (measured) elapsed += f.durationMs ?: 0L
+                        PlayerChapter(
+                            title = f.fileName.substringBeforeLast('.'),
+                            mediaItemIndex = f.sortIndex,
+                            startMs = null,
+                            isCurrent = f.sortIndex == s.chapterIndex,
+                            lengthMs = f.durationMs,
+                            startInBookMs = startInBook,
+                        )
+                    }
                 }
                 else -> emptyList()
             }

@@ -413,6 +413,12 @@
     <!-- Player -->
     <string name="player_loading">Loading…</string>
     <string name="player_chapter_of">Chapter %1$d of %2$d</string>
+    <!-- The chapter line, assembled: "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)". Split into
+         parts so a locale can reorder them, and so each part can be dropped on its own when the
+         number behind it is not known yet. -->
+    <string name="player_chapter_line">%1$s · %2$s (%3$s)</string>
+    <string name="player_chapter_at">at %1$s</string>
+    <string name="player_chapter_at_pct">at %1$s · %2$d%%</string>
     <string name="player_now_playing">NOW PLAYING</string>
     <string name="player_time_remaining">-%1$s</string>
     <string name="player_time_unknown">--:--</string>
@@ -426,13 +432,18 @@
     <string name="player_sleep_minutes">%1$dm</string>
     <string name="player_sleep_end_of_chapter">End of chapter</string>
     <string name="player_sleep_turn_off">Turn off</string>
-    <string name="player_volume">Volume</string>
     <string name="player_volume_quiet">Quiet</string>
     <string name="player_volume_boost">Boost</string>
     <string name="player_volume_reduced">Reduced</string>
     <string name="player_volume_normal">Normal</string>
     <string name="player_volume_increased">Increased</string>
-    <string name="player_silence">Silence</string>
+    <!-- The one control the three at-play settings live behind, and its summary line. -->
+    <string name="player_playback">Playback</string>
+    <string name="player_playback_speed">Speed</string>
+    <string name="player_playback_volume">Volume</string>
+    <string name="player_playback_silence">Silence</string>
+    <string name="player_silence_on">Cut</string>
+    <string name="player_silence_off">Keep</string>
     <string name="player_mark">Mark</string>
     <string name="player_sleep_chapter">Chapter</string>
     <string name="player_sleep">Sleep</string>

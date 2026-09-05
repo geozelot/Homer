@@ -7,6 +7,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
+import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -53,6 +54,7 @@ class DurationEnricher @Inject constructor(
     private val mp4ChapterParser: Mp4ChapterParser,
     private val librarySettings: LibrarySettings,
     private val networkMonitor: NetworkMonitor,
+    private val downloadStorage: DownloadStorage,
 ) {
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
@@ -126,14 +128,23 @@ class DurationEnricher @Inject constructor(
         if (!inFlight.add(bookId)) return
         try {
             val credentials = credentialStore.awaitCredentials() ?: return
-            // Offline, nothing can be measured — and crucially nothing may be RECORDED as
-            // unmeasurable: probe() returns null both for "this file has no duration" and for
-            // "I couldn't reach it", so a single offline open would otherwise mark every file
-            // and the book permanently attempted. A book that never becomes fully measured
-            // loses its time-left, progress ring and auto-finish until a full re-scan.
-            if (!networkMonitor.isOnline()) return
             val libraryRoot = librarySettings.libraryRoot.first()
             val files = audioFileDao.findForBook(bookId)
+            // Where each file can be read WITHOUT the network, when it has been downloaded.
+            //
+            // The reader underneath is a DefaultDataSource, which dispatches on the scheme — so a
+            // content:// or file:// URI is read by exactly the same header parser that reads an
+            // http one, only locally and with no round trip. Which makes a downloaded book the
+            // cheapest thing there is to measure, and it is the case where measuring matters
+            // most: offline is when a chapter list cannot fall back to asking the server.
+            val local = files.associate { it.relativePath to downloadStorage.uri(it.relativePath) }
+            // Offline, nothing that is not already here can be measured — and crucially nothing may
+            // be RECORDED as unmeasurable: probe() returns null both for "this file has no
+            // duration" and for "I couldn't reach it", so a single offline open would otherwise
+            // mark every file and the book permanently attempted. A book that never becomes fully
+            // measured loses its time-left, progress ring and auto-finish until a full re-scan.
+            val offline = !networkMonitor.isOnline()
+            if (offline && files.none { local[it.relativePath] != null }) return
             val book = bookDao.findById(bookId)
             // A probe that came back empty is recorded, because nothing else ever settles these
             // questions: a book whose tags simply carry no genre, and a file whose duration
@@ -172,19 +183,22 @@ class DurationEnricher @Inject constructor(
                     async {
                         slots.withPermit {
                             ensureActive()
+                            val localUri = local[file.relativePath]
                             // Connectivity can drop part-way through. Every further probe would
                             // only wait out its timeout and be discarded, so stop claiming files
-                            // and let a later pass resume.
-                            if (!networkMonitor.isOnline()) return@withPermit
-                            val url = webDavClient
-                                .urlFor(credentials, libraryRoot, file.relativePath).toString()
+                            // and let a later pass resume — unless this one is on the device, in
+                            // which case the network was never in the path at all.
+                            if (localUri == null && !networkMonitor.isOnline()) return@withPermit
+                            val url = localUri?.toString()
+                                ?: webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
                             val measured = measureFile(url, file.sizeBytes, probeSlot, state)
 
                             if (measured != null) {
                                 audioFileDao.updateDuration(file.relativePath, measured)
-                            } else if (networkMonitor.isOnline()) {
-                                // Only a negative answer we can trust: still online, so "no
-                                // duration" is about the file, not the connection.
+                            } else if (localUri != null || networkMonitor.isOnline()) {
+                                // Only a negative answer we can trust: the file was here on the
+                                // device, or we are still online — so "no duration" is about the
+                                // file rather than about the connection.
                                 audioFileDao.markDurationAttempted(file.relativePath)
                             }
                             state.fileDone(bookId)
@@ -216,7 +230,8 @@ class DurationEnricher @Inject constructor(
             ) {
                 files.firstOrNull()?.let { first ->
                     coroutineContext.ensureActive()
-                    val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
+                    val url = local[first.relativePath]?.toString()
+                        ?: webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
                     val fromHeaderTag = audioHeaderTags.read(url)
                     if (fromHeaderTag != null) {
                         tagsSource = "header"

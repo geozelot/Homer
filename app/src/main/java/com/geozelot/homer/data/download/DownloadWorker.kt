@@ -20,6 +20,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.di.Authed
@@ -52,6 +53,7 @@ class DownloadWorker @AssistedInject constructor(
     private val audioFileDao: AudioFileDao,
     private val downloadDao: DownloadDao,
     private val storage: DownloadStorage,
+    private val durationEnricher: DurationEnricher,
     private val librarySettings: LibrarySettings,
 ) : CoroutineWorker(appContext, params) {
 
@@ -106,6 +108,15 @@ class DownloadWorker @AssistedInject constructor(
             if (isStopped) return Result.failure()
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DONE, files.size, files.size, now()))
             Log.i(TAG, "downloaded $bookId (${files.size} files)")
+            // Measure it now it is here. Every file is on the device, so this reads headers off
+            // local storage — no network, no timeouts, and it works with the radio off. It is also
+            // the moment the answer starts to matter: a downloaded book is the one somebody is
+            // about to listen to away from a connection, and until its files are measured the
+            // player can say which chapter but not how long it runs or where it sits in the book.
+            //
+            // Fire-and-forget by design: the download has succeeded either way, and enrich()
+            // no-ops on a book that is already measured.
+            durationEnricher.enrich(bookId)
             return Result.success()
         } catch (e: CancellationException) {
             throw e // stopped/cancelled — DownloadManager.delete does the cleanup

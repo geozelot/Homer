@@ -1,7 +1,9 @@
 package com.geozelot.homer.ui.player
 
 import androidx.compose.foundation.Canvas
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -35,9 +37,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -101,11 +105,15 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
+import com.geozelot.homer.data.metadata.BookGenre
+import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.home.BookDetailsCard
 import com.geozelot.homer.ui.home.BookListItem
 import com.geozelot.homer.ui.home.FilterToken
+import com.geozelot.homer.ui.home.FilterFacet
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.CustomNumberDialog
+import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.HomerTextButton
@@ -121,6 +129,7 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface2
+import com.geozelot.homer.ui.theme.Surface1
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -163,6 +172,17 @@ fun PlayerScreen(
     val download by viewModel.downloadState.collectAsStateWithLifecycle()
     val editableBook by viewModel.editableBook.collectAsStateWithLifecycle()
     val cover by viewModel.cover.collectAsStateWithLifecycle()
+    val bookDurationMs by viewModel.bookDurationMs.collectAsStateWithLifecycle()
+
+    // The book's length, for the chapter line's percentage — with one fallback, and only one.
+    //
+    // A single-file book IS its file, so the player knows the total the moment it loads, long
+    // before the measuring pass writes it to the book row. A multi-file book must NOT take the
+    // same shortcut: there `durationMs` is the current file alone, and using it as the whole would
+    // put chapter three at 90% of the book. Resolved once, here, so the pill and the picker cannot
+    // quote different percentages for the same chapter.
+    val bookTotal = bookDurationMs
+        ?: state.durationMs.takeIf { it > 0 && chapters.firstOrNull()?.startMs != null }
 
     // rememberSaveable: a rotation used to close whichever dialog was open.
     var customSpeed by rememberSaveable { mutableStateOf(false) }
@@ -235,22 +255,45 @@ fun PlayerScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // What the book IS, under what it is called: the author, its genre, the series it
+            // belongs to. Tappable, so each is also the way back into a library narrowed to it —
+            // the same thing the item chips do, which is what makes the player a way in rather
+            // than a dead end.
+            editableBook?.let { book ->
+                BookFacts(
+                    book = book,
+                    locale = LocalConfiguration.current.locales[0],
+                    onFilter = onFilter,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+
             val hasPicker = chapters.isNotEmpty()
             val chapterCount = if (hasPicker) chapters.size else state.chapterCount
             val chapterNumber =
                 if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
                 else state.chapterIndex + 1
 
-            // Chapter picker: a wide pill below the title, above the chapter/progress line.
+            // Chapter picker: a wide pill below the title, carrying the whole chapter line.
             if (hasPicker) {
-                ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 10.dp))
+                ChapterButton(
+                    label = chapterLabel(
+                        number = chapterNumber,
+                        count = chapterCount,
+                        chapter = chapters.firstOrNull { it.isCurrent },
+                        bookTotalMs = bookTotal,
+                    ),
+                    onClick = { showChaptersDialog = true },
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
-            // Info line. The chapter part is conditional (a single-file book with no embedded
-            // chapters has none), the time-left part is NOT — it used to live inside the chapter
-            // branch, which lost the remaining-time readout for exactly those books.
+            // Info line. The chapter count moved into the pill above, where it sits beside the
+            // rest of the same answer; what is left here is the one number that is about the BOOK
+            // — how much of it remains — plus the chapter count for a book with no picker to put
+            // it in.
             val infoLine = buildString {
-                if (chapterCount > 0) {
+                if (chapterCount > 0 && !hasPicker) {
                     append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
                 }
                 timeLeftMs?.let {
@@ -372,6 +415,7 @@ fun PlayerScreen(
     if (showChaptersDialog) {
         ChapterPickerDialog(
             chapters = chapters,
+            bookTotalMs = bookTotal,
             onJump = {
                 viewModel.jumpToChapter(it)
                 showChaptersDialog = false
@@ -744,9 +788,24 @@ private const val SEEK_READY_TIMEOUT_MS = 10_000L
 
 private val SeekGlyphSize = 38.dp
 
-/** Wide pill opening the chapter picker; sits below the title. */
+/**
+ * Where you are in the book, in one line, and the way into the picker.
+ *
+ * It used to say "Chapters" and nothing else, with "Chapter 7 of 21" repeated on the info line
+ * below it. Now the pill carries the whole answer — which chapter, how long it runs, where it
+ * begins in the book and what fraction of the book that is — and the line below carries only the
+ * time left, which is the one number that is about the book rather than about the chapter.
+ *
+ * **Every part after the count is dropped rather than guessed.** A multi-file book knows none of
+ * them until each of its files has been measured, so what it shows in the meantime is "Chapter 7
+ * of 21", which is true. See [PlayerChapter].
+ */
 @Composable
-private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChapterButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     // The tap area is expanded to the 48dp minimum around the pill rather than by inflating the
     // pill itself, so the visual stays the compact chip the layout was designed around.
     Box(
@@ -759,14 +818,146 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(Surface2)
-                .padding(horizontal = 18.dp, vertical = 7.dp),
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
-            Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+            Icon(
+                Icons.AutoMirrored.Filled.List,
+                contentDescription = stringResource(R.string.player_chapters),
+                tint = Parchment,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                label,
+                color = Parchment,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                // One line, and it must be the whole line: the pill sizes to its text and the
+                // column it sits in is the screen's width, so there is room for the long form in
+                // both languages. Ellipsis is the backstop for a 200% font scale, not the plan.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
+}
+
+/**
+ * "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)", with every part after the count optional.
+ *
+ * Assembled from resources rather than concatenated here, so a locale can reorder it — German puts
+ * the same parts in the same order but not every language does, and "bei" is not "at" in a
+ * position a format string can guess.
+ */
+@Composable
+private fun chapterLabel(
+    number: Int,
+    count: Int,
+    chapter: PlayerChapter?,
+    bookTotalMs: Long?,
+): String {
+    val which = stringResource(R.string.player_chapter_of, number, count)
+    val length = chapter?.lengthMs?.takeIf { it > 0 } ?: return which
+    val start = chapter.startInBookMs
+    // The percentage needs BOTH a start and a total, and the total arrives on its own schedule —
+    // so a book can legitimately show "at 2:10:05" with no percentage beside it for a moment.
+    val percent = if (start != null && bookTotalMs != null && bookTotalMs > 0) {
+        ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
+    } else {
+        null
+    }
+    val where = when {
+        start == null -> null
+        percent != null -> stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
+        else -> stringResource(R.string.player_chapter_at, formatTime(start))
+    }
+    return if (where == null) {
+        "$which · ${formatTime(length)}"
+    } else {
+        stringResource(R.string.player_chapter_line, which, formatTime(length), where)
+    }
+}
+
+/**
+ * What the book is, as three quiet chips: author, genre, series.
+ *
+ * Chips rather than a line of text because each one is a way somewhere — tapping narrows the
+ * library to it and leaves — and a thing you can press should not look like a caption. Outlined
+ * and muted on purpose: the title above is what the screen is about, and these sit under it the
+ * way the library's own item chips sit under a card's title.
+ *
+ * Absent facts are absent, not blank: a book with no genre shows two chips, and one with nothing
+ * known shows none and takes no space.
+ */
+@Composable
+private fun BookFacts(
+    book: EditableBook,
+    locale: java.util.Locale,
+    onFilter: (FilterToken) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val facts = buildList {
+        book.author?.takeIf { it.isNotBlank() }?.let { add(it to FilterToken(FilterFacet.AUTHOR, it)) }
+        // The primary alone. A book carrying four genres would otherwise spend the whole row on
+        // them, and the rest are one tap away in the details card.
+        book.genres.firstOrNull()?.takeIf { it.isNotBlank() }?.let {
+            add(BookGenre.display(it, locale) to FilterToken(FilterFacet.GENRE, it))
+        }
+        book.series?.takeIf { it.isNotBlank() }?.let { add(it to FilterToken(FilterFacet.SERIES, it)) }
+    }
+    if (facts.isEmpty()) return
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        facts.forEach { (label, token) ->
+            Text(
+                label,
+                color = Muted,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clip(RoundedCornerShape(999.dp))
+                    .border(1.dp, Line, RoundedCornerShape(999.dp))
+                    .clickable { onFilter(token) }
+                    .padding(horizontal = 9.dp, vertical = 3.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A picker row's second line: "42:15 · at 2:10:05 · 24%", or as much of it as is known.
+ *
+ * Flatter than the pill's version — no brackets — because here it is a caption under a title
+ * rather than a sentence in its own right, and twenty of them stacked read better unbracketed.
+ */
+@Composable
+private fun chapterRowDetail(chapter: PlayerChapter, bookTotalMs: Long?): String? {
+    val parts = buildList {
+        chapter.lengthMs?.takeIf { it > 0 }?.let { add(formatTime(it)) }
+        chapter.startInBookMs?.let { start ->
+            val percent = if (bookTotalMs != null && bookTotalMs > 0) {
+                ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
+            } else {
+                null
+            }
+            add(
+                if (percent != null) {
+                    stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
+                } else {
+                    stringResource(R.string.player_chapter_at, formatTime(start))
+                },
+            )
+        }
+    }
+    return parts.joinToString(" · ").ifEmpty { null }
 }
 
 /** Shown when the stream stalls on an error (typically a lost connection); tap re-prepares. */
@@ -786,8 +977,25 @@ private fun ErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-// ── Tool row (speed / sleep / mark) ───────────────────────────────────────────
+// ── The bottom row: a timer, how it plays, and a mark ─────────────────────────────────────────
 
+/**
+ * Five controls, sorted into the three kinds of thing they actually are.
+ *
+ * They used to sit in one undifferentiated row of five: speed, sleep, volume, silence, mark. Read
+ * left to right that is a timer, then two sound settings, then a third sound setting, then an
+ * action — three different kinds interleaved, and five targets across a phone with nothing between
+ * them but equal spacing.
+ *
+ * So: **sleep** on the left, because when playback stops is a property of this sitting rather than
+ * of the book. **Mark** on the right, because it is the only one that MAKES something. And the
+ * three at-play settings — speed, volume, cut silence — behind one control in the middle, which
+ * carries what they are set to as its own label and opens into a field holding all three.
+ *
+ * That middle control is the library's arrange field, in a player: one chip that becomes a row of
+ * settings in place, with a way back at its left edge. Same idiom, same [DropdownChip], so the two
+ * places in Homer where several settings live behind one control behave identically.
+ */
 @Composable
 private fun ToolRow(
     speed: Float,
@@ -805,43 +1013,35 @@ private fun ToolRow(
     onToggleSkipSilence: () -> Unit,
     onMark: () -> Unit,
 ) {
+    // Survives a rotation: the field is a mode, and coming back to a collapsed row after turning
+    // the phone loses whatever the reader had opened it to change.
+    var playbackOpen by rememberSaveable { mutableStateOf(false) }
+    // Back closes the field before it leaves the player. The library's arrange field — which this
+    // is — already behaves this way, and without it the gesture that means "put that away" meant
+    // "put the whole book away" instead.
+    BackHandler(enabled = playbackOpen) { playbackOpen = false }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 16.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Speed — quick-select menu.
-        Box {
-            var open by remember { mutableStateOf(false) }
-            ToolButton(
-                icon = Icons.Filled.Speed,
-                label = stringResource(R.string.player_speed_value, formatSpeed(speed)),
-                active = abs(speed - 1f) > 0.001f,
-                onClick = { open = true },
+        if (playbackOpen) {
+            PlaybackField(
+                speed = speed,
+                volumeMode = volumeMode,
+                skipSilence = skipSilence,
+                onSpeed = onSpeed,
+                onCustomSpeed = onCustomSpeed,
+                onVolumeMode = onVolumeMode,
+                onToggleSkipSilence = onToggleSkipSilence,
+                onCollapse = { playbackOpen = false },
             )
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                SPEED_PRESETS.forEach { preset ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(R.string.player_speed_value, formatSpeed(preset)),
-                                color = if (abs(preset - speed) < 0.001f) Amber else Parchment,
-                            )
-                        },
-                        onClick = { onSpeed(preset); open = false },
-                    )
-                }
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
-                    onClick = { open = false; onCustomSpeed() },
-                )
-            }
+            return@Row
         }
 
-        // Sleep — quick-select menu + settings.
+        // Sleep — quick-select menu.
         Box {
             var open by remember { mutableStateOf(false) }
             ToolButton(
@@ -875,43 +1075,13 @@ private fun ToolRow(
             }
         }
 
-        // Volume override — quick-select menu.
-        Box {
-            var open by remember { mutableStateOf(false) }
-            ToolButton(
-                icon = when (volumeMode) {
-                    VolumeMode.REDUCED -> Icons.AutoMirrored.Filled.VolumeDown
-                    VolumeMode.INCREASED -> Icons.AutoMirrored.Filled.VolumeUp
-                    else -> Icons.AutoMirrored.Filled.VolumeUp
-                },
-                label = when (volumeMode) {
-                    VolumeMode.REDUCED -> stringResource(R.string.player_volume_quiet)
-                    VolumeMode.INCREASED -> stringResource(R.string.player_volume_boost)
-                    else -> stringResource(R.string.player_volume)
-                },
-                active = volumeMode != VolumeMode.NORMAL,
-                onClick = { open = true },
-            )
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                listOf(
-                    VolumeMode.REDUCED to stringResource(R.string.player_volume_reduced),
-                    VolumeMode.NORMAL to stringResource(R.string.player_volume_normal),
-                    VolumeMode.INCREASED to stringResource(R.string.player_volume_increased),
-                ).forEach { (mode, lbl) ->
-                    DropdownMenuItem(
-                        text = { Text(lbl, color = if (mode == volumeMode) Amber else Parchment) },
-                        onClick = { onVolumeMode(mode); open = false },
-                    )
-                }
-            }
-        }
-
-        // Skip silence — toggle.
-        ToolButton(
-            icon = Icons.Filled.ContentCut,
-            label = stringResource(R.string.player_silence),
-            active = skipSilence,
-            onClick = onToggleSkipSilence,
+        // The three at-play settings, as one control that says what they are set to.
+        PlaybackButton(
+            speed = speed,
+            volumeMode = volumeMode,
+            skipSilence = skipSilence,
+            onClick = { playbackOpen = true },
+            modifier = Modifier.weight(1f),
         )
 
         // Mark — bookmarks.
@@ -920,6 +1090,171 @@ private fun ToolRow(
             label = stringResource(R.string.player_mark),
             active = false,
             onClick = onMark,
+        )
+    }
+}
+
+/**
+ * The collapsed middle control: one button whose label IS the current sound state.
+ *
+ * "1.5× · Boost · Cut" when something is set, the word Playback when nothing is — so the row says
+ * what it is doing without being opened, which is the whole reason the three settings can afford
+ * to be one tap further away than they were.
+ */
+@Composable
+private fun PlaybackButton(
+    speed: Float,
+    volumeMode: String,
+    skipSilence: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val parts = buildList {
+        if (abs(speed - 1f) > 0.001f) add(stringResource(R.string.player_speed_value, formatSpeed(speed)))
+        when (volumeMode) {
+            VolumeMode.REDUCED -> add(stringResource(R.string.player_volume_quiet))
+            VolumeMode.INCREASED -> add(stringResource(R.string.player_volume_boost))
+            else -> Unit
+        }
+        if (skipSilence) add(stringResource(R.string.player_silence_on))
+    }
+    val active = parts.isNotEmpty()
+    val tint = if (active) Amber else Muted
+    Box(
+        modifier = modifier
+            .sizeIn(minHeight = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Surface1)
+                .border(1.dp, if (active) AmberDeep else Line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                Icons.Filled.Tune,
+                contentDescription = stringResource(R.string.player_playback),
+                tint = tint,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                if (active) parts.joinToString(" · ") else stringResource(R.string.player_playback),
+                color = tint,
+                fontSize = 10.5.sp,
+                lineHeight = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * The three settings, in place of the row that opened them.
+ *
+ * Deliberately the same shape as the library's arrange field — a back arrow in a leading slot at
+ * the field's own edge, then equal shares carrying a [DropdownChip] each — because it is the same
+ * gesture answering the same kind of question, and two different-looking versions of it would be
+ * two things to learn.
+ *
+ * Cut-silence is a dropdown of two rather than a switch so that all three cells read the same way
+ * and all three say what they are set to. A switch would have said only that it can be switched.
+ */
+@Composable
+private fun PlaybackField(
+    speed: Float,
+    volumeMode: String,
+    skipSilence: Boolean,
+    onSpeed: (Float) -> Unit,
+    onCustomSpeed: () -> Unit,
+    onVolumeMode: (String) -> Unit,
+    onToggleSkipSilence: () -> Unit,
+    onCollapse: () -> Unit,
+) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface1)
+            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(width = 40.dp, height = 48.dp).clickable(onClick = onCollapse),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.action_back),
+                tint = Muted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        DropdownChip(
+            label = stringResource(R.string.player_speed_value, formatSpeed(speed)),
+            options = SPEED_PRESETS,
+            selected = speed,
+            labelOf = { context.getString(R.string.player_speed_value, formatSpeed(it)) },
+            onSelect = onSpeed,
+            onCustom = onCustomSpeed,
+            modifier = Modifier.weight(1f),
+            icon = Icons.Filled.Speed,
+            iconDescription = stringResource(R.string.player_playback_speed),
+            menuHeader = stringResource(R.string.player_playback_speed),
+            bordered = false,
+        )
+        DropdownChip(
+            label = stringResource(
+                when (volumeMode) {
+                    VolumeMode.REDUCED -> R.string.player_volume_quiet
+                    VolumeMode.INCREASED -> R.string.player_volume_boost
+                    else -> R.string.player_volume_normal
+                },
+            ),
+            options = listOf(VolumeMode.REDUCED, VolumeMode.NORMAL, VolumeMode.INCREASED),
+            selected = volumeMode,
+            labelOf = {
+                context.getString(
+                    when (it) {
+                        VolumeMode.REDUCED -> R.string.player_volume_reduced
+                        VolumeMode.INCREASED -> R.string.player_volume_increased
+                        else -> R.string.player_volume_normal
+                    },
+                )
+            },
+            onSelect = onVolumeMode,
+            modifier = Modifier.weight(1f),
+            icon = if (volumeMode == VolumeMode.REDUCED) {
+                Icons.AutoMirrored.Filled.VolumeDown
+            } else {
+                Icons.AutoMirrored.Filled.VolumeUp
+            },
+            iconDescription = stringResource(R.string.player_playback_volume),
+            menuHeader = stringResource(R.string.player_playback_volume),
+            bordered = false,
+        )
+        DropdownChip(
+            label = stringResource(if (skipSilence) R.string.player_silence_on else R.string.player_silence_off),
+            options = listOf(true, false),
+            selected = skipSilence,
+            labelOf = {
+                context.getString(if (it) R.string.player_silence_on else R.string.player_silence_off)
+            },
+            // The caller owns a toggle, not a setter — so only a change is passed on, and picking
+            // what is already set is the no-op it looks like.
+            onSelect = { if (it != skipSilence) onToggleSkipSilence() },
+            modifier = Modifier.weight(1f),
+            icon = Icons.Filled.ContentCut,
+            iconDescription = stringResource(R.string.player_playback_silence),
+            menuHeader = stringResource(R.string.player_playback_silence),
+            bordered = false,
         )
     }
 }
@@ -1125,6 +1460,7 @@ private fun BookmarksDialog(
 @Composable
 private fun ChapterPickerDialog(
     chapters: List<PlayerChapter>,
+    bookTotalMs: Long?,
     onJump: (PlayerChapter) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1154,17 +1490,29 @@ private fun ChapterPickerDialog(
                             color = if (chapter.isCurrent) Amber else Muted,
                             fontSize = 12.sp,
                         )
-                        Text(
-                            chapter.title.ifBlank { chapterFallback },
-                            modifier = Modifier.weight(1f),
-                            color = if (chapter.isCurrent) Amber else Parchment,
-                            fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        chapter.startMs?.let {
-                            Text(formatTime(it), color = Muted, fontSize = 12.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                chapter.title.ifBlank { chapterFallback },
+                                color = if (chapter.isCurrent) Amber else Parchment,
+                                fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // The same three numbers the pill carries, for every row rather than
+                            // just the current one — which is what makes this a list you can
+                            // choose from ("the short one", "the one an hour in") instead of a
+                            // list of names. Absent where they are not known; see PlayerChapter.
+                            chapterRowDetail(chapter, bookTotalMs)?.let {
+                                Text(
+                                    it,
+                                    color = Muted,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
                         }
                     }
                 }
