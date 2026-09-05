@@ -427,6 +427,8 @@
     <string name="player_cd_skip_forward">Skip forward %1$d seconds</string>
     <string name="player_cd_skip_back">Skip back %1$d seconds</string>
     <string name="player_chapters">Chapters</string>
+    <!-- A series or collection with the book's place in it, on the player's header chips. -->
+    <string name="player_series_volume">%1$s, Volume %2$d</string>
     <string name="player_error_banner">Can\'t reach the server — Retry</string>
     <string name="player_speed_value">%1$s×</string>
     <string name="player_sleep_minutes">%1$dm</string>
@@ -442,6 +444,9 @@
     <string name="player_mark">Mark</string>
     <string name="player_sleep_chapter">Chapter</string>
     <string name="player_sleep">Sleep</string>
+    <!-- Heads the menu each bottom-row glyph opens; the buttons themselves carry no words. -->
+    <string name="player_speed">Speed</string>
+    <string name="player_volume">Volume</string>
     <string name="player_sleep_extend_5">+5m</string>
     <string name="player_sleep_extend_15">+15m</string>
     <string name="player_sleep_extend_30">+30m</string>

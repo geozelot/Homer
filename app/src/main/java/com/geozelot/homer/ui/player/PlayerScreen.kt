@@ -115,16 +115,16 @@ import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
+import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Faint
-import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface2
-import com.geozelot.homer.ui.theme.Surface1
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -238,26 +238,14 @@ fun PlayerScreen(
             modifier = slotModifier,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Above the title, in widening-to-narrowing order: who wrote it, the collection it
-            // sits in, the series within that, and only then the book itself. It reads the way a
-            // spine does — the shelf, then the run, then the volume — and it puts the two facts a
-            // reader uses to place a book ("which Discworld is this?") next to each other rather
-            // than at opposite ends of the screen.
-            editableBook?.let { book ->
-                BookLineage(book = book, onFilter = onFilter, modifier = Modifier.padding(bottom = 6.dp))
-            }
-
             val loadingLabel = stringResource(R.string.player_loading)
-            Text(
-                // Prefer the live (override-applied) title so an in-place edit updates immediately;
-                // fall back to the playback snapshot before the book row has loaded.
-                text = editableBook?.title?.ifBlank { null }
+            BookHeader(
+                book = editableBook,
+                // Prefer the live (override-applied) title so an in-place edit updates
+                // immediately; fall back to the playback snapshot before the book row has loaded.
+                title = editableBook?.title?.ifBlank { null }
                     ?: state.bookTitle.ifEmpty { state.chapterTitle.ifEmpty { loadingLabel } },
-                style = SerifTitle.copy(fontSize = 20.sp),
-                color = Parchment,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                onFilter = onFilter,
             )
             val hasPicker = chapters.isNotEmpty()
             val chapterCount = if (hasPicker) chapters.size else state.chapterCount
@@ -795,115 +783,177 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * What the book belongs to, above what it is called: author, collection, series.
+ * Who wrote it, what it is called, and what it belongs to — in that order, in a block of a fixed
+ * height.
  *
- * Three lines rather than a row of chips, because they are a hierarchy and not a set — the
- * collection contains the series contains this book — and a hierarchy laid out sideways reads as
- * three equal facts. Stacked, the reading order IS the nesting.
+ * ## The order
  *
- * Each is a way somewhere: tapping narrows the library to it and leaves, the same as the item
- * chips do, which is what keeps the player from being a dead end. Each is absent rather than blank
- * when the book has no answer, so a standalone book shows one line and takes one line.
+ * Author, title, series, collection. The two names a reader already knows lead — the author, then
+ * the book — and what places it in a shelf follows, narrowest relation first: the series it is a
+ * volume of, then the collection that series sits in. Reading down is reading outward.
  *
- * The index rides with its name — "Discworld #12" — because a number without the thing it counts
- * is not a fact.
+ * ## Why the space is reserved
+ *
+ * Every slot is drawn whether or not the book fills it. A standalone with no series and no
+ * collection occupies exactly as much as a numbered volume of a nested series does, so the cover
+ * above and the scrubber below sit at the same height for every book — and moving between two
+ * books does not shuffle the transport under a thumb that is already reaching for it.
+ *
+ * ## The chips
+ *
+ * Series and collection are chips because they are the two things here you can act on: each one
+ * narrows the library to it and leaves. They differ in weight on purpose. The series is the closer
+ * relation and wears the accent; the collection is the outer one and wears the shelf hairline the
+ * library already uses to mean exactly that. Both say "<name>, Volume n" — a number without the
+ * thing it counts is not a fact.
  */
 @Composable
-private fun BookLineage(
-    book: EditableBook,
+private fun BookHeader(
+    book: EditableBook?,
+    title: String,
     onFilter: (FilterToken) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val lines = buildList {
-        book.author?.takeIf { it.isNotBlank() }?.let {
-            add(LineageLine(null, it, FilterToken(FilterFacet.AUTHOR, it)))
-        }
-        book.collection?.takeIf { it.isNotBlank() }?.let {
-            add(
-                LineageLine(
-                    stringResource(R.string.filter_facet_collection),
-                    withIndex(it, book.collectionIndex),
-                    FilterToken(FilterFacet.COLLECTION, it),
-                ),
-            )
-        }
-        book.series?.takeIf { it.isNotBlank() }?.let {
-            add(
-                LineageLine(
-                    stringResource(R.string.filter_facet_series),
-                    withIndex(it, book.seriesIndex),
-                    FilterToken(FilterFacet.SERIES, it),
-                ),
-            )
-        }
-    }
-    if (lines.isEmpty()) return
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        lines.forEach { line ->
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { onFilter(line.token) }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                // Named, because two lines each carrying a name and a number are otherwise the
-                // same line twice — and which of them is the collection is exactly what a reader
-                // of a nested series wants to know.
-                line.kind?.let {
-                    Text(it, color = Faint, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1)
-                }
+        // Reserved, like everything below it: a book with no author must not pull the title up.
+        Box(modifier = Modifier.height(BookHeaderAuthorLine), contentAlignment = Alignment.Center) {
+            book?.author?.takeIf { it.isNotBlank() }?.let {
                 Text(
-                    line.label,
+                    it,
                     color = Muted,
                     fontSize = 12.sp,
-                    lineHeight = 14.sp,
+                    lineHeight = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                )
+            }
+        }
+        // Two lines' worth, always — a one-line title leaves the second empty rather than letting
+        // the block breathe differently for every book.
+        Box(
+            modifier = Modifier.height(BookHeaderTitleBlock).padding(top = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                title,
+                style = SerifTitle.copy(fontSize = 20.sp),
+                color = Parchment,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(modifier = Modifier.height(BookHeaderChipRow), contentAlignment = Alignment.Center) {
+            book?.series?.takeIf { it.isNotBlank() }?.let {
+                LineageChip(
+                    label = withVolume(it, book.seriesIndex),
+                    border = Amber,
+                    background = AmberSoft,
+                    text = Parchment,
+                    onClick = { onFilter(FilterToken(FilterFacet.SERIES, it)) },
+                )
+            }
+        }
+        Box(modifier = Modifier.height(BookHeaderChipRow), contentAlignment = Alignment.Center) {
+            book?.collection?.takeIf { it.isNotBlank() }?.let {
+                LineageChip(
+                    label = withVolume(it, book.collectionIndex),
+                    border = LineShelf,
+                    background = Surface2,
+                    text = Muted,
+                    onClick = { onFilter(FilterToken(FilterFacet.COLLECTION, it)) },
                 )
             }
         }
     }
 }
 
-/** One row of [BookLineage]: what kind of thing it is, what it is called, and what it filters to. */
-private data class LineageLine(val kind: String?, val label: String, val token: FilterToken)
+/** One of the two relation chips — see [BookHeader] for why they differ in weight. */
+@Composable
+private fun LineageChip(
+    label: String,
+    border: androidx.compose.ui.graphics.Color,
+    background: androidx.compose.ui.graphics.Color,
+    text: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+) {
+    Text(
+        label,
+        color = text,
+        fontSize = 11.sp,
+        lineHeight = 13.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .border(1.dp, border, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+    )
+}
 
-/** "Discworld #12", or just "Discworld" where the book carries no number in it. */
-private fun withIndex(name: String, index: Int?): String =
-    if (index == null) name else "$name #$index"
+/** "Helgoland, Volume 1", or just "Helgoland" where the book carries no number in it. */
+@Composable
+private fun withVolume(name: String, index: Int?): String =
+    if (index == null) name else stringResource(R.string.player_series_volume, name, index)
+
+/** The author's line, reserved whether or not there is one. */
+private val BookHeaderAuthorLine = 18.dp
+
+/** Two lines of the serif title at 20sp, so a one-line title does not shorten the block. */
+private val BookHeaderTitleBlock = 56.dp
+
+/** One relation chip, reserved. Two of these, so a standalone book is as tall as a nested one. */
+private val BookHeaderChipRow = 24.dp
 
 /**
- * A picker row's second line: "42:15 · at 2:10:05 · 24%", or as much of it as is known.
+ * A picker row's name: "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)".
  *
- * Flatter than the pill's version — no brackets — because here it is a caption under a title
- * rather than a sentence in its own right, and twenty of them stacked read better unbracketed.
+ * Every part after the count is dropped rather than guessed. A single-file book answers all of it
+ * from its marks alone; a multi-file book knows none of it until each of its files has been
+ * measured, and a running sum over a list with a hole in it is wrong for every chapter after the
+ * hole. So an unmeasured book's picker reads "Chapter 7 of 21", which is true. See [PlayerChapter],
+ * and [com.geozelot.homer.data.metadata.DurationEnricher] for what a download does about it.
+ *
+ * Assembled from resources rather than concatenated, so a locale can reorder it — "bei" is not
+ * "at" in a position a format string could guess.
  */
 @Composable
-private fun chapterRowDetail(chapter: PlayerChapter, bookTotalMs: Long?): String? {
-    val parts = buildList {
-        chapter.lengthMs?.takeIf { it > 0 }?.let { add(formatTime(it)) }
-        chapter.startInBookMs?.let { start ->
-            val percent = if (bookTotalMs != null && bookTotalMs > 0) {
-                ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
-            } else {
-                null
-            }
-            add(
-                if (percent != null) {
-                    stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
-                } else {
-                    stringResource(R.string.player_chapter_at, formatTime(start))
-                },
-            )
-        }
+private fun chapterRowName(
+    number: Int,
+    count: Int,
+    chapter: PlayerChapter,
+    bookTotalMs: Long?,
+): String {
+    val which = stringResource(R.string.player_chapter_of, number, count)
+    val length = chapter.lengthMs?.takeIf { it > 0 } ?: return which
+    val start = chapter.startInBookMs
+    // The percentage needs BOTH a start and a total, and the total arrives on its own schedule —
+    // so a row can legitimately read "at 2:10:05" with no percentage beside it for a moment.
+    val percent = if (start != null && bookTotalMs != null && bookTotalMs > 0) {
+        ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
+    } else {
+        null
     }
-    return parts.joinToString(" · ").ifEmpty { null }
+    val where = when {
+        start == null -> null
+        percent != null -> stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
+        else -> stringResource(R.string.player_chapter_at, formatTime(start))
+    }
+    return if (where == null) {
+        "$which · ${formatTime(length)}"
+    } else {
+        stringResource(R.string.player_chapter_line, which, formatTime(length), where)
+    }
 }
 
 /** Shown when the stream stalls on an error (typically a lost connection); tap re-prepares. */
@@ -973,6 +1023,10 @@ private fun ToolRow(
                 onClick = { open = true },
             )
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                // The one header that is not just a noun. A running timer used to be readable on
+                // the button itself; with the words gone, the moment it is opened is the moment to
+                // say how long is left.
+                MenuHeader(if (sleepActive) "${stringResource(R.string.player_sleep)} · $sleepLabel" else stringResource(R.string.player_sleep))
                 listOf(15, 30, 45, 60).forEach { m ->
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.player_sleep_minutes, m)) },
@@ -997,14 +1051,15 @@ private fun ToolRow(
             }
         }
 
-        // The three at-play settings, banded.
+        // The three at-play settings, held together by proximity alone.
+        //
+        // The box they sat in was one more line on a screen that already has a scrubber, a
+        // transport row and a chapter pill drawing horizontals. Three glyphs set close with a gap
+        // either side of the group say "these belong together" without adding an edge — which is
+        // the same thing the enclosure was for, and quieter.
         Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Surface1)
-                .border(1.dp, Line, RoundedCornerShape(10.dp))
-                .padding(horizontal = 2.dp),
+            modifier = Modifier.align(Alignment.Center),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Speed — quick-select menu.
@@ -1017,6 +1072,7 @@ private fun ToolRow(
                     onClick = { open = true },
                 )
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    MenuHeader(stringResource(R.string.player_speed))
                     SPEED_PRESETS.forEach { preset ->
                         DropdownMenuItem(
                             text = {
@@ -1054,6 +1110,7 @@ private fun ToolRow(
                     onClick = { open = true },
                 )
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    MenuHeader(stringResource(R.string.player_volume))
                     listOf(
                         VolumeMode.REDUCED to stringResource(R.string.player_volume_reduced),
                         VolumeMode.NORMAL to stringResource(R.string.player_volume_normal),
@@ -1091,6 +1148,18 @@ private fun ToolRow(
     }
 }
 
+/**
+ * One control on the bottom row: a glyph, and nothing else.
+ *
+ * The label under it is gone. Five of them made the row a paragraph read at arm's length while
+ * something is playing, and every one of those words is said again — in full, and in the reader's
+ * own language — by the header of the menu the button opens. What the glyph still has to carry is
+ * whether the setting is doing anything, and that is the tint: [Amber] when it is, [Muted] when it
+ * sits at its default.
+ *
+ * [label] therefore survives as the content description. It is the same word the menu is headed
+ * with, so what a screen reader announces and what a sighted reader sees on opening agree.
+ */
 @Composable
 private fun ToolButton(
     icon: ImageVector,
@@ -1100,17 +1169,34 @@ private fun ToolButton(
     activeColor: androidx.compose.ui.graphics.Color = Amber,
 ) {
     val tint = if (active) activeColor else Muted
-    Column(
+    Box(
+        // A glyph is a small target, and this one lost the words that used to make it a big one.
+        // The 48dp is claimed here rather than by inflating the icon.
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
-        Text(label, color = tint, fontSize = 10.5.sp, maxLines = 1)
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
     }
+}
+
+/**
+ * What the menu that just opened is about — the word the button under it no longer says.
+ *
+ * Set in [SectionLabel] and indented to the items' own text, the same way [DropdownChip] heads its
+ * menus, so the two places in Homer where a small control opens a list of values name that list
+ * identically.
+ */
+@Composable
+private fun MenuHeader(text: String) {
+    Text(
+        text,
+        style = SectionLabel,
+        color = Faint,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
+    )
 }
 
 private fun sleepLabel(remainingMs: Long?, endOfChapter: Boolean, context: android.content.Context): String = when {
@@ -1323,25 +1409,36 @@ private fun ChapterPickerDialog(
                             fontSize = 12.sp,
                         )
                         Column(modifier = Modifier.weight(1f)) {
+                            // The row's NAME is the template: which chapter, how long it runs,
+                            // where it begins and what fraction of the book that is. This is the
+                            // one screen where those numbers are what you are choosing on — "the
+                            // short one", "the one an hour in" — and it is also where a name is
+                            // least likely to be worth reading, since a multi-file book's chapter
+                            // titles are its file names.
                             Text(
-                                chapter.title.ifBlank { chapterFallback },
+                                chapterRowName(
+                                    number = index + 1,
+                                    count = chapters.size,
+                                    chapter = chapter,
+                                    bookTotalMs = bookTotalMs,
+                                ),
                                 color = if (chapter.isCurrent) Amber else Parchment,
                                 fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                                 fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            // The same three numbers the pill carries, for every row rather than
-                            // just the current one — which is what makes this a list you can
-                            // choose from ("the short one", "the one an hour in") instead of a
-                            // list of names. Absent where they are not known; see PlayerChapter.
-                            chapterRowDetail(chapter, bookTotalMs)?.let {
+                            // The chapter's own title underneath, and only when it is one: an
+                            // embedded mark that carries "Kapitel 12" says nothing the line above
+                            // does not already say, and a file named after the book says less.
+                            chapter.title.takeIf { it.isNotBlank() && it != chapterFallback }?.let {
                                 Text(
                                     it,
                                     color = Muted,
                                     fontSize = 11.sp,
                                     lineHeight = 14.sp,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(top = 2.dp),
                                 )
                             }

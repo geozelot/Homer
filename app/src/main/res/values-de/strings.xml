@@ -399,6 +399,7 @@
     <string name="player_cd_skip_forward">%1$d Sekunden vorspringen</string>
     <string name="player_cd_skip_back">%1$d Sekunden zurückspringen</string>
     <string name="player_chapters">Kapitel</string>
+    <string name="player_series_volume">%1$s, Band %2$d</string>
     <string name="player_error_banner">Server nicht erreichbar — erneut versuchen</string>
     <string name="player_speed_value">%1$s×</string>
     <string name="player_sleep_minutes">%1$d min</string>
@@ -414,6 +415,8 @@
     <string name="player_mark">Merken</string>
     <string name="player_sleep_chapter">Kapitel</string>
     <string name="player_sleep">Einschlafen</string>
+    <string name="player_speed">Tempo</string>
+    <string name="player_volume">Lautstärke</string>
     <string name="player_sleep_extend_5">+5 min</string>
     <string name="player_sleep_extend_15">+15 min</string>
     <string name="player_sleep_extend_30">+30 min</string>
