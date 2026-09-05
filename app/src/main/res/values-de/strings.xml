@@ -409,10 +409,6 @@
     <string name="player_volume_reduced">Verringert</string>
     <string name="player_volume_normal">Normal</string>
     <string name="player_volume_increased">Erhöht</string>
-    <string name="player_playback">Wiedergabe</string>
-    <string name="player_playback_speed">Tempo</string>
-    <string name="player_playback_volume">Lautst.</string>
-    <string name="player_playback_silence">Stille</string>
     <string name="player_silence_on">Kürzen</string>
     <string name="player_silence_off">Lassen</string>
     <string name="player_mark">Merken</string>

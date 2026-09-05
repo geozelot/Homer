@@ -1,7 +1,6 @@
 package com.geozelot.homer.ui.player
 
 import androidx.compose.foundation.Canvas
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,11 +36,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -105,7 +102,6 @@ import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
-import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.home.BookDetailsCard
 import com.geozelot.homer.ui.home.BookListItem
@@ -113,7 +109,6 @@ import com.geozelot.homer.ui.home.FilterToken
 import com.geozelot.homer.ui.home.FilterFacet
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.CustomNumberDialog
-import com.geozelot.homer.ui.components.DropdownChip
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.HomerTextButton
@@ -243,6 +238,15 @@ fun PlayerScreen(
             modifier = slotModifier,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Above the title, in widening-to-narrowing order: who wrote it, the collection it
+            // sits in, the series within that, and only then the book itself. It reads the way a
+            // spine does — the shelf, then the run, then the volume — and it puts the two facts a
+            // reader uses to place a book ("which Discworld is this?") next to each other rather
+            // than at opposite ends of the screen.
+            editableBook?.let { book ->
+                BookLineage(book = book, onFilter = onFilter, modifier = Modifier.padding(bottom = 6.dp))
+            }
+
             val loadingLabel = stringResource(R.string.player_loading)
             Text(
                 // Prefer the live (override-applied) title so an in-place edit updates immediately;
@@ -255,45 +259,22 @@ fun PlayerScreen(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            // What the book IS, under what it is called: the author, its genre, the series it
-            // belongs to. Tappable, so each is also the way back into a library narrowed to it —
-            // the same thing the item chips do, which is what makes the player a way in rather
-            // than a dead end.
-            editableBook?.let { book ->
-                BookFacts(
-                    book = book,
-                    locale = LocalConfiguration.current.locales[0],
-                    onFilter = onFilter,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-
             val hasPicker = chapters.isNotEmpty()
             val chapterCount = if (hasPicker) chapters.size else state.chapterCount
             val chapterNumber =
                 if (hasPicker) chapters.indexOfFirst { it.isCurrent }.let { if (it >= 0) it + 1 else 1 }
                 else state.chapterIndex + 1
 
-            // Chapter picker: a wide pill below the title, carrying the whole chapter line.
+            // Chapter picker: a wide pill below the title, above the chapter/progress line.
             if (hasPicker) {
-                ChapterButton(
-                    label = chapterLabel(
-                        number = chapterNumber,
-                        count = chapterCount,
-                        chapter = chapters.firstOrNull { it.isCurrent },
-                        bookTotalMs = bookTotal,
-                    ),
-                    onClick = { showChaptersDialog = true },
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                ChapterButton(onClick = { showChaptersDialog = true }, modifier = Modifier.padding(top = 10.dp))
             }
 
-            // Info line. The chapter count moved into the pill above, where it sits beside the
-            // rest of the same answer; what is left here is the one number that is about the BOOK
-            // — how much of it remains — plus the chapter count for a book with no picker to put
-            // it in.
+            // Info line. The chapter part is conditional (a single-file book with no embedded
+            // chapters has none), the time-left part is NOT — it used to live inside the chapter
+            // branch, which lost the remaining-time readout for exactly those books.
             val infoLine = buildString {
-                if (chapterCount > 0 && !hasPicker) {
+                if (chapterCount > 0) {
                     append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
                 }
                 timeLeftMs?.let {
@@ -788,24 +769,9 @@ private const val SEEK_READY_TIMEOUT_MS = 10_000L
 
 private val SeekGlyphSize = 38.dp
 
-/**
- * Where you are in the book, in one line, and the way into the picker.
- *
- * It used to say "Chapters" and nothing else, with "Chapter 7 of 21" repeated on the info line
- * below it. Now the pill carries the whole answer — which chapter, how long it runs, where it
- * begins in the book and what fraction of the book that is — and the line below carries only the
- * time left, which is the one number that is about the book rather than about the chapter.
- *
- * **Every part after the count is dropped rather than guessed.** A multi-file book knows none of
- * them until each of its files has been measured, so what it shows in the meantime is "Chapter 7
- * of 21", which is true. See [PlayerChapter].
- */
+/** Wide pill opening the chapter picker; sits below the title. */
 @Composable
-private fun ChapterButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     // The tap area is expanded to the 48dp minimum around the pill rather than by inflating the
     // pill itself, so the visual stays the compact chip the layout was designed around.
     Box(
@@ -818,119 +784,99 @@ private fun ChapterButton(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(Surface2)
-                .padding(horizontal = 14.dp, vertical = 7.dp),
+                .padding(horizontal = 18.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.List,
-                contentDescription = stringResource(R.string.player_chapters),
-                tint = Parchment,
-                modifier = Modifier.size(16.dp),
-            )
-            Text(
-                label,
-                color = Parchment,
-                fontSize = 12.sp,
-                lineHeight = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                // One line, and it must be the whole line: the pill sizes to its text and the
-                // column it sits in is the screen's width, so there is room for the long form in
-                // both languages. Ellipsis is the backstop for a 200% font scale, not the plan.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Parchment, modifier = Modifier.size(17.dp))
+            Text(stringResource(R.string.player_chapters), color = Parchment, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 /**
- * "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)", with every part after the count optional.
+ * What the book belongs to, above what it is called: author, collection, series.
  *
- * Assembled from resources rather than concatenated here, so a locale can reorder it — German puts
- * the same parts in the same order but not every language does, and "bei" is not "at" in a
- * position a format string can guess.
+ * Three lines rather than a row of chips, because they are a hierarchy and not a set — the
+ * collection contains the series contains this book — and a hierarchy laid out sideways reads as
+ * three equal facts. Stacked, the reading order IS the nesting.
+ *
+ * Each is a way somewhere: tapping narrows the library to it and leaves, the same as the item
+ * chips do, which is what keeps the player from being a dead end. Each is absent rather than blank
+ * when the book has no answer, so a standalone book shows one line and takes one line.
+ *
+ * The index rides with its name — "Discworld #12" — because a number without the thing it counts
+ * is not a fact.
  */
 @Composable
-private fun chapterLabel(
-    number: Int,
-    count: Int,
-    chapter: PlayerChapter?,
-    bookTotalMs: Long?,
-): String {
-    val which = stringResource(R.string.player_chapter_of, number, count)
-    val length = chapter?.lengthMs?.takeIf { it > 0 } ?: return which
-    val start = chapter.startInBookMs
-    // The percentage needs BOTH a start and a total, and the total arrives on its own schedule —
-    // so a book can legitimately show "at 2:10:05" with no percentage beside it for a moment.
-    val percent = if (start != null && bookTotalMs != null && bookTotalMs > 0) {
-        ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
-    } else {
-        null
-    }
-    val where = when {
-        start == null -> null
-        percent != null -> stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
-        else -> stringResource(R.string.player_chapter_at, formatTime(start))
-    }
-    return if (where == null) {
-        "$which · ${formatTime(length)}"
-    } else {
-        stringResource(R.string.player_chapter_line, which, formatTime(length), where)
-    }
-}
-
-/**
- * What the book is, as three quiet chips: author, genre, series.
- *
- * Chips rather than a line of text because each one is a way somewhere — tapping narrows the
- * library to it and leaves — and a thing you can press should not look like a caption. Outlined
- * and muted on purpose: the title above is what the screen is about, and these sit under it the
- * way the library's own item chips sit under a card's title.
- *
- * Absent facts are absent, not blank: a book with no genre shows two chips, and one with nothing
- * known shows none and takes no space.
- */
-@Composable
-private fun BookFacts(
+private fun BookLineage(
     book: EditableBook,
-    locale: java.util.Locale,
     onFilter: (FilterToken) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val facts = buildList {
-        book.author?.takeIf { it.isNotBlank() }?.let { add(it to FilterToken(FilterFacet.AUTHOR, it)) }
-        // The primary alone. A book carrying four genres would otherwise spend the whole row on
-        // them, and the rest are one tap away in the details card.
-        book.genres.firstOrNull()?.takeIf { it.isNotBlank() }?.let {
-            add(BookGenre.display(it, locale) to FilterToken(FilterFacet.GENRE, it))
+    val lines = buildList {
+        book.author?.takeIf { it.isNotBlank() }?.let {
+            add(LineageLine(null, it, FilterToken(FilterFacet.AUTHOR, it)))
         }
-        book.series?.takeIf { it.isNotBlank() }?.let { add(it to FilterToken(FilterFacet.SERIES, it)) }
-    }
-    if (facts.isEmpty()) return
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        facts.forEach { (label, token) ->
-            Text(
-                label,
-                color = Muted,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .clip(RoundedCornerShape(999.dp))
-                    .border(1.dp, Line, RoundedCornerShape(999.dp))
-                    .clickable { onFilter(token) }
-                    .padding(horizontal = 9.dp, vertical = 3.dp),
+        book.collection?.takeIf { it.isNotBlank() }?.let {
+            add(
+                LineageLine(
+                    stringResource(R.string.filter_facet_collection),
+                    withIndex(it, book.collectionIndex),
+                    FilterToken(FilterFacet.COLLECTION, it),
+                ),
+            )
+        }
+        book.series?.takeIf { it.isNotBlank() }?.let {
+            add(
+                LineageLine(
+                    stringResource(R.string.filter_facet_series),
+                    withIndex(it, book.seriesIndex),
+                    FilterToken(FilterFacet.SERIES, it),
+                ),
             )
         }
     }
+    if (lines.isEmpty()) return
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        lines.forEach { line ->
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onFilter(line.token) }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                // Named, because two lines each carrying a name and a number are otherwise the
+                // same line twice — and which of them is the collection is exactly what a reader
+                // of a nested series wants to know.
+                line.kind?.let {
+                    Text(it, color = Faint, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1)
+                }
+                Text(
+                    line.label,
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
+
+/** One row of [BookLineage]: what kind of thing it is, what it is called, and what it filters to. */
+private data class LineageLine(val kind: String?, val label: String, val token: FilterToken)
+
+/** "Discworld #12", or just "Discworld" where the book carries no number in it. */
+private fun withIndex(name: String, index: Int?): String =
+    if (index == null) name else "$name #$index"
 
 /**
  * A picker row's second line: "42:15 · at 2:10:05 · 24%", or as much of it as is known.
@@ -984,17 +930,20 @@ private fun ErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
  *
  * They used to sit in one undifferentiated row of five: speed, sleep, volume, silence, mark. Read
  * left to right that is a timer, then two sound settings, then a third sound setting, then an
- * action — three different kinds interleaved, and five targets across a phone with nothing between
- * them but equal spacing.
+ * action — three different kinds interleaved, and five equally-spaced targets with nothing to say
+ * which of them belong together.
  *
- * So: **sleep** on the left, because when playback stops is a property of this sitting rather than
- * of the book. **Mark** on the right, because it is the only one that MAKES something. And the
- * three at-play settings — speed, volume, cut silence — behind one control in the middle, which
- * carries what they are set to as its own label and opens into a field holding all three.
+ * So: **sleep** at the leading edge, because when playback stops is a property of this sitting
+ * rather than of the book. **Mark** at the trailing edge, because it is the only one that MAKES
+ * something. And the three at-play settings — speed, volume, cut silence — banded together in the
+ * middle, each still its own button, one tap deep, exactly as they were.
  *
- * That middle control is the library's arrange field, in a player: one chip that becomes a row of
- * settings in place, with a way back at its left edge. Same idiom, same [DropdownChip], so the two
- * places in Homer where several settings live behind one control behave identically.
+ * ## Why a [Box] and not a [Row]
+ *
+ * The group is centred on the SCREEN, not on what is left after its neighbours. Sleep's label is a
+ * live countdown, so it changes width every minute; in a row with weights, a centred middle would
+ * drift sideways as the timer ticked down. Anchoring the sides and centring the group independently
+ * is the only arrangement where the three settings hold still.
  */
 @Composable
 private fun ToolRow(
@@ -1013,36 +962,9 @@ private fun ToolRow(
     onToggleSkipSilence: () -> Unit,
     onMark: () -> Unit,
 ) {
-    // Survives a rotation: the field is a mode, and coming back to a collapsed row after turning
-    // the phone loses whatever the reader had opened it to change.
-    var playbackOpen by rememberSaveable { mutableStateOf(false) }
-    // Back closes the field before it leaves the player. The library's arrange field — which this
-    // is — already behaves this way, and without it the gesture that means "put that away" meant
-    // "put the whole book away" instead.
-    BackHandler(enabled = playbackOpen) { playbackOpen = false }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (playbackOpen) {
-            PlaybackField(
-                speed = speed,
-                volumeMode = volumeMode,
-                skipSilence = skipSilence,
-                onSpeed = onSpeed,
-                onCustomSpeed = onCustomSpeed,
-                onVolumeMode = onVolumeMode,
-                onToggleSkipSilence = onToggleSkipSilence,
-                onCollapse = { playbackOpen = false },
-            )
-            return@Row
-        }
-
+    Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp)) {
         // Sleep — quick-select menu.
-        Box {
+        Box(modifier = Modifier.align(Alignment.CenterStart)) {
             var open by remember { mutableStateOf(false) }
             ToolButton(
                 icon = Icons.Filled.Bedtime,
@@ -1075,187 +997,97 @@ private fun ToolRow(
             }
         }
 
-        // The three at-play settings, as one control that says what they are set to.
-        PlaybackButton(
-            speed = speed,
-            volumeMode = volumeMode,
-            skipSilence = skipSilence,
-            onClick = { playbackOpen = true },
-            modifier = Modifier.weight(1f),
-        )
+        // The three at-play settings, banded.
+        Row(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Surface1)
+                .border(1.dp, Line, RoundedCornerShape(10.dp))
+                .padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Speed — quick-select menu.
+            Box {
+                var open by remember { mutableStateOf(false) }
+                ToolButton(
+                    icon = Icons.Filled.Speed,
+                    label = stringResource(R.string.player_speed_value, formatSpeed(speed)),
+                    active = abs(speed - 1f) > 0.001f,
+                    onClick = { open = true },
+                )
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    SPEED_PRESETS.forEach { preset ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.player_speed_value, formatSpeed(preset)),
+                                    color = if (abs(preset - speed) < 0.001f) Amber else Parchment,
+                                )
+                            },
+                            onClick = { onSpeed(preset); open = false },
+                        )
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
+                        onClick = { open = false; onCustomSpeed() },
+                    )
+                }
+            }
+
+            // Volume override — quick-select menu.
+            Box {
+                var open by remember { mutableStateOf(false) }
+                ToolButton(
+                    icon = if (volumeMode == VolumeMode.REDUCED) {
+                        Icons.AutoMirrored.Filled.VolumeDown
+                    } else {
+                        Icons.AutoMirrored.Filled.VolumeUp
+                    },
+                    label = when (volumeMode) {
+                        VolumeMode.REDUCED -> stringResource(R.string.player_volume_quiet)
+                        VolumeMode.INCREASED -> stringResource(R.string.player_volume_boost)
+                        else -> stringResource(R.string.player_volume_normal)
+                    },
+                    active = volumeMode != VolumeMode.NORMAL,
+                    onClick = { open = true },
+                )
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    listOf(
+                        VolumeMode.REDUCED to stringResource(R.string.player_volume_reduced),
+                        VolumeMode.NORMAL to stringResource(R.string.player_volume_normal),
+                        VolumeMode.INCREASED to stringResource(R.string.player_volume_increased),
+                    ).forEach { (mode, lbl) ->
+                        DropdownMenuItem(
+                            text = { Text(lbl, color = if (mode == volumeMode) Amber else Parchment) },
+                            onClick = { onVolumeMode(mode); open = false },
+                        )
+                    }
+                }
+            }
+
+            // Skip silence — toggle. The label says which way it is set rather than what it is
+            // called: "Cut" and "Keep" are the two answers, and the button is the question.
+            ToolButton(
+                icon = Icons.Filled.ContentCut,
+                label = stringResource(
+                    if (skipSilence) R.string.player_silence_on else R.string.player_silence_off,
+                ),
+                active = skipSilence,
+                onClick = onToggleSkipSilence,
+            )
+        }
 
         // Mark — bookmarks.
-        ToolButton(
-            icon = Icons.Filled.BookmarkBorder,
-            label = stringResource(R.string.player_mark),
-            active = false,
-            onClick = onMark,
-        )
-    }
-}
-
-/**
- * The collapsed middle control: one button whose label IS the current sound state.
- *
- * "1.5× · Boost · Cut" when something is set, the word Playback when nothing is — so the row says
- * what it is doing without being opened, which is the whole reason the three settings can afford
- * to be one tap further away than they were.
- */
-@Composable
-private fun PlaybackButton(
-    speed: Float,
-    volumeMode: String,
-    skipSilence: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val parts = buildList {
-        if (abs(speed - 1f) > 0.001f) add(stringResource(R.string.player_speed_value, formatSpeed(speed)))
-        when (volumeMode) {
-            VolumeMode.REDUCED -> add(stringResource(R.string.player_volume_quiet))
-            VolumeMode.INCREASED -> add(stringResource(R.string.player_volume_boost))
-            else -> Unit
-        }
-        if (skipSilence) add(stringResource(R.string.player_silence_on))
-    }
-    val active = parts.isNotEmpty()
-    val tint = if (active) Amber else Muted
-    Box(
-        modifier = modifier
-            .sizeIn(minHeight = 48.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Surface1)
-                .border(1.dp, if (active) AmberDeep else Line, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Icon(
-                Icons.Filled.Tune,
-                contentDescription = stringResource(R.string.player_playback),
-                tint = tint,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                if (active) parts.joinToString(" · ") else stringResource(R.string.player_playback),
-                color = tint,
-                fontSize = 10.5.sp,
-                lineHeight = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+            ToolButton(
+                icon = Icons.Filled.BookmarkBorder,
+                label = stringResource(R.string.player_mark),
+                active = false,
+                onClick = onMark,
             )
         }
-    }
-}
-
-/**
- * The three settings, in place of the row that opened them.
- *
- * Deliberately the same shape as the library's arrange field — a back arrow in a leading slot at
- * the field's own edge, then equal shares carrying a [DropdownChip] each — because it is the same
- * gesture answering the same kind of question, and two different-looking versions of it would be
- * two things to learn.
- *
- * Cut-silence is a dropdown of two rather than a switch so that all three cells read the same way
- * and all three say what they are set to. A switch would have said only that it can be switched.
- */
-@Composable
-private fun PlaybackField(
-    speed: Float,
-    volumeMode: String,
-    skipSilence: Boolean,
-    onSpeed: (Float) -> Unit,
-    onCustomSpeed: () -> Unit,
-    onVolumeMode: (String) -> Unit,
-    onToggleSkipSilence: () -> Unit,
-    onCollapse: () -> Unit,
-) {
-    val context = LocalContext.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Surface1)
-            .border(1.dp, AmberDeep, RoundedCornerShape(8.dp)),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(width = 40.dp, height = 48.dp).clickable(onClick = onCollapse),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.action_back),
-                tint = Muted,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-        DropdownChip(
-            label = stringResource(R.string.player_speed_value, formatSpeed(speed)),
-            options = SPEED_PRESETS,
-            selected = speed,
-            labelOf = { context.getString(R.string.player_speed_value, formatSpeed(it)) },
-            onSelect = onSpeed,
-            onCustom = onCustomSpeed,
-            modifier = Modifier.weight(1f),
-            icon = Icons.Filled.Speed,
-            iconDescription = stringResource(R.string.player_playback_speed),
-            menuHeader = stringResource(R.string.player_playback_speed),
-            bordered = false,
-        )
-        DropdownChip(
-            label = stringResource(
-                when (volumeMode) {
-                    VolumeMode.REDUCED -> R.string.player_volume_quiet
-                    VolumeMode.INCREASED -> R.string.player_volume_boost
-                    else -> R.string.player_volume_normal
-                },
-            ),
-            options = listOf(VolumeMode.REDUCED, VolumeMode.NORMAL, VolumeMode.INCREASED),
-            selected = volumeMode,
-            labelOf = {
-                context.getString(
-                    when (it) {
-                        VolumeMode.REDUCED -> R.string.player_volume_reduced
-                        VolumeMode.INCREASED -> R.string.player_volume_increased
-                        else -> R.string.player_volume_normal
-                    },
-                )
-            },
-            onSelect = onVolumeMode,
-            modifier = Modifier.weight(1f),
-            icon = if (volumeMode == VolumeMode.REDUCED) {
-                Icons.AutoMirrored.Filled.VolumeDown
-            } else {
-                Icons.AutoMirrored.Filled.VolumeUp
-            },
-            iconDescription = stringResource(R.string.player_playback_volume),
-            menuHeader = stringResource(R.string.player_playback_volume),
-            bordered = false,
-        )
-        DropdownChip(
-            label = stringResource(if (skipSilence) R.string.player_silence_on else R.string.player_silence_off),
-            options = listOf(true, false),
-            selected = skipSilence,
-            labelOf = {
-                context.getString(if (it) R.string.player_silence_on else R.string.player_silence_off)
-            },
-            // The caller owns a toggle, not a setter — so only a change is passed on, and picking
-            // what is already set is the no-op it looks like.
-            onSelect = { if (it != skipSilence) onToggleSkipSilence() },
-            modifier = Modifier.weight(1f),
-            icon = Icons.Filled.ContentCut,
-            iconDescription = stringResource(R.string.player_playback_silence),
-            menuHeader = stringResource(R.string.player_playback_silence),
-            bordered = false,
-        )
     }
 }
 
