@@ -90,10 +90,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -114,6 +116,7 @@ import com.geozelot.homer.ui.components.CustomNumberDialog
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.rememberTextWidth
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
@@ -232,7 +235,12 @@ fun PlayerScreen(
             modifier = slotModifier,
         )
     }
-    val controls: @Composable (Modifier) -> Unit = { slotModifier ->
+    // Everything below the cover is fixed in dp, so on a small or low-density screen it measured
+    // more than the viewport had and the transport ended up below the fold. One number sizes the
+    // lot — see [playerScale]. Passed IN rather than held in state: only the layouts at the bottom
+    // of this composable know the viewport, and state written during composition to be read later
+    // in the same composition is how a recomposition loop starts.
+    val controls: @Composable (Modifier, Float) -> Unit = { slotModifier, scale ->
         // Everything under the cover, in three regions:
         //
         //  - **Info** — who wrote it, what it is called, what it belongs to. Facts about the book.
@@ -249,6 +257,7 @@ fun PlayerScreen(
             // ── Info ─────────────────────────────────────────────────────────────────────
             val loadingLabel = stringResource(R.string.player_loading)
             BookHeader(
+                scale = scale,
                 book = editableBook,
                 // Prefer the live (override-applied) title so an in-place edit updates
                 // immediately; fall back to the playback snapshot before the book row has loaded.
@@ -280,7 +289,10 @@ fun PlayerScreen(
             // lost the remaining-time readout for exactly those books.
             val positionLine = buildString {
                 if (chapterCount > 0) {
-                    append(context.getString(R.string.player_chapter_of, chapterNumber, chapterCount))
+                    // The number as a string, unpadded: the picker pads its numbers so twenty
+                    // rows line up in columns, and this is one line under a title where "Chapter
+                    // 07" would just look like a typo.
+                    append(context.getString(R.string.player_chapter_of, "$chapterNumber", chapterCount))
                 }
                 timeLeftMs?.let {
                     if (isNotEmpty()) append(" · ")
@@ -317,6 +329,7 @@ fun PlayerScreen(
             Transport(
                 isPlaying = state.isPlaying,
                 seekSeconds = seekSeconds,
+                scale = scale,
                 onPrev = viewModel::previousChapter,
                 onSeekBack = { viewModel.seekBy(-seekSeconds) },
                 onPlayPause = viewModel::playPause,
@@ -353,6 +366,8 @@ fun PlayerScreen(
             .padding(horizontal = 22.dp),
     ) {
         val viewportHeight = maxHeight
+        val viewportWidth = maxWidth
+        val scale = playerScale(viewportHeight, viewportWidth)
         if (viewportHeight < SIDE_BY_SIDE_BELOW) {
             // Short viewport (landscape, split screen): stacking cannot work here — the control
             // cluster is fixed-height, so it takes what it needs and a weighted cover above it
@@ -371,6 +386,9 @@ fun PlayerScreen(
                             .fillMaxHeight()
                             .verticalScroll(rememberScrollState())
                             .padding(start = 16.dp),
+                        // Half the width is the cluster's here, so the transport is measured
+                        // against that rather than against the whole screen.
+                        playerScale(viewportHeight, viewportWidth * 0.58f),
                     )
                 }
             }
@@ -390,10 +408,13 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             // A fraction of the viewport rather than the leftover space: the cover
                             // then has a real height no matter how tall the cluster measures.
-                            .height((viewportHeight * 0.48f).coerceAtLeast(MIN_ARTWORK_HEIGHT))
-                            .padding(vertical = 16.dp),
+                            // Scaled with everything else: the cover is the one part of the screen
+                            // that can afford to give room back, and on a short viewport it is what
+                            // the cluster below borrows from rather than scrolling past.
+                            .height((viewportHeight * 0.46f * scale).coerceAtLeast(MIN_ARTWORK_HEIGHT.scaled(scale)))
+                            .padding(vertical = 16.dp.scaled(scale)),
                     )
-                    controls(Modifier.fillMaxWidth())
+                    controls(Modifier.fillMaxWidth(), scale)
                 }
             }
         }
@@ -490,6 +511,53 @@ private val SIDE_BY_SIDE_BELOW = 520.dp
 
 /** Floor for the artwork slot in the stacked layout. */
 private val MIN_ARTWORK_HEIGHT = 150.dp
+
+/**
+ * How wide the transport row measures at full size: five controls and the gaps between them.
+ *
+ * Written down because it is the widest fixed thing on the screen, and therefore the thing that
+ * decides whether the player fits a phone at all. At 348dp it does not fit a 360dp device once the
+ * screen's own 22dp margins are taken off — which is why [playerScale] divides by it.
+ */
+private const val TRANSPORT_NATURAL_DP = 348f
+
+/**
+ * One number the whole cluster is drawn at, between 0.7 and 1.
+ *
+ * ## Why a scale and not a breakpoint
+ *
+ * Everything below the cover is fixed in `dp` — an 84dp play button, a 38dp glyph, a reserved
+ * header block — and a `dp` is a physical size. So on a small or low-density screen the cluster
+ * measured exactly what it measures on a large one, took more of the viewport than there was, and
+ * the player scrolled: the transport, the thing somebody opened the screen to reach, sat below the
+ * fold. A breakpoint would fix one device and leave the next one wrong.
+ *
+ * ## Both axes, because both can be the binding one
+ *
+ * Height decides how much room the cluster has to stand in. Width decides whether the transport row
+ * fits at all — five round controls in a row is the one piece of this screen that cannot wrap, and
+ * on a 360dp phone it overflows before height ever becomes the problem.
+ *
+ * The floor is 0.7: below that the touch targets stop being touch targets, and a player nobody can
+ * hit accurately is worse than one that scrolls.
+ */
+internal fun playerScale(viewportHeight: Dp, viewportWidth: Dp): Float {
+    val byHeight = when {
+        viewportHeight >= 760.dp -> 1f
+        viewportHeight >= 680.dp -> 0.92f
+        viewportHeight >= 600.dp -> 0.84f
+        else -> 0.76f
+    }
+    val byWidth = (viewportWidth.value / TRANSPORT_NATURAL_DP).coerceAtMost(1f)
+    return minOf(byHeight, byWidth).coerceAtLeast(0.7f)
+}
+
+/** [this] scaled and rounded to whole dp, so nothing lands on a half-pixel. */
+private fun Dp.scaled(scale: Float): Dp = (value * scale).toInt().dp
+
+/** Type scales too, but less far and never below [floor] — 11sp is the smallest readable here. */
+private fun TextUnit.scaled(scale: Float, floor: Float): TextUnit =
+    (value * (1f - (1f - scale) * 0.6f)).coerceAtLeast(floor).sp
 
 /** Floor for the cover itself, so it can never compute to a non-positive (invisible) size. */
 private val MIN_COVER_WIDTH = 64.dp
@@ -664,6 +732,7 @@ private fun Scrubber(
 private fun Transport(
     isPlaying: Boolean,
     seekSeconds: Int,
+    scale: Float,
     onPrev: () -> Unit,
     onSeekBack: () -> Unit,
     onPlayPause: () -> Unit,
@@ -674,15 +743,15 @@ private fun Transport(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp.scaled(scale)),
     ) {
-        IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.player_cd_previous), tint = Parchment, modifier = Modifier.size(38.dp))
+        IconButton(onClick = onPrev, modifier = Modifier.size(52.dp.scaled(scale))) {
+            Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.player_cd_previous), tint = Parchment, modifier = Modifier.size(38.dp.scaled(scale)))
         }
-        SeekButton(seconds = seekSeconds, forward = false, onClick = onSeekBack)
+        SeekButton(seconds = seekSeconds, forward = false, scale = scale, onClick = onSeekBack)
         Box(
             modifier = Modifier
-                .size(84.dp)
+                .size(84.dp.scaled(scale))
                 .shadow(12.dp, CircleShape, spotColor = AmberDeep)
                 .clip(CircleShape)
                 .background(Amber)
@@ -693,12 +762,12 @@ private fun Transport(
                 imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (isPlaying) stringResource(R.string.action_pause) else stringResource(R.string.action_play),
                 tint = OnAmber,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(40.dp.scaled(scale)),
             )
         }
-        SeekButton(seconds = seekSeconds, forward = true, onClick = onSeekForward)
-        IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.player_cd_next), tint = Parchment, modifier = Modifier.size(38.dp))
+        SeekButton(seconds = seekSeconds, forward = true, scale = scale, onClick = onSeekForward)
+        IconButton(onClick = onNext, modifier = Modifier.size(52.dp.scaled(scale))) {
+            Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.player_cd_next), tint = Parchment, modifier = Modifier.size(38.dp.scaled(scale)))
         }
     }
 }
@@ -711,7 +780,7 @@ private fun Transport(
  * a deliberate gap at the top for the head and keeps the whole interior clear for the digits.
  */
 @Composable
-private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
+private fun SeekButton(seconds: Int, forward: Boolean, scale: Float, onClick: () -> Unit) {
     val label = if (forward) {
         stringResource(R.string.player_cd_skip_forward, seconds)
     } else {
@@ -719,13 +788,13 @@ private fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
     }
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(56.dp.scaled(scale))
             .clip(CircleShape)
             .clickable(onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.size(SeekGlyphSize)) {
+        Canvas(modifier = Modifier.size(SeekGlyphSize.scaled(scale))) {
             val stroke = 2.dp.toPx()
             // Inset by half the stroke so the arc's outer edge lands on the glyph bounds rather
             // than half a stroke outside them.
@@ -835,6 +904,7 @@ private fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 private fun BookHeader(
     book: EditableBook?,
     title: String,
+    scale: Float,
     onFilter: (FilterToken) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -843,13 +913,13 @@ private fun BookHeader(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Reserved, like everything below it: a book with no author must not pull the title up.
-        Box(modifier = Modifier.height(BookHeaderAuthorLine), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.height(BookHeaderAuthorLine.scaled(scale)), contentAlignment = Alignment.Center) {
             book?.author?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     it,
                     color = Muted,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 13.sp.scaled(scale, floor = 11f),
+                    lineHeight = 16.sp.scaled(scale, floor = 14f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -862,19 +932,22 @@ private fun BookHeader(
         // Two lines' worth, always — a one-line title leaves the second empty rather than letting
         // the block breathe differently for every book.
         Box(
-            modifier = Modifier.height(BookHeaderTitleBlock).padding(top = 2.dp),
+            modifier = Modifier.height(BookHeaderTitleBlock.scaled(scale)).padding(top = 2.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 title,
-                style = SerifTitle.copy(fontSize = 22.sp, lineHeight = 27.sp),
+                style = SerifTitle.copy(
+                    fontSize = 22.sp.scaled(scale, floor = 17f),
+                    lineHeight = 27.sp.scaled(scale, floor = 21f),
+                ),
                 color = Parchment,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(modifier = Modifier.height(BookHeaderChipRow), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.height(BookHeaderChipRow.scaled(scale)), contentAlignment = Alignment.Center) {
             book?.series?.takeIf { it.isNotBlank() }?.let {
                 LineageChip(
                     label = withVolume(it, book.seriesIndex),
@@ -888,7 +961,7 @@ private fun BookHeader(
                 )
             }
         }
-        Box(modifier = Modifier.height(BookHeaderChipRow), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.height(BookHeaderChipRow.scaled(scale)), contentAlignment = Alignment.Center) {
             book?.collection?.takeIf { it.isNotBlank() }?.let {
                 LineageChip(
                     label = withVolume(it, book.collectionIndex),
@@ -943,7 +1016,21 @@ private val BookHeaderTitleBlock = 60.dp
 private val BookHeaderChipRow = 24.dp
 
 /**
- * A picker row's name: "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)".
+ * The one style the picker's rows are set in — and measured in, which is why it is a value and not
+ * three arguments repeated at two call sites that could drift apart.
+ */
+private val ChapterRowStyle = TextStyle(
+    fontSize = 14.sp,
+    lineHeight = 18.sp,
+    fontWeight = FontWeight.SemiBold,
+    fontFeatureSettings = "tnum",
+)
+
+/** The card's own padding around a row: the dialog's insets either side, plus a little air. */
+private val ChapterCardPadding = 72.dp
+
+/**
+ * A picker row's name: "Chapter 07 of 21 · 00:42:15 (at 02:10:05 · 24%)".
  *
  * Every part after the count is dropped rather than guessed. A single-file book answers all of it
  * from its marks alone; a multi-file book knows none of it until each of its files has been
@@ -961,27 +1048,44 @@ private fun chapterRowName(
     chapter: PlayerChapter,
     bookTotalMs: Long?,
 ): String {
-    val which = stringResource(R.string.player_chapter_of, number, count)
-    val length = chapter.lengthMs?.takeIf { it > 0 } ?: return which
+    // Every field is drawn, always, at the same width — an unknown one as dashes rather than as an
+    // absence. Twenty rows that each drop a different part are twenty different shapes, and the
+    // list becomes unreadable exactly when it is least complete. Dashes say "not measured yet",
+    // which is true, and keep the columns standing while it is.
+    val which = stringResource(R.string.player_chapter_of, pad(number, count), count)
+    val length = clock(chapter.lengthMs?.takeIf { it > 0 })
     val start = chapter.startInBookMs
-    // The percentage needs BOTH a start and a total, and the total arrives on its own schedule —
-    // so a row can legitimately read "at 2:10:05" with no percentage beside it for a moment.
     val percent = if (start != null && bookTotalMs != null && bookTotalMs > 0) {
         ((start.toFloat() / bookTotalMs) * 100).toInt().coerceIn(0, 100)
     } else {
         null
     }
-    val where = when {
-        start == null -> null
-        percent != null -> stringResource(R.string.player_chapter_at_pct, formatTime(start), percent)
-        else -> stringResource(R.string.player_chapter_at, formatTime(start))
-    }
-    return if (where == null) {
-        "$which · ${formatTime(length)}"
-    } else {
-        stringResource(R.string.player_chapter_line, which, formatTime(length), where)
-    }
+    val where = stringResource(R.string.player_chapter_at_pct, clock(start), percentOrDashes(percent))
+    return stringResource(R.string.player_chapter_line, which, length, where)
 }
+
+/**
+ * `hh:mm:ss`, always — or `--:--:--` where the number is not known yet.
+ *
+ * Full width even under an hour, unlike [formatTime], which drops the hours because a scrubber has
+ * one reading and no column to keep. Here there are twenty of them stacked, and a list where some
+ * rows say 42:15 and others 2:10:05 has no columns at all.
+ */
+private fun clock(ms: Long?): String {
+    if (ms == null || ms < 0) return "--:--:--"
+    val hours = TimeUnit.MILLISECONDS.toHours(ms)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
+    return "%02d:%02d:%02d".format(hours, minutes, seconds)
+}
+
+/** A percentage, or the dashes that hold its place. Padded, so the bracket closes in one column. */
+private fun percentOrDashes(percent: Int?): String =
+    if (percent == null) "--" else "%2d".format(percent)
+
+/** [number] zero-padded to the width of [count], so chapter 7 of 210 reads 007 and lines up. */
+private fun pad(number: Int, count: Int): String =
+    number.toString().padStart(count.toString().length, '0')
 
 /** Shown when the stream stalls on an error (typically a lost connection); tap re-prepares. */
 @Composable
@@ -1429,14 +1533,35 @@ private fun ChapterPickerDialog(
         // first and last chapters simply stay where they are rather than leaving a gap.
         listState.scrollBy(-(viewport - item.size) / 2f)
     }
+    // As wide as the template needs, and no wider.
+    //
+    // Every row is one line of "Chapter 07 of 21 · 00:42:15 (at 02:10:05 · 24%)", a sentence of
+    // numbers that means nothing truncated — so the card is measured from the line itself rather
+    // than set to a fraction of the screen and hoped for. Every row is the same width by
+    // construction (each field is padded to a fixed size), so one sample measures all of them.
+    //
+    // A LazyColumn cannot be asked for its intrinsic width — lazy layouts have none — which is why
+    // this is measured from the string and not from the list.
+    val sample = chapters.firstOrNull()?.let {
+        chapterRowName(number = chapters.size, count = chapters.size, chapter = it, bookTotalMs = bookTotalMs)
+    } ?: stringResource(R.string.player_chapters)
+    val rowWidth = rememberTextWidth(listOf(sample), ChapterRowStyle)
+    // Capped at the screen: a book of a thousand chapters pads its numbers wider, and a card is
+    // still a card. Inside the cap the dialog is exactly the sentence plus the padding around it.
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val cardWidth = (rowWidth + ChapterCardPadding).coerceAtMost(screenWidth - 24.dp)
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Wider than a stock dialog. Every row is one line of "Chapter 7 of 21 · 42:15 (at 2:10:05
-        // · 24%)" — a sentence of numbers that means nothing truncated — and the platform default
-        // is sized for a paragraph of prose with a button under it.
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
-        title = { Text(stringResource(R.string.player_chapters)) },
+        modifier = Modifier.width(cardWidth),
+        title = {
+            // Centred over its own card rather than left-aligned against rows of numbers.
+            Text(
+                stringResource(R.string.player_chapters),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        },
         text = {
             LazyColumn(state = listState, modifier = Modifier.heightIn(max = dialogContentMaxHeight())) {
                 itemsIndexed(chapters) { index, chapter ->
@@ -1471,9 +1596,13 @@ private fun ChapterPickerDialog(
                                     chapter = chapter,
                                     bookTotalMs = bookTotalMs,
                                 ),
+                                // Tabular figures, so the digits sit in columns down the list
+                                // instead of drifting with whatever glyph widths a 1 and a 7
+                                // happen to have. The zero-padding above only lines up if the
+                                // figures themselves are the same width.
+                                style = ChapterRowStyle,
                                 color = if (chapter.isCurrent) Amber else Parchment,
                                 fontWeight = if (chapter.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                                fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

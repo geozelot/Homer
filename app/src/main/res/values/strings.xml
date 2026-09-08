@@ -416,13 +416,12 @@
 
     <!-- Player -->
     <string name="player_loading">Loading…</string>
-    <string name="player_chapter_of">Chapter %1$d of %2$d</string>
+    <string name="player_chapter_of">Chapter %1$s of %2$d</string>
     <!-- The chapter line, assembled: "Chapter 7 of 21 · 42:15 (at 2:10:05 · 24%)". Split into
          parts so a locale can reorder them, and so each part can be dropped on its own when the
          number behind it is not known yet. -->
     <string name="player_chapter_line">%1$s · %2$s (%3$s)</string>
-    <string name="player_chapter_at">at %1$s</string>
-    <string name="player_chapter_at_pct">at %1$s · %2$d%%</string>
+    <string name="player_chapter_at_pct">at %1$s · %2$s%%</string>
     <string name="player_now_playing">NOW PLAYING</string>
     <string name="player_time_remaining">-%1$s</string>
     <string name="player_time_unknown">--:--</string>
