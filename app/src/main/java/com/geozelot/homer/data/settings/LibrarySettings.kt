@@ -47,6 +47,18 @@ private val Context.settingsDataStore by preferencesDataStore(
  * relative to the files root, where the crawl begins — empty = the whole drive), plus sync toggles,
  * storage location, cover-lookup, security, and view/sort/group preferences.
  */
+/**
+ * A certificate the pin refused, and what the server offered in its place.
+ *
+ * [offered] is every pin in the chain that was presented, so accepting it is a write rather than
+ * another handshake — and so accepting an intermediate covers the renewals after this one too.
+ */
+data class PinningBlock(val host: String, val offered: List<String>)
+
+/** Comma-joined pins as stored; a single pin from before the list existed reads back as one. */
+private fun String?.toPinList(): List<String> =
+    this?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
 @Singleton
 class LibrarySettings @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -370,8 +382,9 @@ class LibrarySettings @Inject constructor(
 
     /**
      * Pin the Nextcloud server's TLS certificate (trust-on-first-use). When enabled the first
-     * connection's certificate is captured into [pinnedServerCert] and every later connection must
-     * match it. Disabling clears the captured pin so it re-captures if re-enabled.
+     * connection's certificate chain is captured into [pinnedServerCerts] and every later
+     * connection must present at least one certificate matching it. Disabling clears the capture so
+     * it re-captures if re-enabled.
      */
     val certPinningEnabled: Flow<Boolean> =
         context.settingsDataStore.data.map { it[KEY_CERT_PIN] ?: false }
@@ -379,17 +392,63 @@ class LibrarySettings @Inject constructor(
     suspend fun setCertPinningEnabled(value: Boolean) {
         context.settingsDataStore.edit {
             it[KEY_CERT_PIN] = value
-            if (!value) it.remove(KEY_PINNED_CERT)
+            if (!value) {
+                it.remove(KEY_PINNED_CERT)
+                it.remove(KEY_PIN_BLOCKED_HOST)
+                it.remove(KEY_PIN_OFFERED)
+            }
         }
     }
 
-    /** The captured pin ("sha256/…"), or null before first capture. */
-    val pinnedServerCert: Flow<String?> =
-        context.settingsDataStore.data.map { it[KEY_PINNED_CERT] }
+    /**
+     * The captured pins ("sha256/…"), whole chain, or empty before first capture.
+     *
+     * A LIST, and that is the fix for a pin that expired on a timer. Only the leaf used to be kept,
+     * and a leaf is the one certificate guaranteed to change: Let's Encrypt renews every sixty to
+     * ninety days with a fresh key, so the stored hash stopped matching on a schedule and every
+     * request failed from then on — silently, forever, until somebody read a log.
+     *
+     * Keeping the whole chain and accepting a match anywhere in it survives that, because a
+     * renewal keeps the same issuing intermediate. A CA rotating its intermediate still blocks,
+     * which is correct: that is a real change, and it is the user's to accept.
+     *
+     * Stored comma-joined in the key a single pin used to occupy, so an install that already holds
+     * one reads it back as a list of one and nothing has to migrate. A pin is base64 with a
+     * `sha256/` prefix and can never contain a comma.
+     */
+    val pinnedServerCerts: Flow<List<String>> =
+        context.settingsDataStore.data.map { it[KEY_PINNED_CERT].toPinList() }
 
-    suspend fun setPinnedServerCert(pin: String?) {
+    suspend fun setPinnedServerCerts(pins: List<String>) {
         context.settingsDataStore.edit {
-            if (pin == null) it.remove(KEY_PINNED_CERT) else it[KEY_PINNED_CERT] = pin
+            if (pins.isEmpty()) it.remove(KEY_PINNED_CERT) else it[KEY_PINNED_CERT] = pins.joinToString(",")
+        }
+    }
+
+    /**
+     * The host whose certificate was refused, and what it offered instead — or null when nothing is
+     * being refused.
+     *
+     * Recorded so the refusal can be SHOWN. A blocked pin used to be a warning in logcat and
+     * nothing else: the app went on looking healthy while every write to the server was rejected,
+     * which is the worst possible way for a security control to fail. The offered pins are kept
+     * with it so accepting them costs no second handshake.
+     */
+    val pinningBlocked: Flow<PinningBlock?> =
+        context.settingsDataStore.data.map { prefs ->
+            val host = prefs[KEY_PIN_BLOCKED_HOST] ?: return@map null
+            PinningBlock(host = host, offered = prefs[KEY_PIN_OFFERED].toPinList())
+        }
+
+    suspend fun setPinningBlocked(host: String?, offered: List<String> = emptyList()) {
+        context.settingsDataStore.edit {
+            if (host == null) {
+                it.remove(KEY_PIN_BLOCKED_HOST)
+                it.remove(KEY_PIN_OFFERED)
+            } else {
+                it[KEY_PIN_BLOCKED_HOST] = host
+                it[KEY_PIN_OFFERED] = offered.joinToString(",")
+            }
         }
     }
 
@@ -416,6 +475,8 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_LAST_COVER_SWEEP_ETAG)
             it.remove(KEY_FULL_CRAWL_AT)
             it.remove(KEY_PINNED_CERT)
+            it.remove(KEY_PIN_BLOCKED_HOST)
+            it.remove(KEY_PIN_OFFERED)
             // The rules and the ownership belong to the library being left, not to this device.
             it.remove(KEY_POLICY_ROOT)
             it.remove(KEY_POLICY_PRESENT)
@@ -467,6 +528,8 @@ class LibrarySettings @Inject constructor(
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
         val KEY_CERT_PIN = booleanPreferencesKey("cert_pinning_enabled")
         val KEY_PINNED_CERT = stringPreferencesKey("pinned_server_cert")
+        val KEY_PIN_BLOCKED_HOST = stringPreferencesKey("pinning_blocked_host")
+        val KEY_PIN_OFFERED = stringPreferencesKey("pinning_offered_certs")
     }
 }
 

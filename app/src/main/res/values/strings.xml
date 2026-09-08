@@ -242,6 +242,10 @@
     <string name="settings_app_lock_desc">Asks for your fingerprint, face, or screen lock when Homer opens or returns from the background.</string>
     <string name="settings_cert_pinning">Pin server certificate</string>
     <string name="settings_cert_pinning_desc">Remembers your server\'s certificate on the next connection and refuses to connect if it ever changes. Turn off and on again after a legitimate certificate renewal.</string>
+    <!-- Shown while the pin is refusing the server. Nothing reaches the server in this state. -->
+    <string name="settings_cert_pinning_blocked">%1$s is presenting a certificate that does not match the pinned one. Nothing is being sent to or read from the server.</string>
+    <string name="settings_cert_pinning_blocked_desc">A renewed certificate looks exactly like an intercepted connection. Accept it only if you know your server\'s certificate was due to renew.</string>
+    <string name="settings_cert_pinning_trust">Trust the certificate now presented</string>
     <string name="settings_diagnostics">Diagnostics (logs)</string>
 
     <!-- Settings: library source (reused wording) -->
@@ -689,6 +693,7 @@
     <string name="lib_rules_header">THIS LIBRARY\'S RULES</string>
     <string name="lib_rules_owner">you own it</string>
     <string name="lib_why_reader">This device reads a library it cannot write to, so it runs no scans and publishes nothing. The devices that can write it keep it up to date.</string>
+    <string name="lib_pinning_blocked">Blocked: %1$s is presenting a certificate that does not match the pinned one. Nothing syncs until it is accepted under Privacy.</string>
     <string name="lib_why_rules_unreadable">Homer found rules here it could not read, so it is being cautious: it reads the library and publishes nothing.</string>
     <string name="lib_why_edits_locked">Corrections you make stay on this device — this library\'s owner does not accept published edits.</string>
     <string name="action_continue">Continue</string>

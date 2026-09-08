@@ -84,6 +84,7 @@ fun LibrarySyncScreen(
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val ruleWriteFailed by viewModel.ruleWriteFailed.collectAsStateWithLifecycle()
+    val pinBlocked by viewModel.pinningBlocked.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
 
@@ -95,6 +96,14 @@ fun LibrarySyncScreen(
     // as chips on the row they qualify. "Last full crawl" belongs to Upkeep, beside the passes it
     // authorises.
     SettingsScaffold(stringResource(R.string.set_sync_title), onBack, modifier) {
+        // Before any of the three facts, because while it is set none of them are being acted on:
+        // a refused certificate stops every read and every write, and this page is where somebody
+        // comes to ask why. The remedy is a decision about trust, so it is made where trust is
+        // configured rather than offered here as a button.
+        pinBlocked?.let {
+            SettingsNote(stringResource(R.string.lib_pinning_blocked, it.host))
+        }
+
         // ── books ────────────────────────────────────────────────────────────
         StateRow(
             header = stringResource(R.string.lib_fact_books),

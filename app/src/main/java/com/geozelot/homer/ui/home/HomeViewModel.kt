@@ -37,6 +37,7 @@ import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
+import com.geozelot.homer.data.settings.PinningBlock
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
@@ -655,6 +656,35 @@ class HomeViewModel @Inject constructor(
     /** Whether the server's TLS certificate is pinned (trust-on-first-use). */
     val certPinningEnabled: StateFlow<Boolean> = librarySettings.certPinningEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * The server whose certificate the pin is currently refusing, or null when nothing is refused.
+     *
+     * Worth a screen of its own attention: while this is set, NOTHING reaches the server — not the
+     * progress sync, not the rules, not a published edit — and the app otherwise looks perfectly
+     * healthy, because everything it shows came from the database.
+     */
+    val pinningBlocked: StateFlow<PinningBlock?> = librarySettings.pinningBlocked
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Accepts the certificate the server is presenting now, in place of what was pinned.
+     *
+     * The user's decision, never the app's. A renewed certificate and an intercepted connection are
+     * the same event to a pin, and the only party who can tell them apart is the person who knows
+     * whether their server was due to renew.
+     *
+     * Adopting the whole offered chain rather than its leaf is what stops this recurring: the next
+     * renewal presents a new leaf under the same intermediate, and that still matches.
+     */
+    fun trustPresentedCertificate() {
+        viewModelScope.launch {
+            val block = librarySettings.pinningBlocked.first() ?: return@launch
+            librarySettings.setPinnedServerCerts(block.offered)
+            librarySettings.setPinningBlocked(null)
+            Log.i(TAG_NET, "adopted the certificate presented by '${block.host}'")
+        }
+    }
 
     /** Live progress of a storage move (null when none is running) — drives a blocking overlay. */
     val migrationProgress: StateFlow<StorageMigrator.Progress?> = storageMigrator.progress
@@ -1372,6 +1402,7 @@ class HomeViewModel @Inject constructor(
 
         const val MIRROR_MARKER = "progress.json"
         const val TAG_STORAGE = "HomerStore"
+        const val TAG_NET = "HomerNet"
 
         /** How long the template editor settles before the preview reads the library. */
         const val PREVIEW_DEBOUNCE_MS = 250L

@@ -230,6 +230,9 @@
     <string name="settings_app_lock_desc">Fragt nach Fingerabdruck, Gesicht oder Bildschirmsperre, wenn Homer startet oder aus dem Hintergrund zurückkehrt.</string>
     <string name="settings_cert_pinning">Serverzertifikat anpinnen</string>
     <string name="settings_cert_pinning_desc">Merkt sich das Zertifikat deines Servers bei der nächsten Verbindung und verweigert die Verbindung, wenn es sich je ändert. Nach einer legitimen Zertifikatserneuerung aus- und wieder einschalten.</string>
+    <string name="settings_cert_pinning_blocked">%1$s zeigt ein Zertifikat, das nicht zum angehefteten passt. Es wird nichts an den Server gesendet oder von ihm gelesen.</string>
+    <string name="settings_cert_pinning_blocked_desc">Ein erneuertes Zertifikat sieht genauso aus wie eine abgefangene Verbindung. Akzeptiere es nur, wenn du weißt, dass das Zertifikat deines Servers fällig war.</string>
+    <string name="settings_cert_pinning_trust">Gezeigtes Zertifikat übernehmen</string>
     <string name="settings_diagnostics">Diagnose (Protokoll)</string>
 
     <!-- Settings: library source (reused wording) -->
@@ -659,6 +662,7 @@
     <string name="lib_rules_header">REGELN DIESER BIBLIOTHEK</string>
     <string name="lib_rules_owner">gehört dir</string>
     <string name="lib_why_reader">Dieses Gerät liest eine Bibliothek, in die es nicht schreiben kann — es durchsucht daher nichts und veröffentlicht nichts. Die schreibberechtigten Geräte halten sie aktuell.</string>
+    <string name="lib_pinning_blocked">Blockiert: %1$s zeigt ein Zertifikat, das nicht zum angehefteten passt. Bis es unter Privatsphäre übernommen wird, wird nichts synchronisiert.</string>
     <string name="lib_why_rules_unreadable">Homer hat hier Regeln gefunden, die er nicht lesen konnte, und bleibt vorsichtig: Er liest die Bibliothek und veröffentlicht nichts.</string>
     <string name="lib_why_edits_locked">Deine Korrekturen bleiben auf diesem Gerät — wem diese Bibliothek gehört, nimmt keine veröffentlichten Änderungen an.</string>
     <string name="action_continue">Weiter</string>
