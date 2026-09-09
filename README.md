@@ -183,14 +183,14 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.1**, and **2.2 is in beta** under the moving tag `v2.2.0-BETA`. A moving tag is
+Homer is at **2.1**, and **2.1.1 is in beta** under the moving tag `v2.1.1-BETA`. A moving tag is
 replaced by each build rather than added to, so there is one pre-release to follow; its title
-carries the actual build (`2.2.0-BETA.57`) while the APK keeps a stable name. In-app update checks
+carries the actual build (`2.1.1-BETA.57`) while the APK keeps a stable name. In-app update checks
 only offer a pre-release to devices on the beta channel.
 
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
-`2.1.0`, so once 2.1 shipped, the next beta had to open the 2.2 line or the updater would have read
-it as a downgrade.
+`2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it is
+working towards.
 
 2.1 is about finding your way around a library and setting one up.
 
