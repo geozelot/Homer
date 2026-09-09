@@ -2164,6 +2164,7 @@ private fun BookGridCard(
                     chips = bookChip(book, ctx),
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
+                    lines = ctx.chipLines,
                 )
             },
         )
@@ -2286,6 +2287,20 @@ private fun chipToken(kind: MetaChipKind, value: String): FilterToken = when (ki
     // state, so it answers "show me everything that is in a collection".
     MetaChipKind.SHELF -> FilterToken(FilterFacet.STATE, value)
 }
+
+/**
+ * How many chip lines an item reserves in this arrangement.
+ *
+ * Two only where the rule can produce two — shelved by item, where no heading names either fact —
+ * and only in the GRID, which has the height to spend and the narrow cells that make two pills side
+ * by side unreadable. A list row is one line tall and the width of the screen, so there the two sit
+ * beside each other exactly as they did.
+ *
+ * Read from the arrangement rather than from the book, so every card reserves the same space
+ * whether or not it fills it, and the grid still lines up.
+ */
+internal val RowContext.chipLines: Int
+    get() = if (gridView && shelving == LibraryShelving.ITEM) 2 else 1
 
 /**
  * The number a book's corner shows — which depends entirely on what shelf it is standing on.
@@ -2546,6 +2561,7 @@ private fun SeriesGridCard(
                     chips = shelfChip(series, ctx),
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
+                    lines = ctx.chipLines,
                 )
             },
         )

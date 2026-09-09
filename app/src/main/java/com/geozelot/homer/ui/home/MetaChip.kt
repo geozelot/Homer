@@ -121,6 +121,12 @@ object MetaChipSlot {
      * book in the list are spaced differently.
      */
     val TitleGap: Dp = 6.dp
+
+    /** The gap between stacked chip lines — see [MetaChipSlot]'s `lines`. */
+    val StackGap: Dp = 3.dp
+
+    /** The height [lines] of chips occupy, gaps included. */
+    fun stackHeight(lines: Int): Dp = SlotHeight * lines + StackGap * (lines - 1)
 }
 
 /** Which fact the chip carries — see [MetaChipSlot] for why it is one or the other. */
@@ -251,25 +257,53 @@ internal fun MetaChipSlot(
      * nothing.
      */
     trailing: String? = null,
+    /**
+     * How many chip LINES to reserve, and therefore whether chips stack.
+     *
+     * More than one and each chip takes its own line, with the full height held whether or not the
+     * item fills it — the same bargain the single row already made, one storey up. A grid card
+     * carrying an author and a genre reads as two facts stacked; side by side on a ~100dp cell the
+     * two pills had barely a word each between them, and a book with only one of the two left the
+     * row looking half-drawn.
+     *
+     * Derived from the ARRANGEMENT rather than from the book, so every card in a grid reserves the
+     * same space and the rows still line up — which is the whole reason this slot exists.
+     */
+    lines: Int = 1,
 ) {
-    Row(
-        modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    if (lines <= 1) {
+        Row(
+            modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            chips.forEach { (kind, values) -> MetaChip(kind, values, ctx, onFilter) }
+            if (trailing.isNullOrBlank()) return@Row
+            Text(
+                // The separator belongs to the join, not to the caller: every one of these lines is
+                // mid-dots and building it at four call sites is how one of them ends up with a comma.
+                if (chips.isEmpty()) trailing else " · $trailing",
+                color = Muted,
+                fontSize = 10.sp,
+                lineHeight = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = if (chips.isEmpty()) MetaChipSlot.TextInset else 0.dp),
+            )
+        }
+        return
+    }
+    Column(
+        modifier = modifier.height(MetaChipSlot.stackHeight(lines)),
+        verticalArrangement = Arrangement.spacedBy(MetaChipSlot.StackGap),
     ) {
-        chips.forEach { (kind, values) -> MetaChip(kind, values, ctx, onFilter) }
-        if (trailing.isNullOrBlank()) return@Row
-        Text(
-            // The separator belongs to the join, not to the caller: every one of these lines is
-            // mid-dots and building it at four call sites is how one of them ends up with a comma.
-            if (chips.isEmpty()) trailing else " · $trailing",
-            color = Muted,
-            fontSize = 10.sp,
-            lineHeight = 10.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = if (chips.isEmpty()) MetaChipSlot.TextInset else 0.dp),
-        )
+        // Each on its own line, in the order they were given — author above genre, which is the
+        // order [metaChipFor] returns them in and the order the details card lists them in.
+        chips.take(lines).forEach { (kind, values) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MetaChip(kind, values, ctx, onFilter)
+            }
+        }
     }
 }
 
