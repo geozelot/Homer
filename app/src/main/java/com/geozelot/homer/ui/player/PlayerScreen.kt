@@ -401,29 +401,30 @@ fun PlayerScreen(
                 }
             }
         } else {
-            // Tall viewport: the stacked layout, but inside a scroll container whose content is at
-            // least one viewport tall. SpaceBetween keeps the cluster pinned to the bottom while
-            // everything fits; at large font scales the content grows past the viewport and simply
-            // scrolls rather than crushing the cover and clipping the transport row.
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = viewportHeight),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    topBar()
-                    artwork(
-                        Modifier
-                            .fillMaxWidth()
-                            // A fraction of the viewport rather than the leftover space: the cover
-                            // then has a real height no matter how tall the cluster measures.
-                            // Scaled with everything else: the cover is the one part of the screen
-                            // that can afford to give room back, and on a short viewport it is what
-                            // the cluster below borrows from rather than scrolling past.
-                            .height((viewportHeight * 0.46f * scale).coerceAtLeast(MIN_ARTWORK_HEIGHT.scaled(scale)))
-                            .padding(vertical = 16.dp.scaled(scale)),
-                    )
-                    controls(Modifier.fillMaxWidth(), scale)
-                }
+            // Tall viewport: the cover takes what is LEFT, and therefore the player always fits.
+            //
+            // It was a fraction of the viewport — 46% of it, scaled — which is a guess at how much
+            // room the cluster below would need, and a guess is wrong on exactly the screens that
+            // cannot afford it. On a mid-sized phone the sum came to more than the viewport and the
+            // transport, the thing somebody opened the player to reach, sat below the fold.
+            //
+            // A Column measures its unweighted children at their natural height FIRST and hands
+            // what remains to the weighted one. So the top bar and the control cluster take exactly
+            // what they need, the cover gets the rest, and the total is the viewport by
+            // construction. Nothing scrolls because there is nothing left to scroll past.
+            //
+            // No floor on the cover, deliberately: a minimum is what turns "the cover is small" —
+            // recoverable, and only on a screen where something has to give — into "the transport
+            // is off the bottom", which is not.
+            Column(modifier = Modifier.fillMaxSize()) {
+                topBar()
+                artwork(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(vertical = 16.dp.scaled(scale)),
+                )
+                controls(Modifier.fillMaxWidth(), scale)
             }
         }
     }
@@ -519,9 +520,6 @@ fun PlayerScreen(
 /** Below this viewport height the cover and the control cluster sit side by side, not stacked. */
 private val SIDE_BY_SIDE_BELOW = 520.dp
 
-/** Floor for the artwork slot in the stacked layout. */
-private val MIN_ARTWORK_HEIGHT = 150.dp
-
 /**
  * How wide the transport row measures at full size: five controls and the gaps between them.
  *
@@ -569,9 +567,6 @@ private fun Dp.scaled(scale: Float): Dp = (value * scale).toInt().dp
 private fun TextUnit.scaled(scale: Float, floor: Float): TextUnit =
     (value * (1f - (1f - scale) * 0.6f)).coerceAtLeast(floor).sp
 
-/** Floor for the cover itself, so it can never compute to a non-positive (invisible) size. */
-private val MIN_COVER_WIDTH = 64.dp
-
 /** The cover, centered in whatever slot it's given and sized to fit it in both dimensions. */
 @Composable
 private fun PlayerArtwork(
@@ -602,7 +597,10 @@ private fun PlayerArtwork(
         //
         // It was 1:1.3, which cut 23% off a square cover — less brutal than the library's 2:3 but on
         // the one screen where the artwork IS the content, and where there is room to show all of it.
-        val coverWidth = minOf(maxWidth * 0.82f, maxHeight).coerceAtLeast(MIN_COVER_WIDTH)
+        // Whichever bound is smaller, and NO floor: this slot is whatever the cluster below left
+        // over, so a cover insisting on a minimum would push the transport off the screen to keep
+        // itself large. Small is a cost the artwork can bear; missing controls are not.
+        val coverWidth = minOf(maxWidth * 0.82f, maxHeight)
         CoverImage(
             model = model,
             modifier = Modifier
