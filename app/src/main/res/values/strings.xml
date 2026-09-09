@@ -502,13 +502,7 @@
     <string name="set_update_err_signature">That release is signed with a different key than this build, so Android would refuse it. This is normal if you built this copy yourself \u2014 install the release APK by hand instead.</string>
     <string name="set_update_err_notallowed">Homer needs your permission to install apps.</string>
     <string name="set_update_err_installfailed">The install didn\u2019t complete.</string>
-    <string name="details_series">Series</string>
     <string name="details_series_at">%1$s, #%2$d</string>
-    <string name="details_collection">Collection</string>
-    <string name="details_author">Author</string>
-    <string name="details_genre">Genre</string>
-    <string name="details_language">Language</string>
-    <string name="details_tags">Tags</string>
     <string name="details_length">Length</string>
     <string name="details_length_unknown">Not measured yet</string>
     <string name="details_files">Files</string>
@@ -521,7 +515,6 @@
     <string name="details_offline_some">%1$d of %2$d downloaded</string>
     <string name="details_location">Folder</string>
     <string name="details_volumes">Volumes</string>
-    <string name="details_subseries">Contains</string>
     <string name="details_started">Started</string>
     <string name="details_started_none">None started</string>
     <string name="details_started_some">%1$d of %2$d started</string>

@@ -471,13 +471,7 @@
     <string name="set_update_err_signature">Diese Version ist mit einem anderen Schlüssel signiert als dieser Build, daher würde Android sie ablehnen. Das ist normal, wenn du diese Kopie selbst gebaut hast — installiere die Release-APK stattdessen von Hand.</string>
     <string name="set_update_err_notallowed">Homer braucht deine Erlaubnis, Apps zu installieren.</string>
     <string name="set_update_err_installfailed">Die Installation ist nicht fertig geworden.</string>
-    <string name="details_series">Serie</string>
     <string name="details_series_at">%1$s, Nr. %2$d</string>
-    <string name="details_collection">Kollektion</string>
-    <string name="details_author">Autor</string>
-    <string name="details_genre">Genre</string>
-    <string name="details_language">Sprache</string>
-    <string name="details_tags">Schlagwörter</string>
     <string name="details_length">Länge</string>
     <string name="details_length_unknown">Noch nicht gemessen</string>
     <string name="details_files">Dateien</string>
@@ -490,7 +484,6 @@
     <string name="details_offline_some">%1$d von %2$d heruntergeladen</string>
     <string name="details_location">Ordner</string>
     <string name="details_volumes">Bände</string>
-    <string name="details_subseries">Enthält</string>
     <string name="details_started">Begonnen</string>
     <string name="details_started_none">Keines begonnen</string>
     <string name="details_started_some">%1$d von %2$d begonnen</string>

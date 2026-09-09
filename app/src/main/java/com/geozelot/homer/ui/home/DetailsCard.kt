@@ -3,6 +3,10 @@ package com.geozelot.homer.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Rule
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,10 +32,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -36,14 +46,18 @@ import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.metadata.BookLanguage
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifTitle
+import com.geozelot.homer.ui.theme.Surface2
 
 /**
  * Everything Homer knows about one book or one shelf, in one place.
@@ -91,6 +105,82 @@ private fun Fact(label: String, value: String?, onTap: (() -> Unit)? = null) {
             fontSize = 13.sp,
             lineHeight = 18.sp,
         )
+    }
+}
+
+/**
+ * One filterable fact, as a chip: a mark saying what kind of fact it is, and its value.
+ *
+ * ## Why the labels went
+ *
+ * These were labelled rows — a 96dp column reading "Author", "Genre", "Language", then the value.
+ * Nine of them stacked is a form, and a third of the card's width was spent on words that never
+ * change. The mark says the same thing in 11dp, which is what the mark is for, and it says it in
+ * every language without being translated.
+ *
+ * ## Why chips and not rows
+ *
+ * Every one of these narrows the library to itself, and a thing you can press should look pressable.
+ * As rows they were amber text, which in Homer means "this does something" — true, and invisible
+ * next to eight other rows of text. It also lets a book with four genres be four chips instead of
+ * one row reading "Krimi · Thriller · Hörspiel · Jugend", where only the first was tappable and
+ * nothing said so.
+ */
+private data class DetailChip(val icon: ImageVector, val label: String, val token: FilterToken)
+
+/** The block of them, wrapping as it needs to. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailChips(chips: List<DetailChip>, onFilter: (FilterToken) -> Unit) {
+    if (chips.isEmpty()) return
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        chips.forEach { chip ->
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Surface2)
+                    .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
+                    .clickable { onFilter(chip.token) }
+                    .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(chip.icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
+                Text(
+                    chip.label,
+                    color = Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The way out of a folder Homer has read wrongly, drawn as the action it is.
+ *
+ * It was a line of amber text at the bottom of a card full of text — the most consequential thing
+ * on the card, and the least visible. It opens the template editor seeded with this folder and the
+ * pattern currently matching it, which is a page of its own; that deserves a button.
+ */
+@Composable
+private fun ReadFolderDifferentlyButton(onClick: () -> Unit) {
+    HomerTextButton(
+        onClick = onClick,
+        modifier = Modifier.padding(top = 10.dp),
+        contentPadding = SettingsActionPadding,
+    ) {
+        Icon(Icons.Filled.Rule, contentDescription = null, tint = Amber, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.size(7.dp))
+        Text(stringResource(R.string.details_read_folder), color = Amber, fontSize = 12.sp)
     }
 }
 
@@ -145,34 +235,66 @@ fun BookDetailsCard(
 
                 FactDivider()
 
-                // The VALUE filtered on is the stored one, not the rendered one: the language row
-                // reads "German" and filters on `de`.
-                Fact(stringResource(R.string.details_author), book.author) {
-                    book.author?.let { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
-                }
-                Fact(stringResource(R.string.details_series), book.seriesLine(context)) {
-                    book.series?.let { onFilter(FilterToken(FilterFacet.SERIES, it)) }
-                }
-                Fact(stringResource(R.string.details_collection), book.collectionLine(context)) {
-                    book.collection?.let { onFilter(FilterToken(FilterFacet.COLLECTION, it)) }
-                }
-                // Every genre, and tapping filters on the PRIMARY one. A single tap cannot mean
-                // three tokens, and the first is the one the shelf agrees with.
-                Fact(
-                    stringResource(R.string.details_genre),
-                    book.genres.takeIf { it.isNotEmpty() }
-                        ?.joinToString(" · ") { BookGenre.display(it, locale) },
-                ) {
-                    book.genre?.let { onFilter(FilterToken(FilterFacet.GENRE, it)) }
-                }
-                Fact(
-                    stringResource(R.string.details_language),
-                    book.language?.let { BookLanguage.displayName(it, locale) },
-                ) { book.language?.let { onFilter(FilterToken(FilterFacet.LANGUAGE, it)) } }
-                Fact(stringResource(R.string.details_tags), book.tags.takeIf { it.isNotEmpty() }?.joinToString(" · "))
+                // What this book IS, as chips — every one of them a filter. The label filtered ON
+                // is the stored value, not the rendered one: a language chip reads "German" and
+                // filters `de`, a genre chip reads "Krimi" and filters the canonical key.
+                //
+                // One chip per genre and one per tag, rather than one row listing them: a book with
+                // four genres used to be a single row where only the first was tappable and nothing
+                // said which.
+                DetailChips(
+                    buildList {
+                        book.author?.takeIf { it.isNotBlank() }?.let {
+                            add(DetailChip(HomerIcons.Author, it, FilterToken(FilterFacet.AUTHOR, it)))
+                        }
+                        book.series?.takeIf { it.isNotBlank() }?.let { name ->
+                            add(
+                                DetailChip(
+                                    HomerIcons.SeriesBracket,
+                                    book.seriesLine(context) ?: name,
+                                    FilterToken(FilterFacet.SERIES, name),
+                                ),
+                            )
+                        }
+                        book.collection?.takeIf { it.isNotBlank() }?.let { name ->
+                            add(
+                                DetailChip(
+                                    HomerIcons.CollectionBracket,
+                                    book.collectionLine(context) ?: name,
+                                    FilterToken(FilterFacet.COLLECTION, name),
+                                ),
+                            )
+                        }
+                        book.genres.forEach {
+                            add(
+                                DetailChip(
+                                    HomerIcons.Genre,
+                                    BookGenre.display(it, locale),
+                                    FilterToken(FilterFacet.GENRE, it),
+                                ),
+                            )
+                        }
+                        book.language?.takeIf { it.isNotBlank() }?.let {
+                            add(
+                                DetailChip(
+                                    Icons.Filled.Language,
+                                    BookLanguage.displayName(it, locale),
+                                    FilterToken(FilterFacet.LANGUAGE, it),
+                                ),
+                            )
+                        }
+                        book.tags.forEach {
+                            add(DetailChip(Icons.Filled.Tag, it, FilterToken(FilterFacet.TAG, it)))
+                        }
+                    },
+                    onFilter,
+                )
 
                 FactDivider()
 
+                // What there IS of it. Everything here is a measurement rather than a property, so
+                // none of it is a filter and none of it is a chip — which is the line the two
+                // blocks are divided on, and the same line the shelf card divides on.
                 Fact(
                     stringResource(R.string.details_length),
                     book.totalDurationMs?.let { formatCompactDuration(it) }
@@ -195,17 +317,7 @@ fun BookDetailsCard(
                 // …and if what is wrong is how that path was READ, this is the way out. Seeded from
                 // here rather than authored from nothing: the folder is this book's and the shape is
                 // whichever pattern is already matching, which is the one that needs changing.
-                onReadFolderDifferently?.let { open ->
-                    Text(
-                        stringResource(R.string.details_read_folder),
-                        color = Amber,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = open)
-                            .padding(top = 10.dp),
-                    )
-                }
+                onReadFolderDifferently?.let { ReadFolderDifferentlyButton(it) }
             }
         },
         confirmButton = {
@@ -244,24 +356,57 @@ fun SeriesDetailsCard(
 
                 FactDivider()
 
-                Fact(stringResource(R.string.details_author), series.author) {
-                    series.author?.let { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
-                }
+                // The same block a book gets, filled with what a shelf has: who wrote it, the
+                // threads inside it, everything its books are about. Chips throughout, because
+                // every one of them narrows the library the same way a book's do.
+                DetailChips(
+                    buildList {
+                        series.author?.takeIf { it.isNotBlank() }?.let {
+                            add(DetailChip(HomerIcons.Author, it, FilterToken(FilterFacet.AUTHOR, it)))
+                        }
+                        // Only a collection has threads inside it to name, and only when they are
+                        // named. Each is its own chip: they are separate series, and a reader who
+                        // wants the Watch books wants the Watch books.
+                        if (series.isCollection) {
+                            series.books.mapNotNull { it.series }.distinct().forEach {
+                                add(DetailChip(HomerIcons.SeriesBracket, it, FilterToken(FilterFacet.SERIES, it)))
+                            }
+                        }
+                        series.books.flatMap { it.genres }.distinct().forEach {
+                            add(
+                                DetailChip(
+                                    HomerIcons.Genre,
+                                    BookGenre.display(it, locale),
+                                    FilterToken(FilterFacet.GENRE, it),
+                                ),
+                            )
+                        }
+                        series.books.mapNotNull { it.language }.distinct().forEach {
+                            add(
+                                DetailChip(
+                                    Icons.Filled.Language,
+                                    BookLanguage.displayName(it, locale),
+                                    FilterToken(FilterFacet.LANGUAGE, it),
+                                ),
+                            )
+                        }
+                        series.books.flatMap { it.tags }.distinct().forEach {
+                            add(DetailChip(Icons.Filled.Tag, it, FilterToken(FilterFacet.TAG, it)))
+                        }
+                    },
+                    onFilter,
+                )
+
+                FactDivider()
+
                 Fact(
                     stringResource(R.string.details_volumes),
                     pluralStringResource(R.plurals.home_series_book_count, series.books.size, series.books.size),
                 )
-                // Only a collection has threads inside it to name, and only when they are named.
+                // Rule two, said out loud: a collection carrying volume numbers can be read straight
+                // through, and one without them is a grouping and nothing more. It is the difference
+                // between Discworld and Star Wars Legends, and the shelf itself cannot show it.
                 if (series.isCollection) {
-                    Fact(
-                        stringResource(R.string.details_subseries),
-                        series.books.mapNotNull { it.series }.distinct()
-                            .takeIf { it.isNotEmpty() }?.joinToString(" · "),
-                    )
-                    // Rule two, said out loud: a collection carrying volume numbers can be read
-                    // straight through, and one without them is a grouping and nothing more. It is
-                    // the difference between Discworld and Star Wars Legends, and the shelf itself
-                    // cannot show it.
                     Fact(
                         stringResource(R.string.details_reading_order),
                         stringResource(
@@ -273,20 +418,6 @@ fun SeriesDetailsCard(
                         ),
                     )
                 }
-                Fact(
-                    stringResource(R.string.details_genre),
-                    series.books.flatMap { it.genres }.distinct().takeIf { it.isNotEmpty() }
-                        ?.joinToString(" · ") { BookGenre.display(it, locale) },
-                )
-                Fact(
-                    stringResource(R.string.details_language),
-                    series.books.mapNotNull { it.language }.distinct()
-                        .takeIf { it.isNotEmpty() }
-                        ?.joinToString(" · ") { BookLanguage.displayName(it, locale) },
-                )
-
-                FactDivider()
-
                 Fact(
                     stringResource(R.string.details_length),
                     seriesTotalMs(series)?.let { formatCompactDuration(it) }
@@ -319,17 +450,7 @@ fun SeriesDetailsCard(
                 // them belongs at — a whole series or collection read wrongly is the case a
                 // template is most worth writing for.
                 Fact(stringResource(R.string.details_location), series.commonFolder().ifBlank { "/" })
-                onReadFolderDifferently?.let { open ->
-                    Text(
-                        stringResource(R.string.details_read_folder),
-                        color = Amber,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = open)
-                            .padding(top = 10.dp),
-                    )
-                }
+                onReadFolderDifferently?.let { ReadFolderDifferentlyButton(it) }
             }
         },
         confirmButton = {
