@@ -183,14 +183,19 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.1**, and **2.1.1 is in beta** under the moving tag `v2.1.1-BETA`. A moving tag is
-replaced by each build rather than added to, so there is one pre-release to follow; its title
-carries the actual build (`2.1.1-BETA.57`) while the APK keeps a stable name. In-app update checks
-only offer a pre-release to devices on the beta channel.
+Homer is at **2.1.1**. Betas run under a moving tag — `v2.1.1-BETA` was the last — replaced by each
+build rather than added to, so there is one pre-release to follow; its title carries the actual
+build (`2.1.1-BETA.57`) while the APK keeps a stable name. In-app update checks only offer a
+pre-release to devices on the beta channel.
 
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
-`2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it is
+`2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
+
+2.1.1 is repairs and cosmetics on top of 2.1: certificate pinning that survives a renewal instead of
+expiring on one, a player that fits small screens, a chapter list that states each chapter's length
+and place, one family of marks for series, collections, authors and genres, details cards rebuilt on
+one shape, and a sleep timer you can see — on the cover and, if you want it, in the shade.
 
 2.1 is about finding your way around a library and setting one up.
 
