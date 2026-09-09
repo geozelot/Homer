@@ -623,8 +623,10 @@ private fun WorklistDialog(
                 }
             }
         },
+        // The way out sits in the confirm slot, in the accent — the same place and the same colour
+        // in every dialog that exists to be read. See DetailsCard for the rule.
         confirmButton = {
-            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Amber) }
         },
     )
 }

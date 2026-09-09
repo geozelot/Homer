@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.ScreenInset
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Muted
@@ -39,7 +40,7 @@ private fun InfoScaffold(title: String, onBack: () -> Unit, content: @Composable
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 22.dp),
+            .padding(horizontal = ScreenInset),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

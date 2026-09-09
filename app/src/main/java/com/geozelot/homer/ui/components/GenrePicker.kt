@@ -197,6 +197,7 @@ fun GenrePickerField(
                         genre.label(locale),
                         color = if (chosen) Parchment else Muted,
                         fontSize = 13.sp,
+                        lineHeight = 16.sp,
                         modifier = Modifier.padding(start = 10.dp),
                     )
                 }
@@ -238,6 +239,7 @@ private fun GenreChip(
                 else -> Muted
             },
             fontSize = 12.sp,
+            lineHeight = 15.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

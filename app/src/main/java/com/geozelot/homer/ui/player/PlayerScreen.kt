@@ -1176,7 +1176,13 @@ private fun ErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(Icons.Filled.Refresh, contentDescription = null, tint = Danger, modifier = Modifier.size(17.dp))
-        Text(stringResource(R.string.player_error_banner), color = Danger, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            stringResource(R.string.player_error_banner),
+            color = Danger,
+            fontSize = 12.5.sp,
+            lineHeight = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -1555,6 +1561,7 @@ private fun BookmarksDialog(
                                         stringResource(R.string.player_chapter_cut_tag),
                                         color = Amber,
                                         fontSize = 10.sp,
+                                        lineHeight = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                 }
@@ -1573,8 +1580,11 @@ private fun BookmarksDialog(
                 }
             }
         },
-        confirmButton = {},
-        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        // The way out sits in the confirm slot, in the accent — the same place and the same colour
+        // in every dialog that exists to be read. See DetailsCard for the rule.
+        confirmButton = {
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Amber) }
+        },
     )
 }
 
@@ -1698,8 +1708,11 @@ private fun ChapterPickerDialog(
                 }
             }
         },
-        confirmButton = {},
-        dismissButton = { HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        // The way out sits in the confirm slot, in the accent — the same place and the same colour
+        // in every dialog that exists to be read. See DetailsCard for the rule.
+        confirmButton = {
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Amber) }
+        },
     )
 }
 

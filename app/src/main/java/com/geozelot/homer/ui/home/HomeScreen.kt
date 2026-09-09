@@ -68,6 +68,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -141,6 +142,8 @@ import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
+import com.geozelot.homer.ui.components.SettingsActionPadding
+import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.HomerSwitch
@@ -645,6 +648,19 @@ fun HomeScreen(
                     collection = collection,
                 )
                 editingSeriesKey = null
+            },
+            onReadFolderDifferently = if (maintainsLibrary) {
+                {
+                    editingSeriesKey = null
+                    // The shape is read from a member book, the scope from what they all share.
+                    viewModel.seedTemplateFor(
+                        bookId = series.books.first().id,
+                        scopeOverride = series.commonFolder(),
+                    )
+                    onOpenTemplates()
+                }
+            } else {
+                null
             },
             onDismiss = { editingSeriesKey = null },
         )
@@ -3301,6 +3317,8 @@ private fun EmptyResults(modifier: Modifier = Modifier) {
 private fun ShelfEditDialog(
     series: LibraryEntry.Series,
     onSave: (name: String, author: String, genres: List<String>, collection: String) -> Unit,
+    /** Opens the template editor scoped to the folder this shelf's books share. Null for a reader. */
+    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val namesCollection = series.isCollection
@@ -3390,6 +3408,25 @@ private fun ShelfEditDialog(
                         lineHeight = 15.sp,
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                }
+
+                // The shelf's own way into the template editor, scoped to the folder its books
+                // share. It used to live on the shelf's DETAILS card; moving the book one to Edit
+                // and not this one would have left a whole series or collection — the case a
+                // pattern is most worth writing for — with no way to reach it at all.
+                onReadFolderDifferently?.let { open ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Line)
+                    HomerTextButton(onClick = open, contentPadding = SettingsActionPadding) {
+                        Icon(
+                            Icons.Filled.Rule,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.size(7.dp))
+                        Text(stringResource(R.string.details_read_folder), color = Amber, fontSize = 12.sp)
+                    }
+                    SettingsExplanation(stringResource(R.string.edit_read_folder_desc))
                 }
             }
         },

@@ -299,7 +299,11 @@ private fun MetaChip(
                 .height(MetaChipSlot.SlotHeight)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Surface2)
-                .border(1.dp, Line, RoundedCornerShape(999.dp))
+                // LineShelf, like the player's header chips and the details card's — one border
+                // for "a fact you can press", wherever it is drawn. It was Line here, which is the
+                // hairline dividers and card edges use, so the one pressable thing on a card wore
+                // the same outline as the things that merely enclose it.
+                .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
                 // Its own click, so it does not open the book underneath it. The card still opens
                 // everywhere else, and long-pressing the card still reaches the menu. One value is
                 // committed straight to the filter; several open the list first.

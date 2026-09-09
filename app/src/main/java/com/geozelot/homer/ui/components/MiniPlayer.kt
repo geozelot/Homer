@@ -147,6 +147,7 @@ fun MiniPlayer(
                     },
                     color = if (state.hasError) Danger else Muted,
                     fontSize = 10.5.sp,
+                    lineHeight = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
