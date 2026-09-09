@@ -34,9 +34,29 @@ class SleepTimer(
     private val onPause: () -> Unit,
     private val onChanged: () -> Unit,
     private val onShake: () -> Unit,
+    /** Picks playback back up when a shake lands after the timer fired. */
+    private val onResume: () -> Unit,
 ) {
     private var job: Job? = null
     private var targetRealtimeMs = 0L
+
+    /** Disarms the shake window some minutes after the timer fired — see [startCountdown]. */
+    private var disarmJob: Job? = null
+
+    /**
+     * True between the timer firing and the shake window closing: playback has been paused, and a
+     * shake will pick it up again.
+     *
+     * The state that did not exist before, and its absence was the whole problem. Shake-to-extend
+     * was armed *during* the countdown, which is the one stretch of time when a shake means
+     * nothing — the phone is in a hand, or being set down, or in a pocket, and playback is running
+     * perfectly well. Every one of those extended the timer, and the reader saw a countdown that
+     * refused to end.
+     *
+     * Armed after it fires, a shake means the one thing it can mean: "I am still awake, keep
+     * going." That is also the only moment the gesture is worth its battery.
+     */
+    val awaitingShake: Boolean get() = disarmJob?.isActive == true
 
     /** True while set to pause at the end of the current chapter. */
     var endOfChapter: Boolean = false
@@ -59,15 +79,15 @@ class SleepTimer(
     /**
      * Pauses playback after [durationMs].
      *
-     * [armShake] arms shake-to-extend for the life of this countdown. It is a parameter rather than
-     * something read in here because the accelerometer should not be REGISTERED at all when the
-     * feature is off — the previous version armed it unconditionally, and there was no way to turn
-     * the feature off in the first place.
+     * [armShake] arms shake-to-extend — but only once the countdown has FIRED, for [SHAKE_WINDOW_MS]
+     * afterwards. See [awaitingShake] for why it is no longer armed while the timer runs.
+     *
+     * It is a parameter rather than something read in here because the accelerometer should not be
+     * REGISTERED at all when the feature is off.
      */
     fun startCountdown(durationMs: Long, armShake: Boolean) {
         clear()
         targetRealtimeMs = SystemClock.elapsedRealtime() + durationMs
-        if (armShake) shakeDetector.start()
         job = scope.launch {
             // The target can move under this loop — that is what `extendBy` does — so it is the
             // condition rather than a fixed count of ticks.
@@ -78,14 +98,31 @@ class SleepTimer(
             // Expired. Everything `clear()` does EXCEPT cancelling the job, because the job is this
             // coroutine and it is about to finish on its own. Calling `clear()` here made the body
             // cancel itself and survived only by not suspending afterwards.
-            shakeDetector.stop()
             endOfChapter = false
             job = null
             // After `job = null`, so the state this pushes reports no timer rather than a stale one.
             onPause()
+            if (armShake) armShakeWindow()
             onChanged()
         }
         onChanged()
+    }
+
+    /**
+     * Listens for a shake for a few minutes after the timer fired, then stops.
+     *
+     * Bounded because an accelerometer registered forever is a battery drain nobody asked for, and
+     * because a shake an hour later is not somebody catching a timer that just ran out — it is a
+     * phone being picked up, and picking your phone up should not restart a book.
+     */
+    private fun armShakeWindow() {
+        shakeDetector.start()
+        disarmJob = scope.launch {
+            delay(SHAKE_WINDOW_MS)
+            shakeDetector.stop()
+            Log.i(TAG, "shake window closed")
+            onChanged()
+        }
     }
 
     /** Pauses when the current chapter finishes (no shake-to-extend in this mode). */
@@ -106,15 +143,38 @@ class SleepTimer(
         onChanged()
     }
 
-    /** Adds [extraMs] to a running countdown (shake-to-extend), capped; no-op otherwise. */
-    fun extendBy(extraMs: Long) {
-        if (job?.isActive != true) return
-        // Cap the total remaining so repeated shakes can't push the timer arbitrarily far.
-        val cap = SystemClock.elapsedRealtime() + MAX_REMAINING_MS
-        targetRealtimeMs = (targetRealtimeMs + extraMs).coerceAtMost(cap)
-        val remaining = (targetRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-        Log.i(TAG, "shake: sleep timer extended by ${extraMs / 1000}s -> ${remaining / 1000}s left")
-        onChanged()
+    /**
+     * Gives the reader [extraMs] more.
+     *
+     * Two situations, and the difference is what the caller means by "more":
+     *
+     *  - **The timer fired** and the shake window is open. Playback is paused, so this starts a
+     *    fresh countdown and asks the host to resume — which is what a shake means at that moment.
+     *  - **A countdown is running.** The target moves. No shake reaches this any more, but the
+     *    method is still the one way to add time and is kept honest for whatever calls it next.
+     *
+     * Anything else is a no-op: there is no timer to extend and nothing was asked for.
+     */
+    fun extendBy(extraMs: Long, resume: Boolean = false) {
+        when {
+            awaitingShake -> {
+                Log.i(TAG, "shake after expiry: another ${extraMs / 1000}s")
+                disarmJob?.cancel()
+                shakeDetector.stop()
+                // A fresh countdown, and its own shake window at the end of it — so a reader who is
+                // still awake can do this again.
+                startCountdown(extraMs, armShake = true)
+                if (resume) onResume()
+            }
+            job?.isActive == true -> {
+                // Cap the total remaining so repeated extensions can't push the timer arbitrarily far.
+                val cap = SystemClock.elapsedRealtime() + MAX_REMAINING_MS
+                targetRealtimeMs = (targetRealtimeMs + extraMs).coerceAtMost(cap)
+                val remaining = (targetRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                Log.i(TAG, "sleep timer extended by ${extraMs / 1000}s -> ${remaining / 1000}s left")
+                onChanged()
+            }
+        }
     }
 
     /** Cancels any armed timer and refreshes state. */
@@ -126,6 +186,8 @@ class SleepTimer(
     private fun clear() {
         job?.cancel()
         job = null
+        disarmJob?.cancel()
+        disarmJob = null
         endOfChapter = false
         shakeDetector.stop()
     }
@@ -133,6 +195,14 @@ class SleepTimer(
     private companion object {
         const val TAG = "HomerPlay"
         const val TICK_MS = 1_000L
+
+        /**
+         * How long a shake still means "keep going" after the timer fired.
+         *
+         * Long enough to cover surfacing from a doze and reaching for the phone; short enough that
+         * the accelerometer is not registered for the rest of the night.
+         */
+        const val SHAKE_WINDOW_MS = 5 * 60 * 1000L
         const val MAX_REMAINING_MS = 2 * 60 * 60 * 1000L
     }
 }

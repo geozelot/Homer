@@ -628,6 +628,24 @@ class PlaybackSettings @Inject constructor(
     }
 
     /**
+     * Seconds to rewind when RETURNING to a book — the app having been closed since, or another
+     * book played in between — rather than merely resuming one you paused a moment ago.
+     *
+     * A different question from [autoRewindSeconds], which is why it is a different setting. Ten
+     * seconds is about right for "where was I in this sentence"; coming back the next morning, or
+     * after an hour of something else, you have lost the scene and want a good deal more. Setting
+     * one number for both means choosing which of the two cases to serve badly.
+     *
+     * 0 = off, and then a return rewinds by whatever an ordinary resume would.
+     */
+    val rewindOnReturnSeconds: Flow<Int> =
+        context.settingsDataStore.data.map { it[KEY_REWIND_ON_RETURN] ?: DEFAULT_REWIND_ON_RETURN }
+
+    suspend fun setRewindOnReturnSeconds(value: Int) {
+        context.settingsDataStore.edit { it[KEY_REWIND_ON_RETURN] = value }
+    }
+
+    /**
      * Global default: when true, pressing Play downloads the whole book for offline use (while it
      * streams immediately); when false, playback just streams and downloads stay manual. A per-book
      * override can force either mode for a specific book. Default true.
@@ -649,6 +667,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_SEEK_SECONDS = intPreferencesKey("seek_seconds")
         val KEY_VOLUME_MODE = stringPreferencesKey("volume_mode")
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
+        val KEY_REWIND_ON_RETURN = intPreferencesKey("rewind_on_return_seconds")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
         /**
@@ -663,6 +682,13 @@ class PlaybackSettings @Inject constructor(
         const val DEFAULT_SEEK_SECONDS = 15
         const val DEFAULT_VOLUME_MODE = "normal"
         const val DEFAULT_AUTO_REWIND = 0
+
+        /**
+         * Off by default, like the ordinary rewind. A rewind nobody asked for is a book that
+         * appears to have lost your place, and the two settings should surprise nobody together
+         * who was not surprised by either alone.
+         */
+        const val DEFAULT_REWIND_ON_RETURN = 0
     }
 }
 

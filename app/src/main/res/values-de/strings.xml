@@ -370,6 +370,8 @@
     <string name="player_speed_custom_range">Alles von 0,25× bis 4×.</string>
     <string name="set_playback_skip_desc">Wie weit die Sprungtasten des Players springen.</string>
     <string name="set_playback_rewind_desc">Springt beim erneuten Abspielen ein Stück zurück, damit du den Faden wieder aufnehmen kannst.</string>
+    <string name="settings_rewind_return">Rücksprung bei Rückkehr</string>
+    <string name="set_playback_rewind_return_desc">Gilt, wenn du zu einem Buch zurückkehrst, statt eines fortzusetzen: die App war zwischenzeitlich geschlossen, oder es lief ein anderes Buch. Ein größerer Rücksprung, denn verloren ist hier die Szene, nicht der Satz.</string>
     <string name="set_playback_background_header">WIEDERGABE IM HINTERGRUND</string>
     <string name="set_playback_background_label">Weiterspielen, wenn Homer geschlossen ist</string>
     <string name="set_playback_background_on">Erlaubt. Die Wiedergabe sollte auch bei ausgeschaltetem Bildschirm weiterlaufen.</string>
@@ -407,6 +409,8 @@
     <string name="player_sleep_minutes">%1$d min</string>
     <string name="player_sleep_end_of_chapter">Kapitelende</string>
     <string name="player_sleep_turn_off">Ausschalten</string>
+    <string name="player_sleep_minutes_left">Schlaf %1$d Min</string>
+    <string name="player_sleep_under_minute">Schlaf unter einer Minute</string>
     <string name="player_volume_quiet">Leise</string>
     <string name="player_volume_boost">Lauter</string>
     <string name="player_volume_reduced">Verringert</string>

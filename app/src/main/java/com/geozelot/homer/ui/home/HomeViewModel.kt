@@ -931,6 +931,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
 
+    /** Seconds to rewind when RETURNING to a book — see [LibrarySettings.rewindOnReturnSeconds]. */
+    val rewindOnReturnSeconds: StateFlow<Int> = playbackSettings.rewindOnReturnSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun setRewindOnReturnSeconds(seconds: Int) {
+        viewModelScope.launch { playbackSettings.setRewindOnReturnSeconds(seconds) }
+    }
+
     fun setAutoRewindSeconds(value: Int) {
         viewModelScope.launch { playbackSettings.setAutoRewindSeconds(value) }
     }

@@ -48,12 +48,14 @@ fun PlaybackSettingsScreen(
 ) {
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
+    val rewindOnReturn by viewModel.rewindOnReturnSeconds.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var customSeek by remember { mutableStateOf(false) }
     var customRewind by remember { mutableStateOf(false) }
+    var customReturnRewind by remember { mutableStateOf(false) }
     var customFade by remember { mutableStateOf(false) }
 
     SettingsScaffold(stringResource(R.string.set_playback_title), onBack, modifier) {
@@ -89,6 +91,26 @@ fun PlaybackSettingsScreen(
             onSelect = viewModel::setAutoRewindSeconds,
             description = stringResource(R.string.set_playback_rewind_desc),
             onCustom = { customRewind = true },
+        )
+        SettingsDropdownRow(
+            label = stringResource(R.string.settings_rewind_return),
+            chipLabel = if (rewindOnReturn == 0) {
+                stringResource(R.string.settings_off)
+            } else {
+                stringResource(R.string.settings_seconds, rewindOnReturn)
+            },
+            options = REWIND_RETURN_OPTIONS,
+            selected = rewindOnReturn,
+            labelOf = {
+                if (it == 0) {
+                    context.getString(R.string.settings_off)
+                } else {
+                    context.getString(R.string.settings_seconds, it)
+                }
+            },
+            onSelect = viewModel::setRewindOnReturnSeconds,
+            description = stringResource(R.string.set_playback_rewind_return_desc),
+            onCustom = { customReturnRewind = true },
         )
 
         SettingsDivider()
@@ -137,6 +159,18 @@ fun PlaybackSettingsScreen(
             range = 0..120,
             onConfirm = viewModel::setAutoRewindSeconds,
             onDismiss = { customRewind = false },
+        )
+    }
+    if (customReturnRewind) {
+        CustomNumberDialog(
+            title = stringResource(R.string.settings_rewind_return),
+            unit = stringResource(R.string.settings_unit_seconds),
+            initial = rewindOnReturn,
+            // Wider than the ordinary rewind's two minutes: coming back to a book the next day,
+            // half a chapter is a reasonable thing to want.
+            range = 0..600,
+            onConfirm = viewModel::setRewindOnReturnSeconds,
+            onDismiss = { customReturnRewind = false },
         )
     }
     if (customFade) {
@@ -240,6 +274,12 @@ private fun Context.openBatteryOptimisationSettings() {
 
 private val SEEK_OPTIONS = listOf(5, 10, 15, 20, 30, 45, 60)
 private val REWIND_OPTIONS = listOf(0, 5, 10, 15, 20, 30)
+
+/**
+ * Longer than [REWIND_OPTIONS], because the two answer different questions: one is "where was I in
+ * this sentence", the other "what was happening when I stopped listening yesterday".
+ */
+private val REWIND_RETURN_OPTIONS = listOf(0, 10, 15, 30, 60, 120)
 private val SLEEP_FADE_OPTIONS = listOf(0, 5, 10, 20, 30, 60)
 /** Off first, because it is the default and because the picker had no way to say it at all. */
 private val SLEEP_EXTEND_OPTIONS = listOf(SLEEP_EXTEND_OFF, "5", "15", "30", "previous", "chapter")

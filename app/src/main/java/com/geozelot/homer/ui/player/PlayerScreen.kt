@@ -129,6 +129,8 @@ import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
+import com.geozelot.homer.ui.theme.Studio
+import com.geozelot.homer.ui.theme.TabularSmall
 import com.geozelot.homer.ui.theme.Surface2
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -231,6 +233,7 @@ fun PlayerScreen(
         PlayerArtwork(
             // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
             model = cover ?: state.coverModel ?: state.artworkData?.bytes,
+            sleepRemainingMs = state.sleepRemainingMs,
             onCollapse = onBack,
             modifier = slotModifier,
         )
@@ -564,7 +567,13 @@ private val MIN_COVER_WIDTH = 64.dp
 
 /** The cover, centered in whatever slot it's given and sized to fit it in both dimensions. */
 @Composable
-private fun PlayerArtwork(model: Any?, onCollapse: () -> Unit, modifier: Modifier = Modifier) {
+private fun PlayerArtwork(
+    model: Any?,
+    /** The sleep timer's remaining time, or null when none is running. */
+    sleepRemainingMs: Long?,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     BoxWithConstraints(
         modifier = modifier
             // Swipe down anywhere on the artwork to collapse back to the mini-player.
@@ -600,6 +609,43 @@ private fun PlayerArtwork(model: Any?, onCollapse: () -> Unit, modifier: Modifie
                 )
                 .clip(RoundedCornerShape(14.dp)),
         )
+        // The countdown, on the artwork.
+        //
+        // A running sleep timer is the one piece of state that changes what is ABOUT to happen
+        // rather than what is happening, and it had nowhere to be seen: the bottom row said "Sleep"
+        // whether one was running or not once the labels came off the glyphs, and the amber tint
+        // says a timer exists without saying how much of it is left.
+        //
+        // On the cover rather than beside it because the cover is the one region with space to
+        // spare, and because a number floating over the artwork reads as temporary — which it is.
+        // Seconds here, minutes in the notification: redrawing this costs nothing.
+        sleepRemainingMs?.let { remaining ->
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 14.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Studio.copy(alpha = 0.82f))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Bedtime,
+                    contentDescription = stringResource(R.string.player_sleep),
+                    tint = Amber,
+                    modifier = Modifier.size(13.dp),
+                )
+                Text(
+                    formatTime(remaining),
+                    // TabularSmall is the app's own "numbers that must not jitter" style, which is
+                    // exactly what a countdown is: without it the pill changes width every time a
+                    // 1 ticks past.
+                    style = TabularSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                    color = Amber,
+                )
+            }
+        }
     }
 }
 

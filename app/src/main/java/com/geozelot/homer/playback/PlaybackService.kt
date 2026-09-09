@@ -16,6 +16,7 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.geozelot.homer.R
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -24,7 +25,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -43,6 +46,13 @@ class PlaybackService : MediaLibraryService() {
 
     @Inject
     lateinit var playbackSettings: PlaybackSettings
+
+    /**
+     * Written by the connection, read here. A singleton rather than a reference to the connection
+     * itself, which would close a loop — see [SleepTimerState].
+     */
+    @Inject
+    lateinit var sleepTimerState: SleepTimerState
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var player: ExoPlayer? = null
@@ -85,6 +95,27 @@ class PlaybackService : MediaLibraryService() {
 
         session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback()).build()
 
+        // The sleep timer's remaining minutes, beside the author in the notification — the one
+        // thing a reader wants to check without opening the app, since they are in bed with the
+        // screen face down. See [SleepAwareNotificationProvider].
+        setMediaNotificationProvider(
+            SleepAwareNotificationProvider(
+                context = this,
+                remainingMs = { sleepTimerState.remainingMs.value },
+                format = ::sleepLabel,
+            ),
+        )
+        // Rebuilt when the MINUTE changes, not when the tick does. A notification refreshed every
+        // second is three and a half thousand system posts an hour for a number that only needs to
+        // be approximately true; the exact seconds are on the player's cover, where redrawing costs
+        // nothing. distinctUntilChanged on the minute is the whole throttle.
+        serviceScope.launch {
+            sleepTimerState.remainingMs
+                .map { it?.let { ms -> ms / 60_000L } }
+                .distinctUntilChanged()
+                .collect { session?.let { onUpdateNotification(it, /* startInForegroundRequired= */ false) } }
+        }
+
         // The two things that decide whether audio survives backgrounding, and neither is visible
         // from inside the app once it goes wrong. A wake lock the system declines to honour and a
         // battery-optimised app the OS freezes outright look identical from here: the audio simply
@@ -94,6 +125,16 @@ class PlaybackService : MediaLibraryService() {
         val wakeLockGranted =
             checkSelfPermission(android.Manifest.permission.WAKE_LOCK) == PackageManager.PERMISSION_GRANTED
         Log.i(TAG, "player ready: wakeMode=NETWORK wakeLock=$wakeLockGranted batteryExempt=$exempt")
+    }
+
+    /** "14 min", or "under a minute" for the last stretch — see the provider for why not seconds. */
+    private fun sleepLabel(remainingMs: Long): String {
+        val minutes = remainingMs / 60_000L
+        return if (minutes <= 0L) {
+            getString(R.string.player_sleep_under_minute)
+        } else {
+            getString(R.string.player_sleep_minutes_left, minutes)
+        }
     }
 
     /**

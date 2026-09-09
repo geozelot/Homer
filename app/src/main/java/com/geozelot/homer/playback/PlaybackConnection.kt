@@ -112,6 +112,7 @@ class PlaybackConnection @Inject constructor(
     private val homerSync: HomerSyncRepository,
     private val libraryIndex: LibraryIndexRepository,
     private val localMirror: LocalMirror,
+    private val sleepTimerState: SleepTimerState,
 ) {
     // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
     // constraint after a concurrent scan pruned the row) is logged, not propagated to the
@@ -148,6 +149,22 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var autoRewindMs = 0L
 
+    /** Seconds to rewind when returning to a book rather than resuming it — see [startPlayback]. */
+    @Volatile
+    private var rewindOnReturnMs = 0L
+
+    /**
+     * The last book this PROCESS started playing, and the whole of how a return is recognised.
+     *
+     * In memory on purpose. "The app was closed" and "another book was played in between" are the
+     * same question asked of one field: a fresh process remembers nothing, so the first play of
+     * anything is a return; and within a session, playing something else moves this on, so coming
+     * back is a return too. Pausing and resuming the same book is neither, and that is the case
+     * this must NOT fire on — it is what the ordinary rewind is for.
+     */
+    @Volatile
+    private var lastPlayedBookId: String? = null
+
     /** Global "download on play" default (cached from settings); a per-book override can flip it. */
     @Volatile
     private var downloadOnPlayGlobal = true
@@ -171,16 +188,28 @@ class PlaybackConnection @Inject constructor(
             playbackSettings.autoRewindSeconds.collect { autoRewindMs = it * 1000L }
         }
         scope.launch {
+            playbackSettings.rewindOnReturnSeconds.collect { rewindOnReturnMs = it * 1000L }
+        }
+        scope.launch {
             playbackSettings.downloadOnPlay.collect { downloadOnPlayGlobal = it }
         }
     }
+
+    /**
+     * Published so the service can put the countdown in the notification — see [SleepTimerState].
+     *
+     * The return type is spelled out because this reads `sleepTimer`, which is declared below it,
+     * and an inferred type would send the compiler round that loop.
+     */
+    private fun publishSleepRemaining(): Unit = sleepTimerState.set(sleepTimer.remainingMs())
 
     private val sleepTimer = SleepTimer(
         context = context,
         scope = scope,
         onPause = ::fadeOutAndPause,
-        onChanged = ::pushState,
+        onChanged = { publishSleepRemaining(); pushState() },
         onShake = ::extendSleepByPreference,
+        onResume = ::resumeAfterSleep,
     )
     private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, localMirror, ::positionSnapshot)
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
@@ -466,9 +495,27 @@ class PlaybackConnection @Inject constructor(
 
     private fun startPlayback() {
         val c = controller ?: return
-        // Auto-rewind: on resume, step back a little so the listener re-hears some context.
-        // Skipped on a brand-new start (position ~0, clamped by seekBy anyway).
-        if (autoRewindMs > 0L && c.currentPosition > 0L) seekBy(-autoRewindMs)
+        // How far back to step so the listener re-hears some context, and the answer depends on
+        // how long they have been away.
+        //
+        // Returning to a book — the app closed since, or something else played in between — is a
+        // different situation from resuming one paused a minute ago: the scene is gone, not just
+        // the sentence. So a return uses its own amount, and takes the LARGER of the two rather
+        // than replacing one with the other, so a return can never rewind less than an ordinary
+        // resume would.
+        //
+        // Both are skipped on a brand-new start (position ~0, clamped by seekBy anyway).
+        val returning = currentBookId != null && currentBookId != lastPlayedBookId
+        val rewindMs = if (returning) maxOf(rewindOnReturnMs, autoRewindMs) else autoRewindMs
+        if (rewindMs > 0L && c.currentPosition > 0L) {
+            if (returning && rewindOnReturnMs > 0L) {
+                Log.i(TAG, "returning to '$currentBookId': rewinding ${rewindMs / 1000}s")
+            }
+            seekBy(-rewindMs)
+        }
+        // Claimed here rather than in playBook: this is the moment a book actually starts, and
+        // loading one without playing it is not a return to it.
+        lastPlayedBookId = currentBookId
         // Download-on-play: keep the book offline as it plays (it streams meanwhile; the download
         // watcher swaps to local files once complete). Per-book override wins over the global.
         currentBookId?.let(::maybeAutoDownload)
@@ -554,6 +601,22 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
+    /**
+     * Picks playback back up after a shake caught a timer that had just run out.
+     *
+     * The fade-out owns the volume, and by this point it has finished and restored it — but a shake
+     * landing DURING the fade would otherwise resume into a ramp still counting down to a pause.
+     * Cancelling it here is what makes the two safe to overlap.
+     */
+    private fun resumeAfterSleep() {
+        fadeJob?.cancel()
+        controller?.let {
+            it.volume = 1f
+            it.play()
+        }
+        pushState()
+    }
+
     fun startSleepTimerEndOfChapter() = sleepTimer.startEndOfChapter()
 
     fun cancelSleepTimer() = sleepTimer.cancel()
@@ -604,12 +667,15 @@ class PlaybackConnection @Inject constructor(
                 // fifteen minutes for anything it does not recognise, so "off" reaching it would
                 // have extended by a quarter of an hour — the exact opposite of what it says.
                 SLEEP_EXTEND_OFF -> Unit
-                "chapter" -> sleepTimer.startEndOfChapter()
+                "chapter" -> {
+                    sleepTimer.startEndOfChapter()
+                    resumeAfterSleep()
+                }
                 "previous" -> {
                     val last = playbackSettings.sleepLastDurationMs.first()
-                    sleepTimer.extendBy(if (last > 0L) last else DEFAULT_EXTEND_MS)
+                    sleepTimer.extendBy(if (last > 0L) last else DEFAULT_EXTEND_MS, resume = true)
                 }
-                else -> sleepTimer.extendBy((mode.toLongOrNull() ?: 15L) * 60_000L)
+                else -> sleepTimer.extendBy((mode.toLongOrNull() ?: 15L) * 60_000L, resume = true)
             }
         }
     }
