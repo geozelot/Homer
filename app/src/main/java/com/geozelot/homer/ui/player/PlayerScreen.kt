@@ -413,9 +413,18 @@ fun PlayerScreen(
             // what they need, the cover gets the rest, and the total is the viewport by
             // construction. Nothing scrolls because there is nothing left to scroll past.
             //
-            // No floor on the cover, deliberately: a minimum is what turns "the cover is small" —
-            // recoverable, and only on a screen where something has to give — into "the transport
-            // is off the bottom", which is not.
+            // The cluster is CAPPED, and scrolls inside that cap.
+            //
+            // Leftover-sizing alone had a failure of its own at the far end: a Column gives the
+            // weighted child what is left, and when the cluster is taller than the viewport what is
+            // left is nothing — the cover collapses to zero AND the bottom of the cluster is cut
+            // off, with no scroll to reach it. Which is worse than the scrolling it replaced.
+            //
+            // Capping the cluster fixes both directions at once. Below the cap — every ordinary
+            // screen, where the cluster measures around half the viewport — nothing changes and the
+            // cover still takes the whole remainder. Above it, at the font scales that caused the
+            // problem, the cluster stops growing, scrolls within its own area, and the cover keeps
+            // the rest. So the transport is always reachable and the artwork never disappears.
             Column(modifier = Modifier.fillMaxSize()) {
                 topBar()
                 artwork(
@@ -424,7 +433,13 @@ fun PlayerScreen(
                         .weight(1f)
                         .padding(vertical = 16.dp.scaled(scale)),
                 )
-                controls(Modifier.fillMaxWidth(), scale)
+                controls(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = viewportHeight * CLUSTER_MAX_FRACTION)
+                        .verticalScroll(rememberScrollState()),
+                    scale,
+                )
             }
         }
     }
@@ -528,6 +543,16 @@ private val SIDE_BY_SIDE_BELOW = 520.dp
  * screen's own 22dp margins are taken off — which is why [playerScale] divides by it.
  */
 private const val TRANSPORT_NATURAL_DP = 348f
+
+/**
+ * The most of the viewport the control cluster may take before it starts scrolling instead.
+ *
+ * Not a layout preference — a backstop. An ordinary cluster measures around half the viewport, so
+ * this never binds; it exists for the accessibility font scales where it would otherwise grow past
+ * the screen and take the cover and the transport with it. What is left over is the cover's, which
+ * at this cap is always something rather than nothing.
+ */
+private const val CLUSTER_MAX_FRACTION = 0.74f
 
 /**
  * One number the whole cluster is drawn at, between 0.7 and 1.

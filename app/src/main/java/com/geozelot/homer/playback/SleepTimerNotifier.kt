@@ -63,6 +63,14 @@ class SleepTimerNotifier @Inject constructor(
     private var shownMinutes: Long? = null
 
     init {
+        // Anything showing when this object is built belongs to a process that is gone.
+        //
+        // The countdown lives in memory, so a kill takes the timer and leaves the notification —
+        // which then sits in the shade claiming "45 min left" of a timer that no longer exists, and
+        // nothing ever takes it down because the tick that would has stopped. A fresh process has
+        // no timer by definition, so whatever is up is stale and goes.
+        runCatching { NotificationManagerCompat.from(context).cancel(NOTIF_ID) }
+
         scope.launch {
             playbackSettings.sleepTimerNotification.collect { on ->
                 enabled = on

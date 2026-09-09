@@ -616,14 +616,12 @@ class PlaybackConnection @Inject constructor(
      *
      * The fade-out owns the volume, and by this point it has finished and restored it — but a shake
      * landing DURING the fade would otherwise resume into a ramp still counting down to a pause.
-     * Cancelling it here is what makes the two safe to overlap.
+     * [cancelFade] is what makes the two safe to overlap: it stops the ramp, drops the job and puts
+     * the volume back, which is all three of the things a half-finished fade leaves wrong.
      */
     private fun resumeAfterSleep() {
-        fadeJob?.cancel()
-        controller?.let {
-            it.volume = 1f
-            it.play()
-        }
+        cancelFade()
+        controller?.play()
         pushState()
     }
 
@@ -636,16 +634,15 @@ class PlaybackConnection @Inject constructor(
      * Starts playback when a timer is armed against a paused book, if the reader asked for that.
      *
      * Guarded on not-already-playing, which is the ordinary case and must stay a no-op: arming a
-     * timer mid-chapter would otherwise run the rewind and step backwards for no reason. The fade
-     * job is cancelled first because a timer armed DURING a fade-out — the reader catching it as it
+     * timer mid-chapter would otherwise run the rewind and step backwards for no reason.
+     * [cancelFade] first, because a timer armed DURING a fade-out — the reader catching it as it
      * goes quiet — would otherwise resume into a ramp still counting down to a pause.
      */
     private fun maybePlayForSleepTimer() {
         if (!playOnSleepTimer) return
         val c = controller ?: return
         if (c.isPlaying) return
-        fadeJob?.cancel()
-        c.volume = 1f
+        cancelFade()
         startPlayback()
     }
 
@@ -688,9 +685,19 @@ class PlaybackConnection @Inject constructor(
         controller?.volume = 1f
     }
 
-    /** Applies the user's shake-to-extend preference to the running countdown. */
+    /**
+     * Applies the user's shake-to-extend preference to whatever the timer is doing.
+     *
+     * The guard was `!isCountingDown` — written when the detector ran FOR the life of a countdown,
+     * and exactly inverted once it moved to the window after one fires. `job` is null by then, so
+     * every shake was returning here and the whole feature was unreachable while looking armed.
+     *
+     * Both states now, because both are moments a shake means something: catching a timer that has
+     * just run out (the usual one), and adding to one still running (which nothing currently
+     * triggers, but which `extendBy` still handles).
+     */
     private fun extendSleepByPreference() {
-        if (!sleepTimer.isCountingDown) return
+        if (!sleepTimer.awaitingShake && !sleepTimer.isCountingDown) return
         scope.launch {
             when (val mode = playbackSettings.sleepExtend.first()) {
                 // Checked even though the sensor is not armed when off: `else` below falls back to

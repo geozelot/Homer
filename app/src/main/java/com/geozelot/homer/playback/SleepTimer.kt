@@ -62,7 +62,14 @@ class SleepTimer(
     var endOfChapter: Boolean = false
         private set
 
-    /** True while a countdown is running (shake-to-extend only applies then). */
+    /**
+     * True while a countdown is running.
+     *
+     * NOT the precondition for shake-to-extend — that is [awaitingShake], and it is true in exactly
+     * the window this one is false. The two were the same thing before the detector moved to the
+     * period AFTER a timer fires, and the sentence that used to say so here is what a guard
+     * elsewhere was written against; it cost the feature entirely.
+     */
     val isCountingDown: Boolean get() = job?.isActive == true
 
     // The extend amount/mode is a host preference, so a shake just notifies the host.
