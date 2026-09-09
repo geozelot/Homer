@@ -112,7 +112,6 @@ class PlaybackConnection @Inject constructor(
     private val homerSync: HomerSyncRepository,
     private val libraryIndex: LibraryIndexRepository,
     private val localMirror: LocalMirror,
-    private val sleepTimerState: SleepTimerState,
 ) {
     // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
     // constraint after a concurrent scan pruned the row) is logged, not propagated to the
@@ -152,10 +151,6 @@ class PlaybackConnection @Inject constructor(
     /** Seconds to rewind when returning to a book rather than resuming it — see [startPlayback]. */
     @Volatile
     private var rewindOnReturnMs = 0L
-
-    /** Whether opening a book starts it — see [LibrarySettings.playOnOpen]. */
-    @Volatile
-    private var playOnOpen = false
 
     /** Whether arming a sleep timer starts it — see [LibrarySettings.playOnSleepTimer]. */
     @Volatile
@@ -199,9 +194,6 @@ class PlaybackConnection @Inject constructor(
             playbackSettings.rewindOnReturnSeconds.collect { rewindOnReturnMs = it * 1000L }
         }
         scope.launch {
-            playbackSettings.playOnOpen.collect { playOnOpen = it }
-        }
-        scope.launch {
             playbackSettings.playOnSleepTimer.collect { playOnSleepTimer = it }
         }
         scope.launch {
@@ -209,19 +201,11 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
-    /**
-     * Published so the service can put the countdown in the notification — see [SleepTimerState].
-     *
-     * The return type is spelled out because this reads `sleepTimer`, which is declared below it,
-     * and an inferred type would send the compiler round that loop.
-     */
-    private fun publishSleepRemaining(): Unit = sleepTimerState.set(sleepTimer.remainingMs())
-
     private val sleepTimer = SleepTimer(
         context = context,
         scope = scope,
         onPause = ::fadeOutAndPause,
-        onChanged = { publishSleepRemaining(); pushState() },
+        onChanged = ::pushState,
         onShake = ::extendSleepByPreference,
         onResume = ::resumeAfterSleep,
     )
@@ -348,13 +332,9 @@ class PlaybackConnection @Inject constructor(
                     return@withLock
                 }
                 // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
-                // (so they reflect other devices) and leave its queue untouched.
+                // (so they reflect other devices) and leave its queue + play state untouched.
                 if (currentBookId == bookId && c.mediaItemCount > 0) {
                     withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
-                    // Opening a paused book still counts as opening it. Guarded on isPlaying so
-                    // returning to one that is ALREADY playing does not run the rewind a second
-                    // time and step backwards for no reason.
-                    if (playOnOpen && !c.isPlaying) startPlayback()
                     return@withLock
                 }
 
@@ -410,10 +390,7 @@ class PlaybackConnection @Inject constructor(
                 }
                 pushState()
                 // A play tap that arrived mid-switch was deferred; honour it now the queue is B's.
-                // Or the reader asked for opening a book to BE the tap — same path either way, so
-                // the rewind-on-return and the download-on-play both apply exactly as they would
-                // have if they had pressed it themselves.
-                if (pendingPlay || playOnOpen) { pendingPlay = false; startPlayback() }
+                if (pendingPlay) { pendingPlay = false; startPlayback() }
                 // Per-file duration total (headless probe; reads headers, no main playback).
                 durationEnricher.enrich(bookId)
                 // Watch for download-status flips only after the playlist is loaded, so the reload

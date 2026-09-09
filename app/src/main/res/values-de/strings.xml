@@ -372,8 +372,6 @@
     <string name="set_playback_skip_desc">Wie weit die Sprungtasten des Players springen.</string>
     <string name="set_playback_rewind_desc">Springt beim erneuten Abspielen ein Stück zurück, damit du den Faden wieder aufnehmen kannst.</string>
     <string name="settings_rewind_return">Rücksprung bei Rückkehr</string>
-    <string name="settings_play_on_open">Beim Öffnen abspielen</string>
-    <string name="set_playback_play_on_open_desc">Aus öffnet ein Buch dort, wo du warst, und wartet. An ist das Öffnen dasselbe wie Play — samt Rücksprung, du hörst also noch etwas von davor.</string>
     <string name="settings_play_on_sleep_timer">Bei Einschlaftimer abspielen</string>
     <string name="set_playback_play_on_sleep_timer_desc">Ein Timer auf ein pausiertes Buch startet es. Aus wird der Timer gestellt, und das Buch wartet auf Play.</string>
     <string name="set_playback_rewind_return_desc">Gilt, wenn du zu einem Buch zurückkehrst, statt eines fortzusetzen: die App war zwischenzeitlich geschlossen, oder es lief ein anderes Buch. Ein größerer Rücksprung, denn verloren ist hier die Szene, nicht der Satz.</string>
@@ -414,8 +412,6 @@
     <string name="player_sleep_minutes">%1$d min</string>
     <string name="player_sleep_end_of_chapter">Kapitelende</string>
     <string name="player_sleep_turn_off">Ausschalten</string>
-    <string name="player_sleep_minutes_left">Schlaf %1$d Min</string>
-    <string name="player_sleep_under_minute">Schlaf unter einer Minute</string>
     <string name="player_volume_quiet">Leise</string>
     <string name="player_volume_boost">Lauter</string>
     <string name="player_volume_reduced">Verringert</string>
@@ -707,7 +703,7 @@
 
     <string name="help_player_chapters">Tippe die Kapitel-Pille an für die ganze Liste, mit Länge und Beginn jedes Kapitels.</string>
     <string name="help_player_settings">Tempo, Lautstärke und Stille kürzen stehen zusammen in der Mitte der unteren Reihe.</string>
-    <string name="help_player_sleep">Der Einschlaftimer läuft auf dem Cover und in der Benachrichtigung. Schütteln setzt fort, wenn er abgelaufen ist.</string>
+    <string name="help_player_sleep">Der Einschlaftimer läuft auf dem Cover. Schütteln setzt fort, wenn er abgelaufen ist.</string>
     <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest.</string>
     <string name="help_player_swipe">Wische auf dem Cover nach unten, um den Player zu verlassen, ohne ihn zu stoppen.</string>
 </resources>

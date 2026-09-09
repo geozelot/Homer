@@ -398,8 +398,6 @@
     <string name="set_playback_skip_desc">How far the player\'s skip buttons jump.</string>
     <string name="set_playback_rewind_desc">Steps back a little when you press play again, so you can pick the thread back up.</string>
     <string name="settings_rewind_return">Rewind on return</string>
-    <string name="settings_play_on_open">Play when a book is opened</string>
-    <string name="set_playback_play_on_open_desc">Off, a book opens where you left it and waits. On, opening one is the same as pressing play — including the rewind, so you still hear a little of what came before.</string>
     <string name="settings_play_on_sleep_timer">Play when a sleep timer is set</string>
     <string name="set_playback_play_on_sleep_timer_desc">Setting a timer against a paused book starts it. Off, the timer is armed and the book waits for you to press play.</string>
     <string name="set_playback_rewind_return_desc">Used when you come back to a book rather than resume one: the app was closed since, or another book was played in between. A longer step back, because what you have lost is the scene rather than the sentence.</string>
@@ -444,10 +442,6 @@
     <string name="player_sleep_minutes">%1$dm</string>
     <string name="player_sleep_end_of_chapter">End of chapter</string>
     <string name="player_sleep_turn_off">Turn off</string>
-    <!-- The countdown as the notification shows it: minutes, because a notification rebuilt every
-         second is a notification posted three thousand times an hour. -->
-    <string name="player_sleep_minutes_left">Sleep %1$d min</string>
-    <string name="player_sleep_under_minute">Sleep under a minute</string>
     <string name="player_volume_quiet">Quiet</string>
     <string name="player_volume_boost">Boost</string>
     <string name="player_volume_reduced">Reduced</string>
@@ -741,7 +735,7 @@
 
     <string name="help_player_chapters">Tap the chapter pill for the whole list, with each chapter\'s length and where it begins.</string>
     <string name="help_player_settings">Speed, volume and cut-silence sit together in the middle of the bottom row.</string>
-    <string name="help_player_sleep">The sleep timer counts down on the cover and in the notification. Shake to carry on once it has run out.</string>
+    <string name="help_player_sleep">The sleep timer counts down on the cover. Shake to carry on once it has run out.</string>
     <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
     <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
 </resources>
