@@ -646,6 +646,24 @@ class PlaybackSettings @Inject constructor(
     }
 
     /**
+     * Whether opening a book starts it playing, or waits to be asked.
+     *
+     * Homer has always waited: tapping a book loads it, restores the position and stops there. That
+     * suits somebody who opens a book to look at it — to check where they are, read the chapter
+     * list, edit something — and it is one tap too many for somebody who opens a book because they
+     * want to hear it, which is most opens.
+     *
+     * Off by default, because that is what the app already did and a setting that changes behaviour
+     * on upgrade should be opted into rather than discovered.
+     */
+    val playOnOpen: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_PLAY_ON_OPEN] ?: false }
+
+    suspend fun setPlayOnOpen(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_PLAY_ON_OPEN] = value }
+    }
+
+    /**
      * Global default: when true, pressing Play downloads the whole book for offline use (while it
      * streams immediately); when false, playback just streams and downloads stay manual. A per-book
      * override can force either mode for a specific book. Default true.
@@ -668,6 +686,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_VOLUME_MODE = stringPreferencesKey("volume_mode")
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
         val KEY_REWIND_ON_RETURN = intPreferencesKey("rewind_on_return_seconds")
+        val KEY_PLAY_ON_OPEN = booleanPreferencesKey("play_on_open")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
         /**

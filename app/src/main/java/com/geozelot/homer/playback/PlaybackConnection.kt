@@ -153,6 +153,10 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var rewindOnReturnMs = 0L
 
+    /** Whether opening a book starts it — see [LibrarySettings.playOnOpen]. */
+    @Volatile
+    private var playOnOpen = false
+
     /**
      * The last book this PROCESS started playing, and the whole of how a return is recognised.
      *
@@ -189,6 +193,9 @@ class PlaybackConnection @Inject constructor(
         }
         scope.launch {
             playbackSettings.rewindOnReturnSeconds.collect { rewindOnReturnMs = it * 1000L }
+        }
+        scope.launch {
+            playbackSettings.playOnOpen.collect { playOnOpen = it }
         }
         scope.launch {
             playbackSettings.downloadOnPlay.collect { downloadOnPlayGlobal = it }
@@ -334,9 +341,13 @@ class PlaybackConnection @Inject constructor(
                     return@withLock
                 }
                 // Reopening the already-loaded book: just refresh cross-device positions/bookmarks
-                // (so they reflect other devices) and leave its queue + play state untouched.
+                // (so they reflect other devices) and leave its queue untouched.
                 if (currentBookId == bookId && c.mediaItemCount > 0) {
                     withTimeoutOrNull(RESUME_SYNC_TIMEOUT_MS) { positionSyncer.pull() }
+                    // Opening a paused book still counts as opening it. Guarded on isPlaying so
+                    // returning to one that is ALREADY playing does not run the rewind a second
+                    // time and step backwards for no reason.
+                    if (playOnOpen && !c.isPlaying) startPlayback()
                     return@withLock
                 }
 
@@ -392,7 +403,10 @@ class PlaybackConnection @Inject constructor(
                 }
                 pushState()
                 // A play tap that arrived mid-switch was deferred; honour it now the queue is B's.
-                if (pendingPlay) { pendingPlay = false; startPlayback() }
+                // Or the reader asked for opening a book to BE the tap — same path either way, so
+                // the rewind-on-return and the download-on-play both apply exactly as they would
+                // have if they had pressed it themselves.
+                if (pendingPlay || playOnOpen) { pendingPlay = false; startPlayback() }
                 // Per-file duration total (headless probe; reads headers, no main playback).
                 durationEnricher.enrich(bookId)
                 // Watch for download-status flips only after the playlist is loaded, so the reload

@@ -25,9 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -97,24 +95,17 @@ class PlaybackService : MediaLibraryService() {
 
         // The sleep timer's remaining minutes, beside the author in the notification — the one
         // thing a reader wants to check without opening the app, since they are in bed with the
-        // screen face down. See [SleepAwareNotificationProvider].
+        // screen face down. The provider posts its own updates through the callback Media3 hands it, which is the
+        // mechanism meant for content that changes after a notification was built. Asking the
+        // service to rebuild on a timer was the first attempt and the wrong one.
         setMediaNotificationProvider(
             SleepAwareNotificationProvider(
                 context = this,
-                remainingMs = { sleepTimerState.remainingMs.value },
+                remainingMs = sleepTimerState.remainingMs,
                 format = ::sleepLabel,
+                scope = serviceScope,
             ),
         )
-        // Rebuilt when the MINUTE changes, not when the tick does. A notification refreshed every
-        // second is three and a half thousand system posts an hour for a number that only needs to
-        // be approximately true; the exact seconds are on the player's cover, where redrawing costs
-        // nothing. distinctUntilChanged on the minute is the whole throttle.
-        serviceScope.launch {
-            sleepTimerState.remainingMs
-                .map { it?.let { ms -> ms / 60_000L } }
-                .distinctUntilChanged()
-                .collect { session?.let { onUpdateNotification(it, /* startInForegroundRequired= */ false) } }
-        }
 
         // The two things that decide whether audio survives backgrounding, and neither is visible
         // from inside the app once it goes wrong. A wake lock the system declines to honour and a

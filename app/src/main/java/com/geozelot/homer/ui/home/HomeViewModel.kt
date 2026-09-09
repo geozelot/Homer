@@ -931,6 +931,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
 
+    /** Whether opening a book starts it playing — see [LibrarySettings.playOnOpen]. */
+    val playOnOpen: StateFlow<Boolean> = playbackSettings.playOnOpen
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setPlayOnOpen(value: Boolean) {
+        viewModelScope.launch { playbackSettings.setPlayOnOpen(value) }
+    }
+
     /** Seconds to rewind when RETURNING to a book — see [LibrarySettings.rewindOnReturnSeconds]. */
     val rewindOnReturnSeconds: StateFlow<Int> = playbackSettings.rewindOnReturnSeconds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)

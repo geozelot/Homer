@@ -398,6 +398,8 @@
     <string name="set_playback_skip_desc">How far the player\'s skip buttons jump.</string>
     <string name="set_playback_rewind_desc">Steps back a little when you press play again, so you can pick the thread back up.</string>
     <string name="settings_rewind_return">Rewind on return</string>
+    <string name="settings_play_on_open">Play when a book is opened</string>
+    <string name="set_playback_play_on_open_desc">Off, a book opens where you left it and waits. On, opening one is the same as pressing play — including the rewind, so you still hear a little of what came before.</string>
     <string name="set_playback_rewind_return_desc">Used when you come back to a book rather than resume one: the app was closed since, or another book was played in between. A longer step back, because what you have lost is the scene rather than the sentence.</string>
     <string name="set_playback_background_header">PLAYING IN THE BACKGROUND</string>
     <string name="set_playback_background_label">Keep playing when Homer is closed</string>

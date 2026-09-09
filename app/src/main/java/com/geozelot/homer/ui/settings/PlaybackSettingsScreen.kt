@@ -28,6 +28,7 @@ import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
+import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.home.HomeViewModel
 
@@ -48,6 +49,7 @@ fun PlaybackSettingsScreen(
 ) {
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
+    val playOnOpen by viewModel.playOnOpen.collectAsStateWithLifecycle()
     val rewindOnReturn by viewModel.rewindOnReturnSeconds.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
@@ -71,6 +73,12 @@ fun PlaybackSettingsScreen(
             onSelect = viewModel::setSeekSeconds,
             description = stringResource(R.string.set_playback_skip_desc),
             onCustom = { customSeek = true },
+        )
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_play_on_open),
+            checked = playOnOpen,
+            onCheckedChange = viewModel::setPlayOnOpen,
+            description = stringResource(R.string.set_playback_play_on_open_desc),
         )
         SettingsDropdownRow(
             label = stringResource(R.string.settings_rewind),

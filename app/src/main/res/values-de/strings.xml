@@ -372,6 +372,8 @@
     <string name="set_playback_skip_desc">Wie weit die Sprungtasten des Players springen.</string>
     <string name="set_playback_rewind_desc">Springt beim erneuten Abspielen ein Stück zurück, damit du den Faden wieder aufnehmen kannst.</string>
     <string name="settings_rewind_return">Rücksprung bei Rückkehr</string>
+    <string name="settings_play_on_open">Beim Öffnen abspielen</string>
+    <string name="set_playback_play_on_open_desc">Aus öffnet ein Buch dort, wo du warst, und wartet. An ist das Öffnen dasselbe wie Play — samt Rücksprung, du hörst also noch etwas von davor.</string>
     <string name="set_playback_rewind_return_desc">Gilt, wenn du zu einem Buch zurückkehrst, statt eines fortzusetzen: die App war zwischenzeitlich geschlossen, oder es lief ein anderes Buch. Ein größerer Rücksprung, denn verloren ist hier die Szene, nicht der Satz.</string>
     <string name="set_playback_background_header">WIEDERGABE IM HINTERGRUND</string>
     <string name="set_playback_background_label">Weiterspielen, wenn Homer geschlossen ist</string>
