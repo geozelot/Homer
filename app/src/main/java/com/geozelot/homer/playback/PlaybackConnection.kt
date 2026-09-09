@@ -112,6 +112,7 @@ class PlaybackConnection @Inject constructor(
     private val homerSync: HomerSyncRepository,
     private val libraryIndex: LibraryIndexRepository,
     private val localMirror: LocalMirror,
+    private val sleepNotifier: SleepTimerNotifier,
 ) {
     // A handler so an unhandled error in a fire-and-forget launch (e.g. a DAO write hitting a
     // constraint after a concurrent scan pruned the row) is logged, not propagated to the
@@ -201,11 +202,21 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
+    /**
+     * One tick of the countdown, handed to the notification.
+     *
+     * The cover pill reads the pushed state; this decides for itself whether the tick is worth a
+     * post — see [SleepTimerNotifier.update]. The return type is spelled out because this reads
+     * `sleepTimer`, which is declared just below it, and an inferred type sends the compiler round
+     * that loop.
+     */
+    private fun tickSleepTimer(): Unit = sleepNotifier.update(sleepTimer.remainingMs())
+
     private val sleepTimer = SleepTimer(
         context = context,
         scope = scope,
         onPause = ::fadeOutAndPause,
-        onChanged = ::pushState,
+        onChanged = { tickSleepTimer(); pushState() },
         onShake = ::extendSleepByPreference,
         onResume = ::resumeAfterSleep,
     )

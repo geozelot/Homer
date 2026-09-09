@@ -931,6 +931,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
 
+    /** Whether a running sleep timer gets its own notification. */
+    val sleepTimerNotification: StateFlow<Boolean> = playbackSettings.sleepTimerNotification
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setSleepTimerNotification(value: Boolean) {
+        viewModelScope.launch { playbackSettings.setSleepTimerNotification(value) }
+    }
+
     /** Whether arming a sleep timer starts playback — see [LibrarySettings.playOnSleepTimer]. */
     val playOnSleepTimer: StateFlow<Boolean> = playbackSettings.playOnSleepTimer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

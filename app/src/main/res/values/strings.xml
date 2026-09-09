@@ -400,6 +400,11 @@
     <string name="settings_rewind_return">Rewind on return</string>
     <string name="settings_play_on_sleep_timer">Play when a sleep timer is set</string>
     <string name="set_playback_play_on_sleep_timer_desc">Setting a timer against a paused book starts it. Off, the timer is armed and the book waits for you to press play.</string>
+    <string name="settings_sleep_notification">Sleep timer notification</string>
+    <string name="set_playback_sleep_notification_desc">Shows how long is left in the notification shade, updated every minute. Silent, and dismissible without stopping the timer.</string>
+    <string name="sleep_channel_name">Sleep timer</string>
+    <string name="sleep_notif_title">Sleep timer</string>
+    <string name="player_sleep_minutes_left">%1$d min left</string>
     <string name="set_playback_rewind_return_desc">Used when you come back to a book rather than resume one: the app was closed since, or another book was played in between. A longer step back, because what you have lost is the scene rather than the sentence.</string>
     <string name="set_playback_background_header">PLAYING IN THE BACKGROUND</string>
     <string name="set_playback_background_label">Keep playing when Homer is closed</string>
@@ -735,7 +740,7 @@
 
     <string name="help_player_chapters">Tap the chapter pill for the whole list, with each chapter\'s length and where it begins.</string>
     <string name="help_player_settings">Speed, volume and cut-silence sit together in the middle of the bottom row.</string>
-    <string name="help_player_sleep">The sleep timer counts down on the cover. Shake to carry on once it has run out.</string>
+    <string name="help_player_sleep">The sleep timer counts down on the cover, and in a notification of its own if you want one. Shake to carry on once it has run out.</string>
     <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
     <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
 </resources>

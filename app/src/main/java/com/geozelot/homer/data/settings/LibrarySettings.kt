@@ -646,6 +646,22 @@ class PlaybackSettings @Inject constructor(
     }
 
     /**
+     * Whether a running sleep timer gets a notification of its own.
+     *
+     * On by default: somebody who set a timer is by definition about to stop looking at the screen,
+     * and the shade is where they can check it without picking the phone up properly. It is a plain
+     * Homer notification on its own channel — see [com.geozelot.homer.playback.SleepTimerNotifier]
+     * for why it is not part of the media one — so a reader who finds it noise can mute the channel
+     * from system settings, or switch it off here.
+     */
+    val sleepTimerNotification: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_SLEEP_NOTIFICATION] ?: true }
+
+    suspend fun setSleepTimerNotification(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_SLEEP_NOTIFICATION] = value }
+    }
+
+    /**
      * Whether setting a sleep timer also starts playback.
      *
      * Arming a timer is a statement about the next half hour: somebody is settling down to listen
@@ -687,6 +703,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
         val KEY_REWIND_ON_RETURN = intPreferencesKey("rewind_on_return_seconds")
         val KEY_PLAY_ON_SLEEP_TIMER = booleanPreferencesKey("play_on_sleep_timer")
+        val KEY_SLEEP_NOTIFICATION = booleanPreferencesKey("sleep_timer_notification")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
         /**

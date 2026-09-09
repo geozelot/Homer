@@ -50,6 +50,7 @@ fun PlaybackSettingsScreen(
     val seekSeconds by viewModel.seekSeconds.collectAsStateWithLifecycle()
     val autoRewind by viewModel.autoRewindSeconds.collectAsStateWithLifecycle()
     val playOnSleepTimer by viewModel.playOnSleepTimer.collectAsStateWithLifecycle()
+    val sleepNotification by viewModel.sleepTimerNotification.collectAsStateWithLifecycle()
     val rewindOnReturn by viewModel.rewindOnReturnSeconds.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
@@ -126,6 +127,12 @@ fun PlaybackSettingsScreen(
             checked = playOnSleepTimer,
             onCheckedChange = viewModel::setPlayOnSleepTimer,
             description = stringResource(R.string.set_playback_play_on_sleep_timer_desc),
+        )
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_sleep_notification),
+            checked = sleepNotification,
+            onCheckedChange = viewModel::setSleepTimerNotification,
+            description = stringResource(R.string.set_playback_sleep_notification_desc),
         )
         SettingsDropdownRow(
             label = stringResource(R.string.player_shake_to_extend),
