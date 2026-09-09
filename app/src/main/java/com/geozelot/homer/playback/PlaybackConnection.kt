@@ -157,6 +157,10 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var playOnOpen = false
 
+    /** Whether arming a sleep timer starts it — see [LibrarySettings.playOnSleepTimer]. */
+    @Volatile
+    private var playOnSleepTimer = false
+
     /**
      * The last book this PROCESS started playing, and the whole of how a return is recognised.
      *
@@ -196,6 +200,9 @@ class PlaybackConnection @Inject constructor(
         }
         scope.launch {
             playbackSettings.playOnOpen.collect { playOnOpen = it }
+        }
+        scope.launch {
+            playbackSettings.playOnSleepTimer.collect { playOnSleepTimer = it }
         }
         scope.launch {
             playbackSettings.downloadOnPlay.collect { downloadOnPlayGlobal = it }
@@ -606,6 +613,7 @@ class PlaybackConnection @Inject constructor(
     fun startSleepTimer(durationMs: Long) {
         scope.launch {
             playbackSettings.setSleepLastDurationMs(durationMs)
+            maybePlayForSleepTimer()
             // Read BEFORE arming, so the accelerometer is never registered for a reader who has the
             // feature off. It used to be registered for every countdown, and there was no off.
             sleepTimer.startCountdown(
@@ -631,7 +639,27 @@ class PlaybackConnection @Inject constructor(
         pushState()
     }
 
-    fun startSleepTimerEndOfChapter() = sleepTimer.startEndOfChapter()
+    fun startSleepTimerEndOfChapter() {
+        sleepTimer.startEndOfChapter()
+        maybePlayForSleepTimer()
+    }
+
+    /**
+     * Starts playback when a timer is armed against a paused book, if the reader asked for that.
+     *
+     * Guarded on not-already-playing, which is the ordinary case and must stay a no-op: arming a
+     * timer mid-chapter would otherwise run the rewind and step backwards for no reason. The fade
+     * job is cancelled first because a timer armed DURING a fade-out — the reader catching it as it
+     * goes quiet — would otherwise resume into a ramp still counting down to a pause.
+     */
+    private fun maybePlayForSleepTimer() {
+        if (!playOnSleepTimer) return
+        val c = controller ?: return
+        if (c.isPlaying) return
+        fadeJob?.cancel()
+        c.volume = 1f
+        startPlayback()
+    }
 
     fun cancelSleepTimer() = sleepTimer.cancel()
 

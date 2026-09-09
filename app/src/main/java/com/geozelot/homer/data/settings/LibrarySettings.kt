@@ -646,6 +646,24 @@ class PlaybackSettings @Inject constructor(
     }
 
     /**
+     * Whether setting a sleep timer also starts playback.
+     *
+     * Arming a timer is a statement about the next half hour: somebody is settling down to listen
+     * until they fall asleep. If the book happens to be paused at that moment — they opened Homer,
+     * found their place, set the timer — the next thing they want is for it to start, and pressing
+     * play afterwards is a step that only exists because the app did not follow the thought.
+     *
+     * Off by default: a timer that begins playing when the reader expected silence is worse than a
+     * tap, and which of the two somebody wants is genuinely a matter of habit.
+     */
+    val playOnSleepTimer: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_PLAY_ON_SLEEP_TIMER] ?: false }
+
+    suspend fun setPlayOnSleepTimer(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_PLAY_ON_SLEEP_TIMER] = value }
+    }
+
+    /**
      * Whether opening a book starts it playing, or waits to be asked.
      *
      * Homer has always waited: tapping a book loads it, restores the position and stops there. That
@@ -687,6 +705,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_AUTO_REWIND = intPreferencesKey("auto_rewind_seconds")
         val KEY_REWIND_ON_RETURN = intPreferencesKey("rewind_on_return_seconds")
         val KEY_PLAY_ON_OPEN = booleanPreferencesKey("play_on_open")
+        val KEY_PLAY_ON_SLEEP_TIMER = booleanPreferencesKey("play_on_sleep_timer")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
         const val DEFAULT_SLEEP_FADE = 5
         /**

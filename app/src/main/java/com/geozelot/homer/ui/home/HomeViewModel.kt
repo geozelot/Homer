@@ -931,6 +931,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSeekSeconds(value) }
     }
 
+    /** Whether arming a sleep timer starts playback — see [LibrarySettings.playOnSleepTimer]. */
+    val playOnSleepTimer: StateFlow<Boolean> = playbackSettings.playOnSleepTimer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setPlayOnSleepTimer(value: Boolean) {
+        viewModelScope.launch { playbackSettings.setPlayOnSleepTimer(value) }
+    }
+
     /** Whether opening a book starts it playing — see [LibrarySettings.playOnOpen]. */
     val playOnOpen: StateFlow<Boolean> = playbackSettings.playOnOpen
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
