@@ -227,6 +227,7 @@ fun PlayerScreen(
             onMarkCompleted = viewModel::markCompleted,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
             onDetails = { showDetails = true },
+            onBookmarks = { showBookmarksDialog = true },
         )
     }
     val artwork: @Composable (Modifier) -> Unit = { slotModifier ->
@@ -458,9 +459,6 @@ fun PlayerScreen(
                 book = book,
                 onEdit = { showDetails = false; showEditDialog = true },
                 onFilter = { showDetails = false; onFilter(it) },
-                onReadFolderDifferently = onReadFolderDifferently?.let {
-                    { showDetails = false; it() }
-                },
                 onDismiss = { showDetails = false },
             )
         }
@@ -483,6 +481,9 @@ fun PlayerScreen(
                 },
                 onPickCover = viewModel::setCustomCover,
                 onClearCover = viewModel::clearCustomCover,
+                onReadFolderDifferently = onReadFolderDifferently?.let {
+                    { showEditDialog = false; it() }
+                },
                 onDismiss = { showEditDialog = false },
             )
         }
@@ -661,6 +662,7 @@ private fun PlayerTopBar(
     onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
     onDetails: () -> Unit,
+    onBookmarks: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -678,16 +680,11 @@ private fun PlayerTopBar(
             IconButton(onClick = { overflowOpen = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Muted)
             }
+            // The same order as the library's own book menu, and for the same reason a menu has an
+            // order at all: what you look at, then what you change, then what this device does with
+            // the file. Reading is first because it is what most taps are after; the destructive
+            // one sits behind a rule of its own.
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                if (started) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.mark_completed)) },
-                        onClick = {
-                            onMarkCompleted()
-                            overflowOpen = false
-                        },
-                    )
-                }
                 // DETAILS, not Edit. The library's own menus lead here too, and editing is one
                 // level inside it — which is the right order: you look at a book before deciding it
                 // is wrong. Reaching Edit directly from the player skipped the looking, and made the
@@ -697,6 +694,23 @@ private fun PlayerTopBar(
                         text = { Text(stringResource(R.string.menu_details)) },
                         onClick = {
                             onDetails()
+                            overflowOpen = false
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.menu_bookmarks)) },
+                    onClick = {
+                        onBookmarks()
+                        overflowOpen = false
+                    },
+                )
+                if (started) {
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mark_completed)) },
+                        onClick = {
+                            onMarkCompleted()
                             overflowOpen = false
                         },
                     )

@@ -177,14 +177,30 @@ internal fun metaChipFor(
     genres: List<String>,
     author: String?,
     shelving: LibraryShelving,
-): Pair<MetaChipKind, List<String>>? {
+    /**
+     * True when the arrangement groups nothing — no shelves, no stacks. Then the row is the only
+     * thing describing the book, and it can afford to say both facts rather than choosing one.
+     */
+    unshelved: Boolean = false,
+): List<Pair<MetaChipKind, List<String>>> {
     val genre = genres.takeIf { it.isNotEmpty() }
     val named = author?.takeIf { it.isNotBlank() }
     return when (shelving) {
-        LibraryShelving.AUTHOR -> genre?.let { MetaChipKind.GENRE to it }
-        LibraryShelving.GENRE -> named?.let { MetaChipKind.AUTHOR to listOf(it) }
-        else -> genre?.let { MetaChipKind.GENRE to it }
-            ?: named?.let { MetaChipKind.AUTHOR to listOf(it) }
+        LibraryShelving.AUTHOR -> listOfNotNull(genre?.let { MetaChipKind.GENRE to it })
+        LibraryShelving.GENRE -> listOfNotNull(named?.let { MetaChipKind.AUTHOR to listOf(it) })
+        // Both, in that order, when nothing overhead is saying either. Author first: it is the fact
+        // people navigate a library by, and the genre qualifies it rather than the other way round.
+        else -> if (unshelved) {
+            listOfNotNull(
+                named?.let { MetaChipKind.AUTHOR to listOf(it) },
+                genre?.let { MetaChipKind.GENRE to it },
+            )
+        } else {
+            listOfNotNull(
+                genre?.let { MetaChipKind.GENRE to it }
+                    ?: named?.let { MetaChipKind.AUTHOR to listOf(it) },
+            )
+        }
     }
 }
 
@@ -208,8 +224,8 @@ private fun chipIcon(kind: MetaChipKind, value: String): ImageVector = when (kin
 }
 
 /** Whether [metaChipFor] took the author, so a meta line knows not to print it again. */
-internal fun Pair<MetaChipKind, List<String>>?.carriesAuthor(): Boolean =
-    this?.first == MetaChipKind.AUTHOR
+internal fun List<Pair<MetaChipKind, List<String>>>.carriesAuthor(): Boolean =
+    any { it.first == MetaChipKind.AUTHOR }
 
 /**
  * The slot under an item's title: the chip, or the space it would have taken.
@@ -219,7 +235,7 @@ internal fun Pair<MetaChipKind, List<String>>?.carriesAuthor(): Boolean =
  */
 @Composable
 internal fun MetaChipSlot(
-    chip: Pair<MetaChipKind, List<String>>?,
+    chips: List<Pair<MetaChipKind, List<String>>>,
     ctx: RowContext,
     onFilter: (MetaChipKind, String) -> Unit,
     modifier: Modifier = Modifier,
@@ -236,19 +252,20 @@ internal fun MetaChipSlot(
     Row(
         modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (chip != null) MetaChip(chip.first, chip.second, ctx, onFilter)
+        chips.forEach { (kind, values) -> MetaChip(kind, values, ctx, onFilter) }
         if (trailing.isNullOrBlank()) return@Row
         Text(
             // The separator belongs to the join, not to the caller: every one of these lines is
             // mid-dots and building it at four call sites is how one of them ends up with a comma.
-            if (chip == null) trailing else " · $trailing",
+            if (chips.isEmpty()) trailing else " · $trailing",
             color = Muted,
             fontSize = 10.sp,
             lineHeight = 10.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = if (chip == null) MetaChipSlot.TextInset else 4.dp),
+            modifier = Modifier.padding(start = if (chips.isEmpty()) MetaChipSlot.TextInset else 0.dp),
         )
     }
 }

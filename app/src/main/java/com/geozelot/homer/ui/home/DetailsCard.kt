@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,8 +40,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.geozelot.homer.R
 import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.data.db.entity.BookmarkEntity
@@ -126,7 +129,24 @@ private fun Fact(label: String, value: String?, onTap: (() -> Unit)? = null) {
  * one row reading "Krimi · Thriller · Hörspiel · Jugend", where only the first was tappable and
  * nothing said so.
  */
-private data class DetailChip(val icon: ImageVector, val label: String, val token: FilterToken)
+private data class DetailChip(
+    val icon: ImageVector,
+    /** What kind of fact this is — "Author", "Genre" — set in front of the value. */
+    val category: String,
+    val label: String,
+    val token: FilterToken,
+)
+
+/**
+ * A chip, with its category taken from the facet it filters on.
+ *
+ * The facet already owns that word — it is what the filter pills say, and it is translated — so
+ * spelling it out here is reading it from one place rather than writing a second set of labels
+ * that can drift from the first.
+ */
+@Composable
+private fun chip(icon: ImageVector, facet: FilterFacet, label: String, value: String) =
+    DetailChip(icon, stringResource(facet.label), label, FilterToken(facet, value))
 
 /** The block of them, wrapping as it needs to. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -150,6 +170,17 @@ private fun DetailChips(chips: List<DetailChip>, onFilter: (FilterToken) -> Unit
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(chip.icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
+                // Mark, category, value. The mark alone carries it on a library card, where there
+                // is no room for more and the reader is scanning; here they are reading, one card
+                // at a time, and the word removes the last doubt about which fact is which — a
+                // name is a name whether it belongs to a person, a series or a genre.
+                Text(
+                    chip.category,
+                    color = Faint,
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 1,
+                )
                 Text(
                     chip.label,
                     color = Muted,
@@ -164,31 +195,30 @@ private fun DetailChips(chips: List<DetailChip>, onFilter: (FilterToken) -> Unit
     }
 }
 
-/**
- * The way out of a folder Homer has read wrongly, drawn as the action it is.
- *
- * It was a line of amber text at the bottom of a card full of text — the most consequential thing
- * on the card, and the least visible. It opens the template editor seeded with this folder and the
- * pattern currently matching it, which is a page of its own; that deserves a button.
- */
-@Composable
-private fun ReadFolderDifferentlyButton(onClick: () -> Unit) {
-    HomerTextButton(
-        onClick = onClick,
-        modifier = Modifier.padding(top = 10.dp),
-        contentPadding = SettingsActionPadding,
-    ) {
-        Icon(Icons.Filled.Rule, contentDescription = null, tint = Amber, modifier = Modifier.size(15.dp))
-        Spacer(Modifier.size(7.dp))
-        Text(stringResource(R.string.details_read_folder), color = Amber, fontSize = 12.sp)
-    }
-}
-
 /** A hairline between groups of facts, matching the settings pages' rhythm. */
 @Composable
 private fun FactDivider() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp).height(1.dp).background(Line))
 }
+
+/**
+ * How wide a details card should be, and how tall its body may grow.
+ *
+ * A stock dialog is sized for a sentence and two buttons. This one carries a cover, a block of
+ * chips and a dozen facts, and on a large screen it was leaving half the width empty while wrapping
+ * the chips into four rows.
+ *
+ * Proportions rather than fixed dp, because the thing it has to fit is the SCREEN: 94% of the width
+ * up to a limit — past about 560dp a line of text stops being easier to read and starts being
+ * harder — and at most three quarters of the height, so the card is always visibly a card sitting
+ * on the library rather than a page that replaced it.
+ */
+@Composable
+private fun detailsCardWidth(): Dp =
+    (LocalConfiguration.current.screenWidthDp.dp * 0.94f).coerceAtMost(560.dp)
+
+@Composable
+private fun detailsBodyMaxHeight(): Dp = LocalConfiguration.current.screenHeightDp.dp * 0.62f
 
 /** The cover and title block every details card opens with. */
 @Composable
@@ -217,20 +247,21 @@ fun BookDetailsCard(
     book: BookListItem,
     onEdit: () -> Unit,
     onFilter: (FilterToken) -> Unit,
-    /**
-     * Opens the template editor seeded for this book's folder — null where there is nothing to
-     * seed, which is a reader device whose patterns are somebody else's to write.
-     */
-    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.width(detailsCardWidth()),
         title = null,
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = detailsBodyMaxHeight())
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 DetailsHeader(book.coverModel, book.title, book.author)
 
                 FactDivider()
@@ -244,47 +275,47 @@ fun BookDetailsCard(
                 // said which.
                 DetailChips(
                     buildList {
+                        // Ordered: who wrote it, what it is part of, what it is in, what it is
+                        // about. Widening from the book outwards, then the two facts that classify
+                        // it — the same reading order the player's header follows.
                         book.author?.takeIf { it.isNotBlank() }?.let {
-                            add(DetailChip(HomerIcons.Author, it, FilterToken(FilterFacet.AUTHOR, it)))
+                            add(chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it))
                         }
                         book.series?.takeIf { it.isNotBlank() }?.let { name ->
                             add(
-                                DetailChip(
+                                chip(
                                     HomerIcons.SeriesBracket,
+                                    FilterFacet.SERIES,
                                     book.seriesLine(context) ?: name,
-                                    FilterToken(FilterFacet.SERIES, name),
+                                    name,
                                 ),
                             )
                         }
                         book.collection?.takeIf { it.isNotBlank() }?.let { name ->
                             add(
-                                DetailChip(
+                                chip(
                                     HomerIcons.CollectionBracket,
+                                    FilterFacet.COLLECTION,
                                     book.collectionLine(context) ?: name,
-                                    FilterToken(FilterFacet.COLLECTION, name),
-                                ),
-                            )
-                        }
-                        book.genres.forEach {
-                            add(
-                                DetailChip(
-                                    HomerIcons.Genre,
-                                    BookGenre.display(it, locale),
-                                    FilterToken(FilterFacet.GENRE, it),
+                                    name,
                                 ),
                             )
                         }
                         book.language?.takeIf { it.isNotBlank() }?.let {
                             add(
-                                DetailChip(
+                                chip(
                                     Icons.Filled.Language,
+                                    FilterFacet.LANGUAGE,
                                     BookLanguage.displayName(it, locale),
-                                    FilterToken(FilterFacet.LANGUAGE, it),
+                                    it,
                                 ),
                             )
                         }
+                        book.genres.forEach {
+                            add(chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it))
+                        }
                         book.tags.forEach {
-                            add(DetailChip(Icons.Filled.Tag, it, FilterToken(FilterFacet.TAG, it)))
+                            add(chip(Icons.Filled.Tag, FilterFacet.TAG, it, it))
                         }
                     },
                     onFilter,
@@ -317,14 +348,16 @@ fun BookDetailsCard(
                 // …and if what is wrong is how that path was READ, this is the way out. Seeded from
                 // here rather than authored from nothing: the folder is this book's and the shape is
                 // whichever pattern is already matching, which is the one that needs changing.
-                onReadFolderDifferently?.let { ReadFolderDifferentlyButton(it) }
             }
         },
+        // Close in the confirm slot, which is where a dialog puts what most taps are for — and on
+        // a card people open to LOOK at something, that is closing it again. Edit is the step
+        // further in, and sits where a secondary action sits.
         confirmButton = {
-            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Amber) }
         },
         dismissButton = {
-            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Muted) }
         },
     )
 }
@@ -335,17 +368,21 @@ fun SeriesDetailsCard(
     series: LibraryEntry.Series,
     onEdit: () -> Unit,
     onFilter: (FilterToken) -> Unit,
-    /** Opens the template editor scoped to the folder this shelf's books share. Null for a reader. */
-    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.width(detailsCardWidth()),
         title = null,
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = detailsBodyMaxHeight())
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 DetailsHeader(
                     series.frontCover(),
                     series.name,
@@ -362,36 +399,31 @@ fun SeriesDetailsCard(
                 DetailChips(
                     buildList {
                         series.author?.takeIf { it.isNotBlank() }?.let {
-                            add(DetailChip(HomerIcons.Author, it, FilterToken(FilterFacet.AUTHOR, it)))
+                            add(chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it))
                         }
                         // Only a collection has threads inside it to name, and only when they are
                         // named. Each is its own chip: they are separate series, and a reader who
                         // wants the Watch books wants the Watch books.
                         if (series.isCollection) {
                             series.books.mapNotNull { it.series }.distinct().forEach {
-                                add(DetailChip(HomerIcons.SeriesBracket, it, FilterToken(FilterFacet.SERIES, it)))
+                                add(chip(HomerIcons.SeriesBracket, FilterFacet.SERIES, it, it))
                             }
-                        }
-                        series.books.flatMap { it.genres }.distinct().forEach {
-                            add(
-                                DetailChip(
-                                    HomerIcons.Genre,
-                                    BookGenre.display(it, locale),
-                                    FilterToken(FilterFacet.GENRE, it),
-                                ),
-                            )
                         }
                         series.books.mapNotNull { it.language }.distinct().forEach {
                             add(
-                                DetailChip(
+                                chip(
                                     Icons.Filled.Language,
+                                    FilterFacet.LANGUAGE,
                                     BookLanguage.displayName(it, locale),
-                                    FilterToken(FilterFacet.LANGUAGE, it),
+                                    it,
                                 ),
                             )
                         }
+                        series.books.flatMap { it.genres }.distinct().forEach {
+                            add(chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it))
+                        }
                         series.books.flatMap { it.tags }.distinct().forEach {
-                            add(DetailChip(Icons.Filled.Tag, it, FilterToken(FilterFacet.TAG, it)))
+                            add(chip(Icons.Filled.Tag, FilterFacet.TAG, it, it))
                         }
                     },
                     onFilter,
@@ -450,14 +482,16 @@ fun SeriesDetailsCard(
                 // them belongs at — a whole series or collection read wrongly is the case a
                 // template is most worth writing for.
                 Fact(stringResource(R.string.details_location), series.commonFolder().ifBlank { "/" })
-                onReadFolderDifferently?.let { ReadFolderDifferentlyButton(it) }
             }
         },
+        // Close in the confirm slot, which is where a dialog puts what most taps are for — and on
+        // a card people open to LOOK at something, that is closing it again. Edit is the step
+        // further in, and sits where a secondary action sits.
         confirmButton = {
-            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Amber) }
+            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Amber) }
         },
         dismissButton = {
-            HomerTextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Muted) }
+            HomerTextButton(onClick = onEdit) { Text(stringResource(R.string.action_edit), color = Muted) }
         },
     )
 }

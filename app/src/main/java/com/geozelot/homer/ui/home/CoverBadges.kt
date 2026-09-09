@@ -275,23 +275,23 @@ internal fun ShelfBadge(
 /**
  * Where one book sits in the thing it belongs to — "#3" of its series, or of its collection.
  *
- * Series first when a book has both. The sub-series is the more specific claim, and a Discworld
- * witches novel is "Die Hexen #3" before it is "Scheibenwelt #12"; showing both would put two
- * different numbers about the same book in the same corner — so the corner does not say WHICH it is,
- * and does not try to. The shelf the book is sitting on is the context that answers that.
+ * WHICH number is not decided here — see `volumeIndexFor`, which answers it from how the library is
+ * currently arranged. The corner never says which of the two it is showing, and does not try to:
+ * the shelf a book is sitting on is the context that answers that, and when there is no such shelf
+ * there is no number worth showing.
  *
- * Draws nothing when the book is in neither, rather than a bare "#" or a zero — most standalones are
- * in neither, and a badge that appears on every cover to say nothing is worse than no badge.
+ * Draws nothing when there is nothing to draw, rather than a bare "#" or a zero — a badge that
+ * appears on every cover to say nothing is worse than no badge.
  */
 @Composable
 internal fun VolumeIndexBadge(
-    seriesIndex: Int?,
-    collectionIndex: Int?,
+    /** Which number to show, or null to draw nothing — see `volumeIndexFor`. */
+    index: Int?,
     corner: CoverCorner = CoverCorner.TOP_START,
     modifier: Modifier = Modifier,
     size: BadgeSize = BadgeSize.LARGE,
 ) {
-    val index = seriesIndex ?: collectionIndex ?: return
+    if (index == null) return
     // A "#", not a glyph. The book/shelf icons said WHICH of the two numbers this is, at the cost of
     // the corner reading as an icon with a number stuck to it rather than as a number — and the
     // distinction was never the question being asked here. "#3" is what a volume number looks like.

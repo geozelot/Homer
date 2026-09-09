@@ -11,14 +11,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Parchment
@@ -115,6 +122,11 @@ fun EditBookDialog(
     onReset: () -> Unit,
     onPickCover: (Uri) -> Unit,
     onClearCover: () -> Unit,
+    /**
+     * Opens the template editor seeded for this book's folder — null where there is nothing to
+     * seed, which is a reader device whose patterns are somebody else's to write.
+     */
+    onReadFolderDifferently: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val pickCover = rememberLauncherForActivityResult(
@@ -245,6 +257,27 @@ fun EditBookDialog(
                     if (book.hasCustomCover) {
                         HomerTextButton(onClick = onClearCover) { Text(stringResource(R.string.edit_clear_cover)) }
                     }
+                }
+
+                // The way out of a folder Homer has read wrongly, where the other corrections are.
+                //
+                // It lived on the details card, which is the page for LOOKING at a book — and this
+                // is the most consequential change anybody can make to one: a pattern rewrites what
+                // the index says about every book under that folder, not just this one. It belongs
+                // with editing, one level in, beside the fields it would overwrite.
+                onReadFolderDifferently?.let { open ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Line)
+                    HomerTextButton(onClick = open, contentPadding = SettingsActionPadding) {
+                        Icon(
+                            Icons.Filled.Rule,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.size(7.dp))
+                        Text(stringResource(R.string.details_read_folder), color = Amber, fontSize = 12.sp)
+                    }
+                    SettingsExplanation(stringResource(R.string.edit_read_folder_desc))
                 }
             }
         },

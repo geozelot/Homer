@@ -106,6 +106,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -587,6 +588,14 @@ fun HomeScreen(
             },
             onPickCover = { uri -> viewModel.setCustomCover(book.id, uri) },
             onClearCover = { viewModel.clearCustomCover(book.id) },
+            // A pattern rewrites what the index says about every book under a folder, so it lives
+            // with editing rather than with looking — and only where patterns are this device's to
+            // write, which a reader's are not.
+            onReadFolderDifferently = if (maintainsLibrary) {
+                { editingId = null; viewModel.seedTemplateFor(book.id); onOpenTemplates() }
+            } else {
+                null
+            },
             onDismiss = { editingId = null },
         )
     }
@@ -598,11 +607,6 @@ fun HomeScreen(
             book = book,
             onEdit = { detailsId = null; editingId = book.id },
             onFilter = { detailsId = null; searching = false; viewModel.addFilterToken(it) },
-            onReadFolderDifferently = if (maintainsLibrary) {
-                { detailsId = null; viewModel.seedTemplateFor(book.id); onOpenTemplates() }
-            } else {
-                null
-            },
             onDismiss = { detailsId = null },
         )
     }
@@ -611,19 +615,6 @@ fun HomeScreen(
             series = series,
             onEdit = { detailsSeriesKey = null; editingSeriesKey = series.expandKey },
             onFilter = { detailsSeriesKey = null; searching = false; viewModel.addFilterToken(it) },
-            onReadFolderDifferently = if (maintainsLibrary) {
-                {
-                    detailsSeriesKey = null
-                    // The shape is read from a member book, the scope from what they all share.
-                    viewModel.seedTemplateFor(
-                        bookId = series.books.first().id,
-                        scopeOverride = series.commonFolder(),
-                    )
-                    onOpenTemplates()
-                }
-            } else {
-                null
-            },
             onDismiss = { detailsSeriesKey = null },
         )
     }
@@ -900,7 +891,19 @@ private fun LazyGridScope.libraryContent(
             is LibraryEntry.Header -> item(
                 span = { GridItemSpan(maxLineSpan) },
                 key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
-            ) { SectionLabelRow(headerLabel(entry)) }
+            ) {
+                // More air above a shelf heading in LIST view. The gap is the same 12dp in both,
+                // but a grid row is a cover tall and a list row is 46dp — so the same measurement
+                // reads as a pause in one and as a crowd in the other.
+                SectionLabelRow(
+                    headerLabel(entry),
+                    topPadding = if (gridView) 12.dp else 20.dp,
+                    // A step brighter than the rows under it. A heading that names a shelf is the
+                    // structure of the list rather than a note about it, and at Muted it sat at the
+                    // same weight as the meta lines it was organising.
+                    color = Parchment,
+                )
+            }
             is LibraryEntry.Standalone -> {
                 if (gridView) {
                     item(key = entry.book.id) {
@@ -1073,12 +1076,13 @@ private fun SectionLabelRow(
     topPadding: Dp = 12.dp,
     bottomPadding: Dp = 8.dp,
     large: Boolean = false,
+    color: Color = Muted,
 ) {
     Text(
         text = text.uppercase(),
         style = SectionLabel,
         fontSize = if (large) SectionLabelLargeSize else SectionLabel.fontSize,
-        color = Muted,
+        color = color,
         modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
     )
 }
@@ -2058,8 +2062,7 @@ private fun BookGridCard(
             // itself in one corner. Which of the two it is goes unsaid: the shelf the book is
             // sitting on is the context that answers it.
             VolumeIndexBadge(
-                seriesIndex = if (ctx.collectionNumbered) null else book.seriesIndex,
-                collectionIndex = book.collectionIndex,
+                index = volumeIndexFor(book, ctx),
                 modifier = Modifier.align(Alignment.TopStart),
                 size = BadgeSize.LARGE,
             )
@@ -2101,7 +2104,7 @@ private fun BookGridCard(
             meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
             chip = {
                 MetaChipSlot(
-                    chip = bookChip(book, ctx),
+                    chips = bookChip(book, ctx),
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 )
@@ -2173,7 +2176,14 @@ private fun GridCardText(
  * site is how the grid and the list end up disagreeing about what a card says.
  */
 private fun bookChip(book: BookListItem, ctx: RowContext) =
-    metaChipFor(book.genres, book.author, ctx.shelving)
+    metaChipFor(
+        book.genres,
+        book.author,
+        ctx.shelving,
+        // Shelved by nothing and stacked into nothing: the row is the only thing describing this
+        // book, so it says both facts instead of picking one.
+        unshelved = ctx.shelving == LibraryShelving.ITEM && ctx.series == LibraryDepth.FLAT,
+    )
 
 /** The same, for a shelf: what most of its books agree on. */
 private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
@@ -2186,8 +2196,10 @@ private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
  * whether this is a collection or one series, which the cover stack used to imply and no longer
  * does in list view.
  */
-private fun shelfKindChip(series: LibraryEntry.Series) = MetaChipKind.SHELF to listOf(
-    (if (series.isCollection) BookState.IN_COLLECTION else BookState.IN_SERIES).key,
+private fun shelfKindChip(series: LibraryEntry.Series) = listOf(
+    MetaChipKind.SHELF to listOf(
+        (if (series.isCollection) BookState.IN_COLLECTION else BookState.IN_SERIES).key,
+    ),
 )
 
 /** A chip's value as a filter token. */
@@ -2197,6 +2209,30 @@ private fun chipToken(kind: MetaChipKind, value: String): FilterToken = when (ki
     // Not `collection:TKKG`, which would narrow the library to the shelf already on screen — the
     // state, so it answers "show me everything that is in a collection".
     MetaChipKind.SHELF -> FilterToken(FilterFacet.STATE, value)
+}
+
+/**
+ * The number a book's corner shows — which depends entirely on what shelf it is standing on.
+ *
+ * A volume number is a claim about a book's place in something, so it is only worth showing while
+ * that something is on screen. Four cases, and three of them used to give the same answer:
+ *
+ *  - **Flat.** Nothing. The arrangement has taken the shelves apart, so "#3" refers to a run the
+ *    reader is not currently looking at — and next to a book numbered 3 of a different series it is
+ *    actively misleading.
+ *  - **A collection read as one numbered run.** The collection's own number: that IS the shelf.
+ *  - **Grouped by series.** The series number, and nothing when the book has none. A standalone
+ *    inside a collection used to fall back to the COLLECTION's number here, which put a number from
+ *    the enclosing shelf on a book sitting outside every sub-series of it.
+ *  - **Grouped by collection.** The series number if it has one — the more specific claim, and a
+ *    Discworld witches novel is "Die Hexen #3" before it is "Scheibenwelt #12" — otherwise the
+ *    collection's, which is the shelf it is on.
+ */
+internal fun volumeIndexFor(book: BookListItem, ctx: RowContext): Int? = when {
+    ctx.series == LibraryDepth.FLAT -> null
+    ctx.collectionNumbered -> book.collectionIndex
+    ctx.series == LibraryDepth.SERIES -> book.seriesIndex
+    else -> book.seriesIndex ?: book.collectionIndex
 }
 
 /** What the arrangement already tells the reader, so a row can say something else instead. */
@@ -2424,7 +2460,7 @@ private fun SeriesGridCard(
             // so a shelf can say "Krimi +3" where no single volume carries four.
             chip = {
                 MetaChipSlot(
-                    chip = shelfChip(series, ctx),
+                    chips = shelfChip(series, ctx),
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 )
@@ -2560,7 +2596,7 @@ private fun ExpandedSeriesHeader(
                 // The same header the list view draws, built the same way: what this shelf is,
                 // then what it holds, on one line.
                 MetaChipSlot(
-                    chip = shelfKindChip(series),
+                    chips = shelfKindChip(series),
                     ctx = ctx,
                     onFilter = { kind, value -> onFilter(chipToken(kind, value)) },
                     trailing = seriesMeta(series, ctx, LocalContext.current, expanded = true),
@@ -2616,7 +2652,9 @@ private fun ExpandedSubHeader(label: String, last: Boolean) {
         Text(
             label.uppercase(),
             style = SectionLabel,
-            color = Faint,
+            // A step brighter, like the shelf headings outside the enclosure — a sub-series is the
+            // structure of what is open, not a footnote to it.
+            color = Muted,
             modifier = Modifier.padding(start = 2.dp, top = 10.dp, bottom = 4.dp),
         )
     }
@@ -2777,8 +2815,7 @@ private fun BookListRow(
                 // about a book in a series that the row's single line of text keeps running out of
                 // room for.
                 VolumeIndexBadge(
-                    seriesIndex = if (ctx.collectionNumbered) null else book.seriesIndex,
-                    collectionIndex = book.collectionIndex,
+                    index = volumeIndexFor(book, ctx),
                     modifier = Modifier.align(Alignment.TopStart),
                     size = BadgeSize.SMALL,
                 )
@@ -2829,7 +2866,7 @@ private fun BookListRow(
             // drawn rather than written (progress). What was left was tags and a percentage, and
             // neither is worth a second line on every row in the library.
             MetaChipSlot(
-                chip = bookChip(book, ctx),
+                chips = bookChip(book, ctx),
                 ctx = ctx,
                 onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                 modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
@@ -2964,7 +3001,7 @@ private fun SeriesShelfRow(
                 // under it stepping up and down as a shelf is opened and closed. Folded it carries
                 // what a book carries; opened, the kind of shelf this is and what it holds.
                 MetaChipSlot(
-                    chip = if (expanded) shelfKindChip(series) else shelfChip(series, ctx),
+                    chips = if (expanded) shelfKindChip(series) else shelfChip(series, ctx),
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                     trailing = if (expanded) {
