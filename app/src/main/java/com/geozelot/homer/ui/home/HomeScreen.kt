@@ -870,6 +870,15 @@ private val ControlRowInset = (ControlTapHeight - ControlPillHeight) / 2
 /** Gap between grid cells, both axes. The series enclosure paints across half of it. */
 private val LibraryGridSpacing = 12.dp
 
+/**
+ * Extra air under a grid card's text block, so its last line belongs to it rather than to the
+ * cover beneath.
+ *
+ * Small on purpose: the grid's own 12dp is nearly right, and a card that stands too far off its
+ * neighbours stops reading as part of a shelf.
+ */
+private val GridCardFooterGap = 5.dp
+
 /** The grid's horizontal content padding. */
 private val LibraryGridPadding = 16.dp
 
@@ -942,7 +951,10 @@ private fun LazyGridScope.libraryContent(
                 // reads as a pause in one and as a crowd in the other.
                 SectionLabelRow(
                     headerLabel(entry),
-                    topPadding = if (gridView) 12.dp else 20.dp,
+                    // The grid's cards now carry their own footer gap, so a heading following a row
+                    // would sit that much lower than one following a heading. Taking it back here
+                    // keeps every heading the same distance from what precedes it.
+                    topPadding = if (gridView) 12.dp - GridCardFooterGap else 20.dp,
                     // A step brighter than the rows under it. A heading that names a shelf is the
                     // structure of the list rather than a note about it, and at Muted it sat at the
                     // same weight as the meta lines it was organising.
@@ -2184,7 +2196,14 @@ private fun GridCardText(
      */
     chip: @Composable () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // The footer stands off whatever is below it.
+    //
+    // The grid spaces its rows 12dp apart, which is the gap between a row's tallest CARD and the
+    // next row's cover — and a card's last line is small muted text, so 12dp put one card's meta
+    // line closer to the next book's artwork than to its own title. The extra is on the card
+    // rather than on the grid so a full-span heading, which is its own item, does not inherit it;
+    // see the header's own top padding, which gives that gap back.
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = GridCardFooterGap)) {
         // Indented to where the chip's TEXT starts, not to where its outline does. The pill's
         // hairline hangs into the margin instead of shunting the words it belongs to sideways, so
         // the title, the chip's label and the meta line share one left edge.
@@ -2225,14 +2244,26 @@ private fun bookChip(book: BookListItem, ctx: RowContext) =
         book.genres,
         book.author,
         ctx.shelving,
-        // Shelved by nothing and stacked into nothing: the row is the only thing describing this
-        // book, so it says both facts instead of picking one.
-        unshelved = ctx.shelving == LibraryShelving.ITEM && ctx.series == LibraryDepth.FLAT,
+        // Shelved by nothing: no heading above this card says either fact, so the card says both.
+        //
+        // It used to also require a flat grouping, which made the same card describe itself three
+        // different ways depending on a setting that has nothing to do with it — two chips when
+        // flat, one chip and the author in plain text underneath when grouped. Whether books are
+        // stacked into series is a question about the LIST; whether a heading already names the
+        // author is a question about this card, and only the second one is this rule's business.
+        unshelved = ctx.shelving == LibraryShelving.ITEM,
     )
 
 /** The same, for a shelf: what most of its books agree on. */
 private fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
-    metaChipFor(series.books.shelfGenres(), series.author, ctx.shelving)
+    metaChipFor(
+        series.books.shelfGenres(),
+        series.author,
+        ctx.shelving,
+        // Same rule as a book's: a shelf card standing in an unshelved list has no heading over it
+        // either, and two cards side by side should not describe themselves differently.
+        unshelved = ctx.shelving == LibraryShelving.ITEM,
+    )
 
 /**
  * The chip an OPENED shelf wears: what it is, rather than what it is about.

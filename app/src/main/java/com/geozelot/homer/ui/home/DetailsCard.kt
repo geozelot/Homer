@@ -129,67 +129,61 @@ private fun Fact(label: String, value: String?, onTap: (() -> Unit)? = null) {
  * one row reading "Krimi · Thriller · Hörspiel · Jugend", where only the first was tappable and
  * nothing said so.
  */
-private data class DetailChip(
-    val icon: ImageVector,
-    /** What kind of fact this is — "Author", "Genre" — set in front of the value. */
-    val category: String,
-    val label: String,
-    val token: FilterToken,
-)
+private data class DetailChip(val icon: ImageVector, val label: String, val token: FilterToken)
+
+private fun chip(icon: ImageVector, facet: FilterFacet, label: String, value: String) =
+    DetailChip(icon, label, FilterToken(facet, value))
 
 /**
- * A chip, with its category taken from the facet it filters on.
+ * One category of filterable facts: its name in the label column, its values as chips beside it.
  *
- * The facet already owns that word — it is what the filter pills say, and it is translated — so
- * spelling it out here is reading it from one place rather than writing a second set of labels
- * that can drift from the first.
+ * The category is a COLUMN, not part of the chip. Inside the pill it repeated itself once per
+ * value — a book with four genres said "Genre" four times — and it read as part of each value
+ * rather than as the heading of a group. In the column it is said once, and it lines up with every
+ * other labelled fact on the card, which is what makes the chips look like an answer to the same
+ * kind of question rather than a different device.
  */
-@Composable
-private fun chip(icon: ImageVector, facet: FilterFacet, label: String, value: String) =
-    DetailChip(icon, stringResource(facet.label), label, FilterToken(facet, value))
-
-/** The block of them, wrapping as it needs to. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailChips(chips: List<DetailChip>, onFilter: (FilterToken) -> Unit) {
+private fun DetailChipRow(label: String, chips: List<DetailChip>, onFilter: (FilterToken) -> Unit) {
     if (chips.isEmpty()) return
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        chips.forEach { chip ->
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Surface2)
-                    .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
-                    .clickable { onFilter(chip.token) }
-                    .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Icon(chip.icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
-                // Mark, category, value. The mark alone carries it on a library card, where there
-                // is no room for more and the reader is scanning; here they are reading, one card
-                // at a time, and the word removes the last doubt about which fact is which — a
-                // name is a name whether it belongs to a person, a series or a genre.
-                Text(
-                    chip.category,
-                    color = Faint,
-                    fontSize = 10.sp,
-                    lineHeight = 13.sp,
-                    maxLines = 1,
-                )
-                Text(
-                    chip.label,
-                    color = Muted,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        // The same 96dp column [Fact] uses, so a chip row and a text row share one left edge for
+        // their values.
+        Text(
+            label,
+            color = Faint,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.width(96.dp).padding(end = 10.dp, top = 3.dp),
+        )
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            chips.forEach { chip ->
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Surface2)
+                        .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
+                        .clickable { onFilter(chip.token) }
+                        .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(chip.icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
+                    Text(
+                        chip.label,
+                        color = Muted,
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -266,58 +260,75 @@ fun BookDetailsCard(
 
                 FactDivider()
 
-                // What this book IS, as chips — every one of them a filter. The label filtered ON
-                // is the stored value, not the rendered one: a language chip reads "German" and
+                // What this book IS, one category to a row: the name in the label column, its
+                // values as chips beside it. Every chip is a filter, and the value it filters ON is
+                // the stored one rather than the rendered one — a language chip reads "German" and
                 // filters `de`, a genre chip reads "Krimi" and filters the canonical key.
                 //
-                // One chip per genre and one per tag, rather than one row listing them: a book with
-                // four genres used to be a single row where only the first was tappable and nothing
-                // said which.
-                DetailChips(
-                    buildList {
-                        // Ordered: who wrote it, what it is part of, what it is in, what it is
-                        // about. Widening from the book outwards, then the two facts that classify
-                        // it — the same reading order the player's header follows.
+                // Ordered: who wrote it, what it is part of, what it is in, what it is about.
+                // Widening from the book outwards, then the two facts that classify it.
+                DetailChipRow(
+                    stringResource(FilterFacet.AUTHOR.label),
+                    listOfNotNull(
                         book.author?.takeIf { it.isNotBlank() }?.let {
-                            add(chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it))
-                        }
+                            chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                        },
+                    ),
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.SERIES.label),
+                    listOfNotNull(
                         book.series?.takeIf { it.isNotBlank() }?.let { name ->
-                            add(
-                                chip(
-                                    HomerIcons.SeriesBracket,
-                                    FilterFacet.SERIES,
-                                    book.seriesLine(context) ?: name,
-                                    name,
-                                ),
+                            chip(
+                                HomerIcons.SeriesBracket,
+                                FilterFacet.SERIES,
+                                book.seriesLine(context) ?: name,
+                                name,
                             )
-                        }
+                        },
+                    ),
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.COLLECTION.label),
+                    listOfNotNull(
                         book.collection?.takeIf { it.isNotBlank() }?.let { name ->
-                            add(
-                                chip(
-                                    HomerIcons.CollectionBracket,
-                                    FilterFacet.COLLECTION,
-                                    book.collectionLine(context) ?: name,
-                                    name,
-                                ),
+                            chip(
+                                HomerIcons.CollectionBracket,
+                                FilterFacet.COLLECTION,
+                                book.collectionLine(context) ?: name,
+                                name,
                             )
-                        }
+                        },
+                    ),
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.LANGUAGE.label),
+                    listOfNotNull(
                         book.language?.takeIf { it.isNotBlank() }?.let {
-                            add(
-                                chip(
-                                    Icons.Filled.Language,
-                                    FilterFacet.LANGUAGE,
-                                    BookLanguage.displayName(it, locale),
-                                    it,
-                                ),
+                            chip(
+                                Icons.Filled.Language,
+                                FilterFacet.LANGUAGE,
+                                BookLanguage.displayName(it, locale),
+                                it,
                             )
-                        }
-                        book.genres.forEach {
-                            add(chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it))
-                        }
-                        book.tags.forEach {
-                            add(chip(Icons.Filled.Tag, FilterFacet.TAG, it, it))
-                        }
-                    },
+                        },
+                    ),
+                    onFilter,
+                )
+                // One chip per genre and per tag, rather than one row listing them: a book with
+                // four genres used to be a single value where only the first was tappable and
+                // nothing said which.
+                DetailChipRow(
+                    stringResource(FilterFacet.GENRE.label),
+                    book.genres.map { chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it) },
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.TAG.label),
+                    book.tags.map { chip(Icons.Filled.Tag, FilterFacet.TAG, it, it) },
                     onFilter,
                 )
 
@@ -393,38 +404,48 @@ fun SeriesDetailsCard(
 
                 FactDivider()
 
-                // The same block a book gets, filled with what a shelf has: who wrote it, the
-                // threads inside it, everything its books are about. Chips throughout, because
-                // every one of them narrows the library the same way a book's do.
-                DetailChips(
-                    buildList {
+                // The same rows a book gets, filled with what a shelf has: who wrote it, the
+                // threads inside it, everything its books are about.
+                DetailChipRow(
+                    stringResource(FilterFacet.AUTHOR.label),
+                    listOfNotNull(
                         series.author?.takeIf { it.isNotBlank() }?.let {
-                            add(chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it))
-                        }
-                        // Only a collection has threads inside it to name, and only when they are
-                        // named. Each is its own chip: they are separate series, and a reader who
-                        // wants the Watch books wants the Watch books.
-                        if (series.isCollection) {
-                            series.books.mapNotNull { it.series }.distinct().forEach {
-                                add(chip(HomerIcons.SeriesBracket, FilterFacet.SERIES, it, it))
-                            }
-                        }
-                        series.books.mapNotNull { it.language }.distinct().forEach {
-                            add(
-                                chip(
-                                    Icons.Filled.Language,
-                                    FilterFacet.LANGUAGE,
-                                    BookLanguage.displayName(it, locale),
-                                    it,
-                                ),
-                            )
-                        }
-                        series.books.flatMap { it.genres }.distinct().forEach {
-                            add(chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it))
-                        }
-                        series.books.flatMap { it.tags }.distinct().forEach {
-                            add(chip(Icons.Filled.Tag, FilterFacet.TAG, it, it))
-                        }
+                            chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                        },
+                    ),
+                    onFilter,
+                )
+                // Only a collection has threads inside it to name, and only when they are named.
+                // Each is its own chip: they are separate series, and a reader who wants the Watch
+                // books wants the Watch books.
+                DetailChipRow(
+                    stringResource(FilterFacet.SERIES.label),
+                    if (series.isCollection) {
+                        series.books.mapNotNull { it.series }.distinct()
+                            .map { chip(HomerIcons.SeriesBracket, FilterFacet.SERIES, it, it) }
+                    } else {
+                        emptyList()
+                    },
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.LANGUAGE.label),
+                    series.books.mapNotNull { it.language }.distinct().map {
+                        chip(Icons.Filled.Language, FilterFacet.LANGUAGE, BookLanguage.displayName(it, locale), it)
+                    },
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.GENRE.label),
+                    series.books.flatMap { it.genres }.distinct().map {
+                        chip(HomerIcons.Genre, FilterFacet.GENRE, BookGenre.display(it, locale), it)
+                    },
+                    onFilter,
+                )
+                DetailChipRow(
+                    stringResource(FilterFacet.TAG.label),
+                    series.books.flatMap { it.tags }.distinct().map {
+                        chip(Icons.Filled.Tag, FilterFacet.TAG, it, it)
                     },
                     onFilter,
                 )
