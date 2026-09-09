@@ -107,6 +107,7 @@ import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.playback.VolumeMode
 import com.geozelot.homer.ui.components.EditableBook
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.home.BookDetailsCard
 import com.geozelot.homer.ui.home.BookListItem
 import com.geozelot.homer.ui.home.FilterToken
@@ -120,7 +121,6 @@ import com.geozelot.homer.ui.components.rememberTextWidth
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
-import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Danger
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.LineShelf
@@ -915,17 +915,14 @@ private fun BookHeader(
         // Reserved, like everything below it: a book with no author must not pull the title up.
         Box(modifier = Modifier.height(BookHeaderAuthorLine.scaled(scale)), contentAlignment = Alignment.Center) {
             book?.author?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    it,
-                    color = Muted,
-                    fontSize = 13.sp.scaled(scale, floor = 11f),
-                    lineHeight = 16.sp.scaled(scale, floor = 14f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { onFilter(FilterToken(FilterFacet.AUTHOR, it)) }
-                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                // A chip like the two below it. It was bare text, which made the one fact up here
+                // you can act on look like the one fact you cannot — and three things that all
+                // filter the library should not be drawn three different ways.
+                LineageChip(
+                    label = it,
+                    icon = HomerIcons.Author,
+                    scale = scale,
+                    onClick = { onFilter(FilterToken(FilterFacet.AUTHOR, it)) },
                 )
             }
         }
@@ -951,12 +948,8 @@ private fun BookHeader(
             book?.series?.takeIf { it.isNotBlank() }?.let {
                 LineageChip(
                     label = withVolume(it, book.seriesIndex),
-                    // The same hairline the collection wears. Two different borders made them read
-                    // as two different KINDS of thing, where they are one kind at two distances —
-                    // which the fill and the text tone already say, quietly.
-                    border = LineShelf,
-                    background = AmberSoft,
-                    text = Parchment,
+                    icon = HomerIcons.SeriesBracket,
+                    scale = scale,
                     onClick = { onFilter(FilterToken(FilterFacet.SERIES, it)) },
                 )
             }
@@ -965,9 +958,8 @@ private fun BookHeader(
             book?.collection?.takeIf { it.isNotBlank() }?.let {
                 LineageChip(
                     label = withVolume(it, book.collectionIndex),
-                    border = LineShelf,
-                    background = Surface2,
-                    text = Muted,
+                    icon = HomerIcons.CollectionBracket,
+                    scale = scale,
                     onClick = { onFilter(FilterToken(FilterFacet.COLLECTION, it)) },
                 )
             }
@@ -975,30 +967,54 @@ private fun BookHeader(
     }
 }
 
-/** One of the two relation chips — see [BookHeader] for why they differ in weight. */
+/**
+ * One fact about the book, as a chip: a mark saying which kind of fact, and its value.
+ *
+ * ## One style for all three
+ *
+ * They were drawn three ways — the author as bare text, the series on the accent, the collection
+ * quieter — which said the three were three different sorts of thing. They are not: each is one
+ * fact about this book, and each narrows the library to it. The mark is what distinguishes them
+ * now, which is what a mark is for, and it leaves the chips free to be identical.
+ *
+ * ## Why the accent went
+ *
+ * A filled amber chip is what Homer uses for a filter that is ON. None of these is on; each is an
+ * offer. Wearing the accent, the series chip claimed the library was already narrowed to it.
+ */
 @Composable
 private fun LineageChip(
     label: String,
-    border: androidx.compose.ui.graphics.Color,
-    background: androidx.compose.ui.graphics.Color,
-    text: androidx.compose.ui.graphics.Color,
+    icon: ImageVector,
+    scale: Float,
     onClick: () -> Unit,
 ) {
-    Text(
-        label,
-        color = text,
-        fontSize = 11.sp,
-        lineHeight = 13.sp,
-        fontWeight = FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+    Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(background)
-            .border(1.dp, border, RoundedCornerShape(999.dp))
+            .background(Surface2)
+            .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 2.dp),
-    )
+            .padding(start = 7.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = Faint,
+            modifier = Modifier.size(11.dp.scaled(scale)),
+        )
+        Text(
+            label,
+            color = Muted,
+            fontSize = 11.sp.scaled(scale, floor = 10f),
+            lineHeight = 13.sp.scaled(scale, floor = 12f),
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /** "Helgoland, Volume 1", or just "Helgoland" where the book carries no number in it. */

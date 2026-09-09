@@ -2387,6 +2387,7 @@ private fun SeriesGridCard(
             // A badge is furniture on the ITEM's cover space, and the stack is a drawing inside that
             // space — running off the cell's own edge is what makes a badge read as part of the card.
             ShelfBadge(
+                isCollection = series.isCollection,
                 count = series.books.size,
                 modifier = Modifier.align(Alignment.TopStart),
                 size = BadgeSize.LARGE,
@@ -2937,6 +2938,7 @@ private fun SeriesShelfRow(
                 // the cover anyway ("8 books"), and the same number twice on one row two centimetres
                 // apart is not twice as clear.
                 ShelfBadge(
+                    isCollection = series.isCollection,
                     modifier = Modifier.align(Alignment.TopStart),
                     size = BadgeSize.SMALL,
                 )

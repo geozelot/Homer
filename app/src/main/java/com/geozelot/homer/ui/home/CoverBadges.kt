@@ -237,34 +237,37 @@ internal fun OfflineBadge(
  *
  * ## One mark for a series and for a collection
  *
- * It used to be two: a shelf of books for a collection, a single open book for a series. The
- * distinction cost more than it bought. At badge size the two glyphs were separated by detail that
- * had already dissolved, the open book read as *one* book being read — the opposite of the claim a
- * shelf badge makes — and the framed shelf became a filled square. Meanwhile the question the badge
- * exists to answer is "is this one thing or several", which both kinds answer the same way. Which
- * KIND it is, when that matters, is named in words on the details card and by the collection chip in
- * the control bar.
+ * It was two marks, then one, and is two again — and the difference is what the marks are made OF.
  *
- * [HomerIcons.Spines] — three upright spines with a bookmark notch — because it is the only
- * candidate that still reads as *books* at 13dp. The notch is the part that goes soft first; three
- * uprights is what survives, and three uprights is the whole message.
+ * The first pair was a shelf of books and an open book: two pictures whose distinction lived in
+ * detail that had already dissolved at this size, and one of which read as a single book being
+ * read, the opposite of what a shelf badge claims. So it collapsed to [HomerIcons.Spines] for both,
+ * on the grounds that the question a badge answers is "one thing or several", which both kinds
+ * answer the same way.
  *
- * Drawn by Homer rather than taken from the Material set. It shipped as `CollectionsBookmark` on the
- * strength of the name matching the description of the reviewed mark, and that icon is a different
- * shape — so the thing on the device was never the thing that was approved. See [HomerIcons].
+ * The pair here is not a second attempt at pictures. A series is a bracket holding a book; a
+ * collection is a bracket holding a bracket holding a book. The distinction is structural — one
+ * nesting level against two — so it survives on silhouette, which is the only thing that does
+ * survive at 13dp. What a picture could not carry, a shape can.
+ *
+ * Drawn by Homer rather than taken from the Material set. The first pair shipped as
+ * `CollectionsBookmark` on the strength of the name matching the description of the reviewed mark,
+ * and that icon is a different shape — so what was on the device was never what was approved. See
+ * [HomerIcons].
  *
  * [count] is omitted on a list row, where the meta line beside the cover already says "8 books" and
  * a badge repeating it would put the same number twice on one row two centimetres apart.
  */
 @Composable
 internal fun ShelfBadge(
+    isCollection: Boolean,
     count: Int? = null,
     corner: CoverCorner = CoverCorner.TOP_START,
     modifier: Modifier = Modifier,
     size: BadgeSize = BadgeSize.LARGE,
 ) {
     CoverBadge(corner, modifier, size) {
-        BadgeIcon(HomerIcons.Spines, size)
+        BadgeIcon(if (isCollection) HomerIcons.CollectionShelf else HomerIcons.SeriesShelf, size)
         count?.let { BadgeText(it.toString(), size) }
     }
 }

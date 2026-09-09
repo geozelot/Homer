@@ -13,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -46,7 +47,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import com.geozelot.homer.R
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.geozelot.homer.data.metadata.BookGenre
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
@@ -185,6 +188,25 @@ internal fun metaChipFor(
     }
 }
 
+/**
+ * The mark a chip wears: what kind of fact it carries.
+ *
+ * The shelf kind resolves further, because "this is in a collection" and "this is in a series" are
+ * two different claims wearing one [MetaChipKind] — and they are exactly the two the bracket family
+ * exists to tell apart.
+ */
+@Composable
+private fun chipIcon(kind: MetaChipKind, value: String): ImageVector = when (kind) {
+    MetaChipKind.GENRE -> HomerIcons.Genre
+    MetaChipKind.AUTHOR -> HomerIcons.Author
+    MetaChipKind.SHELF ->
+        if (BookState.from(value) == BookState.IN_COLLECTION) {
+            HomerIcons.CollectionBracket
+        } else {
+            HomerIcons.SeriesBracket
+        }
+}
+
 /** Whether [metaChipFor] took the author, so a meta line knows not to print it again. */
 internal fun Pair<MetaChipKind, List<String>>?.carriesAuthor(): Boolean =
     this?.first == MetaChipKind.AUTHOR
@@ -263,9 +285,19 @@ private fun MetaChip(
                 .clickable {
                     if (values.size > 1) open = true else onFilter(kind, values.first())
                 }
-                .padding(horizontal = 6.dp),
+                .padding(start = 4.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // The mark says WHICH KIND of fact this is, which the words alone cannot: "Krimi" and
+            // "Frank Schätzing" are both just names until something says one is a genre and the
+            // other a person. It costs 10dp and buys the reader the distinction at a glance.
+            Icon(
+                chipIcon(kind, values.first()),
+                contentDescription = null,
+                tint = Faint,
+                modifier = Modifier.size(9.dp).padding(end = 0.dp),
+            )
+            Spacer(Modifier.size(3.dp))
             Text(
                 label(values.first()),
                 color = Muted,
