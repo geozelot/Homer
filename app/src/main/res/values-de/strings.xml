@@ -140,6 +140,7 @@
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Suchen</string>
     <string name="home_cd_settings">Einstellungen</string>
+    <string name="home_cd_help">Was dieser Bildschirm zeigt</string>
     <string name="home_cd_close_search">Suche schließen</string>
     <string name="home_search_placeholder">Titel, Autor, Genre, Schlagwort…</string>
 
@@ -672,4 +673,37 @@
         <item quantity="one">%1$d offline</item>
         <item quantity="other">%1$d offline</item>
     </plurals>
+    <string name="help_library_title">Deine Bibliothek</string>
+    <string name="help_library_lead_grid">Cover, darunter was Homer über jedes Buch weiß. Ein Regal — eine Serie oder eine Kollektion — ist eine Karte für mehrere Bücher.</string>
+    <string name="help_library_lead_list">Ein Buch pro Zeile. Ein Regal — eine Serie oder eine Kollektion — ist eine Zeile für mehrere Bücher.</string>
+    <string name="help_player_title">Der Player</string>
+    <string name="help_player_lead">Das Buch, wo du darin bist, und wie es abgespielt wird. Alles über dem Cover betrifft das Buch, alles darunter dieses Hören.</string>
+
+    <string name="help_section_marks">Was die Zeichen bedeuten</string>
+    <string name="help_section_covers">Auf den Covern</string>
+    <string name="help_section_doing">Was du hier tun kannst</string>
+
+    <string name="help_mark_series">Eine Serie: Bücher in fester Reihenfolge. Die Klammer hält eines.</string>
+    <string name="help_mark_collection">Eine Kollektion: mehrere Serien oder Bücher unter einem Namen. Eine Klammer in einer Klammer.</string>
+    <string name="help_mark_author">Wer es geschrieben hat.</string>
+    <string name="help_mark_genre">Worum es geht. Ein Buch kann mehrere haben; der Chip zeigt das erste und eine Anzahl.</string>
+    <string name="help_mark_series_player">Die Serie, zu der dieses Buch gehört, und seine Nummer darin.</string>
+    <string name="help_mark_collection_player">Die Kollektion, in der diese Serie steht.</string>
+
+    <string name="help_cover_shelf">Oben links auf einem Regal: wie viele Bücher darin stehen.</string>
+    <string name="help_cover_index">Oben links auf einem Buch: wo es im Regal steht, auf dem es liegt.</string>
+    <string name="help_cover_index_off">Wo ein Buch in seiner Serie steht — bei einzelner Anordnung ausgeblendet, weil das zugehörige Regal gar nicht zu sehen ist.</string>
+
+    <string name="help_do_open_shelf">Tippe ein Regal an, um es zu öffnen; tippe die Kopfzeile erneut an, um es zu schließen.</string>
+    <string name="help_do_chip_filter">Tippe einen Chip an, um die Bibliothek darauf einzugrenzen. Ein Genre-Chip mit Anzahl zeigt angetippt die übrigen.</string>
+    <string name="help_do_long_press">Halte ein Buch gedrückt für Details, Lesezeichen und Offline.</string>
+    <string name="help_do_search">Die Suche filtert beim Tippen, und ihre Vorschläge werden zu Filtern, die sich kombinieren lassen.</string>
+    <string name="help_do_arrange">Anordnen bestimmt, wonach die Bibliothek aufgeteilt und wie sie sortiert wird.</string>
+    <string name="help_do_arrange_shelved">Anordnen bestimmt die Regale — die Überschriften oben zeigen, worauf es steht.</string>
+
+    <string name="help_player_chapters">Tippe die Kapitel-Pille an für die ganze Liste, mit Länge und Beginn jedes Kapitels.</string>
+    <string name="help_player_settings">Tempo, Lautstärke und Stille kürzen stehen zusammen in der Mitte der unteren Reihe.</string>
+    <string name="help_player_sleep">Der Einschlaftimer läuft auf dem Cover und in der Benachrichtigung. Schütteln setzt fort, wenn er abgelaufen ist.</string>
+    <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest.</string>
+    <string name="help_player_swipe">Wische auf dem Cover nach unten, um den Player zu verlassen, ohne ihn zu stoppen.</string>
 </resources>

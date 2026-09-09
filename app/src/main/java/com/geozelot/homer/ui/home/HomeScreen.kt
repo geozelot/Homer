@@ -53,6 +53,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -142,6 +143,7 @@ import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.CoverImage
 import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
+import com.geozelot.homer.ui.components.LibraryHelpCard
 import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.EditBookDialog
@@ -212,6 +214,7 @@ fun HomeScreen(
     // live row is re-derived from `entries` below on each recomposition.
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
     var detailsId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
     var bookmarksId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -384,7 +387,9 @@ fun HomeScreen(
     Column(modifier = modifier.fillMaxSize()) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
-        Box(modifier = dismissSearch) { TopBar(onSettings = onOpenSettings) }
+        Box(modifier = dismissSearch) {
+            TopBar(onHelp = { showHelp = true }, onSettings = onOpenSettings)
+        }
 
         // The Currently-listening shelf is pinned here — above the scrolling library rather than
         // being its first item — and is now ONE fixed size whatever the library does beneath it; see
@@ -633,6 +638,19 @@ fun HomeScreen(
         )
     }
 
+    if (showHelp) {
+        // Answering for the arrangement actually on screen. A card that described every possible
+        // arrangement would describe none of them: the reader is looking at ONE, and the marks in
+        // front of them are the ones worth decoding.
+        LibraryHelpCard(
+            gridView = gridView,
+            shelved = shelfMode != LibraryShelving.ITEM,
+            stacked = seriesMode != LibraryDepth.FLAT,
+            numbered = seriesMode != LibraryDepth.FLAT,
+            onDismiss = { showHelp = false },
+        )
+    }
+
     entries.findSeries(editingSeriesKey)?.let { series ->
         ShelfEditDialog(
             series = series,
@@ -738,7 +756,7 @@ private class BookActions(
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(onSettings: () -> Unit) {
+private fun TopBar(onHelp: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -750,6 +768,16 @@ private fun TopBar(onSettings: () -> Unit) {
         run {
             Wordmark(stringResource(R.string.app_name))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Before settings, because it explains the screen you are on rather than taking
+                // you off it — and because a reader who does not know what a bracket means will
+                // not go looking for the answer under a tuning fork.
+                IconButton(onClick = onHelp) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.HelpOutline,
+                        contentDescription = stringResource(R.string.home_cd_help),
+                        tint = Muted,
+                    )
+                }
                 // Straight to settings. This was an overflow menu holding exactly one item ever
                 // since the library folder, sync and storage became their own destinations — two
                 // taps and a popup to reach the only thing in it.

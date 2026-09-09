@@ -139,6 +139,7 @@
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Search</string>
     <string name="home_cd_settings">Settings</string>
+    <string name="home_cd_help">What this screen shows</string>
     <string name="home_cd_close_search">Close search</string>
     <string name="home_search_placeholder">Title, author, genre, tag…</string>
 
@@ -705,4 +706,38 @@
         <item quantity="one">%1$d offline</item>
         <item quantity="other">%1$d offline</item>
     </plurals>
+    <!-- The help cards: what a screen shows, what its marks mean, what can be done with it. -->
+    <string name="help_library_title">Your library</string>
+    <string name="help_library_lead_grid">Covers, with what Homer knows about each book underneath. A shelf — a series or a collection — is one card standing for several books.</string>
+    <string name="help_library_lead_list">One book to a row. A shelf — a series or a collection — is one row standing for several books.</string>
+    <string name="help_player_title">The player</string>
+    <string name="help_player_lead">The book, where you are in it, and how it plays. Everything above the cover is about the book; everything below it is about this listening.</string>
+
+    <string name="help_section_marks">What the marks mean</string>
+    <string name="help_section_covers">On the covers</string>
+    <string name="help_section_doing">What you can do here</string>
+
+    <string name="help_mark_series">A series: books that run in order. The bracket holds one thing.</string>
+    <string name="help_mark_collection">A collection: several series, or several books, gathered under one name. A bracket inside a bracket.</string>
+    <string name="help_mark_author">Who wrote it.</string>
+    <string name="help_mark_genre">What it is about. A book can carry several; the chip shows the first and a count.</string>
+    <string name="help_mark_series_player">The series this book belongs to, and its number in it.</string>
+    <string name="help_mark_collection_player">The collection that series sits in.</string>
+
+    <string name="help_cover_shelf">Top left of a shelf: how many books are on it.</string>
+    <string name="help_cover_index">Top left of a book: where it sits in the shelf it is on.</string>
+    <string name="help_cover_index_off">Where a book sits in its series — hidden while the arrangement is flat, because the shelf it counts against is not on screen.</string>
+
+    <string name="help_do_open_shelf">Tap a shelf to open it; tap its header again to close.</string>
+    <string name="help_do_chip_filter">Tap any chip to narrow the library to it. Tap a genre chip carrying a count to see the rest.</string>
+    <string name="help_do_long_press">Long-press a book for details, bookmarks, and offline.</string>
+    <string name="help_do_search">Search filters as you type, and its suggestions become filters you can stack.</string>
+    <string name="help_do_arrange">Arrange changes what the library is broken into and how it is sorted.</string>
+    <string name="help_do_arrange_shelved">Arrange changes the shelving — the headings above are what it is set to.</string>
+
+    <string name="help_player_chapters">Tap the chapter pill for the whole list, with each chapter\'s length and where it begins.</string>
+    <string name="help_player_settings">Speed, volume and cut-silence sit together in the middle of the bottom row.</string>
+    <string name="help_player_sleep">The sleep timer counts down on the cover and in the notification. Shake to carry on once it has run out.</string>
+    <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
+    <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
 </resources>
