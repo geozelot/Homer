@@ -550,11 +550,15 @@ private const val TRANSPORT_NATURAL_DP = 348f
  * hit accurately is worse than one that scrolls.
  */
 internal fun playerScale(viewportHeight: Dp, viewportWidth: Dp): Float {
+    // Stepped down a notch after the leftover-cover change: with the cluster no longer competing
+    // with a fixed cover fraction, what was left was simply that the transport is large in absolute
+    // terms — an 84dp disc is an 84dp disc on a small screen as much as on a tablet, and on the
+    // smaller ones it dominated a player it was only supposed to sit at the bottom of.
     val byHeight = when {
-        viewportHeight >= 760.dp -> 1f
-        viewportHeight >= 680.dp -> 0.92f
-        viewportHeight >= 600.dp -> 0.84f
-        else -> 0.76f
+        viewportHeight >= 800.dp -> 1f
+        viewportHeight >= 700.dp -> 0.88f
+        viewportHeight >= 620.dp -> 0.80f
+        else -> 0.72f
     }
     val byWidth = (viewportWidth.value / TRANSPORT_NATURAL_DP).coerceAtMost(1f)
     return minOf(byHeight, byWidth).coerceAtLeast(0.7f)

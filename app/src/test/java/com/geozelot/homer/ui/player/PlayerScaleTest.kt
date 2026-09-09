@@ -29,7 +29,16 @@ class PlayerScaleTest {
 
     @Test
     fun `a short viewport shrinks the cluster`() {
-        assertTrue(playerScale(viewportHeight = 620.dp, viewportWidth = 400.dp) < 0.9f)
+        assertTrue(playerScale(viewportHeight = 620.dp, viewportWidth = 400.dp) <= 0.8f)
+    }
+
+    @Test
+    fun `a mid-sized phone is shrunk noticeably, not marginally`() {
+        // The case that was still wrong after the cover started taking the leftover: everything
+        // fitted, and the transport was simply too large for the screen it was on.
+        val scale = playerScale(viewportHeight = 700.dp, viewportWidth = 400.dp)
+        assertTrue("expected a real reduction, got $scale", scale <= 0.9f)
+        assertTrue("play button should come in under 76dp", 84f * scale <= 76f)
     }
 
     @Test
