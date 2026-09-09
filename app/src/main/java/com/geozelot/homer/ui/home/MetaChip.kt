@@ -3,23 +3,27 @@ package com.geozelot.homer.ui.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -339,22 +343,32 @@ private fun MetaChip(
                 )
             }
         }
-        // The expansion, as the chip growing sideways rather than as a menu dropping out of it.
+        // The expansion, as the chip growing out of itself — and the direction it grows is the
+        // direction the item has room in.
         //
-        // A `Popup` because it has to be drawn over the grid, not in it: anything laid out inline
+        // A `Popup` because it has to be drawn over the list, not in it: anything laid out inline
         // would push every card below it down to show one card's genres, and the whole arrangement
-        // exists to keep those cards where they are. The provider pins it to the chip's own line and
-        // to the window's left edge, so what a reader sees is this chip stretching across the
-        // screen — which also settles where it should sit when the tapped card is in the right-hand
-        // column: nowhere in particular, because it spans the whole width either way.
+        // exists to keep those cards where they are.
+        //
+        //  - **Grid.** Upwards, over the cover, and the tapped chip STAYS WHERE IT IS while the
+        //    rest stack above it in reverse. The chip is the bottom of the stack rather than a
+        //    thing that vanished into a strip somewhere else, so the eye never loses it. A card has
+        //    height to grow into; it does not have width.
+        //  - **List.** Rightwards along the row, for exactly the mirrored reason: a row is one line
+        //    tall and the whole width of the screen.
+        //
+        // Either way the strip is bounded by the item and scrolls inside it, rather than spanning
+        // the window — a full-width band was legible but said nothing about WHICH card had been
+        // asked.
         if (open) {
             Popup(
-                popupPositionProvider = MetaChipStripPosition,
+                popupPositionProvider = if (ctx.gridView) MetaChipStackPosition else MetaChipRowPosition,
                 onDismissRequest = { open = false },
             ) {
                 MetaChipStrip(
                     values = values,
                     label = label,
+                    upwards = ctx.gridView,
                     onPick = {
                         open = false
                         onFilter(kind, it)
@@ -367,21 +381,43 @@ private fun MetaChip(
 }
 
 /**
- * Pins the strip to the chip's line, at the window's left edge.
+ * Grid: the stack stands ON the chip, growing upwards.
  *
- * The y comes from the anchor and the x does not — that asymmetry IS the effect: the strip appears
- * exactly where the chip is, and reaches across everything either side of it.
+ * Its bottom edge is the chip's bottom edge, so the chip the reader tapped is the last row of the
+ * stack and has not moved — everything else appeared above it. Left-aligned with the chip for the
+ * same reason. Clamped to the window at the top, which is what a card near the header does instead
+ * of drawing off-screen; the strip scrolls inside itself when it runs out of room.
  */
-private object MetaChipStripPosition : PopupPositionProvider {
+private object MetaChipStackPosition : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset = IntOffset(
-        x = 0,
-        // Centred on the chip rather than hung below it, so the strip replaces the chip in place
-        // instead of appearing to be a second thing underneath it.
+        x = anchorBounds.left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+        y = (anchorBounds.bottom - popupContentSize.height)
+            .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+    )
+}
+
+/**
+ * List: the strip runs rightwards from the chip, on the chip's own line.
+ *
+ * The row has the width, so the expansion takes it. Starting at the chip's left edge rather than at
+ * the window's means the strip begins where the reader is looking, and the card it belongs to is
+ * never in doubt.
+ */
+private object MetaChipRowPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset(
+        x = anchorBounds.left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+        // Centred on the chip's line, so the strip replaces the chip in place instead of appearing
+        // to be a second thing under it.
         y = (anchorBounds.top - (popupContentSize.height - anchorBounds.height) / 2)
             .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
     )
@@ -398,50 +434,54 @@ private object MetaChipStripPosition : PopupPositionProvider {
 private fun MetaChipStrip(
     values: List<String>,
     label: @Composable (String) -> String,
+    /** Grid: a column growing up from the chip. List: a row running right from it. */
+    upwards: Boolean,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val width = LocalConfiguration.current.screenWidthDp.dp
+    val state = remember { MutableTransitionState(false).apply { targetState = true } }
+    val shape = RoundedCornerShape(10.dp)
+    // Bounded by the item it belongs to, not by the window. A grid stack is a card wide; a list
+    // strip may run most of the row but stops short of its end, so the card underneath is still
+    // visibly the one being asked about.
+    val maxLength = LocalConfiguration.current.let {
+        if (upwards) it.screenHeightDp.dp * 0.5f else it.screenWidthDp.dp * 0.8f
+    }
     AnimatedVisibility(
-        visibleState = remember { MutableTransitionState(false).apply { targetState = true } },
-        enter = expandHorizontally(expandFrom = Alignment.Start) + fadeIn(),
-        exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut(),
+        visibleState = state,
+        // Growing from the corner the chip is in, so the expansion reads as the chip opening rather
+        // than as a panel arriving.
+        enter = (if (upwards) expandVertically(expandFrom = Alignment.Bottom) else expandHorizontally(expandFrom = Alignment.Start)) + fadeIn(),
+        exit = (if (upwards) shrinkVertically(shrinkTowards = Alignment.Bottom) else shrinkHorizontally(shrinkTowards = Alignment.Start)) + fadeOut(),
     ) {
-        Row(
-            modifier = Modifier
-                .width(width)
-                .background(Surface2)
-                .border(1.dp, Line)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            for (value in values) {
+        val content: @Composable () -> Unit = {
+            // REVERSED going up, so the tapped chip — the primary, which is what the card was
+            // showing — ends up at the bottom, exactly where it already was. Everything else
+            // appeared above it and nothing the reader was looking at moved.
+            val ordered = if (upwards) values.asReversed() else values
+            for (value in ordered) {
+                val primary = value == values.first()
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(Surface1)
-                        .border(1.dp, if (value == values.first()) LineShelf else Line, RoundedCornerShape(999.dp))
+                        .border(1.dp, if (primary) LineShelf else Line, RoundedCornerShape(999.dp))
                         .clickable { onPick(value) }
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                 ) {
                     Text(
                         label(value),
-                        color = if (value == values.first()) Parchment else Muted,
+                        color = if (primary) Parchment else Muted,
                         fontSize = 11.sp,
                         lineHeight = 11.sp,
                         maxLines = 1,
                     )
                 }
             }
-            // The way out that is not "tap somewhere else" — the strip covers the row it came from,
-            // so the card underneath is not a safe place to aim at.
+            // The way out that is not "tap somewhere else" — the strip covers what it came from,
+            // so the card underneath is not a safe place to aim at. The glyph stays 16dp; the
+            // target is 28.
             Box(
-                // The glyph stays 16dp; the target is 28. This is the strip's stated way out — the
-                // row it came from is covered, so there is nowhere safe to tap instead — and a
-                // 16dp target for the one control that has to be hittable was the wrong size for
-                // the job it is doing.
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
                     .clickable(onClick = onDismiss)
@@ -454,6 +494,31 @@ private fun MetaChipStrip(
                     modifier = Modifier.size(16.dp),
                 )
             }
+        }
+        if (upwards) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = maxLength)
+                    .clip(shape)
+                    .background(Surface2)
+                    .border(1.dp, Line, shape)
+                    .verticalScroll(rememberScrollState(), reverseScrolling = true)
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.Start,
+            ) { content() }
+        } else {
+            Row(
+                modifier = Modifier
+                    .widthIn(max = maxLength)
+                    .clip(shape)
+                    .background(Surface2)
+                    .border(1.dp, Line, shape)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { content() }
         }
     }
 }

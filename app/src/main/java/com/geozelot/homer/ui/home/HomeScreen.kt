@@ -539,6 +539,7 @@ fun HomeScreen(
                         ctx = RowContext(
                             shelving = shelfMode,
                             series = seriesMode,
+                            gridView = gridView,
                             locale = interfaceLocale,
                         ),
                         expanded = expanded,
@@ -2240,6 +2241,13 @@ internal fun volumeIndexFor(book: BookListItem, ctx: RowContext): Int? = when {
 internal data class RowContext(
     val shelving: LibraryShelving,
     val series: LibraryDepth,
+    /**
+     * Which view these rows are being drawn in.
+     *
+     * Only the expanding genre chip asks: a card has height to grow into and a row has width, so
+     * the two expand in different directions — see [MetaChipStrip].
+     */
+    val gridView: Boolean = true,
     /**
      * Whether the shelf these books are sitting on is counting the COLLECTION rather than the series.
      *
