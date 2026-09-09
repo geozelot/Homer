@@ -24,7 +24,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -69,9 +73,16 @@ private fun HelpSection(title: String, content: @Composable () -> Unit) {
     content()
 }
 
-/** A line of explanation, with the mark it is explaining set beside it. */
+/**
+ * A line of explanation, with the mark it is explaining set beside it.
+ *
+ * [category] names the thing before describing it — "Author — who wrote it" — because the mark and
+ * the sentence between them still leave the reader to infer the WORD, and the word is what they
+ * will see everywhere else in the app: on a details chip, on a filter pill, in the arrange menu.
+ * Naming it here is what ties the glyph to the rest of the vocabulary.
+ */
 @Composable
-private fun HelpMark(icon: ImageVector?, text: String, badge: String? = null) {
+private fun HelpMark(icon: ImageVector?, text: String, badge: String? = null, category: String? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         verticalAlignment = Alignment.Top,
@@ -96,7 +107,23 @@ private fun HelpMark(icon: ImageVector?, text: String, badge: String? = null) {
                 )
             }
         }
-        Text(text, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        Text(
+            text = if (category == null) {
+                AnnotatedString(text)
+            } else {
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = Parchment, fontWeight = FontWeight.SemiBold)) {
+                        append(category)
+                    }
+                    append(" — ")
+                    append(text)
+                }
+            },
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -153,10 +180,26 @@ fun LibraryHelpCard(
         )
 
         HelpSection(stringResource(R.string.help_section_marks)) {
-            HelpMark(HomerIcons.SeriesBracket, stringResource(R.string.help_mark_series))
-            HelpMark(HomerIcons.CollectionBracket, stringResource(R.string.help_mark_collection))
-            HelpMark(HomerIcons.Author, stringResource(R.string.help_mark_author))
-            HelpMark(HomerIcons.Genre, stringResource(R.string.help_mark_genre))
+            HelpMark(
+                HomerIcons.SeriesBracket,
+                stringResource(R.string.help_mark_series),
+                category = stringResource(R.string.filter_facet_series),
+            )
+            HelpMark(
+                HomerIcons.CollectionBracket,
+                stringResource(R.string.help_mark_collection),
+                category = stringResource(R.string.filter_facet_collection),
+            )
+            HelpMark(
+                HomerIcons.Author,
+                stringResource(R.string.help_mark_author),
+                category = stringResource(R.string.filter_facet_author),
+            )
+            HelpMark(
+                HomerIcons.Genre,
+                stringResource(R.string.help_mark_genre),
+                category = stringResource(R.string.filter_facet_genre),
+            )
         }
 
         HelpSection(stringResource(R.string.help_section_covers)) {
@@ -194,9 +237,21 @@ fun PlayerHelpCard(onDismiss: () -> Unit) {
         )
 
         HelpSection(stringResource(R.string.help_section_marks)) {
-            HelpMark(HomerIcons.Author, stringResource(R.string.help_mark_author))
-            HelpMark(HomerIcons.SeriesBracket, stringResource(R.string.help_mark_series_player))
-            HelpMark(HomerIcons.CollectionBracket, stringResource(R.string.help_mark_collection_player))
+            HelpMark(
+                HomerIcons.Author,
+                stringResource(R.string.help_mark_author),
+                category = stringResource(R.string.filter_facet_author),
+            )
+            HelpMark(
+                HomerIcons.SeriesBracket,
+                stringResource(R.string.help_mark_series_player),
+                category = stringResource(R.string.filter_facet_series),
+            )
+            HelpMark(
+                HomerIcons.CollectionBracket,
+                stringResource(R.string.help_mark_collection_player),
+                category = stringResource(R.string.filter_facet_collection),
+            )
         }
 
         HelpSection(stringResource(R.string.help_section_doing)) {

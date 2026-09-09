@@ -25,8 +25,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.geozelot.homer.R
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.geozelot.homer.data.metadata.BookGenre
@@ -368,6 +367,10 @@ private fun MetaChip(
             Popup(
                 popupPositionProvider = if (ctx.gridView) MetaChipStackPosition else MetaChipRowPosition,
                 onDismissRequest = { open = false },
+                // Focusable, which is what makes a tap anywhere else close it — an unfocusable
+                // popup lets touches through to the library underneath, so the strip stayed open
+                // while the tap it was ignoring opened a book behind it.
+                properties = PopupProperties(focusable = true),
             ) {
                 MetaChipStrip(
                     values = values,
@@ -377,7 +380,6 @@ private fun MetaChip(
                         open = false
                         onFilter(kind, it)
                     },
-                    onDismiss = { open = false },
                 )
             }
         }
@@ -441,7 +443,6 @@ private fun MetaChipStrip(
     /** Grid: a column growing up from the chip. List: a row running right from it. */
     upwards: Boolean,
     onPick: (String) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val state = remember { MutableTransitionState(false).apply { targetState = true } }
     val shape = RoundedCornerShape(10.dp)
@@ -481,22 +482,6 @@ private fun MetaChipStrip(
                         maxLines = 1,
                     )
                 }
-            }
-            // The way out that is not "tap somewhere else" — the strip covers what it came from,
-            // so the card underneath is not a safe place to aim at. The glyph stays 16dp; the
-            // target is 28.
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onDismiss)
-                    .padding(6.dp),
-            ) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.action_close),
-                    tint = Faint,
-                    modifier = Modifier.size(16.dp),
-                )
             }
         }
         if (upwards) {
