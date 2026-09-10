@@ -220,7 +220,13 @@ class PlaybackConnection @Inject constructor(
         onShake = ::extendSleepByPreference,
         onResume = ::resumeAfterSleep,
     )
-    private val positionSyncer = PositionSyncer(scope, playbackStateDao, homerSync, localMirror, ::positionSnapshot)
+    private val positionSyncer = PositionSyncer(
+        scope = scope,
+        playbackStateDao = playbackStateDao,
+        snapshot = ::positionSnapshot,
+        exportMirror = { localMirror.export() },
+        syncManifest = { force -> homerSync.sync(force) },
+    ).also { it.observeAppLifecycle() }
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
 
     /** " buffered=12s" — how much audio is in hand, the number that matters during a stall. */
@@ -266,6 +272,9 @@ class PlaybackConnection @Inject constructor(
                 events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
                 events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)
             if (visible) pushState()
+            // A seek is a deliberate act — persist it in the same event, not on the next poll
+            // tick, so a process death right after can't resume at the pre-seek position.
+            if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) positionSyncer.save()
             // Pausing is the natural checkpoint: persist and push it out. Forced, so the sync
             // throttle can never swallow the one update another device is waiting for.
             if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
@@ -285,11 +294,12 @@ class PlaybackConnection @Inject constructor(
             if (loading) return
             val auto = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
             sleepTimer.onChapterTransition(auto)
-            // Persist the boundary LOCALLY only. This used to push to the server on every chapter
-            // change — with 5-minute chapters that was a full manifest round trip every few
-            // minutes, and the radio ramp-up cost more battery than the bytes did. Pausing,
-            // backgrounding and app close still push.
-            if (auto) positionSyncer.save()
+            // Persist the boundary LOCALLY only — auto rollovers and manual skips alike, so a
+            // process death right after a skip resumes in the new chapter. This used to push to
+            // the server on every chapter change — with 5-minute chapters that was a full
+            // manifest round trip every few minutes, and the radio ramp-up cost more battery
+            // than the bytes did. Pausing, backgrounding and app close still push.
+            positionSyncer.save()
         }
     }
 
