@@ -88,6 +88,23 @@ class ArtworkBytes(val bytes: ByteArray) {
 }
 
 /**
+ * Which player events persist the position, as two rules that have to be read together.
+ *
+ * A jump lands in BOTH callbacks — a manual chapter skip is a seek, and an automatic rollover is a
+ * discontinuity — so whichever pair of answers these give, the sum across one event has to be
+ * exactly one. Reacting to everything wrote the same row twice at every chapter change; reacting to
+ * too little is what left a seek unsaved until the next fifteen-second poll, and a process death in
+ * between resumed at the wrong place. Pure and named so the pairing can be stated in a test rather
+ * than only in a comment (see PlaybackSaveRulesTest).
+ */
+internal fun savesOnDiscontinuity(reason: Int): Boolean =
+    reason == Player.DISCONTINUITY_REASON_SEEK
+
+/** @see savesOnDiscontinuity */
+internal fun savesOnTransition(reason: Int): Boolean =
+    reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
+
+/**
  * App-side bridge to [PlaybackService]. Lazily connects a [MediaController], exposes playback
  * as observable [state], and offers transport controls. Lives for the app's lifetime
  * (single-user, single playback session).
@@ -272,9 +289,6 @@ class PlaybackConnection @Inject constructor(
                 events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
                 events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)
             if (visible) pushState()
-            // A seek is a deliberate act — persist it in the same event, not on the next poll
-            // tick, so a process death right after can't resume at the pre-seek position.
-            if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) positionSyncer.save()
             // Pausing is the natural checkpoint: persist and push it out. Forced, so the sync
             // throttle can never swallow the one update another device is waiting for.
             if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
@@ -290,16 +304,36 @@ class PlaybackConnection @Inject constructor(
             pushState()
         }
 
+        /**
+         * A seek — persisted in the event that caused it rather than on the next poll tick, so a
+         * process death right after cannot resume at the pre-seek position.
+         *
+         * Only [Player.DISCONTINUITY_REASON_SEEK], which is the deliberate ones and covers a manual
+         * chapter skip (jumping to a chapter IS a seek). An automatic rollover is a discontinuity
+         * too, and [onMediaItemTransition] persists that boundary — reacting to both here wrote the
+         * same row twice at every chapter change.
+         */
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            if (loading) return
+            if (savesOnDiscontinuity(reason)) positionSyncer.save()
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (loading) return
             val auto = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
             sleepTimer.onChapterTransition(auto)
-            // Persist the boundary LOCALLY only — auto rollovers and manual skips alike, so a
-            // process death right after a skip resumes in the new chapter. This used to push to
-            // the server on every chapter change — with 5-minute chapters that was a full
-            // manifest round trip every few minutes, and the radio ramp-up cost more battery
-            // than the bytes did. Pausing, backgrounding and app close still push.
-            positionSyncer.save()
+            // Persist the boundary LOCALLY only. This used to push to the server on every chapter
+            // change — with 5-minute chapters that was a full manifest round trip every few
+            // minutes, and the radio ramp-up cost more battery than the bytes did. Pausing,
+            // backgrounding and app close still push.
+            //
+            // Only the AUTO rollover: a manual skip arrives here too, but it is a seek and
+            // [onPositionDiscontinuity] has already saved it.
+            if (savesOnTransition(reason)) positionSyncer.save()
         }
     }
 

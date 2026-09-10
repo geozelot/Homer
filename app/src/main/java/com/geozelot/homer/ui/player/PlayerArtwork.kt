@@ -37,8 +37,11 @@ import com.geozelot.homer.ui.theme.TabularSmall
 @Composable
 internal fun PlayerArtwork(
     model: Any?,
-    /** The sleep timer's remaining time, or null when none is running. */
-    sleepRemainingMs: Long?,
+    /**
+     * The sleep timer's remaining time, or null when none is running — read inside [SleepCountdown]
+     * ONLY, because it changes every second and this composable holds the cover.
+     */
+    sleepRemainingMs: () -> Long?,
     /** Collapse back to the mini-player, or null where there is nothing to collapse into — the
      *  docked pane of a two-pane layout, which is not covering anything. */
     onCollapse: (() -> Unit)?,
@@ -88,42 +91,52 @@ internal fun PlayerArtwork(
                 )
                 .clip(RoundedCornerShape(14.dp)),
         )
-        // The countdown, on the artwork.
-        //
-        // A running sleep timer is the one piece of state that changes what is ABOUT to happen
-        // rather than what is happening, and it had nowhere to be seen: the bottom row said "Sleep"
-        // whether one was running or not once the labels came off the glyphs, and the amber tint
-        // says a timer exists without saying how much of it is left.
-        //
-        // On the cover rather than beside it because the cover is the one region with space to
-        // spare, and because a number floating over the artwork reads as temporary — which it is.
-        // Seconds here, minutes in the notification: redrawing this costs nothing.
-        sleepRemainingMs?.let { remaining ->
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 14.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Studio.copy(alpha = 0.82f))
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    Icons.Filled.Bedtime,
-                    contentDescription = stringResource(R.string.player_sleep),
-                    tint = Amber,
-                    modifier = Modifier.size(13.dp),
-                )
-                Text(
-                    formatTime(remaining),
-                    // TabularSmall is the app's own "numbers that must not jitter" style, which is
-                    // exactly what a countdown is: without it the pill changes width every time a
-                    // 1 ticks past.
-                    style = TabularSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                    color = Amber,
-                )
-            }
+        SleepCountdown(sleepRemainingMs, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/**
+ * The countdown, on the artwork.
+ *
+ * A running sleep timer is the one piece of state that changes what is ABOUT to happen rather than
+ * what is happening, and it had nowhere to be seen: the bottom row said "Sleep" whether one was
+ * running or not once the labels came off the glyphs, and the amber tint says a timer exists
+ * without saying how much of it is left.
+ *
+ * On the cover rather than beside it because the cover is the one region with space to spare, and
+ * because a number floating over the artwork reads as temporary — which it is. Seconds here,
+ * minutes in the notification: redrawing THIS costs nothing.
+ *
+ * A composable of its own so that stays true. The remaining time changes every second; read in
+ * [PlayerArtwork]'s body it would recompose the cover with it, and read a level further up it would
+ * recompose the entire player once a second for as long as a timer runs. Here, a pill redraws.
+ */
+@Composable
+private fun SleepCountdown(remainingMs: () -> Long?, modifier: Modifier = Modifier) {
+    remainingMs()?.let { remaining ->
+        Row(
+            modifier = modifier
+                .padding(bottom = 14.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Studio.copy(alpha = 0.82f))
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.Filled.Bedtime,
+                contentDescription = stringResource(R.string.player_sleep),
+                tint = Amber,
+                modifier = Modifier.size(13.dp),
+            )
+            Text(
+                formatTime(remaining),
+                // TabularSmall is the app's own "numbers that must not jitter" style, which is
+                // exactly what a countdown is: without it the pill changes width every time a
+                // 1 ticks past.
+                style = TabularSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                color = Amber,
+            )
         }
     }
 }

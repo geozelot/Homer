@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -70,7 +69,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 //   PlayerDialogs.kt   the custom speed dialog
 //   PlayerFormat.kt    the two time/speed formatters the files above share
 //
-// They were one 1,800-line file until the split; nothing moved except across file boundaries.
+// They were one 1,800-line file until the split. Every declaration moved verbatim; what the split
+// ADDED is the state discipline below — which is what the boundaries are for.
 
 @Composable
 fun PlayerScreen(
@@ -100,19 +100,27 @@ fun PlayerScreen(
     onBack: (() -> Unit)?,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
-    // The playback state is held as a State OBJECT here, never read at this level: positionMs and
-    // bookElapsedMs advance every second while audio plays, and one read of them in this scope
-    // would recompose the whole screen — header, transport, top bar, artwork — per tick. Instead
-    // [state] below is a derived slice with the two ticking fields zeroed, so from one tick to the
-    // next it compares equal and notifies nobody; the live values reach exactly two places, as
-    // lambdas — the scrubber and the position line — which are built to tick (see Scrubber.kt).
+    // The playback state is held as a State OBJECT here, never read at this level. THREE of its
+    // fields advance every second — positionMs, bookElapsedMs and, while a timer runs,
+    // sleepRemainingMs — and one read of any of them in this scope would recompose the whole
+    // screen per tick: header, transport, top bar, cover. Instead [state] below is a derived slice
+    // with all three cleared, so from one tick to the next it compares equal and notifies nobody.
+    //
+    // The live values reach exactly four composables, as lambdas, and every one of them is small
+    // and built to tick: the scrubber and the position line (Scrubber.kt), the countdown pill on
+    // the cover, and the sleep glyph whose description carries the time for a screen reader.
     val stateHolder = viewModel.state.collectAsStateWithLifecycle()
     val state by remember {
-        derivedStateOf { stateHolder.value.copy(positionMs = 0L, bookElapsedMs = 0L) }
+        derivedStateOf {
+            stateHolder.value.copy(positionMs = 0L, bookElapsedMs = 0L, sleepRemainingMs = null)
+        }
     }
     // Whether listening has started, for the top bar's "Mark completed" — derived separately so
     // it flips once instead of ticking along with bookElapsedMs.
     val started by remember { derivedStateOf { stateHolder.value.bookElapsedMs > 0 } }
+    // Likewise WHETHER a timer is running, which is what decides the glyph's tint and the menu's
+    // "turn off" row. That flips twice a timer; the number behind it moves sixty times a minute.
+    val sleepRunning by remember { derivedStateOf { stateHolder.value.sleepRemainingMs != null } }
     // Ticks every second too — held as a State object and read only inside PositionLine.
     val timeLeftMs = viewModel.timeLeftMs.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
@@ -143,7 +151,6 @@ fun PlayerScreen(
     var showEditDialog by rememberSaveable { mutableStateOf(false) }
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
 
     // Start playback when the screen opens for this book.
     LaunchedEffect(bookId) { viewModel.play(bookId) }
@@ -187,7 +194,7 @@ fun PlayerScreen(
         PlayerArtwork(
             // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
             model = cover ?: state.coverModel ?: state.artworkData?.bytes,
-            sleepRemainingMs = state.sleepRemainingMs,
+            sleepRemainingMs = { stateHolder.value.sleepRemainingMs },
             onCollapse = onBack,
             modifier = slotModifier,
         )
@@ -270,8 +277,9 @@ fun PlayerScreen(
             // ── Playback ─────────────────────────────────────────────────────────────────
             ToolRow(
                 speed = state.playbackSpeed,
-                sleepLabel = sleepLabel(state.sleepRemainingMs, state.sleepEndOfChapter, context),
-                sleepActive = state.sleepRemainingMs != null || state.sleepEndOfChapter,
+                sleepRemainingMs = { stateHolder.value.sleepRemainingMs },
+                sleepEndOfChapter = state.sleepEndOfChapter,
+                sleepActive = sleepRunning || state.sleepEndOfChapter,
                 volumeMode = volumeMode,
                 skipSilence = skipSilence,
                 onSpeed = viewModel::setSpeed,

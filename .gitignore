@@ -19,3 +19,6 @@
 /keystore.properties
 *.jks
 *.keystore
+
+# Junie (JetBrains agent) working directory — plans and scratch, not project source
+.junie/

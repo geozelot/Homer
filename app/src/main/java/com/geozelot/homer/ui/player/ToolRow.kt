@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -67,7 +68,12 @@ import kotlin.math.abs
 @Composable
 internal fun ToolRow(
     speed: Float,
-    sleepLabel: String,
+    /**
+     * The sleep timer's remaining time — read inside [SleepTool] ONLY. It counts down every second,
+     * and this row holds five controls that do not.
+     */
+    sleepRemainingMs: () -> Long?,
+    sleepEndOfChapter: Boolean,
     sleepActive: Boolean,
     volumeMode: String,
     skipSilence: Boolean,
@@ -82,43 +88,16 @@ internal fun ToolRow(
     onMark: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp)) {
-        // Sleep — quick-select menu.
-        Box(modifier = Modifier.align(Alignment.CenterStart)) {
-            var open by remember { mutableStateOf(false) }
-            ToolButton(
-                icon = Icons.Filled.Bedtime,
-                label = sleepLabel,
-                active = sleepActive,
-                onClick = { open = true },
-            )
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                // The one header that is not just a noun. A running timer used to be readable on
-                // the button itself; with the words gone, the moment it is opened is the moment to
-                // say how long is left.
-                MenuHeader(if (sleepActive) "${stringResource(R.string.player_sleep)} · $sleepLabel" else stringResource(R.string.player_sleep))
-                listOf(15, 30, 45, 60).forEach { m ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.player_sleep_minutes, m)) },
-                        onClick = { onSleepMinutes(m * 60_000L); open = false },
-                    )
-                }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.player_sleep_end_of_chapter)) },
-                    onClick = { onSleepEndOfChapter(); open = false },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
-                    onClick = { open = false; onCustomSleep() },
-                )
-                if (sleepActive) {
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.player_sleep_turn_off), color = MaterialTheme.colorScheme.error) },
-                        onClick = { onSleepOff(); open = false },
-                    )
-                }
-            }
-        }
+        SleepTool(
+            remainingMs = sleepRemainingMs,
+            endOfChapter = sleepEndOfChapter,
+            active = sleepActive,
+            onMinutes = onSleepMinutes,
+            onEndOfChapter = onSleepEndOfChapter,
+            onOff = onSleepOff,
+            onCustom = onCustomSleep,
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
 
         // The three at-play settings, held together by proximity alone.
         //
@@ -229,6 +208,67 @@ internal fun ToolRow(
  * [label] therefore survives as the content description. It is the same word the menu is headed
  * with, so what a screen reader announces and what a sighted reader sees on opening agree.
  */
+/**
+ * Sleep: the glyph, and the menu of durations behind it.
+ *
+ * Its own composable because it is the one control on this row that TICKS. The remaining time
+ * reaches the button's description and the menu's header, and both of those are inside here — so a
+ * running timer redraws a glyph once a second instead of redrawing the player.
+ *
+ * The description is worth keeping live even though nothing on screen shows the number: to a
+ * screen reader it is the only place the remaining time is said at all.
+ */
+@Composable
+private fun SleepTool(
+    remainingMs: () -> Long?,
+    endOfChapter: Boolean,
+    active: Boolean,
+    onMinutes: (Long) -> Unit,
+    onEndOfChapter: () -> Unit,
+    onOff: () -> Unit,
+    onCustom: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val label = sleepLabel(remainingMs(), endOfChapter, context)
+    Box(modifier = modifier) {
+        var open by remember { mutableStateOf(false) }
+        ToolButton(
+            icon = Icons.Filled.Bedtime,
+            label = label,
+            active = active,
+            onClick = { open = true },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // The one header that is not just a noun. A running timer used to be readable on
+            // the button itself; with the words gone, the moment it is opened is the moment to
+            // say how long is left.
+            MenuHeader(if (active) "${stringResource(R.string.player_sleep)} · $label" else stringResource(R.string.player_sleep))
+            listOf(15, 30, 45, 60).forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.player_sleep_minutes, m)) },
+                    onClick = { onMinutes(m * 60_000L); open = false },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.player_sleep_end_of_chapter)) },
+                onClick = { onEndOfChapter(); open = false },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings_custom), color = Parchment) },
+                onClick = { open = false; onCustom() },
+            )
+            if (active) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.player_sleep_turn_off), color = MaterialTheme.colorScheme.error) },
+                    onClick = { onOff(); open = false },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ToolButton(
     icon: ImageVector,

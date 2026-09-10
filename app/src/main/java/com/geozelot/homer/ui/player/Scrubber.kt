@@ -43,10 +43,11 @@ import kotlin.math.roundToInt
 
 // ── Scrubber ─────────────────────────────────────────────────────────────────
 //
-// The two composables that tick. Playback position advances every second, and these are the only
-// places on the player that read it — [Scrubber] takes the position as a LAMBDA and [PositionLine]
-// the time left the same way, so the per-second recomposition stops here instead of running the
-// whole screen: the header, the transport, the top bar and the artwork never see a tick.
+// Two of the four composables that tick. Playback position advances every second, and these are
+// the only places that read it — [Scrubber] takes the position as a LAMBDA and [PositionLine] the
+// time left the same way, so the per-second recomposition stops here instead of running the whole
+// screen. (The other two are `SleepCountdown` and `SleepTool`, which tick only while a sleep timer
+// is running and for the same reason: they are what shows it.)
 
 /**
  * How far the finger has to leave the bar before the drag stops being a normal one, and what a
