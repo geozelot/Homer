@@ -408,6 +408,8 @@
     <string name="player_chapter_at_pct">bei %1$s · %2$s %%</string>
     <string name="player_now_playing">LÄUFT GERADE</string>
     <string name="player_time_remaining">-%1$s</string>
+    <string name="player_pane_empty">Nichts wird abgespielt</string>
+    <string name="player_pane_empty_hint">Öffne ein Buch aus der Bibliothek — es läuft dann hier.</string>
     <string name="player_time_unknown">--:--</string>
     <string name="player_cd_previous">Vorheriges Kapitel</string>
     <string name="player_cd_next">Nächstes Kapitel</string>

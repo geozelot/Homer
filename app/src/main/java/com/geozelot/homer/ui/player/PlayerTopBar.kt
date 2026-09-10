@@ -3,9 +3,10 @@ package com.geozelot.homer.ui.player
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -40,7 +41,8 @@ internal fun PlayerTopBar(
     offline: Boolean,
     downloading: Boolean,
     canShowDetails: Boolean,
-    onBack: () -> Unit,
+    /** Leaves the player, or null where it cannot be left — a docked pane has nowhere to go. */
+    onBack: (() -> Unit)?,
     onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
     onDetails: () -> Unit,
@@ -55,8 +57,14 @@ internal fun PlayerTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_back), tint = Muted)
+        if (onBack != null) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_back), tint = Muted)
+            }
+        } else {
+            // The row is a SpaceBetween of three, so the title only sits centred while the leading
+            // slot is occupied. Held open rather than removed.
+            Spacer(Modifier.size(BackSlotWidth))
         }
         Text(stringResource(R.string.player_now_playing), style = SectionLabel, color = Muted)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -133,3 +141,6 @@ internal fun PlayerTopBar(
         }
     }
 }
+
+/** The width of the leading slot, held open when there is no back control — a default [IconButton]. */
+private val BackSlotWidth = 48.dp

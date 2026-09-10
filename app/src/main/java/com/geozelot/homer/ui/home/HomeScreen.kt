@@ -106,6 +106,13 @@ fun HomeScreen(
     onBookClickAt: (String, Long) -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenSettings: () -> Unit,
+    /**
+     * Whether to dock the mini-player at the foot of the list.
+     *
+     * False in a two-pane layout, where the player is already on screen beside this one and a
+     * second set of transport controls for the same audio is furniture, not a shortcut.
+     */
+    showMiniPlayer: Boolean = true,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -487,7 +494,7 @@ fun HomeScreen(
         // The mini-player insets itself (its gradient runs behind the navigation bar). When there's
         // nothing playing it emits nothing at all, so the space has to be reserved here or the last
         // row of books ends up under the navigation bar.
-        if (playback.bookId != null) {
+        if (showMiniPlayer && playback.bookId != null) {
             MiniPlayer(
                 state = playback,
                 onOpenPlayer = onBookClick,
