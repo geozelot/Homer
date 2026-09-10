@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Category
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
@@ -66,6 +69,7 @@ import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
+import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
@@ -112,27 +116,41 @@ internal fun LibraryControlBar(
     onShelfChange: (LibraryShelving) -> Unit,
     onSeriesChange: (LibraryDepth) -> Unit,
     onToggleView: (Boolean) -> Unit,
+    /**
+     * Short viewport: there is no top bar, so this row leads with the label it used to sit under
+     * and ends with the two actions it used to hold.
+     */
+    compact: Boolean,
+    onHelp: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // No inset of its own. The bar carries the grid's own horizontal padding from its call site, so
     // an extra 2dp here put the search chip 2dp right of the covers it filters and the header 4dp
     // right of both — the section label keeps its own 2dp, which every header on the screen shares.
+    // Always "Library". It titles the same region whatever is filtered, and renaming it to
+    // "Results" made the shelf look like a different place rather than the same one with less on
+    // it. The COUNT carries that instead.
+    val header = if (searching) {
+        stringResource(R.string.home_section_library_filtered, shown, total)
+    } else {
+        stringResource(R.string.home_section_library, count)
+    }
     Column(modifier = modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-        SectionLabelRow(
-            // Always "Library". It titles the same region whatever is filtered, and renaming it to
-            // "Results" made the shelf look like a different place rather than the same one with
-            // less on it. The COUNT carries that instead.
-            if (searching) {
-                stringResource(R.string.home_section_library_filtered, shown, total)
-            } else {
-                stringResource(R.string.home_section_library, count)
-            },
-            topPadding = 8.dp,
-            bottomPadding = 4.dp,
-            // Stays large while scrolling. Unlike the listening panel, this header is not inside
-            // anything that collapses — it titles the list being scrolled, so it holds its size.
-            large = true,
-        )
+        // A line of its own only where there is height for one. Compact, it leads the control row
+        // instead — and while the field is open it steps aside entirely rather than pushing the
+        // library down by its own height to reappear, which is the move this bar was built to stop
+        // making. Nothing is lost: a filter with pills carries its own count beside Clear.
+        if (!compact) {
+            SectionLabelRow(
+                header,
+                topPadding = 8.dp,
+                bottomPadding = 4.dp,
+                // Stays large while scrolling. Unlike the listening panel, this header is not inside
+                // anything that collapses — it titles the list being scrolled, so it holds its size.
+                large = true,
+            )
+        }
         // Open, the field REPLACES the chips in place — same position, no back arrow. It used to
         // be a full OutlinedTextField, half again as tall as the row it sat in, so opening search
         // shunted the whole library down the screen and closing it shunted it back. A control that
@@ -155,6 +173,17 @@ internal fun LibraryControlBar(
                 onShelfChange = onShelfChange,
                 onSeriesChange = onSeriesChange,
                 onCollapse = onToggleArrange,
+            )
+        } else if (compact) {
+            CompactControlRow(
+                header = header,
+                filtered = tokens.isNotEmpty(),
+                gridView = gridView,
+                onOpenSearch = onOpenSearch,
+                onToggleArrange = onToggleArrange,
+                onToggleView = onToggleView,
+                onHelp = onHelp,
+                onSettings = onSettings,
             )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
@@ -183,6 +212,62 @@ internal fun LibraryControlBar(
             onRemove = onRemoveToken,
             onClear = onClearFilter,
         )
+    }
+}
+
+/**
+ * The whole of the library's chrome on a screen with no height to spare: one 48dp row in place of a
+ * 64dp top bar and an 82dp band.
+ *
+ * It is laid out like the top bar it replaces — label leading, actions trailing — so that rotating
+ * moves the controls rather than introducing new ones. The label takes the slack and gives it back
+ * first: on a window narrow as well as short it ellipsises away to nothing while the chips, which
+ * are the only things here you cannot do without, keep their full size.
+ */
+@Composable
+private fun CompactControlRow(
+    header: String,
+    filtered: Boolean,
+    gridView: Boolean,
+    onOpenSearch: () -> Unit,
+    onToggleArrange: () -> Unit,
+    onToggleView: (Boolean) -> Unit,
+    onHelp: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = header.uppercase(),
+            style = SectionLabel,
+            fontSize = SectionLabelLargeSize,
+            color = Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 2.dp),
+        )
+        SearchChip(active = filtered, onClick = onOpenSearch)
+        ArrangeChip(open = false, onClick = onToggleArrange)
+        ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
+        // The top bar's two, in the top bar's order: help before settings, because it explains the
+        // screen you are on rather than taking you off it.
+        IconButton(onClick = onHelp, modifier = Modifier.size(ControlTapHeight)) {
+            Icon(
+                Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = stringResource(R.string.home_cd_help),
+                tint = Muted,
+            )
+        }
+        IconButton(onClick = onSettings, modifier = Modifier.size(ControlTapHeight)) {
+            Icon(
+                Icons.Filled.Tune,
+                contentDescription = stringResource(R.string.home_cd_settings),
+                tint = Muted,
+            )
+        }
     }
 }
 

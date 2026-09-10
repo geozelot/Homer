@@ -28,8 +28,11 @@ import androidx.compose.runtime.setValue
  *
  * ## The rules, in full, because their asymmetry is the design
  *
- *  - **It starts expanded.** Every launch. The panel answers "where was I", which is the question
- *    somebody opening an audiobook app is most likely to have.
+ *  - **It starts expanded** wherever there is room. The panel answers "where was I", which is the
+ *    question somebody opening an audiobook app is most likely to have. The one exception is a
+ *    viewport too short to hold it and a library at once — a landscape phone — where it starts
+ *    folded instead, because expanded it would leave nothing to scroll and so no way to reach the
+ *    gesture that folds it. The caller decides that; every rule below is the same either way.
  *  - **It folds on any travel into the library** — drag or fling, every time, not just the first.
  *  - **It folds when search opens**, for the same reason.
  *  - **Nothing folds it by hand.** There is no collapse control, so the header is not one.

@@ -366,4 +366,4 @@ internal fun SectionLabelRow(
 }
 
 /** Resting size of the two pinned headers; they fall back to [SectionLabel]'s 12sp on scroll. */
-private val SectionLabelLargeSize = 14.sp
+internal val SectionLabelLargeSize = 14.sp

@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,6 +100,58 @@ import com.geozelot.homer.ui.theme.Surface1
 //   CoverArt.kt           cover art, with the title-forward placeholder
 //
 // They were one 3,500-line file until the split; nothing moved except across file boundaries.
+
+/**
+ * The viewport height below which the library stops affording pinned chrome.
+ *
+ * Every piece of furniture above the grid — the top bar, the listening shelf, the control band —
+ * is a fixed number of dp, and rotating a phone halves the height without any of them noticing. On
+ * an 800×360 landscape phone they came to about 355dp of a 360dp screen: the library was left with
+ * a sliver, and because the shelf folds ON SCROLL and there was nothing left to scroll, the one
+ * mechanism that would have given the space back could not be reached.
+ *
+ * 480dp is chosen to sit above every phone in landscape (the tallest are about 430dp) and below
+ * every phone in portrait and every tablet in either orientation. It is a HEIGHT and not an
+ * orientation on purpose: a short split-screen window has the same problem and deserves the same
+ * answer, and a tall tablet turned sideways has no problem to fix.
+ */
+private val CompactLibraryHeight = 480.dp
+
+/**
+ * The width the merged control row needs before it is an improvement rather than a clipping.
+ *
+ * Label, search, arrange, the view toggle and two 48dp actions come to about 450dp of things that
+ * cannot shrink. Above this they sit comfortably on one row and the 64dp top bar is pure saving;
+ * below it — a narrow split-screen window that also happens to be short — the trailing actions
+ * would be cut off the end, and a top bar costs less than an unreachable settings button.
+ *
+ * So the two savings are decided separately: folding the panel needs no width and always applies,
+ * merging the chrome needs this.
+ */
+private val CompactChromeMinWidth = 600.dp
+
+/** What the library's chrome gives up at a given window size. */
+internal data class LibraryChrome(
+    /** Start the Currently-listening panel folded — there is no room to open it into. */
+    val foldListening: Boolean,
+    /** Drop the top bar; the control row carries its label and its two actions instead. */
+    val mergeTopBar: Boolean,
+)
+
+/**
+ * The two savings, decided together and separately.
+ *
+ * Pure and named so the thresholds can be stated against real device sizes in a test rather than
+ * only in a comment — and because the asymmetry is the part worth pinning: a short window always
+ * folds the panel, but only a short AND wide one merges the chrome.
+ */
+internal fun libraryChromeFor(width: Dp, height: Dp): LibraryChrome {
+    val short = height < CompactLibraryHeight
+    return LibraryChrome(
+        foldListening = short,
+        mergeTopBar = short && width >= CompactChromeMinWidth,
+    )
+}
 
 @Composable
 fun HomeScreen(
@@ -250,8 +303,18 @@ fun HomeScreen(
         }
     }
 
+    // What this window can afford above the first cover — see [libraryChromeFor].
+    val chrome = LocalConfiguration.current.let {
+        libraryChromeFor(width = it.screenWidthDp.dp, height = it.screenHeightDp.dp)
+    }
     // Every rule about when this panel folds lives in ListeningFold, with tests.
-    val fold = rememberSaveable(saver = ListeningFold.Saver) { ListeningFold() }
+    // Keyed on `compact` so a rotation re-decides: the saved value belongs to the layout it was
+    // saved in, and restoring an expanded panel into a screen with no room for it is exactly the
+    // state this is here to avoid. Turning back restores the expanded default, and a tap or a pull
+    // still opens it in either.
+    val fold = rememberSaveable(chrome.foldListening, saver = ListeningFold.Saver) {
+        ListeningFold(expanded = !chrome.foldListening)
+    }
     val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
     // Read here rather than inside the grid: `libraryContent` runs in a LazyGridScope, which is not
     // a composition, so a CompositionLocal is unreachable from it. Reading it in the composition
@@ -317,11 +380,23 @@ fun HomeScreen(
     // Every time the box opens, not just the first.
     LaunchedEffect(searching) { if (searching) fold.onSearchOpened() }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            // Normally [TopBar] carries this. Where there is no top bar, the column has to, or the
+            // shelf below rides up under the status bar.
+            .then(if (chrome.mergeTopBar) Modifier.statusBarsPadding() else Modifier),
+    ) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
-        Box(modifier = dismissSearch) {
-            TopBar(onHelp = { showHelp = true }, onSettings = onOpenSettings)
+        //
+        // Gone entirely on a short screen: it is 64dp, and what it holds is a wordmark nobody needs
+        // told twice plus two buttons the control row has room for. Its help and settings move
+        // there; the wordmark does not come back until there is height to spare for it.
+        if (!chrome.mergeTopBar) {
+            Box(modifier = dismissSearch) {
+                TopBar(onHelp = { showHelp = true }, onSettings = onOpenSettings)
+            }
         }
 
         // The Currently-listening shelf is pinned here — above the scrolling library rather than
@@ -346,8 +421,9 @@ fun HomeScreen(
         val libraryPresent = entries.isNotEmpty() || !filter.isEmpty
         if (listeningShelf.isNotEmpty() && libraryPresent) {
             // Closes the top bar off from the panel below it — without it the wordmark row and the
-            // listening shelf ran together as one undifferentiated block.
-            HorizontalDivider(color = Line.copy(alpha = 0.45f))
+            // listening shelf ran together as one undifferentiated block. Nothing to close off when
+            // there is no top bar, where it would just be a line under the status bar.
+            if (!chrome.mergeTopBar) HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = listeningShelf,
                 expanded = fold.expanded,
@@ -419,6 +495,9 @@ fun HomeScreen(
                     onShelfChange = viewModel::setShelfMode,
                     onSeriesChange = viewModel::setSeriesMode,
                     onToggleView = viewModel::setGridView,
+                    compact = chrome.mergeTopBar,
+                    onHelp = { showHelp = true },
+                    onSettings = onOpenSettings,
                     modifier = Modifier.padding(horizontal = LibraryGridPadding),
                 )
                 HorizontalDivider(color = Line)
