@@ -60,6 +60,13 @@ internal fun relinkMediaId(mediaId: String, oldId: String, newId: String): Strin
  * content fingerprint matches an indexed book the scan did NOT account for is the same book in a
  * new place. Returns newId -> oldId, which is what lets progress, bookmarks and hand-typed
  * overrides follow it instead of being pruned away with the old row.
+ *
+ * A fingerprint is only followed when it is unambiguous on BOTH sides — one lost book, one arrival.
+ * Two books with byte-identical file names and sizes share a hash (a duplicated copy of the same
+ * title), and once more than one of them is in play the fingerprint stops identifying anything:
+ * however the tie is broken, some book is handed another book’s progress. Leaving an ambiguous
+ * pair unlinked costs a resume position; guessing puts the wrong one on the wrong book, with
+ * nothing to show it happened.
  */
 internal fun detectMoves(
     detected: List<BookDetector.Detected>,
@@ -69,12 +76,20 @@ internal fun detectMoves(
     val existingIds = existingBooks.mapTo(HashSet()) { it.id }
     val lostByHash = existingBooks
         .filter { it.contentHash != null && it.id !in keepIds }
-        .associate { it.contentHash!! to it.id } // duplicate hashes: last wins (rare)
+        .groupBy { it.contentHash!! }
+        .mapNotNull { (hash, lost) -> lost.singleOrNull()?.let { hash to it.id } }
+        .toMap()
+    // Arrivals are grouped for the mirror image of the same ambiguity: two fresh copies of one book
+    // cannot both be the move. Ungrouped, this walked the detected list in order, and the first
+    // copy took the old row’s data while the second silently got none of it.
+    val arrivals = detected
+        .filter { it.book.contentHash != null && it.book.id !in existingIds } // path existed → not a move
+        .groupBy { it.book.contentHash!! }
     val moved = HashMap<String, String>()
-    for (book in detected) {
-        val hash = book.book.contentHash ?: continue
-        if (book.book.id in existingIds) continue // path already existed → not a move target
-        moved[book.book.id] = lostByHash[hash] ?: continue
+    for ((hash, arrived) in arrivals) {
+        val book = arrived.singleOrNull() ?: continue
+        val oldId = lostByHash[hash] ?: continue
+        moved[book.book.id] = oldId
     }
     return moved
 }

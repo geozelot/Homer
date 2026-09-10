@@ -218,6 +218,54 @@ class ScanCarryOverTest {
     }
 
     @Test
+    fun `an arrival is not linked when two lost books share its fingerprint`() {
+        // Both copies of a duplicated title moved in the same scan. The fingerprint now names two
+        // books, so it names neither: linking either one hands a stranger's progress to this book.
+        val existing = listOf(book("A/One", contentHash = "same"), book("A/Two", contentHash = "same"))
+        val moved = detectMoves(
+            detected = listOf(detected("B/One").let { it.copy(book = it.book.copy(contentHash = "same")) }),
+            existingBooks = existing,
+            keepIds = setOf("B/One"),
+        )
+        assertTrue(moved.isEmpty())
+    }
+
+    @Test
+    fun `a lost book is not linked when two arrivals share its fingerprint`() {
+        // The mirror image: one book went missing and two identical copies appeared. Only one of
+        // them can be it, and nothing here can say which — so neither takes the old row's data.
+        val existing = listOf(book("A/One", contentHash = "same"))
+        val moved = detectMoves(
+            detected = listOf(
+                detected("B/One").let { it.copy(book = it.book.copy(contentHash = "same")) },
+                detected("B/Two").let { it.copy(book = it.book.copy(contentHash = "same")) },
+            ),
+            existingBooks = existing,
+            keepIds = setOf("B/One", "B/Two"),
+        )
+        assertTrue(moved.isEmpty())
+    }
+
+    @Test
+    fun `an unambiguous move still links when an unrelated duplicate pair is also in the scan`() {
+        val existing = listOf(
+            book("A/Old", contentHash = "abc"),
+            book("D/One", contentHash = "dup"),
+            book("D/Two", contentHash = "dup"),
+        )
+        val moved = detectMoves(
+            detected = listOf(
+                detected("A/New").let { it.copy(book = it.book.copy(contentHash = "abc")) },
+                detected("D/Moved").let { it.copy(book = it.book.copy(contentHash = "dup")) },
+            ),
+            existingBooks = existing,
+            keepIds = setOf("A/New", "D/Moved"),
+        )
+        assertEquals(mapOf("A/New" to "A/Old"), moved)
+    }
+
+
+    @Test
     fun `a moved book carries its durations across by file name`() {
         // The relative path changed with the folder, so matching on it would find nothing and the
         // whole book would be re-probed.
