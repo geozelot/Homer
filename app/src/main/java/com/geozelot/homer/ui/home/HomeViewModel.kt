@@ -17,11 +17,9 @@ import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
-import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
-import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.IndexPass
@@ -32,16 +30,10 @@ import com.geozelot.homer.data.library.LibraryRepository
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
-import com.geozelot.homer.data.library.decodeGenres
-import com.geozelot.homer.data.library.hasMetadataEdit
-import com.geozelot.homer.data.metadata.BookGenre
-import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PinningBlock
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.geozelot.homer.data.storage.LocalMirror
-import com.geozelot.homer.data.storage.StorageLocation
-import com.geozelot.homer.data.storage.StorageMigrationManager
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.CrawlSummary
@@ -55,19 +47,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -153,19 +142,6 @@ data class BookListItem(
 
 /** How close to the end still counts as finished (playback often stops a moment short). */
 private const val FINISHED_TOLERANCE_MS = 15_000L
-
-/** Detected book with its override applied, plus the override-only bits (not book fields). */
-private data class EffectiveBook(
-    val book: BookEntity,
-    val hidden: Boolean,
-    /** Whether the override carries any metadata correction — not just a hidden flag or a tag. */
-    val hasEdits: Boolean,
-    val tags: List<String>,
-    val finishedOverride: Boolean?,
-    val downloadOnPlayOverride: Boolean?,
-    /** Resolved cover model, computed here (rarely) rather than on every progress tick. */
-    val coverModel: Any?,
-)
 
 /**
  * A library row: a section header, a standalone book, or a collapsible series shelf.
@@ -284,19 +260,16 @@ class HomeViewModel @Inject constructor(
     private val playbackSettings: PlaybackSettings,
     private val bookOverrideDao: BookOverrideDao,
     private val bookmarkDao: BookmarkDao,
-    private val templateApplier: TemplateApplier,
     private val bookDao: BookDao,
     private val crawlDirDao: CrawlDirDao,
-    private val bookEditor: BookEditor,
     private val connection: PlaybackConnection,
     private val libraryIndex: LibraryIndexRepository,
-    private val storageLocation: StorageLocation,
-    private val storageMigrationManager: StorageMigrationManager,
-    private val storageMigrator: StorageMigrator,
     private val localMirror: LocalMirror,
     playbackStateDao: PlaybackStateDao,
     private val downloadDao: DownloadDao,
-    private val downloadStorage: DownloadStorage,
+    private val filterEngine: LibraryFilterEngine,
+    private val storage: StorageCoordinator,
+    private val bookEdit: BookEditCoordinator,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
@@ -384,7 +357,9 @@ class HomeViewModel @Inject constructor(
     // Detection with user overrides applied (D2), hidden books filtered unless shown, plus the
     // resolved cover model. All the inputs here change rarely, so the per-book cover resolution
     // does NOT re-run on the ~5s playback-position ticks that drive `books` below. Ordering is
-    // left to `buildEntries` / `listeningShelf`, which always sort, so no sort is needed here.
+    // left to `arrange` / `listening`, which always sort, so no sort is needed here. The cover
+    // model is resolved HERE (it needs credentials and the WebDAV client) and handed to the
+    // otherwise pure engine as a lambda.
     private val effectiveBooks: Flow<List<EffectiveBook>> =
         combine(
             libraryRepository.books,
@@ -393,22 +368,9 @@ class HomeViewModel @Inject constructor(
             authRepository.credentials,
             libraryRepository.libraryRoot,
         ) { books, overrides, showHidden, credentials, libraryRoot ->
-            val overrideByBook = overrides.associateBy { it.bookId }
-            books
-                .map { book ->
-                    val override = overrideByBook[book.id]
-                    val effective = book.applyOverride(override)
-                    EffectiveBook(
-                        book = effective,
-                        hidden = override?.hidden == true,
-                        hasEdits = override != null && override.hasMetadataEdit(),
-                        tags = override?.tags?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
-                        finishedOverride = override?.finished,
-                        downloadOnPlayOverride = override?.downloadOnPlay,
-                        coverModel = BookCover.model(effective, credentials, webDavClient, libraryRoot),
-                    )
-                }
-                .filter { showHidden || !it.hidden }
+            filterEngine.effective(books, overrides, showHidden) { book ->
+                BookCover.model(book, credentials, webDavClient, libraryRoot)
+            }
         }
 
     private val books: StateFlow<List<BookListItem>> =
@@ -417,47 +379,7 @@ class HomeViewModel @Inject constructor(
             playbackStateDao.observeProgress(),
             downloadDao.observeAll(),
         ) { effective, progress, downloads ->
-            val progressByBook = progress.associateBy { it.bookId }
-            val downloadByBook = downloads.associateBy { it.bookId }
-            effective.map { eff ->
-                val book = eff.book
-                val bookProgress = progressByBook[book.id]
-                val elapsed = bookProgress?.elapsedMs
-                val total = book.totalDurationMs
-                val download = downloadByBook[book.id]
-                // A trustworthy percentage / time-left needs a total, a saved position AND every
-                // file measured. Without the completeness check a partially-measured book reports
-                // elapsed > total, which reads as "finished" and hides it from the listening shelf.
-                val measured = total != null && total > 0 && elapsed != null &&
-                    bookProgress.fullyMeasured
-                BookListItem(
-                    id = book.id,
-                    title = book.title,
-                    author = book.author,
-                    isMultiFile = book.isMultiFile,
-                    fileCount = book.fileCount,
-                    coverModel = eff.coverModel,
-                    hasCustomCover = book.customCoverPath != null,
-                    series = book.series,
-                    seriesIndex = book.seriesIndex,
-                    collection = book.collection,
-                    collectionIndex = book.collectionIndex,
-                    genres = decodeGenres(book.genre),
-                    language = book.language,
-                    tags = eff.tags,
-                    hasEdits = eff.hasEdits,
-                    totalDurationMs = total,
-                    timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
-                    progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
-                    lastPlayedAt = bookProgress?.updatedAt,
-                    started = bookProgress?.started == true,
-                    finishedOverride = eff.finishedOverride,
-                    downloadOnPlayOverride = eff.downloadOnPlayOverride,
-                    downloadStatus = download?.status,
-                    downloadedFiles = download?.downloadedFiles ?: 0,
-                    hidden = eff.hidden,
-                )
-            }
+            filterEngine.rows(effective, progress, downloads)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
 
@@ -561,10 +483,7 @@ class HomeViewModel @Inject constructor(
     /** Library list, filtered by [filter], ordered by [sortMode], sectioned by [shelfMode]. */
     val entries: StateFlow<List<LibraryEntry>> =
         combine(books, filter, sortMode, shelfMode, seriesMode) { list, filter, sort, shelving, series ->
-            // Filtering runs BEFORE the grouping: it changes which books are on which shelf, so a
-            // shelf that loses its last book has to disappear rather than stand there empty.
-            val filtered = if (filter.isEmpty) list else list.filter { filter.matches(it) }
-            buildEntries(filtered, sort, shelving, series)
+            filterEngine.arrange(list, filter, sort, shelving, series)
         }
             // Filtering AND grouping the whole library, per keystroke, was running on
             // Main.immediate. Both are pure functions of their inputs and the result is a plain
@@ -585,13 +504,7 @@ class HomeViewModel @Inject constructor(
     /** In-progress books: actually started (real progress), not finished/at-end, not hidden;
      *  most-recently-played first. Merely opening a book (position 0) does NOT qualify. */
     val listeningShelf: StateFlow<List<BookListItem>> = books
-        .map { list ->
-            list.asSequence()
-                .filter { it.started && !it.finished && !it.hidden }
-                .sortedByDescending { it.lastPlayedAt }
-                .take(LISTENING_LIMIT)
-                .toList()
-        }
+        .map(filterEngine::listening)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -647,28 +560,14 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Whether the app currently holds all-files access (for the storage folder browser). */
-    fun hasAllFilesAccess(): Boolean = storageLocation.hasAllFilesAccess()
+    fun hasAllFilesAccess(): Boolean = storage.hasAllFilesAccess()
 
-    private val _storageAccessLost = MutableStateFlow(false)
-
-    /**
-     * True when a custom storage folder is configured but Homer can no longer reach it.
-     *
-     * Not derived from the settings flows: they only say which folder was CHOSEN, and the grant on
-     * it can be withdrawn while the app is not running — so this is refreshed by asking the system,
-     * on the screens that state where downloads go.
-     */
-    val storageAccessLost: StateFlow<Boolean> = _storageAccessLost.asStateFlow()
+    /** True when a custom storage folder is configured but Homer can no longer reach it. */
+    val storageAccessLost: StateFlow<Boolean> = storage.storageAccessLost
 
     /** Re-asks whether the chosen storage folder is still reachable. Cheap; call it on entry. */
     fun refreshStorageAccess() {
-        viewModelScope.launch {
-            val lost = storageLocation.customLocationUnavailable()
-            if (lost != _storageAccessLost.value) {
-                Log.w(TAG_STORAGE, "custom storage folder reachable=${!lost}")
-            }
-            _storageAccessLost.value = lost
-        }
+        viewModelScope.launch { storage.refreshAccess() }
     }
 
     /** Whether opening/resuming the app requires a biometric / device-credential unlock. */
@@ -709,11 +608,10 @@ class HomeViewModel @Inject constructor(
     }
 
     /** Live progress of a storage move (null when none is running) — drives a blocking overlay. */
-    val migrationProgress: StateFlow<StorageMigrator.Progress?> = storageMigrator.progress
+    val migrationProgress: StateFlow<StorageMigrator.Progress?> = storage.migrationProgress
 
-    private val _pendingStorageChange = MutableStateFlow<PendingStorageChange?>(null)
     /** Set when a chosen folder already holds a Homer library and the user must pick load vs replace. */
-    val pendingStorageChange: StateFlow<PendingStorageChange?> = _pendingStorageChange.asStateFlow()
+    val pendingStorageChange: StateFlow<PendingStorageChange?> = storage.pendingChange
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -735,16 +633,8 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
-        // One-time relocation to the siloed Homer/ storage root. Offline downloads lived in
-        // internal storage; drop them (start fresh, per design) so they re-download into the new
-        // location, and reclaim the old files. Covers relocate lazily as new ones are extracted.
-        viewModelScope.launch {
-            if (!librarySettings.storageRelocated.first()) {
-                downloadDao.deleteAll()
-                storageLocation.deleteLegacyDownloads()
-                librarySettings.setStorageRelocated(true)
-            }
-        }
+        // One-time relocation to the siloed Homer/ storage root — see the coordinator.
+        viewModelScope.launch { storage.relocateLegacyDownloadsOnce() }
         // Surface an already-running playback session in the mini-player on cold start, before the
         // user opens a book (recovers the current book from the restored queue if present).
         connection.connect()
@@ -914,11 +804,7 @@ class HomeViewModel @Inject constructor(
      * between then leaves a row still pointing at what is left, for a later pass to finish.
      */
     fun deleteAllDownloads() {
-        viewModelScope.launch {
-            runCatching { downloadStorage.deleteAll() }
-                .onFailure { Log.w(TAG_STORAGE, "could not delete the downloads folder", it) }
-            downloadDao.deleteAll()
-        }
+        viewModelScope.launch { storage.deleteAllDownloads() }
     }
 
     fun download(bookId: String) = downloadManager.download(bookId)
@@ -1028,7 +914,7 @@ class HomeViewModel @Inject constructor(
         downloadOnPlay: Boolean?,
     ) {
         viewModelScope.launch {
-            bookEditor.saveOverride(
+            bookEdit.saveOverride(
                 bookId, title, author, series, seriesIndex, collection, collectionIndex,
                 genres, language, tags, hidden, downloadOnPlay,
             )
@@ -1052,13 +938,13 @@ class HomeViewModel @Inject constructor(
         collection: String,
     ) {
         viewModelScope.launch {
-            bookEditor.saveShelfOverride(bookIds, name, author, genres, namesCollection, collection)
+            bookEdit.saveShelfOverride(bookIds, name, author, genres, namesCollection, collection)
         }
     }
 
     /** Reverts a book to pure detection (see [BookEditor.clearOverride]). */
     fun clearOverride(bookId: String) {
-        viewModelScope.launch { bookEditor.clearOverride(bookId) }
+        viewModelScope.launch { bookEdit.clearOverride(bookId) }
     }
 
     fun setGridView(grid: Boolean) {
@@ -1067,12 +953,12 @@ class HomeViewModel @Inject constructor(
 
     /** Copies a user-picked image into the cover cache and sets it as the book's custom cover. */
     fun setCustomCover(bookId: String, uri: Uri) {
-        viewModelScope.launch { bookEditor.setCustomCover(bookId, uri) }
+        viewModelScope.launch { bookEdit.setCustomCover(bookId, uri) }
     }
 
     /** Clears a custom cover, reverting to detected/extracted/online art. */
     fun clearCustomCover(bookId: String) {
-        viewModelScope.launch { bookEditor.clearCustomCover(bookId) }
+        viewModelScope.launch { bookEdit.clearCustomCover(bookId) }
     }
 
     /**
@@ -1080,109 +966,32 @@ class HomeViewModel @Inject constructor(
      * user is asked what to do ([pendingStorageChange]); otherwise everything is moved into it.
      */
     fun setCustomStorageFolder(uri: Uri) {
-        viewModelScope.launch { requestStorageChange(uri.toString()) }
+        viewModelScope.launch { storage.requestChange(uri.toString()) }
     }
 
     /** Reverts storage to the default app-external location, moving data back (or asking). */
     fun useDefaultStorage() {
-        viewModelScope.launch { requestStorageChange(null) }
+        viewModelScope.launch { storage.requestChange(null) }
     }
 
     /** Points storage at an absolute folder path via all-files access (bypasses SAF). */
     fun setCustomStoragePath(path: String) {
-        viewModelScope.launch { requestStorageChange(path) }
-    }
-
-    /** A storage-location token is either a SAF `content://` tree or an absolute filesystem path. */
-    private fun isSafToken(token: String?) = token?.startsWith("content://") == true
-
-    private suspend fun requestStorageChange(target: String?) {
-        val source = storageLocation.currentLocation()
-        Log.d(TAG_STORAGE, "requestStorageChange: source=$source target=$target")
-        if (source == target) return // already there
-        // A SAF folder needs a durable grant taken before we can read/write it (and some pickers
-        // refuse certain folders, throwing here). An all-files path needs no per-folder grant.
-        if (isSafToken(target)) {
-            try {
-                storageLocation.takePersistable(target!!)
-                Log.d(TAG_STORAGE, "took persistable permission for $target")
-            } catch (e: Exception) {
-                Log.w(TAG_STORAGE, "could not take a durable permission for the chosen folder", e)
-                return
-            }
-        }
-        val hasExisting = runCatching {
-            val area = storageLocation.areaFor(target)
-            area.exists(MIRROR_MARKER)
-        }.getOrDefault(false)
-        if (hasExisting) {
-            // The folder already has Homer data — let the user choose load vs replace.
-            Log.d(TAG_STORAGE, "target already has a Homer library; prompting load-vs-replace")
-            _pendingStorageChange.value = PendingStorageChange(source, target)
-        } else {
-            // Empty target: switch the location NOW (synchronous + reliable, independent of the
-            // worker), then move any existing local data across in the background.
-            commitLocation(source, target)
-            storageMigrationManager.migrate(source, target, overwrite = false)
-        }
-    }
-
-    /** Commits the active storage location immediately and releases the old SAF grant if any. */
-    private suspend fun commitLocation(source: String?, target: String?) {
-        storageLocation.commit(target)
-        if (isSafToken(source) && source != target) storageLocation.releasePersistable(source!!)
-        Log.d(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
+        viewModelScope.launch { storage.requestChange(path) }
     }
 
     /** Adopt the library already in the chosen folder (merge progress, keep its downloads). */
     fun loadPendingStorage() {
-        val p = _pendingStorageChange.value ?: return
-        _pendingStorageChange.value = null
-        viewModelScope.launch {
-            // Before commitLocation, which releases the old folder's SAF grant and makes it
-            // unreadable. Hand-picked covers are the one part of the local cache that isn't
-            // re-derivable, so they're carried across rather than dropped.
-            storageMigrator.carryCustomCovers(p.source, p.target)
-            commitLocation(p.source, p.target)
-            adoptCurrentArea()
-        }
+        viewModelScope.launch { storage.loadPending() }
     }
 
     /** Overwrite the chosen folder's Homer data with this device's (switch now, move in background). */
     fun replacePendingStorage() {
-        val p = _pendingStorageChange.value ?: return
-        _pendingStorageChange.value = null
-        viewModelScope.launch {
-            commitLocation(p.source, p.target)
-            storageMigrationManager.migrate(p.source, p.target, overwrite = true)
-        }
+        viewModelScope.launch { storage.replacePending() }
     }
 
     /** Abandon a pending storage change, releasing the SAF grant taken to probe the folder. */
     fun cancelPendingStorage() {
-        val p = _pendingStorageChange.value ?: return
-        _pendingStorageChange.value = null
-        val target = p.target
-        if (!isSafToken(target)) return
-        viewModelScope.launch {
-            if (target != storageLocation.currentLocation()) storageLocation.releasePersistable(target!!)
-        }
-    }
-
-    /**
-     * Adopts whatever the (now active) area already holds: import its progress mirror (LWW),
-     * recompute download status against it, and re-fetch covers (their old Uris are stale). Used
-     * when the user loads an existing library in the chosen folder rather than moving into it.
-     *
-     * Only *detected* art is discarded here — it costs one enrichment pass to rebuild. Custom
-     * covers are the user's own images and can't be recovered, so `loadPendingStorage` copies them
-     * into the new area first (see [StorageMigrator.carryCustomCovers]).
-     */
-    private suspend fun adoptCurrentArea() {
-        bookDao.resetCoverArt()
-        localMirror.import()
-        localMirror.adoptDownloads()
-        libraryIndexManager.fetchMissingCovers()
+        viewModelScope.launch { storage.cancelPending() }
     }
 
     fun setSortMode(sort: LibrarySort) {
@@ -1253,60 +1062,30 @@ class HomeViewModel @Inject constructor(
 
     /** Unhides a book from the review list. */
     fun unhide(bookId: String) {
-        viewModelScope.launch { bookEditor.setHidden(bookId, hidden = false) }
+        viewModelScope.launch { bookEdit.setHidden(bookId, hidden = false) }
     }
 
     // ── path templates ───────────────────────────────────────────────────────────────────────
 
-    /**
-     * The templates being EDITED, which is not the same as the ones in force.
-     *
-     * A draft, so the preview can show what a half-written pattern would do without that pattern
-     * being applied to the library the moment a character lands in the field. Seeded from the stored
-     * list the first time it is read.
-     */
-    private val _templateDraft = MutableStateFlow<List<String>?>(null)
+    // The template draft's state and rules live in [BookEditCoordinator]; the ViewModel only
+    // supplies the scope its flows are shared in.
 
-    val templateDraft: StateFlow<List<String>> =
-        combine(_templateDraft, librarySettings.pathTemplates) { draft, stored -> draft ?: stored }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** The templates being EDITED, which is not the same as the ones in force. */
+    val templateDraft: StateFlow<List<String>> = bookEdit.templateDraft
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Whether the draft differs from what is stored — what Apply is enabled by. */
-    val templateDraftDirty: StateFlow<Boolean> =
-        combine(_templateDraft, librarySettings.pathTemplates) { draft, stored ->
-            draft != null && draft != stored
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val templateDraftDirty: StateFlow<Boolean> = bookEdit.templateDraftDirty
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    /**
-     * What the draft would make of a sample of the library — changed books first.
-     *
-     * Recomputed on every keystroke, which is affordable because it reads books already in memory
-     * and writes nothing. This is the pass that has to exist before Apply is offered at all: a
-     * silent mis-parse across a subtree is far worse than no feature.
-     */
     /** Which draft row is being edited, so the preview can show the books IT is about. */
-    private val _templateFocus = MutableStateFlow<Int?>(null)
-    val templateFocus: StateFlow<Int?> = _templateFocus.asStateFlow()
+    val templateFocus: StateFlow<Int?> = bookEdit.templateFocus
 
-    fun focusTemplateRow(index: Int?) {
-        _templateFocus.value = index
-    }
+    fun focusTemplateRow(index: Int?) = bookEdit.focusTemplateRow(index)
 
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    val templatePreview: StateFlow<List<TemplateApplier.Preview>> =
-        combine(templateDraft, _templateFocus) { lines, focus -> lines to focus }
-            // Settles before it reads. Mapped straight off the draft it ran a full `SELECT * FROM
-            // books` and re-parsed every row on each character typed, and the pattern field is
-            // exactly where somebody types slowly and watches — so the preview lagged the typing on
-            // the libraries big enough to need it.
-            .debounce(PREVIEW_DEBOUNCE_MS)
-            .mapLatest { (lines, focus) ->
-                val scope = focus?.let { lines.getOrNull(it) }
-                    ?.takeIf { '\t' in it }
-                    ?.substringBefore('\t')
-                templateApplier.preview(TemplateApplier.templatesFrom(lines), focus = scope)
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** What the draft would make of a sample of the library — changed books first. */
+    val templatePreview: StateFlow<List<TemplateApplier.Preview>> = bookEdit.templatePreview
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Every book's folder path, for the template editor's folder picker.
@@ -1318,38 +1097,14 @@ class HomeViewModel @Inject constructor(
         .map { books -> books.map { it.id } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun setTemplateDraft(lines: List<String>) {
-        _templateDraft.value = lines
-    }
+    fun setTemplateDraft(lines: List<String>) = bookEdit.setTemplateDraft(lines)
 
     /**
      * Starts a template for the folder [bookId] sits in, seeded with the pattern currently reading
-     * it.
-     *
-     * Authoring a template from nothing is the miserable part of this feature: you have to work out
-     * both the scope and the shape before you can see whether either is right. Coming from a book,
-     * both are known — the folder is the book's own, and the shape is whichever pattern Homer is
-     * already matching, which is by definition the one that needs changing.
-     *
-     * Prepended, because a narrower scope has to be tried before a broader one, and idempotent: the
-     * same seed twice is one row, not two identical ones.
+     * it — see [BookEditCoordinator.seedTemplateFor].
      */
     fun seedTemplateFor(bookId: String, scopeOverride: String? = null) {
-        viewModelScope.launch {
-            // A shelf passes the folder its books share; a single book uses its own.
-            val scope = scopeOverride?.trim('/') ?: bookId.trim('/').substringBeforeLast('/', "")
-            // The pattern actually IN FORCE for this book, which is the one that needs changing —
-            // the user's own if one matches, and only then the conventional default. Seeding from
-            // DEFAULTS regardless would hand somebody who already has a pattern for this folder a
-            // different line to edit, and adding it would leave two competing rules for one folder.
-            val active = templateApplier.activeTemplates()
-            val shape = active.firstOrNull { it.parse(bookId) != null }?.template?.source
-                ?: "{author}/{title}"
-            val seeded = if (scope.isBlank()) shape else "$scope\t$shape"
-            val existing = templateDraft.value
-            _templateDraft.value = if (seeded in existing) existing else listOf(seeded) + existing
-            Log.i(TAG_STORAGE, "seeded a template for '$scope' from '$shape'")
-        }
+        viewModelScope.launch { bookEdit.seedTemplateFor(bookId, scopeOverride) }
     }
 
     /**
@@ -1362,18 +1117,7 @@ class HomeViewModel @Inject constructor(
      * people the library is shared with the fix would simply not arrive.
      */
     fun applyTemplates() {
-        viewModelScope.launch {
-            val lines = templateDraft.value
-            librarySettings.setPathTemplates(lines)
-            val result = templateApplier.applyAll(TemplateApplier.templatesFrom(lines))
-            _templateDraft.value = null
-            // The patterns, coalesced like any other edit.
-            libraryIndex.publishEdits()
-            // …and the re-derived books, but only if any actually changed: `push()` uploads the
-            // whole structure facet, which is not a thing to do because somebody opened the editor
-            // and pressed Apply on an unchanged pattern.
-            if (result.changed > 0) libraryIndex.push()
-        }
+        viewModelScope.launch { bookEdit.applyTemplates() }
     }
 
     /**
@@ -1408,9 +1152,7 @@ class HomeViewModel @Inject constructor(
     }
 
     /** Throws the draft away, reverting the editor to what is stored. */
-    fun discardTemplateDraft() {
-        _templateDraft.value = null
-    }
+    fun discardTemplateDraft() = bookEdit.discardTemplateDraft()
 
     fun setSeriesMode(mode: LibraryDepth) {
         viewModelScope.launch { librarySettings.setSeriesMode(mode.key) }
@@ -1418,7 +1160,7 @@ class HomeViewModel @Inject constructor(
 
     /** Quick hide/show from the context menu, preserving any existing metadata override. */
     fun setHidden(bookId: String, hidden: Boolean) {
-        viewModelScope.launch { bookEditor.setHidden(bookId, hidden) }
+        viewModelScope.launch { bookEdit.setHidden(bookId, hidden) }
     }
 
     /** "Mark as completed": resets the book's progress so it drops off the listening shelf and reopens fresh. */
@@ -1444,210 +1186,6 @@ class HomeViewModel @Inject constructor(
     }
 
     private companion object {
-        const val LISTENING_LIMIT = 12
-
-        const val MIRROR_MARKER = "progress.json"
-        const val TAG_STORAGE = "HomerStore"
         const val TAG_NET = "HomerNet"
-
-        /** How long the template editor settles before the preview reads the library. */
-        const val PREVIEW_DEBOUNCE_MS = 250L
     }
 }
-
-/**
- * Whether this install has a library yet, and what has to happen if it does not.
- *
- * It exists so that first install, second device and reinstall are one flow rather than three, and
- * so that none of them starts with an empty shelf and a pointer to settings.
- */
-/** The five inputs that decide the list, bundled so the language filter can be a sixth. */
-private data class Arrangement(
-    val books: List<BookListItem>,
-    val query: String,
-    val sort: LibrarySort,
-    val shelving: LibraryShelving,
-    val series: LibraryDepth,
-)
-
-/** A storage-folder change awaiting the user's decision when the target already holds a library. */
-data class PendingStorageChange(val source: String?, val target: String?)
-
-/**
- * Builds the render list. [group] alone decides sectioning and whether series collapse into
- * shelves (decoupled from [sort], which orders the units within): Author/Series group into shelves,
- * a series shelf positioned by [sort] but its episodes always in reading order; None is a flat
- * sorted list; Genre sections flat by genre.
- */
-private fun buildEntries(
-    books: List<BookListItem>,
-    sort: LibrarySort,
-    shelving: LibraryShelving,
-    series: LibraryDepth,
-): List<LibraryEntry> {
-    // Collapsing follows the series control alone now. It used to be decided by the shelving, so
-    // "by genre" silently flattened every series while "by author" kept them stacked — nobody
-    // chose that, it fell out of one expression.
-    val units = collapseIntoUnits(books, series)
-    val ordered = units.sortedWith(unitComparator(sort))
-
-    return when (shelving) {
-        LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        LibraryShelving.AUTHOR ->
-            sectioned(ordered, "Unknown author", R.string.home_shelf_unknown_author) { it.author }
-        // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
-        // are one shelf rather than two that mean the same thing. The heading itself resolves to the
-        // reader's language when it draws — see LibraryEntry.Header.genre.
-        LibraryShelving.GENRE -> sectioned(
-            ordered,
-            "No genre",
-            R.string.home_shelf_no_genre,
-            asGenre = true,
-        ) { unit ->
-            when (unit) {
-                is SortUnit.Solo -> unit.book.genre
-                is SortUnit.Ser -> seriesGenre(unit.series.books)
-            }?.let { BookGenre.canonical(it) }
-        }
-    }
-}
-
-/** A list unit awaiting placement: a standalone book or a collapsed series shelf. */
-internal sealed interface SortUnit {
-    data class Solo(val book: BookListItem) : SortUnit
-    data class Ser(val series: LibraryEntry.Series) : SortUnit
-
-    val author: String?
-        get() = when (this) {
-            is Solo -> book.author
-            is Ser -> series.author
-        }
-
-    fun toEntry(): LibraryEntry = when (this) {
-        is Solo -> LibraryEntry.Standalone(book)
-        is Ser -> series
-    }
-}
-
-/** Reading order within a series: by series index when known, then title. */
-private val inSeriesOrder: Comparator<BookListItem> =
-    compareBy({ it.seriesIndex == null }, { it.seriesIndex }, { it.title.lowercase() })
-
-/**
- * Collapses author+series sets into ordered series units; everything else stays solo.
- *
- * A set of ONE counts. It used to need two members, so a series you own a single volume of was
- * indistinguishable from a standalone book — which hid the fact that it belongs to something, and
- * meant the shelf silently appeared the day a second volume arrived.
- */
-internal fun collapseIntoUnits(
-    books: List<BookListItem>,
-    depth: LibraryDepth = LibraryDepth.SERIES,
-): List<SortUnit> {
-    if (depth == LibraryDepth.FLAT) return books.map { SortUnit.Solo(it) }
-
-    // At COLLECTION depth the grouping key is the collection — which falls back to the series for
-    // the overwhelming majority of books that are in no collection. That fallback is what keeps an
-    // ordinary series stacked at this depth instead of coming apart merely because nobody nested
-    // it inside anything, and it is why a library with no collections looks identical either way.
-    val collectionDepth = depth == LibraryDepth.COLLECTION
-    val keyOf: (BookListItem) -> String? =
-        if (collectionDepth) BookListItem::collectionKey else { b -> b.series?.let { "${b.author.orEmpty()}|$it" } }
-    val nameOf: (BookListItem) -> String? =
-        if (collectionDepth) BookListItem::effectiveCollection else BookListItem::series
-    val order = if (collectionDepth) inCollectionOrder else inSeriesOrder
-
-    val grouped = books.filter { keyOf(it) != null }.groupBy { keyOf(it)!! }
-    val consumed = HashSet<String>()
-    val units = mutableListOf<SortUnit>()
-    for ((key, members) in grouped) {
-        units += SortUnit.Ser(
-            LibraryEntry.Series(
-                key = key,
-                name = nameOf(members.first())!!,
-                author = members.first().author,
-                books = members.sortedWith(order),
-                // Named only when it is a real parent. A collection that exists purely because a
-                // series fell back to being its own is not a collection anybody made, and drawing
-                // it as one would put a badge on every series in the library.
-                isCollection = collectionDepth && members.any { it.collection != null },
-            ),
-        )
-        members.forEach { consumed += it.id }
-    }
-    books.forEach { if (it.id !in consumed) units += SortUnit.Solo(it) }
-    return units
-}
-
-private fun unitComparator(sort: LibrarySort): Comparator<SortUnit> = when (sort) {
-    LibrarySort.TITLE -> compareBy { unitTitle(it).lowercase() }
-    LibrarySort.AUTHOR -> compareBy(
-        { it.author == null }, { it.author?.lowercase() }, { unitTitle(it).lowercase() },
-    )
-    // Never-played / unmeasured sort last under the descending orders.
-    LibrarySort.RECENT -> compareByDescending { unitRecency(it) }
-    LibrarySort.DURATION -> compareByDescending { unitDuration(it) }
-}
-
-private fun unitTitle(u: SortUnit): String = when (u) {
-    is SortUnit.Solo -> u.book.title
-    is SortUnit.Ser -> u.series.name
-}
-
-private fun unitRecency(u: SortUnit): Long = when (u) {
-    is SortUnit.Solo -> u.book.lastPlayedAt ?: Long.MIN_VALUE
-    is SortUnit.Ser -> u.series.books.maxOf { it.lastPlayedAt ?: Long.MIN_VALUE }
-}
-
-private fun unitDuration(u: SortUnit): Long = when (u) {
-    is SortUnit.Solo -> u.book.totalDurationMs ?: -1L
-    is SortUnit.Ser -> u.series.books.sumOf { it.totalDurationMs ?: 0L }
-}
-
-/**
- * The genre a series shelves under: the one its books agree on, or the commonest if they don't.
- *
- * Series used to fall into "No genre" wholesale, on the reasoning that a series can span genres —
- * but that made shelving by genre hide every series in the library under one heading nobody was
- * looking in. Disagreement is the rare case and it is now the user's to fix, since a series edit
- * can set the genre for every volume at once.
- *
- * Ties go to the earliest volume: [books] arrive in reading order and `groupingBy` preserves it, so
- * a two-genre series shelves under the one it started as. Null only when NO volume has a genre.
- */
-internal fun seriesGenre(books: List<BookListItem>): String? =
-    books.mapNotNull { it.genre }
-        .groupingBy { it }
-        .eachCount()
-        .maxByOrNull { it.value }
-        ?.key
-
-/** Groups [units] into sections keyed by [keyOf] (nulls last under [fallback]) with headers. */
-private fun sectioned(
-    units: List<SortUnit>,
-    fallback: String,
-    @StringRes fallbackRes: Int,
-    sortBy: (String) -> String = { it },
-    asGenre: Boolean = false,
-    keyOf: (SortUnit) -> String?,
-): List<LibraryEntry> {
-    val byKey = units.groupBy(keyOf)
-    val keys = byKey.keys.sortedWith(compareBy({ it == null }, { it?.let(sortBy)?.lowercase() }))
-    return buildList {
-        for (key in keys) {
-            // `title` stays the English fallback even when `titleRes` replaces it on screen: it is
-            // also the header's identity for the duplicate-title key in the grid, which must not
-            // change with the interface language.
-            add(
-                LibraryEntry.Header(
-                    title = key ?: fallback,
-                    titleRes = if (key == null) fallbackRes else null,
-                    genre = key.takeIf { asGenre },
-                ),
-            )
-            byKey.getValue(key).forEach { add(it.toEntry()) }
-        }
-    }
-}
-
-
