@@ -229,6 +229,9 @@
     <string name="settings_storage_default_desc">Downloads and covers live in the app\'s storage, which is cleared if you uninstall. Pick a folder to keep them across reinstalls.</string>
     <string name="settings_storage_browse">Browse device…</string>
     <string name="settings_storage_use_app">Use app storage</string>
+    <string name="settings_storage_lost">Homer can\'t reach that folder any more</string>
+    <string name="settings_storage_lost_desc">Access to your chosen folder was withdrawn — the folder was removed, the card ejected, or the permission revoked in system settings. Downloads and covers are going to app storage in the meantime, and books already downloaded to that folder show as not downloaded. Pick the same folder again to restore it, or switch to app storage.</string>
+    <string name="settings_storage_lost_short">Chosen folder unreachable</string>
     <string name="settings_storage_picker_desc">“Choose folder” uses Android\'s folder chooser; “Browse device” uses all-files access (pick any folder) if the chooser won\'t cooperate. Changing the location moves your downloads and covers to the new place.</string>
     <string name="settings_online_covers">Look up missing covers online</string>
     <string name="settings_online_covers_desc">Sends only the title and author of art-less books to Open Library (openlibrary.org, run by the Internet Archive) — a third party — to find a cover. Your server, account and library stay private.</string>

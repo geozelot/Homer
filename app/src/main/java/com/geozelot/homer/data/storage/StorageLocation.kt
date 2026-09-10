@@ -56,6 +56,27 @@ class StorageLocation @Inject constructor(
     }
 
     /**
+     * Whether a custom location is configured but cannot be used, so [area] is quietly handing back
+     * the default area instead.
+     *
+     * The fallback itself is right — refusing to store anything would be worse — but it is silent,
+     * and silence is the problem: a revoked SAF grant (the folder deleted, the card pulled, access
+     * withdrawn in system settings) leaves every downloaded book reading as not downloaded, new
+     * downloads landing somewhere the user never chose, and the settings page still naming the
+     * folder as if it were in use. This is what lets that be said out loud.
+     *
+     * Deliberately a question and not a stored flag: the grant can be taken away while Homer is not
+     * running, so the only trustworthy answer is the one the system gives when asked.
+     */
+    suspend fun customLocationUnavailable(): Boolean {
+        val path = librarySettings.customStoragePath.first()
+        if (path != null && hasAllFilesAccess()) return false
+        val uri = librarySettings.customStorageUri.first()?.let(Uri::parse)
+        if (uri != null && hasPermission(uri)) return false
+        return path != null || uri != null
+    }
+
+    /**
      * Builds an area for an explicit [token] (see [currentLocation]) — null → the default area,
      * a `content://` token → SAF, any other string → a filesystem path (all-files). Used by the
      * migrator to hold the source and target areas at once.

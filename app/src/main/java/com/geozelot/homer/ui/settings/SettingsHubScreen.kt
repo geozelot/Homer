@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,6 +55,11 @@ fun SettingsHubScreen(
     val readsOnly by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
+    val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
+
+    // Asked here as well as on the page itself: a withdrawn folder grant is invisible until
+    // somebody goes looking, and this row is what they would have to think to open.
+    LaunchedEffect(customStoragePath, customStorageUri) { viewModel.refreshStorageAccess() }
 
     SettingsScaffold(stringResource(R.string.settings_title), onBack, modifier) {
         // Three categories, because the eight rows underneath answer three different questions:
@@ -80,7 +86,7 @@ fun SettingsHubScreen(
         // "What's stored here" — downloads and covers on this phone.
         SettingsNavRow(
             label = stringResource(R.string.set_device_title),
-            summary = storageSummary(customStoragePath, customStorageUri),
+            summary = storageSummary(customStoragePath, customStorageUri, storageLost),
             onClick = onOpenDevice,
         )
         SettingsNavRow(
@@ -186,9 +192,17 @@ private fun sourceSummary(
     }
 }
 
-/** Where downloads live, named the way the "On this device" page names it. */
+/**
+ * Where downloads live, named the way the "On this device" page names it — or, when the grant on
+ * that folder is gone, the fact that it is, in place of a folder name that is no longer true.
+ */
 @Composable
-private fun storageSummary(customStoragePath: String?, customStorageUri: String?): String = when {
+private fun storageSummary(
+    customStoragePath: String?,
+    customStorageUri: String?,
+    accessLost: Boolean,
+): String = when {
+    accessLost -> stringResource(R.string.settings_storage_lost_short)
     customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath)
     customStorageUri != null ->
         stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri))

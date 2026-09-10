@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,8 @@ import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.notificationsEnabled
 import com.geozelot.homer.ui.openNotificationSettings
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.Danger
+import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 
 /**
@@ -56,6 +59,20 @@ fun DeviceStorageScreen(
     val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val downloaded by viewModel.downloadedCount.collectAsStateWithLifecycle()
+    val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
+
+    // Re-asked on every resume, not once: the way a folder grant is lost is that the user leaves
+    // for system settings (or a file manager, or the card slot) and comes back — so the moment this
+    // page becomes visible again is exactly the moment the answer may have changed.
+    val storageLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(storageLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshStorageAccess()
+        }
+        storageLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { storageLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(customStoragePath, customStorageUri) { viewModel.refreshStorageAccess() }
 
     var confirmUseAppStorage by remember { mutableStateOf(false) }
     var confirmDeleteDownloads by remember { mutableStateOf(false) }
@@ -82,17 +99,33 @@ fun DeviceStorageScreen(
                     stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri!!))
                 else -> stringResource(R.string.settings_storage_default)
             },
-            color = Parchment,
+            // Dimmed while it is unreachable: the folder is still what was chosen, but nothing is
+            // being written there, and stating it in the same voice as a working one is a lie.
+            color = if (storageLost) Muted else Parchment,
             fontSize = 14.sp,
         )
-        SettingsExplanation(
-            text = if (custom != null) {
-                stringResource(R.string.settings_storage_custom_desc)
-            } else {
-                stringResource(R.string.settings_storage_default_desc)
-            },
-            modifier = Modifier.padding(top = 2.dp),
-        )
+        if (storageLost) {
+            // Said here rather than left to be inferred from books that quietly stopped being
+            // downloaded. The two buttons below are already the whole remedy — pick the folder
+            // again, or move to app storage — so this states the problem and points at them.
+            Text(
+                stringResource(R.string.settings_storage_lost),
+                color = Danger,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+            )
+            SettingsExplanation(stringResource(R.string.settings_storage_lost_desc))
+        } else {
+            SettingsExplanation(
+                text = if (custom != null) {
+                    stringResource(R.string.settings_storage_custom_desc)
+                } else {
+                    stringResource(R.string.settings_storage_default_desc)
+                },
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HomerTextButton(onClick = { folderPicker.launch(null) }, contentPadding = SettingsActionPadding) {
                 Text(stringResource(R.string.set_device_choose_folder))

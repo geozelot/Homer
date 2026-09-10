@@ -217,6 +217,9 @@
     <string name="settings_storage_default_desc">Downloads und Cover liegen im Speicher der App, der beim Deinstallieren gelöscht wird. Wähle einen Ordner, damit sie eine Neuinstallation überleben.</string>
     <string name="settings_storage_browse">Gerät durchsuchen…</string>
     <string name="settings_storage_use_app">App-Speicher verwenden</string>
+    <string name="settings_storage_lost">Homer erreicht diesen Ordner nicht mehr</string>
+    <string name="settings_storage_lost_desc">Der Zugriff auf deinen gewählten Ordner wurde entzogen — der Ordner wurde gelöscht, die Karte entfernt oder die Berechtigung in den Systemeinstellungen widerrufen. Downloads und Cover liegen so lange im App-Speicher, und bereits dorthin geladene Bücher gelten als nicht heruntergeladen. Wähle denselben Ordner erneut, um ihn wiederherzustellen, oder wechsle zum App-Speicher.</string>
+    <string name="settings_storage_lost_short">Gewählter Ordner nicht erreichbar</string>
     <string name="settings_storage_picker_desc">„Ordner auswählen“ nutzt Androids Ordnerauswahl; „Gerät durchsuchen“ nutzt den Zugriff auf alle Dateien (beliebiger Ordner), falls die Auswahl nicht mitspielt. Ein Wechsel verschiebt deine Downloads und Cover an den neuen Ort.</string>
     <string name="settings_online_covers">Fehlende Cover online suchen</string>
     <string name="settings_online_covers_desc">Sendet nur Titel und Autor von Büchern ohne Bild an Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — um ein Cover zu finden. Dein Server, dein Konto und deine Bibliothek bleiben privat.</string>

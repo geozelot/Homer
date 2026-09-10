@@ -649,6 +649,28 @@ class HomeViewModel @Inject constructor(
     /** Whether the app currently holds all-files access (for the storage folder browser). */
     fun hasAllFilesAccess(): Boolean = storageLocation.hasAllFilesAccess()
 
+    private val _storageAccessLost = MutableStateFlow(false)
+
+    /**
+     * True when a custom storage folder is configured but Homer can no longer reach it.
+     *
+     * Not derived from the settings flows: they only say which folder was CHOSEN, and the grant on
+     * it can be withdrawn while the app is not running — so this is refreshed by asking the system,
+     * on the screens that state where downloads go.
+     */
+    val storageAccessLost: StateFlow<Boolean> = _storageAccessLost.asStateFlow()
+
+    /** Re-asks whether the chosen storage folder is still reachable. Cheap; call it on entry. */
+    fun refreshStorageAccess() {
+        viewModelScope.launch {
+            val lost = storageLocation.customLocationUnavailable()
+            if (lost != _storageAccessLost.value) {
+                Log.w(TAG_STORAGE, "custom storage folder reachable=${!lost}")
+            }
+            _storageAccessLost.value = lost
+        }
+    }
+
     /** Whether opening/resuming the app requires a biometric / device-credential unlock. */
     val appLockEnabled: StateFlow<Boolean> = librarySettings.appLockEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
