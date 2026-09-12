@@ -80,20 +80,51 @@ jobs:
           DEST="out/homer-${{ steps.version.outputs.asset }}.apk"
           cp "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          # The R8 mapping, without which a stack trace from a release build is unreadable —
+          # every Homer frame comes back as `jn.v` / `qp3.l` and the report is worth nothing.
+          # It only exists on the runner, so it has to leave with the APK or it is gone with the
+          # machine. R8 stamps each trace with an `r8-map-id-<hash>` matching the file that
+          # decodes it, so a trace can always be paired with the right build's mapping.
+          #
+          # Gzipped, and not out of tidiness: the raw file is ~67MB against a ~4MB APK, sixteen
+          # times the app it explains, and a beta line cuts a lot of builds. It compresses to ~5MB.
+          # To read a trace: gunzip it and run R8's retrace with the file whose `pg_map_id` header
+          # matches the `r8-map-id-` in the trace.
+          MAP=app/build/outputs/mapping/release/mapping.txt
+          if [ -f "$MAP" ]; then
+            DEST_MAP="out/homer-${{ steps.version.outputs.asset }}-mapping.txt.gz"
+            gzip -9 -c "$MAP" > "$DEST_MAP"
+            echo "mapping=$DEST_MAP" >> "$GITHUB_OUTPUT"
+            echo "Collected the R8 mapping: $(du -h "$MAP" | cut -f1) -> $(du -h "$DEST_MAP" | cut -f1)."
+          else
+            # Not fatal: a build with minification off has nothing to map.
+            echo "::warning::No R8 mapping at $MAP — release stack traces will not be decodable."
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: homer-${{ steps.version.outputs.name }}
-          path: ${{ steps.apk.outputs.path }}
+          path: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.mapping }}
+          # A manual run with minification off produces no mapping; the APK is still the point.
+          if-no-files-found: warn
           overwrite: true
 
       - name: Attach APK to the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.apk.outputs.path }}
-          fail_on_unmatched_files: true
+          # The mapping rides along with the release rather than only as a build artifact:
+          # artifacts expire, and the trace that needs decoding usually arrives months later.
+          # Safe to attach — the in-app updater selects by `.apk` suffix (see GitHubReleaseSource),
+          # so an extra asset is invisible to it, and there is nothing to keep secret in a mapping
+          # file for a GPLv3 app whose source is right here.
+          files: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.mapping }}
+          fail_on_unmatched_files: false
           # A tag carrying a pre-release suffix (v2.0.0-BETA, v2.1.0-rc1) is marked as one, so
           # `/releases/latest` keeps pointing at the last finished release. The in-app updater's
           # Stable channel relies on this flag to tell a beta from a release.
