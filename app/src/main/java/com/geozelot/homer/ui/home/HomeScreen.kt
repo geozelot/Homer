@@ -578,6 +578,8 @@ fun HomeScreen(
                 state = playback,
                 onOpenPlayer = onBookClick,
                 onPlayPause = viewModel::playPause,
+                onPrevChapter = viewModel::previousChapter,
+                onNextChapter = viewModel::nextChapter,
                 onRetry = viewModel::retry,
                 liveCover = miniPlayerBook?.coverModel,
                 liveTitle = miniPlayerBook?.title,

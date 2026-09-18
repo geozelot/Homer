@@ -17,11 +17,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,6 +57,8 @@ fun MiniPlayer(
     state: PlaybackUiState,
     onOpenPlayer: (String) -> Unit,
     onPlayPause: () -> Unit,
+    onPrevChapter: () -> Unit,
+    onNextChapter: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     /** Live cover/title from the library row (update on refresh/edit); fall back to the snapshot. */
@@ -152,6 +157,21 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // Chapter steps, only for a book that HAS chapters. A single-file book with no
+            // embedded marks has exactly one media item, so both of these would be inert controls
+            // sitting either side of the one that works — and on a phone they would be taking the
+            // title's room to do it.
+            //
+            // Quiet, and smaller than the play button on purpose: this bar is a shortcut, and the
+            // one thing it is a shortcut TO is play/pause. 40dp rather than 48: below the usual
+            // minimum, and the trade a dense bar makes to keep a readable title beside it.
+            if (state.chapterCount > 1) {
+                MiniChapterButton(
+                    icon = Icons.Filled.SkipPrevious,
+                    label = stringResource(R.string.player_cd_previous),
+                    onClick = onPrevChapter,
+                )
+            }
             // 48dp touch target around the 38dp button: the circle keeps its size, only the
             // tappable area grows (it also has to swallow the row's own click).
             Box(
@@ -183,6 +203,13 @@ fun MiniPlayer(
                     )
                 }
             }
+            if (state.chapterCount > 1) {
+                MiniChapterButton(
+                    icon = Icons.Filled.SkipNext,
+                    label = stringResource(R.string.player_cd_next),
+                    onClick = onNextChapter,
+                )
+            }
         }
         // Live progress hairline, drawn last so it sits on top of the separator.
         Box(
@@ -191,6 +218,25 @@ fun MiniPlayer(
                 .height(2.dp)
                 .background(Amber),
         )
+    }
+}
+
+/**
+ * One chapter step on the bar.
+ *
+ * It has to swallow the row's own click the way the play button does — the whole bar opens the
+ * player, and a chapter step that also opened it would be two actions on one tap.
+ */
+@Composable
+private fun MiniChapterButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(50))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = Muted, modifier = Modifier.size(21.dp))
     }
 }
 

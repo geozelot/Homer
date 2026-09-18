@@ -1169,6 +1169,11 @@ class HomeViewModel @Inject constructor(
     /** Toggle play/pause on the currently-loaded book (docked mini-player). */
     fun playPause() = connection.playPause()
 
+    /** Chapter steps for the docked mini-player; the player screen drives its own. */
+    fun previousChapter() = connection.previousChapter()
+
+    fun nextChapter() = connection.nextChapter()
+
     /** Retry a stalled stream from the docked mini-player (after a connection error). */
     fun retry() = connection.retry()
 
