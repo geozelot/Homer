@@ -93,11 +93,7 @@ fun PlayerScreen(
      * but one. Set when the library opens a book AT a bookmark.
      */
     startAtMs: Long = -1L,
-    /**
-     * Leaves the player. Null in a docked pane, where the player is not covering anything and
-     * there is nothing to go back to — the back arrow and the swipe-down both stand down.
-     */
-    onBack: (() -> Unit)?,
+    onBack: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     // The playback state is held as a State OBJECT here, never read at this level. THREE of its

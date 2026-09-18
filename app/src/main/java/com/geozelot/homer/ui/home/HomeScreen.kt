@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.home
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -103,33 +104,42 @@ import com.geozelot.homer.ui.theme.Surface1
 // They were one 3,500-line file until the split; nothing moved except across file boundaries.
 
 /**
- * The viewport height below which the library stops affording pinned chrome.
+ * A phone, as opposed to a tablet — the smallest of the window's two dimensions.
  *
- * Every piece of furniture above the grid — the top bar, the listening shelf, the control band —
- * is a fixed number of dp, and rotating a phone halves the height without any of them noticing. On
- * an 800×360 landscape phone they came to about 355dp of a 360dp screen: the library was left with
- * a sliver, and because the shelf folds ON SCROLL and there was nothing left to scroll, the one
- * mechanism that would have given the space back could not be reached.
+ * **This is the signal, and an absolute height was not.** The first version of this decided
+ * "landscape phone" by height alone, on the reasoning that the tallest phone on its side is about
+ * 430dp. That is only true at a device's default density. Android lets the reader choose a display
+ * size, and a large phone set to its smallest gives back dp in both directions — a 1440px handset
+ * can report something like 1164×523 on its side, which sails past every threshold written for a
+ * phone and gets served the tablet layout on a phone.
  *
- * 480dp is chosen to sit above every phone in landscape (the tallest are about 430dp) and below
- * every phone in portrait and every tablet in either orientation. It is a HEIGHT and not an
- * orientation on purpose: a short split-screen window has the same problem and deserves the same
- * answer, and a tall tablet turned sideways has no problem to fix.
+ * `smallestScreenWidthDp` is the one measurement that does not move: it is the SHORTER edge, so it
+ * is the same number in both orientations, and it is what Android itself uses to tell the classes
+ * of device apart (the `sw600dp` resource qualifier). A phone stays under 600 at any display size;
+ * a 7" tablet starts at 600 and a 10" at 720.
  */
-private val CompactLibraryHeight = 480.dp
+private val TabletSmallestWidth = 600.dp
 
 /**
- * The width the merged control row needs before it is an improvement rather than a clipping.
+ * The width the rail and the merged control row both need.
  *
- * Label, search, arrange, the view toggle and two 48dp actions come to about 450dp of things that
- * cannot shrink. Above this they sit comfortably on one row and the 64dp top bar is pure saving;
- * below it — a narrow split-screen window that also happens to be short — the trailing actions
- * would be cut off the end, and a top bar costs less than an unreachable settings button.
- *
- * So the two savings are decided separately: folding the panel needs no width and always applies,
- * merging the chrome needs this.
+ * The rail is 180dp and the grid beside it wants four columns at least. The merged row is the
+ * binding constraint anyway: label, search, arrange, the view toggle and two 48dp actions come to
+ * about 450dp of things that cannot shrink, and below that the trailing actions are clipped off the
+ * end — a top bar costs less than an unreachable settings button.
  */
-private val CompactChromeMinWidth = 600.dp
+private val LandscapeMinWidth = 600.dp
+
+/**
+ * The height below which stacked chrome stops fitting, for a window that cannot have the rail.
+ *
+ * Every piece of furniture above the grid — the top bar, the listening panel, the control band — is
+ * a fixed number of dp, and a short window does not make any of them smaller. On an 800×360 screen
+ * they came to about 355dp of 360: the library was left with a sliver, and because the panel folds
+ * ON SCROLL and there was nothing left to scroll, the one mechanism that would have given the space
+ * back could not be reached.
+ */
+private val CompactLibraryHeight = 480.dp
 
 /**
  * How the library arranges itself for the window it is in.
@@ -148,9 +158,9 @@ internal enum class LibraryLayout {
     STACKED_COMPACT,
 
     /**
-     * Short and wide — a phone on its side. The panel goes down the left as a rail, spending width
-     * the grid does not need (it caps at six columns either way), and the top bar folds into the
-     * control row. Nothing above the grid but the controls.
+     * A phone on its side. The panel goes down the left as a rail, spending width the grid does not
+     * need (it caps at six columns either way), and the top bar folds into the control row. Nothing
+     * above the grid but the controls.
      */
     RAIL,
     ;
@@ -166,16 +176,20 @@ internal enum class LibraryLayout {
 }
 
 /**
- * The layout for a window size.
+ * The layout for a window.
  *
- * Pure and named so the thresholds can be stated against real device sizes in a test rather than
- * only in a comment — and because the asymmetry is the part worth pinning: a short window always
- * does something, but only a short AND wide one has room for the rail and the merged row.
+ * Read the branches as a sentence: a tablet has height to spare whichever way up it is held; a phone
+ * turned on its side with room beside the grid gets the rail; anything else short enough to be
+ * cramped folds what it can; everything else stacks.
+ *
+ * Pure and named so the rules can be stated against real device sizes in a test rather than only in
+ * a comment. They have already been wrong once — see [TabletSmallestWidth].
  */
-internal fun libraryLayoutFor(width: Dp, height: Dp): LibraryLayout = when {
-    height >= CompactLibraryHeight -> LibraryLayout.STACKED
-    width >= CompactChromeMinWidth -> LibraryLayout.RAIL
-    else -> LibraryLayout.STACKED_COMPACT
+internal fun libraryLayoutFor(width: Dp, height: Dp, smallestWidth: Dp): LibraryLayout = when {
+    smallestWidth >= TabletSmallestWidth -> LibraryLayout.STACKED
+    width > height && width >= LandscapeMinWidth -> LibraryLayout.RAIL
+    height < CompactLibraryHeight -> LibraryLayout.STACKED_COMPACT
+    else -> LibraryLayout.STACKED
 }
 
 @Composable
@@ -184,13 +198,6 @@ fun HomeScreen(
     onBookClickAt: (String, Long) -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenSettings: () -> Unit,
-    /**
-     * Whether to dock the mini-player at the foot of the list.
-     *
-     * False in a two-pane layout, where the player is already on screen beside this one and a
-     * second set of transport controls for the same audio is furniture, not a shortcut.
-     */
-    showMiniPlayer: Boolean = true,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -329,8 +336,21 @@ fun HomeScreen(
     }
 
     // What this window can afford above the first cover — see [libraryChromeFor].
-    val layout = LocalConfiguration.current.let {
-        libraryLayoutFor(width = it.screenWidthDp.dp, height = it.screenHeightDp.dp)
+    val config = LocalConfiguration.current
+    val layout = libraryLayoutFor(
+        width = config.screenWidthDp.dp,
+        height = config.screenHeightDp.dp,
+        smallestWidth = config.smallestScreenWidthDp.dp,
+    )
+    // Logged on every change, because the last time this was wrong the report could only say the
+    // layout "looked like a tablet" and the numbers behind that had to be guessed at. One line per
+    // rotation makes the next one a fact.
+    LaunchedEffect(layout, config.screenWidthDp, config.screenHeightDp) {
+        Log.i(
+            TAG_UI,
+            "library layout=$layout window=${config.screenWidthDp}x${config.screenHeightDp}dp " +
+                "sw=${config.smallestScreenWidthDp}dp",
+        )
     }
     // Every rule about when this panel folds lives in ListeningFold, with tests.
     // Keyed on `compact` so a rotation re-decides: the saved value belongs to the layout it was
@@ -619,7 +639,7 @@ fun HomeScreen(
         // The mini-player insets itself (its gradient runs behind the navigation bar). When there's
         // nothing playing it emits nothing at all, so the space has to be reserved here or the last
         // row of books ends up under the navigation bar.
-        if (showMiniPlayer && playback.bookId != null) {
+        if (playback.bookId != null) {
             MiniPlayer(
                 state = playback,
                 onOpenPlayer = onBookClick,
@@ -873,3 +893,6 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.withAmber(s: String
     append(s)
     pop()
 }
+
+/** Log tag for what the window is and what the library did about it. */
+private const val TAG_UI = "HomerUI"

@@ -42,31 +42,23 @@ internal fun PlayerArtwork(
      * ONLY, because it changes every second and this composable holds the cover.
      */
     sleepRemainingMs: () -> Long?,
-    /** Collapse back to the mini-player, or null where there is nothing to collapse into — the
-     *  docked pane of a two-pane layout, which is not covering anything. */
-    onCollapse: (() -> Unit)?,
+    onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(
         modifier = modifier
             // Swipe down anywhere on the artwork to collapse back to the mini-player.
-            .then(
-                if (onCollapse == null) {
-                    Modifier
-                } else {
-                    Modifier.pointerInput(Unit) {
-                        val threshold = 60.dp.toPx()
-                        var dragged = 0f
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                if (dragged > threshold) onCollapse()
-                                dragged = 0f
-                            },
-                            onVerticalDrag = { _, delta -> dragged += delta },
-                        )
-                    }
-                },
-            ),
+            .pointerInput(Unit) {
+                val threshold = 60.dp.toPx()
+                var dragged = 0f
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (dragged > threshold) onCollapse()
+                        dragged = 0f
+                    },
+                    onVerticalDrag = { _, delta -> dragged += delta },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         // Largest SQUARE cover that fits the slot both ways, floored so a pathological slot can't

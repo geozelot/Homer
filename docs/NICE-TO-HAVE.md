@@ -31,6 +31,28 @@ devices, once. It wants a device and a deliberate afternoon, not a spare ten min
 
 ---
 
+## The two-pane layout: library and player side by side
+
+**What.** On a wide window, the library keeps a docked player beside it instead of pushing a player
+destination. It was built, shipped in a beta, and taken out again.
+
+**Why it is not in.** It was gated on `screenWidthDp >= 840`, which a large phone clears the moment
+its owner picks a smaller display size — so the first person to rotate a real device got a squeezed
+player pane on a phone, which is the opposite of what the feature is for. That gate is fixable (the
+same `smallestScreenWidthDp` signal the rail now uses tells a phone from a tablet at any density),
+but fixing it would only have moved the feature somewhere nobody has looked at it: it has never run
+on a tablet.
+
+So it came out rather than being re-gated. A player pane is a real design question — how wide, what
+it shows when nothing is playing, whether a rail on one side and a player on the other leaves a grid
+worth having between them — and answering it from a threshold in a nav host, sight unseen, is how it
+went wrong the first time.
+
+**What it would cost.** Mostly the design. The code is in the history (`2d36c04`, reverted in the
+commit that fixed landscape) and was not complicated; what it lacks is a tablet and a decision.
+
+---
+
 ## The side rail on a tall wide window — a tablet
 
 **What.** The Currently-listening rail now exists: on a short, wide window (a phone on its side) the

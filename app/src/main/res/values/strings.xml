@@ -437,8 +437,6 @@
     <string name="player_chapter_at_pct">at %1$s · %2$s%%</string>
     <string name="player_now_playing">NOW PLAYING</string>
     <string name="player_time_remaining">-%1$s</string>
-    <string name="player_pane_empty">Nothing playing</string>
-    <string name="player_pane_empty_hint">Open a book from the library and it plays here.</string>
     <string name="player_time_unknown">--:--</string>
     <string name="player_cd_previous">Previous chapter</string>
     <string name="player_cd_next">Next chapter</string>

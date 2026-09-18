@@ -5,49 +5,54 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Which layout a window size gets.
+ * Which layout a window gets.
  *
- * Written against real window sizes rather than the thresholds themselves, because the thresholds
- * only mean anything as answers about actual devices — and because the rule is asymmetric in a way
- * that is easy to "simplify" back into a bug: being short is what starts the decision, but only
- * being short AND wide earns the rail.
+ * Written against real devices rather than against the thresholds, because the thresholds only mean
+ * anything as answers about actual hardware — and because this has already been wrong once in a way
+ * no threshold-shaped test would have caught: the rule keyed on an absolute height, a large phone at
+ * a reduced display size reported more dp than the rule expected in BOTH directions, and a phone was
+ * served the tablet layout. The case is in here now, with the numbers it actually reported.
  */
 class LibraryLayoutTest {
 
+    /** Portrait and landscape of the same device, since the point is that both must be right. */
+    private fun portrait(w: Int, h: Int) = libraryLayoutFor(w.dp, h.dp, minOf(w, h).dp)
+    private fun landscape(w: Int, h: Int) = libraryLayoutFor(h.dp, w.dp, minOf(w, h).dp)
+
     @Test
-    fun `a phone in portrait stacks everything`() {
-        assertEquals(LibraryLayout.STACKED, libraryLayoutFor(360.dp, 800.dp))
+    fun `a phone stacks upright and rails on its side`() {
+        assertEquals(LibraryLayout.STACKED, portrait(360, 800))
+        assertEquals(LibraryLayout.RAIL, landscape(360, 800))
     }
 
     @Test
-    fun `a phone in landscape gets the rail`() {
-        // 800x360: the case this exists for. Stacked, the furniture came to ~355dp of 360.
-        assertEquals(LibraryLayout.RAIL, libraryLayoutFor(800.dp, 360.dp))
+    fun `a large phone at a reduced display size is still a phone`() {
+        // The regression. This device reports ~523x1164 upright — past every absolute threshold a
+        // phone was assumed to stay under, in both directions at once. Its SHORTER edge still says
+        // phone, which is the whole reason the rule reads that instead.
+        assertEquals(LibraryLayout.STACKED, portrait(523, 1164))
+        assertEquals(LibraryLayout.RAIL, landscape(523, 1164))
     }
 
     @Test
-    fun `the largest phones in landscape are still short`() {
-        // 926x428 — a 6.7" phone. Comfortably above the tallest, comfortably below portrait.
-        assertEquals(LibraryLayout.RAIL, libraryLayoutFor(926.dp, 428.dp))
-    }
-
-    @Test
-    fun `a tablet stacks in both orientations`() {
-        assertEquals(LibraryLayout.STACKED, libraryLayoutFor(1280.dp, 800.dp))
-        assertEquals(LibraryLayout.STACKED, libraryLayoutFor(800.dp, 1280.dp))
+    fun `a tablet stacks whichever way up it is held`() {
+        assertEquals(LibraryLayout.STACKED, portrait(800, 1280))
+        assertEquals(LibraryLayout.STACKED, landscape(800, 1280))
+        // A 7" tablet, right on the boundary Android itself draws.
+        assertEquals(LibraryLayout.STACKED, landscape(600, 960))
     }
 
     @Test
     fun `an unfolded foldable is a tablet, not a wide phone`() {
-        assertEquals(LibraryLayout.STACKED, libraryLayoutFor(841.dp, 674.dp))
+        assertEquals(LibraryLayout.STACKED, portrait(674, 841))
+        assertEquals(LibraryLayout.STACKED, landscape(674, 841))
     }
 
     @Test
-    fun `a window both short and narrow folds the panel and keeps its top bar`() {
-        // The asymmetry, and the reason this is not one threshold. A split-screen half has the same
-        // height problem, but neither the width to put a rail beside the grid nor the width to
-        // carry six controls on one row — so it does the only thing left and folds.
-        val layout = libraryLayoutFor(360.dp, 400.dp)
+    fun `a window short and too narrow for a rail folds what it can`() {
+        // A split-screen half: the same height problem, without the width to put a rail beside the
+        // grid or to carry six controls on one row. It folds the panel and keeps its top bar.
+        val layout = libraryLayoutFor(360.dp, 400.dp, 360.dp)
         assertEquals(LibraryLayout.STACKED_COMPACT, layout)
         assert(layout.foldListening) { "no room to open the panel into" }
         assert(!layout.listeningRail) { "no room to put it beside anything" }
@@ -55,8 +60,15 @@ class LibraryLayoutTest {
     }
 
     @Test
+    fun `a landscape window too narrow for the rail does not get one`() {
+        // Half of a landscape phone, side by side with another app: wider than tall, and still not
+        // 600dp across.
+        assertEquals(LibraryLayout.STACKED_COMPACT, libraryLayoutFor(582.dp, 360.dp, 360.dp))
+    }
+
+    @Test
     fun `a rail never also folds — there is nothing to fold`() {
-        val layout = libraryLayoutFor(800.dp, 360.dp)
+        val layout = landscape(360, 800)
         assert(layout.listeningRail)
         assert(!layout.foldListening) { "a rail is not in the library's way" }
         assert(layout.mergeTopBar)

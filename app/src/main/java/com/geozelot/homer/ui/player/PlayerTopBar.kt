@@ -41,8 +41,7 @@ internal fun PlayerTopBar(
     offline: Boolean,
     downloading: Boolean,
     canShowDetails: Boolean,
-    /** Leaves the player, or null where it cannot be left — a docked pane has nowhere to go. */
-    onBack: (() -> Unit)?,
+    onBack: () -> Unit,
     onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
     onDetails: () -> Unit,
@@ -57,14 +56,8 @@ internal fun PlayerTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_back), tint = Muted)
-            }
-        } else {
-            // The row is a SpaceBetween of three, so the title only sits centred while the leading
-            // slot is occupied. Held open rather than removed.
-            Spacer(Modifier.size(BackSlotWidth))
+        IconButton(onClick = onBack) {
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_back), tint = Muted)
         }
         Text(stringResource(R.string.player_now_playing), style = SectionLabel, color = Muted)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -142,5 +135,3 @@ internal fun PlayerTopBar(
     }
 }
 
-/** The width of the leading slot, held open when there is no back control — a default [IconButton]. */
-private val BackSlotWidth = 48.dp
