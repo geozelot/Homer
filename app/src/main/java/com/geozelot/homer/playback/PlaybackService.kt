@@ -11,6 +11,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -49,6 +50,12 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
 
+    /** The volume override in force, kept so it can be re-applied when the audio session changes. */
+    private var volumeMode: String = VolumeMode.NORMAL
+
+    /** The audio session [loudnessEnhancer] is bound to; an effect cannot be moved between them. */
+    private var enhancerSession: Int = C.AUDIO_SESSION_ID_UNSET
+
     override fun onCreate() {
         super.onCreate()
 
@@ -76,6 +83,22 @@ class PlaybackService : MediaLibraryService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player = exoPlayer
+
+        // The boost has to follow the audio session, and the session does not exist yet.
+        //
+        // An AudioEffect is bound to one session id for its whole life, and a player has no session
+        // until it prepares its first track — so the enhancer built in onCreate would attach to
+        // AUDIO_SESSION_ID_UNSET, which is the GLOBAL output mix rather than this app's audio, and
+        // then stay there for every book that followed. This rebinds it the moment a real session
+        // arrives, and again whenever it changes.
+        exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioSessionIdChanged(
+                eventTime: AnalyticsListener.EventTime,
+                audioSessionId: Int,
+            ) {
+                applyBoost(audioSessionId)
+            }
+        })
 
         // Apply persisted skip-silence + volume override to this session's player.
         serviceScope.launch {
@@ -124,20 +147,49 @@ class PlaybackService : MediaLibraryService() {
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 
-    /** Applies a volume override: player volume for reduced/normal, plus a LoudnessEnhancer for
-     *  the "increased" boost (audio effects are flaky per-device, so failures degrade silently). */
+    /**
+     * Applies a volume override: player volume for reduced and normal, plus a [LoudnessEnhancer]
+     * for the "increased" boost.
+     *
+     * The mode is remembered because the boost cannot always be applied when it is chosen — see
+     * [applyBoost].
+     */
     private fun applyVolumeMode(mode: String) {
+        volumeMode = mode
         val exo = player ?: return
-        exo.volume = if (mode == VolumeMode.REDUCED) 0.45f else 1.0f
+        exo.volume = if (mode == VolumeMode.REDUCED) REDUCED_VOLUME else 1.0f
+        applyBoost(exo.audioSessionId)
+    }
+
+    /**
+     * Binds the boost to the session that is actually playing, and puts it in the state the current
+     * mode asks for.
+     *
+     * Two things had to be true for this to work and neither was. The effect needs
+     * `MODIFY_AUDIO_SETTINGS`, which was not declared — the constructor threw on every attempt and
+     * a `runCatching` swallowed it, so the boost had never once been applied. And it has to be built
+     * against a real session id: called from `onCreate` there is none yet, and an effect built on
+     * the unset id attaches to the global output mix and then stays bound to it.
+     *
+     * Failures still degrade silently, because audio effects genuinely are per-device flaky — but
+     * they are logged now, rather than being indistinguishable from a boost that simply did nothing.
+     */
+    private fun applyBoost(sessionId: Int) {
+        if (sessionId != enhancerSession) {
+            runCatching { loudnessEnhancer?.release() }
+            loudnessEnhancer = null
+            enhancerSession = sessionId
+        }
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET) return
         runCatching {
-            val enhancer = loudnessEnhancer ?: LoudnessEnhancer(exo.audioSessionId).also { loudnessEnhancer = it }
-            if (mode == VolumeMode.INCREASED) {
-                enhancer.setTargetGain(700) // +7 dB loudness boost
+            val enhancer = loudnessEnhancer ?: LoudnessEnhancer(sessionId).also { loudnessEnhancer = it }
+            if (volumeMode == VolumeMode.INCREASED) {
+                enhancer.setTargetGain(BOOST_MILLIBELS)
                 enhancer.enabled = true
             } else {
                 enhancer.enabled = false
             }
-        }
+        }.onFailure { Log.w(TAG, "loudness boost unavailable on this device", it) }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -145,6 +197,13 @@ class PlaybackService : MediaLibraryService() {
 
     private companion object {
         const val TAG = "HomerPlay"
+
+        /** "Reduced" as a player volume. Quiet enough to be a different setting, loud enough to
+         *  still be listening — a fifth would be a mute with extra steps. */
+        const val REDUCED_VOLUME = 0.45f
+
+        /** "Increased" as a gain, in millibels: +7 dB. */
+        const val BOOST_MILLIBELS = 700
     }
 
     override fun onDestroy() {

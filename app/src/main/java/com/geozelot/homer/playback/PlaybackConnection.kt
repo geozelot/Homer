@@ -697,7 +697,11 @@ class PlaybackConnection @Inject constructor(
      *
      * Tracked so it can be cancelled: if the user hits play during the fade, an unowned ramp would
      * keep going and force-pause them a moment later — with the volume left part-way down. The
-     * `finally` restores full volume however the ramp ends.
+     * `finally` puts the volume back however the ramp ends, cancellation included.
+     *
+     * The ramp is RELATIVE to where the volume already is. It used to run from 1.0 down, which on a
+     * reduced-volume setting jumped the audio up to full for the first step before fading it — the
+     * one moment in the app where getting louder is the opposite of what was asked for.
      */
     private fun fadeOutAndPause() {
         val c = controller ?: return
@@ -708,25 +712,50 @@ class PlaybackConnection @Inject constructor(
                 c.pause()
                 return@launch
             }
+            val from = c.volume
             val steps = 20
             val stepMs = (fadeMs / steps).coerceAtLeast(10L)
             try {
                 for (i in steps - 1 downTo 0) {
-                    c.volume = i / steps.toFloat()
+                    c.volume = from * i / steps
                     delay(stepMs)
                 }
                 c.pause()
             } finally {
-                c.volume = 1f // restore so the next play starts at full volume
+                restoreVolume()
             }
         }
     }
 
-    /** Cancels an in-flight sleep fade and restores the volume — any manual transport input. */
+    /**
+     * Puts the volume back where the user's setting says it belongs, by re-applying the mode rather
+     * than by writing a number.
+     *
+     * It wrote `1f` before, which is only right for one of the three settings. Combined with
+     * [cancelFade] running on every play, that meant a reduced or boosted volume was reset to full
+     * the moment playback started — the setting stayed selected on screen and did nothing, which is
+     * the worst of the available outcomes.
+     */
+    private fun restoreVolume() {
+        scope.launch {
+            val mode = playbackSettings.volumeMode.first()
+            controller?.sendCustomCommand(
+                PlaybackCommands.SET_VOLUME_MODE,
+                Bundle().apply { putString(PlaybackCommands.KEY_VOLUME_MODE, mode) },
+            )
+        }
+    }
+
+    /**
+     * Cancels an in-flight sleep fade — any manual transport input.
+     *
+     * Cancelling the job runs its `finally`, which is what restores the volume; there is nothing to
+     * do here beyond that. It used to restore unconditionally, so the common case — no fade running
+     * at all, somebody simply pressing play — wrote the volume to full for no reason.
+     */
     private fun cancelFade() {
         fadeJob?.cancel()
         fadeJob = null
-        controller?.volume = 1f
     }
 
     /**
