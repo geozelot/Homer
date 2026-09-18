@@ -7,10 +7,10 @@ import android.os.Build
 import android.os.Environment
 import com.geozelot.homer.data.settings.LibrarySettings
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
 
 /**
  * Resolves the single, siloed root for all of Homer's on-device data — offline downloads, the

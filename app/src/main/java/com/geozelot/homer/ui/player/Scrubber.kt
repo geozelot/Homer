@@ -16,11 +16,14 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -63,11 +66,14 @@ import kotlin.math.roundToInt
  * strays twenty pixels while crossing the screen is a plain scrub with a shaky hand, not a request
  * for precision.
  */
-private val PrecisionBands = listOf(
+internal val PrecisionBands = listOf(
     40.dp to 1f,
     100.dp to 0.5f,
 )
-private const val FinestRate = 0.25f
+
+/** The rate past every band. Internal for the same reason the bands are: so a test reads the real
+ *  values rather than a copy of them that cannot notice when these change. */
+internal const val ScrubFinestRate = 0.25f
 
 /** What a rate is called. A symbol rather than a string resource: it reads the same in every language. */
 private fun rateLabel(rate: Float): String = when {
@@ -102,42 +108,57 @@ internal fun Scrubber(
     }
 
     Column(modifier = modifier) {
-        // Reserved whether or not a precision drag is running, so engaging one does not shove the
-        // transport down the screen at the moment the reader is aiming at something.
-        RateLabel(
-            rate = precisionRate,
-            fraction = if (hasDuration) sliderValue / durationMs.toFloat() else 0f,
-            trackWidth = trackWidth,
-            labelWidth = labelWidth,
-            onLabelWidth = { labelWidth = it },
-        )
-        Slider(
-            value = sliderValue.coerceIn(range.start, range.endInclusive),
-            onValueChange = { if (precisionRate == null) dragValue = it },
-            onValueChangeFinished = {
-                // Taking the gesture over cancels the slider's own drag, which lands here as well.
-                // The precision gesture commits its own release, so this must not commit a second
-                // time — nor clear the value it is still moving.
-                if (precisionRate == null) commit()
-            },
-            valueRange = range,
-            enabled = hasDuration,
-            colors = SliderDefaults.colors(
-                thumbColor = Amber,
-                activeTrackColor = Amber,
-                inactiveTrackColor = Surface2,
-            ),
-            modifier = Modifier
-                .onSizeChanged { trackWidth = it.width }
-                .precisionScrub(
-                    enabled = hasDuration,
-                    durationMs = durationMs,
-                    valueAt = { dragValue ?: positionMs().toFloat() },
-                    onRate = { precisionRate = it },
-                    onValue = { dragValue = it },
-                    onRelease = { precisionRate = null; commit() },
+        // The label rides INSIDE the slider's own box rather than above it. A reserved strip would
+        // have kept the transport still, at the price of a permanently blank 18dp on a cluster that
+        // is already capped at 74% of the viewport and shrunk again on a small screen — height
+        // spent on something visible only mid-drag. The slider's touch area is 48dp with the track
+        // centred in it, so there is room over the track that costs nothing.
+        Box(contentAlignment = Alignment.TopStart) {
+            Slider(
+                value = sliderValue.coerceIn(range.start, range.endInclusive),
+                onValueChange = { if (precisionRate == null) dragValue = it },
+                onValueChangeFinished = {
+                    // Taking the gesture over cancels the slider's own drag, which lands here as
+                    // well. The precision gesture commits its own release, so this must not commit
+                    // a second time — nor clear the value it is still moving.
+                    if (precisionRate == null) commit()
+                },
+                valueRange = range,
+                enabled = hasDuration,
+                colors = SliderDefaults.colors(
+                    thumbColor = Amber,
+                    activeTrackColor = Amber,
+                    inactiveTrackColor = Surface2,
                 ),
-        )
+                modifier = Modifier
+                    .onSizeChanged { trackWidth = it.width }
+                    .precisionScrub(
+                        enabled = hasDuration,
+                        durationMs = durationMs,
+                        // Held through rememberUpdatedState: the gesture coroutine restarts only
+                        // when durationMs changes, so anything it captures directly is frozen at
+                        // the composition that started it. These read through today only because
+                        // each one happens to touch a remembered state holder — one lambda that
+                        // closed over a VALUE would go stale, with nothing in the signature to say
+                        // so.
+                        callbacks = rememberUpdatedState(
+                            ScrubCallbacks(
+                                valueAt = { dragValue ?: positionMs().toFloat() },
+                                onRate = { precisionRate = it },
+                                onValue = { dragValue = it },
+                                onRelease = { precisionRate = null; commit() },
+                            ),
+                        ),
+                    ),
+            )
+            RateLabel(
+                rate = precisionRate,
+                fraction = if (hasDuration) sliderValue / durationMs.toFloat() else 0f,
+                trackWidth = trackWidth,
+                labelWidth = labelWidth,
+                onLabelWidth = { labelWidth = it },
+            )
+        }
         // Chapter-relative: elapsed on the left, time-to-end-of-chapter on the right.
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -155,10 +176,11 @@ internal fun Scrubber(
 }
 
 /**
- * The rate readout, riding above the thumb it belongs to.
+ * The rate readout, riding over the thumb it belongs to.
  *
  * It follows the thumb rather than sitting in a fixed corner because the thumb is where the reader
- * is looking; a rate stated somewhere else is a number they have to go and find while aiming.
+ * is looking; a rate stated somewhere else is a number they have to go and find while aiming. Drawn
+ * inside the slider's own bounds, so it reserves no height of its own.
  */
 @Composable
 private fun RateLabel(
@@ -168,26 +190,29 @@ private fun RateLabel(
     labelWidth: Int,
     onLabelWidth: (Int) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxWidth().height(RateLabelHeight)) {
-        if (rate != null) {
-            val travel = (trackWidth - labelWidth).coerceAtLeast(0)
-            Text(
-                text = rateLabel(rate),
-                color = Amber,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                modifier = Modifier
-                    .offset { IntOffset((fraction.coerceIn(0f, 1f) * travel).roundToInt(), 0) }
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Surface2)
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
-                    .onSizeChanged { onLabelWidth(it.width) },
-            )
-        }
-    }
+    if (rate == null) return
+    val travel = (trackWidth - labelWidth).coerceAtLeast(0)
+    Text(
+        text = rateLabel(rate),
+        color = Amber,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        modifier = Modifier
+            .offset { IntOffset((fraction.coerceIn(0f, 1f) * travel).roundToInt(), 0) }
+            .clip(RoundedCornerShape(6.dp))
+            .background(Surface2)
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+            .onSizeChanged { onLabelWidth(it.width) },
+    )
 }
 
-private val RateLabelHeight = 18.dp
+/** What a precision drag reports back, as one value so the gesture can re-read all of it at once. */
+private data class ScrubCallbacks(
+    val valueAt: () -> Float,
+    val onRate: (Float?) -> Unit,
+    val onValue: (Float) -> Unit,
+    val onRelease: () -> Unit,
+)
 
 /**
  * Watches a drag on the slider and takes it over once the finger leaves the bar.
@@ -208,10 +233,7 @@ private val RateLabelHeight = 18.dp
 private fun Modifier.precisionScrub(
     enabled: Boolean,
     durationMs: Long,
-    valueAt: () -> Float,
-    onRate: (Float?) -> Unit,
-    onValue: (Float) -> Unit,
-    onRelease: () -> Unit,
+    callbacks: State<ScrubCallbacks>,
 ): Modifier = if (!enabled) this else this.pointerInput(durationMs) {
     val bands = PrecisionBands.map { (distance, rate) -> distance.toPx() to rate }
     awaitEachGesture {
@@ -228,19 +250,19 @@ private fun Modifier.precisionScrub(
                 engaged = true
                 // Where the slider had got to before this became a precision drag, so the fine
                 // part carries on from where the coarse part left off.
-                value = valueAt()
+                value = callbacks.value.valueAt()
             }
             if (engaged) {
                 val perPixel = if (size.width > 0) durationMs.toFloat() / size.width else 0f
                 value = (value + (change.position.x - lastX) * perPixel * rate)
                     .coerceIn(0f, durationMs.toFloat())
-                onRate(rate)
-                onValue(value)
+                callbacks.value.onRate(rate)
+                callbacks.value.onValue(value)
                 change.consume()
             }
             lastX = change.position.x
         }
-        if (engaged) onRelease()
+        if (engaged) callbacks.value.onRelease()
     }
 }
 
@@ -251,10 +273,7 @@ private fun Modifier.precisionScrub(
  * assumed ordered nearest-first — [PrecisionBands] is the only caller that supplies one.
  */
 internal fun scrubRateFor(dy: Float, bands: List<Pair<Float, Float>>): Float =
-    bands.firstOrNull { dy <= it.first }?.second ?: FinestRate
-
-/** The finest rate, past every band — exposed for the same reason [scrubRateFor] is. */
-internal const val ScrubFinestRate = FinestRate
+    bands.firstOrNull { dy <= it.first }?.second ?: ScrubFinestRate
 
 /**
  * Where you are: which chapter, and how much of the book is left. Named for what it says rather

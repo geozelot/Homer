@@ -37,8 +37,8 @@ import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
-import java.util.Locale
 import com.geozelot.homer.ui.theme.Studio
+import java.util.Locale
 
 // ── Grid cards ───────────────────────────────────────────────────────────────
 //

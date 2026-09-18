@@ -7,13 +7,13 @@ import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.facet.LibraryFacets
 import com.geozelot.homer.data.sync.facet.StructureFacet
 import com.geozelot.homer.data.webdav.WebDavClient
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /** A Homer-bearing location found by the discovery sweep, with what it carries. */
 data class DiscoveredLibrary(

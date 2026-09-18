@@ -2,6 +2,7 @@ package com.geozelot.homer.data.auth
 
 import java.net.URI
 
+
 /**
  * A parsed Nextcloud public share link: the server origin plus the share token. The token becomes
  * the Basic-auth username against `‹baseUrl›/public.php/dav/files/‹token›/` (see [WebDavKind.SHARE]);

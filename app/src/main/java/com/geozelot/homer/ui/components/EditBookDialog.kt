@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -44,8 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
 import com.geozelot.homer.ui.theme.Amber
-import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.AmberSoft
+import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface2

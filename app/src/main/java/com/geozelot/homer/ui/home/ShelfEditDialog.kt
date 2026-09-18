@@ -27,11 +27,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.components.SettingsActionPadding
-import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.GenrePickerField
 import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.SettingsActionPadding
+import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted

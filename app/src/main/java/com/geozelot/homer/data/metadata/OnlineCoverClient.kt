@@ -2,6 +2,9 @@ package com.geozelot.homer.data.metadata
 
 import android.util.Log
 import com.geozelot.homer.di.Bootstrap
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,9 +13,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Opt-in cover lookup against Open Library (openlibrary.org), a FOSS book database with a public

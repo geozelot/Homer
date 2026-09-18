@@ -157,7 +157,7 @@ class PlaybackService : MediaLibraryService() {
     private fun applyVolumeMode(mode: String) {
         volumeMode = mode
         val exo = player ?: return
-        exo.volume = if (mode == VolumeMode.REDUCED) REDUCED_VOLUME else 1.0f
+        exo.volume = VolumeMode.playerVolume(mode)
         applyBoost(exo.audioSessionId)
     }
 
@@ -197,10 +197,6 @@ class PlaybackService : MediaLibraryService() {
 
     private companion object {
         const val TAG = "HomerPlay"
-
-        /** "Reduced" as a player volume. Quiet enough to be a different setting, loud enough to
-         *  still be listening — a fifth would be a mute with extra steps. */
-        const val REDUCED_VOLUME = 0.45f
 
         /** "Increased" as a gain, in millibels: +7 dB. */
         const val BOOST_MILLIBELS = 700

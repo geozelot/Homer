@@ -14,8 +14,8 @@ import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
+import kotlinx.coroutines.flow.first
 
 /** Resolves a book into an ordered playlist of streamable [MediaItem]s. */
 class PlaylistResolver @Inject constructor(

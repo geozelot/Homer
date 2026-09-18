@@ -9,6 +9,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
@@ -243,7 +246,16 @@ class PlaybackConnection @Inject constructor(
         snapshot = ::positionSnapshot,
         exportMirror = { localMirror.export() },
         syncManifest = { force -> homerSync.sync(force) },
-    ).also { it.observeAppLifecycle() }
+        observeBackgrounding = { onBackground ->
+            scope.launch {
+                ProcessLifecycleOwner.get().lifecycle.addObserver(
+                    object : DefaultLifecycleObserver {
+                        override fun onStop(owner: LifecycleOwner) = onBackground()
+                    },
+                )
+            }
+        },
+    )
     private val downloadReloadWatcher = DownloadReloadWatcher(scope, downloadDao)
 
     /** " buffered=12s" — how much audio is in hand, the number that matters during a stall. */
@@ -712,7 +724,10 @@ class PlaybackConnection @Inject constructor(
                 c.pause()
                 return@launch
             }
-            val from = c.volume
+            // The base volume the mode asks for — NOT `c.volume`. Cancelling the previous fade is
+            // cooperative: its `finally` has not run yet when this line executes, so the controller
+            // may still be sitting at a half-faded level and this ramp would start from there.
+            val from = VolumeMode.playerVolume(playbackSettings.volumeMode.first())
             val steps = 20
             val stepMs = (fadeMs / steps).coerceAtLeast(10L)
             try {

@@ -1,14 +1,13 @@
 package com.geozelot.homer.playback
 
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Where playback currently is, for persistence — supplied by the host on demand. */
 data class PositionSnapshot(val bookId: String, val mediaId: String, val positionMs: Long)
@@ -30,23 +29,27 @@ class PositionSyncer(
     private val exportMirror: suspend () -> Unit,
     /** Reconciles with the server manifest — [HomerSyncRepository.sync][com.geozelot.homer.data.sync.HomerSyncRepository.sync]. */
     private val syncManifest: suspend (force: Boolean) -> Unit,
-) {
-    private var syncJob: Job? = null
-
     /**
-     * Registers the backgrounding hook. Separate from construction (the host calls it once) so
-     * unit tests can build the syncer without an Android process lifecycle.
+     * Registers `onBackground` to run when the app goes to the background.
+     *
+     * A required constructor argument and not a method to call afterwards. Backgrounding is the
+     * most important push this class makes — it is what lets another device pick the book up — and
+     * a host that forgot to call an `observeAppLifecycle()` would lose it silently, with nothing to
+     * fail and nothing to log. Passed in rather than reached for so the rule stays testable on the
+     * JVM without an Android process lifecycle.
      */
-    fun observeAppLifecycle() {
-        scope.launch {
-            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-                override fun onStop(owner: LifecycleOwner) {
-                    // Backgrounding (and app close) is the most important push of all — it's what
-                    // lets another device pick up where this one left off. Always forced.
-                    if (snapshot() != null) flush(force = true)
-                }
-            })
-        }
+    observeBackgrounding: (onBackground: () -> Unit) -> Unit,
+) {
+    /** The debounce wait. Cancellable by design; the push it starts is not. */
+    private var debounceJob: Job? = null
+
+    /** Serialises pushes, so an overlapping flush queues behind one instead of aborting it. */
+    private val pushLock = Mutex()
+
+    init {
+        // Backgrounding (and app close) is the most important push of all — it's what lets another
+        // device pick up where this one left off. Always forced.
+        observeBackgrounding { if (snapshot() != null) flush(force = true) }
     }
 
     /** Reconciles with the manifest (pull + merge + push). Suspends until done. */
@@ -69,12 +72,21 @@ class PositionSyncer(
      */
     fun flush(force: Boolean = false) {
         save()
-        syncJob?.cancel()
-        syncJob = scope.launch {
+        // Only the WAIT is cancellable. Collapsing a burst is what the debounce is for, and
+        // cancelling a job still sleeping costs nothing — but a forced flush starts its push at
+        // once, so with one cancel covering both a pause followed by a backgrounding aborted a
+        // WebDAV round-trip mid-request. The push is launched detached from the debounce, and the
+        // mutex collapses overlapping pushes instead of killing them.
+        debounceJob?.cancel()
+        debounceJob = scope.launch {
             if (!force) delay(SYNC_DEBOUNCE_MS)
-            // Local mirror first (cheap, offline-safe, all tiers), then the server manifest.
-            exportMirror()
-            syncManifest(force)
+            scope.launch {
+                pushLock.withLock {
+                    // Local mirror first (cheap, offline-safe, all tiers), then the server manifest.
+                    exportMirror()
+                    syncManifest(force)
+                }
+            }
         }
     }
 

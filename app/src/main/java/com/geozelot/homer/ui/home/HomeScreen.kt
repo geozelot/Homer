@@ -13,17 +13,21 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -55,14 +59,17 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -71,9 +78,9 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.IndexActivity
-import com.geozelot.homer.ui.components.LibraryHelpCard
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
+import com.geozelot.homer.ui.components.LibraryHelpCard
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
@@ -83,13 +90,6 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifDisplay
 import com.geozelot.homer.ui.theme.Surface0
 import com.geozelot.homer.ui.theme.Surface1
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.unit.Constraints
 
 // ── The library screen ───────────────────────────────────────────────────────
 //
@@ -408,7 +408,9 @@ fun HomeScreen(
      * moment to a reader. The rule "a fling must never unfold it" is now true by construction rather
      * than by a check, which is why `ListeningFold` no longer takes a flag for it.
      */
-    val pullToExpand = Modifier.pointerInput(gridState, fold, pullToExpandPx) {
+    // Nothing to fold where the panel is a rail, so the gesture is not installed there: it would
+    // sum a delta on every pointer event of every drag and hand the answer to a state nobody reads.
+    val pullToExpand = if (layout.listeningRail) Modifier else Modifier.pointerInput(gridState, fold, pullToExpandPx) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var pressed = true
@@ -456,6 +458,8 @@ fun HomeScreen(
         // ListeningShelf for why the collapse went. Its LazyRow state is hoisted so the horizontal
         // scroll position survives scrolling the library and is not reset by the item being disposed.
         val shelfRowState = rememberLazyListState()
+        // The rail's own, for the same reason: hoisted so it outlives the item being disposed.
+        val railState = rememberLazyListState()
         // Expanded until something says otherwise, and only ever folded BY something — see
         // ListeningShelf. rememberSaveable so a rotation does not silently unfold it again.
         // The shelf STAYS while search is open. Hiding it was meant to give the results more room
@@ -513,6 +517,7 @@ fun HomeScreen(
             if (layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent) {
                 ListeningRail(
                     books = listeningShelf,
+                    railState = railState,
                     onOpen = onBookClick,
                     actions = actions,
                     modifier = dismissSearch,
@@ -945,7 +950,10 @@ private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier:
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        Box(modifier = Modifier.rotatedQuarterTurn().padding(bottom = 16.dp)) {
+        // Padding OUTSIDE the turn. Inside it, a bottom pad is laid out on the upright text and
+        // then rotated onto the start edge — the gap ends up beside the word instead of under it,
+        // and the column grows 16dp wider for it.
+        Box(modifier = Modifier.padding(bottom = 16.dp).rotatedQuarterTurn()) {
             Wordmark(stringResource(R.string.app_name))
         }
     }

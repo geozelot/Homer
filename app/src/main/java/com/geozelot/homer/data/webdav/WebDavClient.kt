@@ -5,6 +5,12 @@ import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.di.Authed
+import java.io.IOException
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -15,12 +21,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.xmlpull.v1.XmlPullParser
-import java.io.IOException
-import java.net.URI
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
-import javax.inject.Inject
 
 /**
  * Minimal Nextcloud WebDAV client: PROPFIND (directory listing) and ranged GET URL

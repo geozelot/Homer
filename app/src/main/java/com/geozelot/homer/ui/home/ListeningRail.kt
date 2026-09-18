@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -72,6 +73,8 @@ private val ListeningRailCover = 44.dp
 @Composable
 internal fun ListeningRail(
     books: List<BookListItem>,
+    /** Hoisted, so scrolling the rail and then opening a book does not send it back to the top. */
+    railState: LazyListState,
     onOpen: (String) -> Unit,
     actions: BookActions,
     modifier: Modifier = Modifier,
@@ -94,7 +97,7 @@ internal fun ListeningRail(
                 large = false,
             )
         }
-        LazyColumn(contentPadding = PaddingValues(bottom = 12.dp)) {
+        LazyColumn(state = railState, contentPadding = PaddingValues(bottom = 12.dp)) {
             items(books, key = { "rail:${it.id}" }) { book ->
                 ListeningRailItem(book, onOpen, actions)
             }

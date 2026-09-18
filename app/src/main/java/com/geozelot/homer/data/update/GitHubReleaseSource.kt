@@ -3,15 +3,15 @@ package com.geozelot.homer.data.update
 import android.util.Log
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.di.Bootstrap
+import java.io.IOException
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.IOException
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * The version a release actually ships.

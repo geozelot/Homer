@@ -44,13 +44,21 @@ class PositionSyncerTest {
         val dao = RecordingDao()
         var snapshot: PositionSnapshot? = PositionSnapshot("book", "book/ch02.mp3", 42_000L)
         val events = mutableListOf<String>()
+
+        /** Captured rather than ignored, so the test can BE the process lifecycle. */
+        private var background: (() -> Unit)? = null
+
         val syncer = PositionSyncer(
             scope = scope,
             playbackStateDao = dao,
             snapshot = { snapshot },
             exportMirror = { events += "export" },
             syncManifest = { force -> events += if (force) "sync(forced)" else "sync" },
+            observeBackgrounding = { onBackground -> background = onBackground },
         )
+
+        /** The app went to the background. */
+        fun background() = background?.invoke()
     }
 
     // ── the bug ──────────────────────────────────────────────────────────────────────────────
@@ -130,6 +138,39 @@ class PositionSyncerTest {
         h.syncer.save()
         advanceUntilIdle()
         assertTrue(h.dao.upserts.isEmpty())
+    }
+
+    @Test
+    fun `backgrounding pushes, forced and without waiting`() = runTest {
+        // The registration is a required constructor argument precisely so this is reachable: it
+        // used to be a method the host had to remember to call, and forgetting it would have lost
+        // the most important push in the class with nothing failing to say so.
+        val h = Harness(this)
+        h.background()
+        runCurrent()
+        assertEquals(listOf("export", "sync(forced)"), h.events)
+    }
+
+    @Test
+    fun `backgrounding with no book loaded pushes nothing`() = runTest {
+        val h = Harness(this)
+        h.snapshot = null
+        h.background()
+        advanceUntilIdle()
+        assertTrue(h.events.isEmpty())
+    }
+
+    @Test
+    fun `a push already in flight is never cancelled by the next flush`() = runTest {
+        // A pause starts a forced push at once; backgrounding a moment later used to cancel it
+        // mid-request, because one cancel covered both the debounce wait and the push itself.
+        val h = Harness(this)
+        h.syncer.flush(force = true)
+        runCurrent()
+        h.syncer.flush(force = true)
+        advanceUntilIdle()
+        // Both pushes ran to completion, serialised — neither was aborted part-way.
+        assertEquals(listOf("export", "sync(forced)", "export", "sync(forced)"), h.events)
     }
 
     @Test

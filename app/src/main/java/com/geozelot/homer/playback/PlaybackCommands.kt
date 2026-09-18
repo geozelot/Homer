@@ -26,4 +26,15 @@ object VolumeMode {
     const val REDUCED = "reduced"
     const val NORMAL = "normal"
     const val INCREASED = "increased"
+
+    /**
+     * A mode as a player volume.
+     *
+     * Here rather than in the service because two places need it now: the service applies it, and
+     * the sleep fade has to know what it is ramping DOWN FROM. The fade used to read the live
+     * controller volume for that, which is only the base volume if no other fade is in flight —
+     * cancellation is cooperative, so a fade started while another was being cancelled captured a
+     * half-faded value and ramped from there.
+     */
+    fun playerVolume(mode: String): Float = if (mode == REDUCED) 0.45f else 1.0f
 }

@@ -5,9 +5,9 @@ import androidx.room.withTransaction
 import com.geozelot.homer.data.db.HomerDatabase
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
-import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
@@ -17,9 +17,9 @@ import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.webdav.DavResource
 import com.geozelot.homer.data.webdav.WebDavClient
-import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * A `LIKE` pattern matching everything beneath [path], with LIKE's own wildcards neutralised.

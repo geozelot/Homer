@@ -4,39 +4,13 @@ import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.geozelot.homer.R
-import com.geozelot.homer.ui.home.FilterToken
-import com.geozelot.homer.ui.theme.Muted
-import com.geozelot.homer.ui.theme.Parchment
-import com.geozelot.homer.ui.theme.SerifTitle
-import com.geozelot.homer.ui.theme.Surface2
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -49,9 +23,8 @@ import com.geozelot.homer.ui.about.DiagnosticsScreen
 import com.geozelot.homer.ui.about.LicensesScreen
 import com.geozelot.homer.ui.about.PrivacyScreen
 import com.geozelot.homer.ui.home.HomeScreen
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.geozelot.homer.ui.home.findBook
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.home.findBook
 import com.geozelot.homer.ui.player.PlayerScreen
 import com.geozelot.homer.ui.settings.AboutSettingsScreen
 import com.geozelot.homer.ui.settings.DeviceStorageScreen
@@ -60,10 +33,10 @@ import com.geozelot.homer.ui.settings.LibraryUpkeepScreen
 import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
 import com.geozelot.homer.ui.settings.PrivacySettingsScreen
 import com.geozelot.homer.ui.settings.SettingsHubScreen
+import com.geozelot.homer.ui.settings.StorageDialogsHost
+import com.geozelot.homer.ui.settings.TemplatesScreen
 import com.geozelot.homer.ui.setup.SetupEntry
 import com.geozelot.homer.ui.setup.SetupFlow
-import com.geozelot.homer.ui.settings.TemplatesScreen
-import com.geozelot.homer.ui.settings.StorageDialogsHost
 import com.geozelot.homer.ui.storage.StorageBrowserScreen
 
 private const val ROUTE_LIBRARY = "library"
@@ -91,6 +64,19 @@ private const val ARG_BOOK_ID = "bookId"
 @Composable
 fun LibraryNavHost() {
     val navController = rememberNavController()
+
+    // Storage prompts live above the graph, not inside a screen — the storage change is started
+    // from the settings pages, and the load-vs-replace prompt is a question the flow WAITS on, so
+    // a dialog bound to one destination would leave the move stalled and invisible.
+    //
+    // It was once deleted along with the two-pane layout it happened to sit beside, and nothing
+    // said so: an uncalled composable and an unused import both compile. What it cost was a folder
+    // change that set its pending state and then waited for an answer no dialog could ask for.
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val libraryEntry = remember(currentEntry) {
+        runCatching { navController.getBackStackEntry(ROUTE_LIBRARY) }.getOrNull()
+    }
+    libraryEntry?.let { StorageDialogsHost(viewModel = hiltViewModel(it)) }
 
     NavHost(navController = navController, startDestination = ROUTE_LIBRARY) {
         composable(ROUTE_LIBRARY) { entry ->
