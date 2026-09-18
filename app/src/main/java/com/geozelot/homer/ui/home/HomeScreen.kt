@@ -83,6 +83,13 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifDisplay
 import com.geozelot.homer.ui.theme.Surface0
 import com.geozelot.homer.ui.theme.Surface1
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 
 // ── The library screen ───────────────────────────────────────────────────────
 //
@@ -488,6 +495,21 @@ fun HomeScreen(
         // it cannot spend and no height at all — which is the whole trade: the rail costs 180dp of
         // the one Homer has plenty of, and nothing of the one it is short of. See [LibraryLayout].
         Row(modifier = Modifier.weight(1f)) {
+            // The top bar, turned. Not merged away and not dropped: it is the same bar a quarter
+            // turn anticlockwise, which is why the buttons end up at the top and the wordmark at
+            // the bottom — the left end of a row becomes the bottom of a column.
+            //
+            // It also puts help and settings somewhere that does not depend on there being a
+            // library. They used to ride on the control row, and the control row does not render
+            // for an empty shelf — so a reader whose first scan found nothing, in landscape, had
+            // no way into the settings that would have let them fix it.
+            if (layout.mergeTopBar) {
+                LibrarySideBar(
+                    onHelp = { showHelp = true },
+                    onSettings = onOpenSettings,
+                    modifier = dismissSearch,
+                )
+            }
             if (layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent) {
                 ListeningRail(
                     books = listeningShelf,
@@ -495,7 +517,11 @@ fun HomeScreen(
                     actions = actions,
                     modifier = dismissSearch,
                 )
-                // A hairline, not a gap: the rail and the library are one surface with a seam.
+            }
+            // One seam, at the edge of everything down the left — and keyed on the BAR, not the
+            // rail, because the bar is always there and the rail is not: a reader with nothing in
+            // progress would otherwise have the turned bar bleeding straight into the grid.
+            if (layout.mergeTopBar) {
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Line))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -560,8 +586,6 @@ fun HomeScreen(
                             onSeriesChange = viewModel::setSeriesMode,
                             onToggleView = viewModel::setGridView,
                             compact = layout.mergeTopBar,
-                            onHelp = { showHelp = true },
-                            onSettings = onOpenSettings,
                             modifier = Modifier.padding(horizontal = LibraryGridPadding),
                         )
                         HorizontalDivider(color = Line)
@@ -872,6 +896,88 @@ private fun TopBar(onHelp: () -> Unit, onSettings: () -> Unit) {
         }
     }
 }
+
+/** How wide the turned bar is: one icon button, and nothing else has to fit across it. */
+private val SideBarWidth = 48.dp
+
+/**
+ * The top bar, on its side.
+ *
+ * A quarter turn anticlockwise and nothing else. That is the whole design and it is worth saying
+ * plainly, because it is what makes the result feel placed rather than rearranged: rotating a row
+ * anticlockwise sends its left end to the bottom and its right end to the top, so the wordmark
+ * lands at the foot of the column and the two buttons at the head — exactly where they would be if
+ * the bar had physically turned with the screen.
+ *
+ * The wordmark turns with it, reading bottom-to-top. That is the continental convention for a book
+ * spine, which is both where this app's first language is spoken and what the thing beside it is:
+ * a shelf.
+ */
+@Composable
+private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .width(SideBarWidth)
+            .fillMaxHeight()
+            // The same flat tone the rail carries, and NO seam between them: two strips down the
+            // left would read as clutter, one column with two zones reads as a margin. The only
+            // hairline is the one separating the pair from the library.
+            .background(Surface0)
+            // A landscape navigation bar or a cutout can sit along this very edge, which is the one
+            // place in the app where something is pinned to it.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Before settings, as in the row it came from: it explains the screen you are on rather
+        // than taking you off it.
+        IconButton(onClick = onHelp) {
+            Icon(
+                Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = stringResource(R.string.home_cd_help),
+                tint = Muted,
+            )
+        }
+        IconButton(onClick = onSettings) {
+            Icon(
+                Icons.Filled.Tune,
+                contentDescription = stringResource(R.string.home_cd_settings),
+                tint = Muted,
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Box(modifier = Modifier.rotatedQuarterTurn().padding(bottom = 16.dp)) {
+            Wordmark(stringResource(R.string.app_name))
+        }
+    }
+}
+
+/**
+ * Turns content a quarter-turn anticlockwise AND gives it the footprint it now occupies.
+ *
+ * `Modifier.rotate` only draws the rotation: the node keeps the size it measured, so a word laid out
+ * for a wide row goes on claiming that width inside a 48dp column and is clipped to nothing. This
+ * measures with the constraints swapped — the text is laid out against the height available, which
+ * is what it will actually run along — reports the swapped size so the column reserves the right
+ * space, and offsets the placement to correct the centre the rotation spins about.
+ */
+private fun Modifier.rotatedQuarterTurn(): Modifier = this
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(
+            Constraints(
+                minWidth = constraints.minHeight,
+                maxWidth = constraints.maxHeight,
+                minHeight = constraints.minWidth,
+                maxHeight = constraints.maxWidth,
+            ),
+        )
+        layout(width = placeable.height, height = placeable.width) {
+            placeable.place(
+                x = -(placeable.width / 2 - placeable.height / 2),
+                y = -(placeable.height / 2 - placeable.width / 2),
+            )
+        }
+    }
+    .rotate(-90f)
 
 /** "Homer" with an amber initial, in the serif voice. */
 @Composable

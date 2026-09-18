@@ -117,12 +117,11 @@ internal fun LibraryControlBar(
     onSeriesChange: (LibraryDepth) -> Unit,
     onToggleView: (Boolean) -> Unit,
     /**
-     * Short viewport: there is no top bar, so this row leads with the label it used to sit under
-     * and ends with the two actions it used to hold.
+     * Short viewport: the header is a line of this row rather than a line of its own. Help and
+     * settings are NOT here — they are on the turned bar down the side, which exists whether or
+     * not there is a library for this row to be about.
      */
     compact: Boolean,
-    onHelp: () -> Unit,
-    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // No inset of its own. The bar carries the grid's own horizontal padding from its call site, so
@@ -182,8 +181,6 @@ internal fun LibraryControlBar(
                 onOpenSearch = onOpenSearch,
                 onToggleArrange = onToggleArrange,
                 onToggleView = onToggleView,
-                onHelp = onHelp,
-                onSettings = onSettings,
             )
         } else Row(
             modifier = Modifier.fillMaxWidth(),
@@ -216,13 +213,12 @@ internal fun LibraryControlBar(
 }
 
 /**
- * The whole of the library's chrome on a screen with no height to spare: one 48dp row in place of a
- * 64dp top bar and an 82dp band.
+ * The library's controls on a screen with no height to spare: one 48dp row in place of an 82dp
+ * band, with the header on it rather than above it.
  *
- * It is laid out like the top bar it replaces — label leading, actions trailing — so that rotating
- * moves the controls rather than introducing new ones. The label takes the slack and gives it back
- * first: on a window narrow as well as short it ellipsises away to nothing while the chips, which
- * are the only things here you cannot do without, keep their full size.
+ * The label leads and takes the slack, giving it back first: on a window narrow as well as short it
+ * ellipsises away to nothing while the chips, which are the only things here you cannot do without,
+ * keep their full size.
  */
 @Composable
 private fun CompactControlRow(
@@ -232,8 +228,6 @@ private fun CompactControlRow(
     onOpenSearch: () -> Unit,
     onToggleArrange: () -> Unit,
     onToggleView: (Boolean) -> Unit,
-    onHelp: () -> Unit,
-    onSettings: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -252,22 +246,6 @@ private fun CompactControlRow(
         SearchChip(active = filtered, onClick = onOpenSearch)
         ArrangeChip(open = false, onClick = onToggleArrange)
         ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
-        // The top bar's two, in the top bar's order: help before settings, because it explains the
-        // screen you are on rather than taking you off it.
-        IconButton(onClick = onHelp, modifier = Modifier.size(ControlTapHeight)) {
-            Icon(
-                Icons.AutoMirrored.Filled.HelpOutline,
-                contentDescription = stringResource(R.string.home_cd_help),
-                tint = Muted,
-            )
-        }
-        IconButton(onClick = onSettings, modifier = Modifier.size(ControlTapHeight)) {
-            Icon(
-                Icons.Filled.Tune,
-                contentDescription = stringResource(R.string.home_cd_settings),
-                tint = Muted,
-            )
-        }
     }
 }
 
