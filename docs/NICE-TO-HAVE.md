@@ -31,26 +31,20 @@ devices, once. It wants a device and a deliberate afternoon, not a spare ten min
 
 ---
 
-## Currently-listening as a side rail on a wide window
+## The side rail on a tall wide window — a tablet
 
-**What.** On a window with width to spare, move the Currently-listening panel out of the stack above
-the library and into a rail down the left — the folded 46dp cover form, stacked vertically — leaving
-the grid everything below the control bar.
+**What.** The Currently-listening rail now exists: on a short, wide window (a phone on its side) the
+panel goes down the left instead of across the top. What is *not* covered is the other wide window —
+a tablet, which is wide **and** tall, and so still stacks the panel above the library.
 
-**Why it is not in.** It was drafted as the answer to the landscape problem and turned out to be the
-answer to a different one. Landscape is a *height* problem, and the height fix (fold the panel, merge
-the top bar — see `libraryChromeFor`) solved it without a second layout to design and maintain. A
-rail spends width, which a landscape phone has plenty of and a tablet has more of.
+**Why it is not in.** A tablet has no height problem, and the rail was built to solve one. Turning it
+on there is a design question rather than a fix: the stacked panel is not hurting anything, and the
+rail would compete for attention with the docked player pane on the opposite side. Two rails and a
+grid between them is a layout that wants deciding, not defaulting into.
 
-So it is really a tablet feature, and it belongs beside the two-pane layout rather than in front of
-it: on an expanded window the library already shares the screen with a docked player, and a rail on
-the other side is the same idea again. Worth doing when tablets get their own pass; not worth a
-second shelf layout before then.
-
-**What it would cost.** A vertical arrangement of the shelf, a width threshold that agrees with the
-two-pane one, and a decision about what folding means when the rail is always open — `ListeningFold`
-has no answer for that, and inventing one for a mode nobody has asked for yet is how a tested
-mechanism acquires an untested branch.
+**What it would cost.** A threshold (`libraryLayoutFor` currently keys the rail on being short), and
+an answer for how the rail and the two-pane player share a screen. Worth doing when tablets get their
+own pass.
 
 ---
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -130,27 +131,51 @@ private val CompactLibraryHeight = 480.dp
  */
 private val CompactChromeMinWidth = 600.dp
 
-/** What the library's chrome gives up at a given window size. */
-internal data class LibraryChrome(
+/**
+ * How the library arranges itself for the window it is in.
+ *
+ * One decision with three outcomes rather than three independent flags, because the outcomes are not
+ * independent: a panel that has become a rail has nothing left to fold.
+ */
+internal enum class LibraryLayout {
+    /** Room for everything: top bar, listening panel expanded above the grid. */
+    STACKED,
+
+    /**
+     * Short, and too narrow to put anything beside anything. The panel starts folded and the top bar
+     * stays, because the merged control row needs ~450dp of controls that cannot shrink.
+     */
+    STACKED_COMPACT,
+
+    /**
+     * Short and wide — a phone on its side. The panel goes down the left as a rail, spending width
+     * the grid does not need (it caps at six columns either way), and the top bar folds into the
+     * control row. Nothing above the grid but the controls.
+     */
+    RAIL,
+    ;
+
     /** Start the Currently-listening panel folded — there is no room to open it into. */
-    val foldListening: Boolean,
+    val foldListening: Boolean get() = this == STACKED_COMPACT
+
     /** Drop the top bar; the control row carries its label and its two actions instead. */
-    val mergeTopBar: Boolean,
-)
+    val mergeTopBar: Boolean get() = this == RAIL
+
+    /** The panel is a rail beside the library rather than a strip above it. */
+    val listeningRail: Boolean get() = this == RAIL
+}
 
 /**
- * The two savings, decided together and separately.
+ * The layout for a window size.
  *
  * Pure and named so the thresholds can be stated against real device sizes in a test rather than
  * only in a comment — and because the asymmetry is the part worth pinning: a short window always
- * folds the panel, but only a short AND wide one merges the chrome.
+ * does something, but only a short AND wide one has room for the rail and the merged row.
  */
-internal fun libraryChromeFor(width: Dp, height: Dp): LibraryChrome {
-    val short = height < CompactLibraryHeight
-    return LibraryChrome(
-        foldListening = short,
-        mergeTopBar = short && width >= CompactChromeMinWidth,
-    )
+internal fun libraryLayoutFor(width: Dp, height: Dp): LibraryLayout = when {
+    height >= CompactLibraryHeight -> LibraryLayout.STACKED
+    width >= CompactChromeMinWidth -> LibraryLayout.RAIL
+    else -> LibraryLayout.STACKED_COMPACT
 }
 
 @Composable
@@ -304,16 +329,16 @@ fun HomeScreen(
     }
 
     // What this window can afford above the first cover — see [libraryChromeFor].
-    val chrome = LocalConfiguration.current.let {
-        libraryChromeFor(width = it.screenWidthDp.dp, height = it.screenHeightDp.dp)
+    val layout = LocalConfiguration.current.let {
+        libraryLayoutFor(width = it.screenWidthDp.dp, height = it.screenHeightDp.dp)
     }
     // Every rule about when this panel folds lives in ListeningFold, with tests.
     // Keyed on `compact` so a rotation re-decides: the saved value belongs to the layout it was
     // saved in, and restoring an expanded panel into a screen with no room for it is exactly the
     // state this is here to avoid. Turning back restores the expanded default, and a tap or a pull
     // still opens it in either.
-    val fold = rememberSaveable(chrome.foldListening, saver = ListeningFold.Saver) {
-        ListeningFold(expanded = !chrome.foldListening)
+    val fold = rememberSaveable(layout.foldListening, saver = ListeningFold.Saver) {
+        ListeningFold(expanded = !layout.foldListening)
     }
     val pullToExpandPx = with(LocalDensity.current) { ListeningPullToExpand.toPx() }
     // Read here rather than inside the grid: `libraryContent` runs in a LazyGridScope, which is not
@@ -385,7 +410,7 @@ fun HomeScreen(
             .fillMaxSize()
             // Normally [TopBar] carries this. Where there is no top bar, the column has to, or the
             // shelf below rides up under the status bar.
-            .then(if (chrome.mergeTopBar) Modifier.statusBarsPadding() else Modifier),
+            .then(if (layout.mergeTopBar) Modifier.statusBarsPadding() else Modifier),
     ) {
         // The wordmark and settings only. Search moved down to the control bar, where the rest of
         // the controls for the list already live — it acts on the library, not on the app.
@@ -393,7 +418,7 @@ fun HomeScreen(
         // Gone entirely on a short screen: it is 64dp, and what it holds is a wordmark nobody needs
         // told twice plus two buttons the control row has room for. Its help and settings move
         // there; the wordmark does not come back until there is height to spare for it.
-        if (!chrome.mergeTopBar) {
+        if (!layout.mergeTopBar) {
             Box(modifier = dismissSearch) {
                 TopBar(onHelp = { showHelp = true }, onSettings = onOpenSettings)
             }
@@ -419,11 +444,13 @@ fun HomeScreen(
         // Clear with it, and left "No matches" with no way back to the library but the back gesture.
         // The bar is the way out of a filter and has to outlive the filter finding nothing.
         val libraryPresent = entries.isNotEmpty() || !filter.isEmpty
-        if (listeningShelf.isNotEmpty() && libraryPresent) {
+        // Only where the shelf is a strip ABOVE the library. Where it is a rail it lives inside
+        // the Row below, beside the grid rather than on top of it.
+        if (!layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent) {
             // Closes the top bar off from the panel below it — without it the wordmark row and the
             // listening shelf ran together as one undifferentiated block. Nothing to close off when
             // there is no top bar, where it would just be a line under the status bar.
-            if (!chrome.mergeTopBar) HorizontalDivider(color = Line.copy(alpha = 0.45f))
+            if (!layout.mergeTopBar) HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = listeningShelf,
                 expanded = fold.expanded,
@@ -435,137 +462,156 @@ fun HomeScreen(
             )
         }
 
-        // Sort, group and the grid/list toggle are pinned here rather than scrolled away as the
-        // grid's first two items: they are the controls for what is being scrolled, so having to
-        // scroll back to the top to reach them was the wrong way round. The listening strip above
-        // collapses to make room for them; these stay put.
-        if (libraryPresent) {
-            // "Filtered" now means either half of the box is doing something: text being typed, OR
-            // a committed pill. Keyed on the open field alone it labelled an untouched library "309
-            // results" before a character was typed; keyed on the text alone it went on claiming
-            // the full count while a pill above it said "41 of 313" — two numbers on one screen
-            // disagreeing about the list between them.
-            val filtering = !filter.isEmpty
-            // The library's header and controls are pinned chrome, not part of the list they act
-            // on. The wash runs dark to light down the band, so it lifts away from the listening
-            // panel above and is at its brightest along the edge where the list begins. It starts
-            // on Surface0 — the same flat tone the listening panel carries — so the two pinned
-            // regions share a floor and only the band rises off it.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Surface0, Surface1))),
-            ) {
-                // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
-                // is what these controls are pointed at.
-                HorizontalDivider(color = Line.copy(alpha = 0.45f))
-                LibraryControlBar(
-                    count = if (filtering) entries.bookCount() else bookCount,
-                    searching = filtering,
-                    sort = sortMode,
-                    shelving = shelfMode,
-                    series = seriesMode,
-                    gridView = gridView,
-                    tokens = filter.tokens,
-                    shown = filterCount.first,
-                    total = filterCount.second,
-                    query = searchQuery,
-                    searchOpen = searching,
-                    arrangeOpen = arranging,
-                    onQueryChange = viewModel::setSearchQuery,
-                    onOpenSearch = {
-                        arranging = false
-                        searching = true
-                    },
-                    onToggleArrange = {
-                        searching = false
-                        arranging = !arranging
-                    },
-                    onCloseSearch = {
-                        viewModel.commitSearchText()
-                        viewModel.setSearchQuery("")
-                        searching = false
-                    },
-                    onRemoveToken = viewModel::removeFilterToken,
-                    onClearFilter = viewModel::clearFilter,
-                    onCommitQuery = viewModel::commitSearchText,
-                    suggestions = suggestions,
-                    onPickSuggestion = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
-                    onSortChange = viewModel::setSortMode,
-                    onShelfChange = viewModel::setShelfMode,
-                    onSeriesChange = viewModel::setSeriesMode,
-                    onToggleView = viewModel::setGridView,
-                    compact = chrome.mergeTopBar,
-                    onHelp = { showHelp = true },
-                    onSettings = onOpenSettings,
-                    modifier = Modifier.padding(horizontal = LibraryGridPadding),
+        // Beside the library rather than above it, where the window is short and wide.
+        //
+        // The grid caps at six columns however wide the screen is, so a phone on its side has width
+        // it cannot spend and no height at all — which is the whole trade: the rail costs 180dp of
+        // the one Homer has plenty of, and nothing of the one it is short of. See [LibraryLayout].
+        Row(modifier = Modifier.weight(1f)) {
+            if (layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent) {
+                ListeningRail(
+                    books = listeningShelf,
+                    onOpen = onBookClick,
+                    actions = actions,
+                    modifier = dismissSearch,
                 )
-                HorizontalDivider(color = Line)
+                // A hairline, not a gap: the rail and the library are one surface with a seam.
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Line))
             }
-        }
-
-        if (entries.isEmpty()) {
-            when {
-                // Room hasn't delivered yet (or a scan is running): show a discovery phase rather
-                // than flashing "your shelf is empty" on every launch.
-                !libraryLoaded || scanState is ScanState.Scanning || indexActivity != IndexActivity.IDLE ->
-                    LibraryLoading(
-                        scanState = scanState,
-                        indexActivity = indexActivity,
-                        modifier = Modifier.weight(1f),
-                    )
-                // Any active filter, pills included. Keyed on the typed text alone, a pill
-                // combination that matched nothing fell through to the SETUP panel and told the
-                // reader their shelf was empty and to try a different folder — the third time that
-                // wrong empty state has turned up, and this time reachable in two taps.
-                !filter.isEmpty -> EmptyResults(modifier = Modifier.weight(1f))
-                // Not "your shelf is empty" whenever it is empty: a crawl that has been asked for
-                // and cannot start yet says so instead. Which library this is was settled by the
-                // setup flow, before the shelf was ever shown.
-                else ->
-                    LibrarySetupPanel(
-                        scanPending = IndexPass.BOOKS in indexQueued,
-                        wifiOnly = wifiOnlyDownloads,
-                        readsOnly = readsSharedIndex,
-                        modifier = Modifier.weight(1f),
-                    )
-            }
-        } else {
-            // The column count comes from the width rather than from a literal, and it is needed in
-            // two places — the grid's own cells, and the rows an opened shelf lays out inside a
-            // full-span item, which have to match them. One BoxWithConstraints, one answer.
-            BoxWithConstraints(modifier = Modifier.weight(1f)) {
-                val columns = if (gridView) gridColumnsFor(maxWidth) else 1
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    state = gridState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Before dismissSearch, and consuming nothing — see `pullToExpand`.
-                        .then(pullToExpand)
-                        .then(dismissSearch),
-                    contentPadding = PaddingValues(
-                        start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
-                    verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
-                ) {
-                    libraryContent(
-                        entries = entries,
-                        gridView = gridView,
-                        columns = columns,
-                        flatCollections = flatCollections,
-                        onCollectionOrder = viewModel::setCollectionFlat,
-                        ctx = RowContext(
+            Column(modifier = Modifier.weight(1f)) {
+                // Sort, group and the grid/list toggle are pinned here rather than scrolled away as the
+                // grid's first two items: they are the controls for what is being scrolled, so having to
+                // scroll back to the top to reach them was the wrong way round. The listening strip above
+                // collapses to make room for them; these stay put.
+                if (libraryPresent) {
+                    // "Filtered" now means either half of the box is doing something: text being typed, OR
+                    // a committed pill. Keyed on the open field alone it labelled an untouched library "309
+                    // results" before a character was typed; keyed on the text alone it went on claiming
+                    // the full count while a pill above it said "41 of 313" — two numbers on one screen
+                    // disagreeing about the list between them.
+                    val filtering = !filter.isEmpty
+                    // The library's header and controls are pinned chrome, not part of the list they act
+                    // on. The wash runs dark to light down the band, so it lifts away from the listening
+                    // panel above and is at its brightest along the edge where the list begins. It starts
+                    // on Surface0 — the same flat tone the listening panel carries — so the two pinned
+                    // regions share a floor and only the band rises off it.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Surface0, Surface1))),
+                    ) {
+                        // Faint above, solid below: the strip overhead is a sibling shelf, the list beneath
+                        // is what these controls are pointed at.
+                        HorizontalDivider(color = Line.copy(alpha = 0.45f))
+                        LibraryControlBar(
+                            count = if (filtering) entries.bookCount() else bookCount,
+                            searching = filtering,
+                            sort = sortMode,
                             shelving = shelfMode,
                             series = seriesMode,
                             gridView = gridView,
-                            locale = interfaceLocale,
-                        ),
-                        expanded = expanded,
-                        onBookClick = onBookClick,
-                        actions = actions,
-                    )
+                            tokens = filter.tokens,
+                            shown = filterCount.first,
+                            total = filterCount.second,
+                            query = searchQuery,
+                            searchOpen = searching,
+                            arrangeOpen = arranging,
+                            onQueryChange = viewModel::setSearchQuery,
+                            onOpenSearch = {
+                                arranging = false
+                                searching = true
+                            },
+                            onToggleArrange = {
+                                searching = false
+                                arranging = !arranging
+                            },
+                            onCloseSearch = {
+                                viewModel.commitSearchText()
+                                viewModel.setSearchQuery("")
+                                searching = false
+                            },
+                            onRemoveToken = viewModel::removeFilterToken,
+                            onClearFilter = viewModel::clearFilter,
+                            onCommitQuery = viewModel::commitSearchText,
+                            suggestions = suggestions,
+                            onPickSuggestion = { viewModel.addFilterToken(FilterToken(it.facet, it.value)) },
+                            onSortChange = viewModel::setSortMode,
+                            onShelfChange = viewModel::setShelfMode,
+                            onSeriesChange = viewModel::setSeriesMode,
+                            onToggleView = viewModel::setGridView,
+                            compact = layout.mergeTopBar,
+                            onHelp = { showHelp = true },
+                            onSettings = onOpenSettings,
+                            modifier = Modifier.padding(horizontal = LibraryGridPadding),
+                        )
+                        HorizontalDivider(color = Line)
+                    }
+                }
+
+                if (entries.isEmpty()) {
+                    when {
+                        // Room hasn't delivered yet (or a scan is running): show a discovery phase rather
+                        // than flashing "your shelf is empty" on every launch.
+                        !libraryLoaded || scanState is ScanState.Scanning || indexActivity != IndexActivity.IDLE ->
+                            LibraryLoading(
+                                scanState = scanState,
+                                indexActivity = indexActivity,
+                                modifier = Modifier.weight(1f),
+                            )
+                        // Any active filter, pills included. Keyed on the typed text alone, a pill
+                        // combination that matched nothing fell through to the SETUP panel and told the
+                        // reader their shelf was empty and to try a different folder — the third time that
+                        // wrong empty state has turned up, and this time reachable in two taps.
+                        !filter.isEmpty -> EmptyResults(modifier = Modifier.weight(1f))
+                        // Not "your shelf is empty" whenever it is empty: a crawl that has been asked for
+                        // and cannot start yet says so instead. Which library this is was settled by the
+                        // setup flow, before the shelf was ever shown.
+                        else ->
+                            LibrarySetupPanel(
+                                scanPending = IndexPass.BOOKS in indexQueued,
+                                wifiOnly = wifiOnlyDownloads,
+                                readsOnly = readsSharedIndex,
+                                modifier = Modifier.weight(1f),
+                            )
+                    }
+                } else {
+                    // The column count comes from the width rather than from a literal, and it is needed in
+                    // two places — the grid's own cells, and the rows an opened shelf lays out inside a
+                    // full-span item, which have to match them. One BoxWithConstraints, one answer.
+                    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+                        val columns = if (gridView) gridColumnsFor(maxWidth) else 1
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            state = gridState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // Before dismissSearch, and consuming nothing — see `pullToExpand`.
+                                .then(pullToExpand)
+                                .then(dismissSearch),
+                            contentPadding = PaddingValues(
+                                start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                            verticalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                        ) {
+                            libraryContent(
+                                entries = entries,
+                                gridView = gridView,
+                                columns = columns,
+                                flatCollections = flatCollections,
+                                onCollectionOrder = viewModel::setCollectionFlat,
+                                ctx = RowContext(
+                                    shelving = shelfMode,
+                                    series = seriesMode,
+                                    gridView = gridView,
+                                    locale = interfaceLocale,
+                                ),
+                                expanded = expanded,
+                                onBookClick = onBookClick,
+                                actions = actions,
+                            )
+                        }
+                    }
                 }
             }
         }
