@@ -147,7 +147,10 @@
     <!-- Section headers. Both carry their own count, and both stay put while the library
          scrolls, so the counts are where the eye already is. -->
     <string name="home_section_listening">Currently listening · %1$d</string>
-    <string name="home_section_library">Library · %1$d</string>
+    <plurals name="home_section_library">
+        <item quantity="one">Library · %1$d book</item>
+        <item quantity="other">Library · %1$d books</item>
+    </plurals>
     <string name="home_cd_grid_view">Grid view</string>
     <string name="home_cd_list_view">List view</string>
     <!-- The library's three arrangement controls. Resources, not Kotlin constants, or every
@@ -610,7 +613,10 @@
     <string name="filter_state_in_collection">Collection</string>
     <string name="filter_state_unmeasured">No length yet</string>
     <string name="filter_state_no_cover">No cover</string>
-    <string name="home_section_library_filtered">Library · %1$d of %2$d</string>
+    <plurals name="home_section_library_filtered">
+        <item quantity="one">Library · %1$d of %2$d book</item>
+        <item quantity="other">Library · %1$d of %2$d books</item>
+    </plurals>
     <string name="edit_genre_add">Add a genre</string>
     <string name="edit_genre_search">Search genres</string>
     <string name="edit_genre_none">No genre yet</string>

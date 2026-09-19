@@ -146,7 +146,10 @@
 
     <!-- Home: library content -->
     <string name="home_section_listening">Gerade am Hören · %1$d</string>
-    <string name="home_section_library">Bibliothek · %1$d</string>
+    <plurals name="home_section_library">
+        <item quantity="one">Bibliothek · %1$d Buch</item>
+        <item quantity="other">Bibliothek · %1$d Bücher</item>
+    </plurals>
     <string name="home_cd_grid_view">Rasteransicht</string>
     <string name="home_cd_list_view">Listenansicht</string>
     <string name="shelve_item">Ohne</string>
@@ -579,7 +582,10 @@
     <string name="filter_state_in_collection">Kollektion</string>
     <string name="filter_state_unmeasured">Noch keine Länge</string>
     <string name="filter_state_no_cover">Kein Cover</string>
-    <string name="home_section_library_filtered">Bibliothek · %1$d von %2$d</string>
+    <plurals name="home_section_library_filtered">
+        <item quantity="one">Bibliothek · %1$d von %2$d Buch</item>
+        <item quantity="other">Bibliothek · %1$d von %2$d Büchern</item>
+    </plurals>
     <string name="edit_genre_add">Genre hinzufügen</string>
     <string name="edit_genre_search">Genres suchen</string>
     <string name="edit_genre_none">Noch kein Genre</string>

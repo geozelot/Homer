@@ -49,6 +49,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
@@ -132,9 +133,11 @@ internal fun LibraryControlBar(
     // "Results" made the shelf look like a different place rather than the same one with less on
     // it. The COUNT carries that instead.
     val header = if (searching) {
-        stringResource(R.string.home_section_library_filtered, shown, total)
+        // Plural on the TOTAL: "41 of 313 books" is a statement about the shelf, and it is the
+        // shelf's size that decides whether the noun is one book or many.
+        pluralStringResource(R.plurals.home_section_library_filtered, total, shown, total)
     } else {
-        stringResource(R.string.home_section_library, count)
+        pluralStringResource(R.plurals.home_section_library, count, count)
     }
     Column(modifier = modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         // A line of its own only where there is height for one. Compact, it leads the control row
@@ -235,17 +238,31 @@ private fun CompactControlRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = header.uppercase(),
-            style = SectionLabel,
-            fontSize = SectionLabelLargeSize,
-            color = Muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 2.dp),
-        )
-        SearchChip(active = filtered, onClick = onOpenSearch)
-        ArrangeChip(open = false, onClick = onToggleArrange)
+        // Label, search and arrange travel together on the left: the two chips act on the list the
+        // label is counting, so they belong beside the count rather than across the row from it.
+        // The view toggle stays at the far end — it changes how the shelf is DRAWN rather than what
+        // is on it, which is the one control here that is not about the count.
+        //
+        // Grouped inside a weighted Row so the slack falls between the two groups: the label takes
+        // what it needs (`fill = false`) and gives it back first, ellipsising on the narrowest
+        // window this layout runs on rather than pushing the chips off the end.
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = header.uppercase(),
+                style = SectionLabel,
+                fontSize = SectionLabelLargeSize,
+                color = Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).padding(start = 2.dp),
+            )
+            SearchChip(active = filtered, onClick = onOpenSearch)
+            ArrangeChip(open = false, onClick = onToggleArrange)
+        }
         ViewToggleGroup(gridView = gridView, onToggleView = onToggleView)
     }
 }
