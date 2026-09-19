@@ -227,6 +227,8 @@
     <string name="settings_storage_lost_short">Gewählter Ordner nicht erreichbar</string>
     <string name="settings_storage_picker_desc">„Ordner auswählen“ nutzt Androids Ordnerauswahl; „Gerät durchsuchen“ nutzt den Zugriff auf alle Dateien (beliebiger Ordner), falls die Auswahl nicht mitspielt. Ein Wechsel verschiebt deine Downloads und Cover an den neuen Ort.</string>
     <string name="settings_online_covers">Fehlende Cover online suchen</string>
+    <string name="set_sync_covers_header">COVER</string>
+    <string name="settings_online_covers_reader">Nur das Gerät, das die Bibliothek pflegt, erzeugt Cover. Dieses übernimmt, was bereits veröffentlicht wurde — hier ändert der Schalter also nichts.</string>
     <string name="settings_online_covers_desc">Sendet nur Titel und Autor von Büchern ohne Bild an Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — um ein Cover zu finden. Dein Server, dein Konto und deine Bibliothek bleiben privat.</string>
     <string name="settings_skip_interval">Sprungweite der Tasten</string>
     <string name="settings_seconds">%1$d s</string>
@@ -399,6 +401,7 @@
     <string name="set_privacy_device_header">DIESES GERÄT</string>
     <string name="set_privacy_server_header">DEIN SERVER</string>
     <string name="set_privacy_online_header">ONLINE-ABFRAGEN</string>
+    <string name="set_privacy_online_note">Homer kann Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — nach einem Cover fragen, wenn ein Buch keines hat. Standardmäßig aus. Der Schalter liegt auf der Bibliotheksseite, denn er bewirkt nur etwas auf dem Gerät, das die Bibliothek pflegt.</string>
     <string name="set_privacy_statement_summary">Was Homer speichert und was er nie sendet</string>
 
     <!-- Settings: about -->

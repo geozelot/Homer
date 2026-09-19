@@ -85,6 +85,8 @@ fun LibrarySyncScreen(
     val indexActivity by viewModel.indexActivity.collectAsStateWithLifecycle()
     val ruleWriteFailed by viewModel.ruleWriteFailed.collectAsStateWithLifecycle()
     val pinBlocked by viewModel.pinningBlocked.collectAsStateWithLifecycle()
+    val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
+    val maintains by viewModel.maintainsLibrary.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
 
@@ -160,6 +162,28 @@ fun LibrarySyncScreen(
                 },
             ),
             onChange = { onChange(SetupEntry.PROGRESS) },
+        )
+
+        // ── cover art, for whoever maintains this library ────────────────────
+        //
+        // Here and not on the Privacy page, where it used to be. Privacy was a fair home for the
+        // one feature that contacts a third party and still names it — but the switch only means
+        // anything on a device with maintenance access. A reader takes cover art out of the shared
+        // cache and creates none, so the lookup is never reached, and a control that cannot act is
+        // a question about something that is not happening.
+        //
+        // Disabled rather than hidden for a reader, the same way Upkeep is: that cover art gets
+        // made somewhere, by somebody, is worth being able to see even when it is not your job.
+        SettingsDivider()
+        SettingsSectionHeader(stringResource(R.string.set_sync_covers_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_online_covers),
+            checked = onlineCovers,
+            onCheckedChange = viewModel::setOnlineCoverLookup,
+            enabled = maintains,
+            description = stringResource(
+                if (maintains) R.string.settings_online_covers_desc else R.string.settings_online_covers_reader,
+            ),
         )
 
         // ── the rules, for the owner ─────────────────────────────────────────

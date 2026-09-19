@@ -239,6 +239,8 @@
     <string name="settings_storage_lost_short">Chosen folder unreachable</string>
     <string name="settings_storage_picker_desc">“Choose folder” uses Android\'s folder chooser; “Browse device” uses all-files access (pick any folder) if the chooser won\'t cooperate. Changing the location moves your downloads and covers to the new place.</string>
     <string name="settings_online_covers">Look up missing covers online</string>
+    <string name="set_sync_covers_header">COVER ART</string>
+    <string name="settings_online_covers_reader">Only the device that maintains the library creates cover art. This one takes what has already been published, so this changes nothing here.</string>
     <string name="settings_online_covers_desc">Sends only the title and author of art-less books to Open Library (openlibrary.org, run by the Internet Archive) — a third party — to find a cover. Your server, account and library stay private.</string>
     <string name="settings_skip_interval">Skip button interval</string>
     <string name="settings_seconds">%1$ds</string>
@@ -425,6 +427,7 @@
     <string name="set_privacy_device_header">THIS DEVICE</string>
     <string name="set_privacy_server_header">YOUR SERVER</string>
     <string name="set_privacy_online_header">ONLINE LOOKUPS</string>
+    <string name="set_privacy_online_note">Homer can ask Open Library (openlibrary.org, run by the Internet Archive) — a third party — for a cover when a book has none. Off by default. The switch is on the Library page, because it only does anything on the device that maintains the library.</string>
     <string name="set_privacy_statement_summary">What Homer stores, and what it never sends</string>
 
     <!-- Settings: about -->

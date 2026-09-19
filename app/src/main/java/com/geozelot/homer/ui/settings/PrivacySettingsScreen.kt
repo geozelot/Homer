@@ -32,7 +32,6 @@ fun PrivacySettingsScreen(
     val appLock by viewModel.appLockEnabled.collectAsStateWithLifecycle()
     val certPinning by viewModel.certPinningEnabled.collectAsStateWithLifecycle()
     val pinBlocked by viewModel.pinningBlocked.collectAsStateWithLifecycle()
-    val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
 
     SettingsScaffold(stringResource(R.string.set_privacy_title), onBack, modifier) {
         SettingsSectionHeader(stringResource(R.string.set_privacy_device_header))
@@ -68,14 +67,17 @@ fun PrivacySettingsScreen(
 
         SettingsDivider()
 
-        // The only feature that reaches a server other than the user's own — named explicitly.
+        // The only feature that reaches a server other than the user's own, still named here in
+        // full — this page's job is to account for what leaves the device, and that does not stop
+        // being true because the switch lives elsewhere.
+        //
+        // The switch itself moved to the Library page: a reader's device takes cover art out of the
+        // shared cache and creates none (`CoverEnricher.enrich(sharedOnly = true)` marks the book
+        // attempted and moves on, before any lookup), so on a device without maintenance access
+        // this setting did nothing whatsoever. A control that cannot act is worse on a privacy page
+        // than on no page at all — it invites a decision about a thing that is not happening.
         SettingsSectionHeader(stringResource(R.string.set_privacy_online_header))
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_online_covers),
-            checked = onlineCovers,
-            onCheckedChange = viewModel::setOnlineCoverLookup,
-            description = stringResource(R.string.settings_online_covers_desc),
-        )
+        SettingsExplanation(stringResource(R.string.set_privacy_online_note))
 
         SettingsDivider()
 
