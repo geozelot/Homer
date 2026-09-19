@@ -183,19 +183,37 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.1.1**. Betas run under a moving tag — `v2.1.1-BETA` was the last — replaced by each
+Homer is at **2.1.2**. Betas run under a moving tag — `v2.1.2-BETA` was the last — replaced by each
 build rather than added to, so there is one pre-release to follow; its title carries the actual
-build (`2.1.1-BETA.57`) while the APK keeps a stable name. In-app update checks only offer a
+build (`2.1.2-BETA.103`) while the APK keeps a stable name. In-app update checks only offer a
 pre-release to devices on the beta channel.
 
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
 `2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
 
-2.1.1 is repairs and cosmetics on top of 2.1: certificate pinning that survives a renewal instead of
-expiring on one, a player that fits small screens, a chapter list that states each chapter's length
-and place, one family of marks for series, collections, authors and genres, details cards rebuilt on
-one shape, and a sleep timer you can see — on the cover and, if you want it, in the shade.
+2.1.2 is mostly about a phone held sideways, and about settings that do what they say.
+
+Landscape stops being a portrait screen squeezed: the Currently-listening panel turns ninety degrees
+into a rail down one side, and the top bar turns with it — buttons at the head, the wordmark running
+up from the foot the way a spine does — so the library gets the height back instead of a sliver of
+it. Which layout a window gets is decided by the one measurement that does not move between
+orientations, because a large phone at a smaller display size had been reporting tablet numbers and
+getting a tablet's layout.
+
+The volume override works. Reduced and boosted both did nothing: every press of play reset the
+volume to full, and the loudness boost had never once been applied, because the permission an audio
+effect needs was not declared. A seek and a manual chapter skip are now saved when they happen
+rather than up to fifteen seconds later, so a process death cannot resume you in the previous
+chapter. Chapter steps sit on the mini-player, and dragging away from the scrubber scrubs at half
+and then a quarter speed, for finding a sentence in an hour-long chapter.
+
+A waiting update says so — a gold dot on the settings button, a pill on the About row — until it is
+actually installed. Actions are drawn as buttons rather than as coloured words, and a press lands on
+the control rather than on the invisible target around it.
+
+Underneath: the two largest files became packages, the library's view model handed its work to three
+collaborators, and a cancelled request is no longer mistaken for an answer from the server.
 
 2.1 is about finding your way around a library and setting one up.
 
