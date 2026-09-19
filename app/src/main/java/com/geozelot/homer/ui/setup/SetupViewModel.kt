@@ -14,10 +14,12 @@ import com.geozelot.homer.data.library.SetupOutcome
 import com.geozelot.homer.data.library.SetupProbe
 import com.geozelot.homer.data.library.SetupState
 import com.geozelot.homer.data.library.decideSetup
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.HomerSyncRepository
 import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /** One screen of the setup flow. Order is the order they appear in, not a strict sequence. */
 enum class SetupStep {
@@ -494,7 +495,7 @@ class SetupViewModel @Inject constructor(
         // Forced, because the throttle exists to stop repeat syncs and this is the one moment the
         // user is waiting for the answer.
         if (librarySettings.progressSyncEnabled.first()) {
-            runCatching { homerSync.sync(force = true) }
+            runCatchingUnlessCancelled { homerSync.sync(force = true) }
                 .onFailure { Log.w(TAG, "could not read progress after setup", it) }
         }
         Log.i(TAG, "setup finished on '$root'")

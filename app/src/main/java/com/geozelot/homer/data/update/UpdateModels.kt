@@ -77,7 +77,13 @@ sealed interface UpdateState {
     /** Handed to the system installer; the app is about to be replaced. */
     data class Installing(val release: UpdateRelease) : UpdateState
 
-    data class Failed(val reason: UpdateFailure) : UpdateState
+    /**
+     * [release] is the update this failed to fetch or install, where there was one — a failed CHECK
+     * has none. Carried so the marks that say an update is waiting survive a failed download: the
+     * update did not stop existing because the network dropped, and a dot that clears on failure
+     * tells the reader the opposite of the truth.
+     */
+    data class Failed(val reason: UpdateFailure, val release: UpdateRelease? = null) : UpdateState
 }
 
 /**
@@ -95,7 +101,6 @@ val UpdateState.pendingRelease: UpdateRelease?
         is UpdateState.Downloading -> release
         is UpdateState.ReadyToInstall -> release
         is UpdateState.Installing -> release
-        UpdateState.Idle, is UpdateState.Checking, is UpdateState.UpToDate,
-        is UpdateState.Failed,
-        -> null
+        is UpdateState.Failed -> release
+        UpdateState.Idle, is UpdateState.Checking, is UpdateState.UpToDate -> null
     }

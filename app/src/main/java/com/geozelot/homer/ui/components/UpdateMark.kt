@@ -11,8 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
@@ -41,7 +40,6 @@ private val DotSize = 7.dp
  */
 @Composable
 fun UpdateDot(visible: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    val label = stringResource(R.string.update_cd_available)
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         content()
         if (visible) {
@@ -52,9 +50,11 @@ fun UpdateDot(visible: Boolean, modifier: Modifier = Modifier, content: @Composa
                     .size(DotSize)
                     .clip(CircleShape)
                     .background(Amber)
-                    // The icon under it already says "settings"; this says the other thing, and a
-                    // screen reader gets both or the dot is decoration to it.
-                    .semantics { contentDescription = label },
+                    // DECORATION, deliberately. Given a description of its own it became a second
+                    // stop in the traversal — "An update is available" with no role and nothing to
+                    // activate, sitting beside the button that actually leads there. The button
+                    // says both things instead; see the settings icon's contentDescription.
+                    .clearAndSetSemantics { },
             )
         }
     }

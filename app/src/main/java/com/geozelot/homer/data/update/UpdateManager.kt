@@ -44,9 +44,21 @@ class UpdateManager @Inject constructor(
      */
     private var pending: UpdateRelease? = null
 
-    /** True while something is in flight and a second request would be dropped. */
-    private val busy: Boolean
-        get() = job?.isActive == true
+    /**
+     * Starts [block] unless something is already running; returns whether it started.
+     *
+     * The check and the assignment together, under a lock. They used to be two statements — read
+     * `job?.isActive`, then assign `job` — which is only exclusive if nothing can arrive in
+     * between. The daily worker firing as the user taps Check is exactly something arriving in
+     * between, and both would have passed a guard the class's own documentation calls absolute.
+     */
+    private fun startExclusive(block: suspend () -> Unit): Boolean = synchronized(lock) {
+        if (job?.isActive == true) return false
+        job = scope.launch { block() }
+        true
+    }
+
+    private val lock = Any()
 
     /**
      * The newest release worth offering on [channel], or null when this build is already current.
@@ -65,8 +77,7 @@ class UpdateManager @Inject constructor(
 
     /** Checks in the background and moves [state] to UpToDate, Available or Failed. */
     fun check() {
-        if (busy) return
-        job = scope.launch {
+        startExclusive {
             _state.value = UpdateState.Checking
             val channel = settings.channel.first()
             try {
@@ -89,9 +100,8 @@ class UpdateManager @Inject constructor(
      * user has granted the install permission costs nothing.
      */
     fun downloadAndInstall(release: UpdateRelease) {
-        if (busy) return
         pending = release
-        job = scope.launch {
+        startExclusive {
             try {
                 _state.value = UpdateState.Downloading(release, 0f)
                 val apk = installer.download(release) { fraction ->
@@ -102,8 +112,8 @@ class UpdateManager @Inject constructor(
                 if (!installer.canInstallPackages()) {
                     // Not a failure of ours — the user has to grant this in system settings, and
                     // the UI turns this state into the button that takes them there.
-                    _state.value = UpdateState.Failed(UpdateFailure.INSTALL_NOT_ALLOWED)
-                    return@launch
+                    _state.value = UpdateState.Failed(UpdateFailure.INSTALL_NOT_ALLOWED, release)
+                    return@startExclusive
                 }
 
                 _state.value = UpdateState.Installing(release)
@@ -111,7 +121,7 @@ class UpdateManager @Inject constructor(
                 // The outcome arrives at InstallResultReceiver; on success this process is replaced.
             } catch (e: UpdateInstallException) {
                 Log.w(TAG, "update install failed: ${e.message}")
-                _state.value = UpdateState.Failed(e.reason)
+                _state.value = UpdateState.Failed(e.reason, release)
             }
         }
     }
@@ -130,7 +140,9 @@ class UpdateManager @Inject constructor(
         if (failure == null) pending = null
         _state.value =
             if (failure == null) UpdateState.UpToDate(System.currentTimeMillis())
-            else UpdateState.Failed(failure)
+            // The release it failed on, so the dot and the pill do not clear while it is still
+            // waiting. `pending` is exactly that, and is cleared above only on success.
+            else UpdateState.Failed(failure, pending)
     }
 
     /** Clears a failure so the screen goes back to offering the check again. */

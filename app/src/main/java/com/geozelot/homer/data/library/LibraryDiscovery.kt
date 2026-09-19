@@ -3,6 +3,7 @@ package com.geozelot.homer.data.library
 import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.net.NetworkMonitor
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.sync.facet.LibraryFacets
 import com.geozelot.homer.data.sync.facet.StructureFacet
@@ -69,7 +70,7 @@ class LibraryDiscovery @Inject constructor(
 
         // Shared-with-me / sibling folders: one bounded pass over the files-root's top-level
         // folders, each probed for a shared catalog. Not recursive.
-        val children = runCatching { webDavClient.propfind("", depth = 1) }.getOrElse {
+        val children = runCatchingUnlessCancelled { webDavClient.propfind("", depth = 1) }.getOrElse {
             Log.w(TAG, "discovery: listing files root failed", it)
             emptyList()
         }.filter { it.isCollection && it.path.isNotEmpty() }
@@ -100,16 +101,16 @@ class LibraryDiscovery @Inject constructor(
         // Existence via PROPFIND Depth 0 (a few hundred bytes). This used to GET the whole
         // catalog for every candidate folder — up to 60 of them, each potentially megabytes —
         // just to decide whether a marker file was there.
-        val hasCatalog = runCatching { webDavClient.exists("$base/${LibraryFacets.STRUCTURE_FILE}") }.getOrDefault(false)
+        val hasCatalog = runCatchingUnlessCancelled { webDavClient.exists("$base/${LibraryFacets.STRUCTURE_FILE}") }.getOrDefault(false)
         val hasIndex = checkIndex &&
-            runCatching { webDavClient.exists("$base/index.json") }.getOrDefault(false)
+            runCatchingUnlessCancelled { webDavClient.exists("$base/index.json") }.getOrDefault(false)
 
         if (!hasCatalog && !hasIndex && !always) return null
 
         // A book count is only worth a full download for the folder actually in use; for the other
         // candidates the UI just shows that a shared catalog exists.
         val bookCount = if (hasCatalog && (always || relativePath == libraryRoot)) {
-            runCatching {
+            runCatchingUnlessCancelled {
                 webDavClient.getText("$base/${LibraryFacets.STRUCTURE_FILE}")?.content
                     ?.takeIf { it.isNotBlank() }
                     ?.let { json.decodeFromString<StructureFacet>(it).books.size }
@@ -117,7 +118,7 @@ class LibraryDiscovery @Inject constructor(
         } else {
             null
         }
-        val owner = if (hasCatalog) runCatching { webDavClient.fetchOwnerId(relativePath) }.getOrNull() else null
+        val owner = if (hasCatalog) runCatchingUnlessCancelled { webDavClient.fetchOwnerId(relativePath) }.getOrNull() else null
 
         return DiscoveredLibrary(
             relativePath = relativePath,

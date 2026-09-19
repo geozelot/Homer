@@ -4,17 +4,18 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.net.NetworkMonitor
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.DeviceIdentity
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Resolves the rules a library imposes, and — for the owner alone — writes them.
@@ -221,7 +222,7 @@ class LibraryPolicyRepository @Inject constructor(
     }
 
     private suspend fun probeOwnerId(folder: String): String? =
-        runCatching { webDavClient.fetchOwnerId(folder) }.getOrNull()
+        runCatchingUnlessCancelled { webDavClient.fetchOwnerId(folder) }.getOrNull()
 
     private fun policyPath(folder: String): String =
         listOf(folder, LibraryFacets.DIR, LibraryFacets.POLICY_FILE)

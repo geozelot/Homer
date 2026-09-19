@@ -4,6 +4,7 @@ import android.util.Xml
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.auth.WebDavKind
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.di.Authed
 import java.io.IOException
 import java.net.URI
@@ -221,9 +222,9 @@ class WebDavClient @Inject constructor(
      * accumulated.
      */
     suspend fun canWrite(dirPath: String, credentials: NextcloudCredentials? = null): Boolean {
-        val reachable = runCatching { mkcol(dirPath, credentials) }.isSuccess
+        val reachable = runCatchingUnlessCancelled { mkcol(dirPath, credentials) }.isSuccess
         if (!reachable) return false
-        return runCatching {
+        return runCatchingUnlessCancelled {
             putText("$dirPath/$WRITE_PROBE_FILE", "", credentials = credentials)
             true
         }.getOrDefault(false)

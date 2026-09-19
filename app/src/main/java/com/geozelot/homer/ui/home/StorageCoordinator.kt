@@ -5,6 +5,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.library.LibraryIndexManager
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageLocation
@@ -122,7 +123,7 @@ class StorageCoordinator @Inject constructor(
                 return
             }
         }
-        val hasExisting = runCatching {
+        val hasExisting = runCatchingUnlessCancelled {
             val area = storageLocation.areaFor(target)
             area.exists(MIRROR_MARKER)
         }.getOrDefault(false)

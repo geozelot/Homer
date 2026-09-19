@@ -5,14 +5,15 @@ import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.library.LibraryMaintenance
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 
 /**
  * Gives books an artwork cover. Embedded audiobook art usually lives only on the first file,
@@ -209,15 +210,11 @@ class CoverEnricher @Inject constructor(
      * which is exactly the kind of guarantee that quietly stops holding when a line moves, and the
      * damage if it does is a book marked "no art available" because someone pressed Stop.
      */
+    /** [runCatchingUnlessCancelled], with this file's log line on the failure. */
     private suspend fun <T> orNullUnlessCancelled(block: suspend () -> T): T? =
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "cover fetch failed", e)
-            null
-        }
+        runCatchingUnlessCancelled(block)
+            .onFailure { Log.w(TAG, "cover fetch failed", it) }
+            .getOrNull()
 
     private companion object {
         const val TAG = "HomerMeta"

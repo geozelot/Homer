@@ -5,16 +5,17 @@ import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.auth.WebDavKind
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.net.NetworkMonitor
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.sync.facet.LibraryFacets
 import com.geozelot.homer.data.sync.facet.LibraryPolicyRepository
 import com.geozelot.homer.data.sync.facet.StructureFacet
 import com.geozelot.homer.data.webdav.WebDavClient
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Looks at a folder and reports what is there, so [decideSetup] can say what to do about it.
@@ -70,9 +71,9 @@ class LibrarySetupProbe @Inject constructor(
 
         // Asked for a share link too: ownership there is somebody else's by definition, but the
         // NAME is what a reader's "kept by andre" is made of.
-        val owner = runCatching { webDavClient.fetchOwnerId(folder) }.getOrNull()
+        val owner = runCatchingUnlessCancelled { webDavClient.fetchOwnerId(folder) }.getOrNull()
         val structurePath = pathOf(folder, LibraryFacets.STRUCTURE_FILE)
-        val hasIndex = runCatching { webDavClient.exists(structurePath) }.getOrDefault(false)
+        val hasIndex = runCatchingUnlessCancelled { webDavClient.exists(structurePath) }.getOrDefault(false)
 
         SetupProbe(
             kind = credentials.kind,

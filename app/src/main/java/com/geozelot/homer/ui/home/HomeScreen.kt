@@ -50,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -245,7 +246,12 @@ fun HomeScreen(
     val readsSharedIndex by viewModel.readsSharedIndex.collectAsStateWithLifecycle()
     val maintainsLibrary by viewModel.maintainsLibrary.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
-    val playback by viewModel.playback.collectAsStateWithLifecycle()
+    // Held as a State OBJECT and never read at this level. positionMs and bookElapsedMs advance
+    // every second while audio plays, and the poll loop runs precisely BECAUSE this screen is
+    // collecting — so one read here re-ran the library once a second to move a bar at its foot.
+    // What the screen needs is whether anything is loaded at all, which changes when a book does.
+    val playbackHolder = viewModel.playback.collectAsStateWithLifecycle()
+    val playingBookId by remember { derivedStateOf { playbackHolder.value.bookId } }
     val miniPlayerBook by viewModel.miniPlayerBook.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
@@ -362,8 +368,13 @@ fun HomeScreen(
     // Read here rather than inside each bar: there are two settings buttons and they must not
     // disagree. A bare hiltViewModel() is safe for this one — UpdateViewModel forwards a singleton
     // and says so in its own KDoc.
-    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
-    val updateWaiting = updateState.pendingRelease != null
+    // Through derivedStateOf, and not for tidiness: a download reports progress per whole percent,
+    // so UpdateManager pushes up to a HUNDRED distinct Downloading states during one. Read directly,
+    // each of them re-ran this whole screen to re-derive a boolean that changes at most twice.
+    val updateStateHolder = updateViewModel.state.collectAsStateWithLifecycle()
+    val updateWaiting by remember {
+        derivedStateOf { updateStateHolder.value.pendingRelease != null }
+    }
 
     val config = LocalConfiguration.current
     val layout = libraryLayoutFor(
@@ -705,9 +716,10 @@ fun HomeScreen(
         // The mini-player insets itself (its gradient runs behind the navigation bar). When there's
         // nothing playing it emits nothing at all, so the space has to be reserved here or the last
         // row of books ends up under the navigation bar.
-        if (playback.bookId != null) {
+        if (playingBookId != null) {
             MiniPlayer(
-                state = playback,
+                // The ticking value reaches the one composable built to tick, and no further.
+                state = playbackHolder.value,
                 onOpenPlayer = onBookClick,
                 onPlayPause = viewModel::playPause,
                 onPrevChapter = viewModel::previousChapter,
@@ -931,7 +943,7 @@ private fun TopBar(updateWaiting: Boolean, onHelp: () -> Unit, onSettings: () ->
                     IconButton(onClick = onSettings) {
                         Icon(
                             Icons.Filled.Tune,
-                            contentDescription = stringResource(R.string.home_cd_settings),
+                            contentDescription = settingsDescription(updateWaiting),
                             tint = Muted,
                         )
                     }
@@ -940,6 +952,18 @@ private fun TopBar(updateWaiting: Boolean, onHelp: () -> Unit, onSettings: () ->
         }
     }
 }
+
+/**
+ * What the settings button is called, which depends on whether it is also carrying the dot.
+ *
+ * One node saying both things rather than two nodes saying one each: the dot beside it is marked
+ * decorative, so a screen reader is not handed "An update is available" as a separate stop with
+ * nothing to activate.
+ */
+@Composable
+private fun settingsDescription(updateWaiting: Boolean): String = stringResource(
+    if (updateWaiting) R.string.home_cd_settings_update else R.string.home_cd_settings,
+)
 
 /** How wide the turned bar is: one icon button, and nothing else has to fit across it. */
 private val SideBarWidth = 48.dp
@@ -989,7 +1013,7 @@ private fun LibrarySideBar(
             IconButton(onClick = onSettings) {
                 Icon(
                     Icons.Filled.Tune,
-                    contentDescription = stringResource(R.string.home_cd_settings),
+                    contentDescription = settingsDescription(updateWaiting),
                     tint = Muted,
                 )
             }

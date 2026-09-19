@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -60,7 +62,12 @@ fun SettingsHubScreen(
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
     val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
-    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+    // Same reason as the library screen: a download's hundred progress states must not re-run a
+    // page whose only interest is whether the About row wears a pill.
+    val updateStateHolder = updateViewModel.state.collectAsStateWithLifecycle()
+    val updateWaiting by remember {
+        derivedStateOf { updateStateHolder.value.pendingRelease != null }
+    }
 
     // Asked here as well as on the page itself: a withdrawn folder grant is invisible until
     // somebody goes looking, and this row is what they would have to think to open.
@@ -118,7 +125,7 @@ fun SettingsHubScreen(
             onClick = onOpenAbout,
             // No row of its own above the sections for this: the About row is already the way
             // to the updater, so the pill marks the path rather than laying a second one beside it.
-            badge = if (updateState.pendingRelease != null) ({ UpdatePill() }) else null,
+            badge = if (updateWaiting) ({ UpdatePill() }) else null,
         )
 
         Text(

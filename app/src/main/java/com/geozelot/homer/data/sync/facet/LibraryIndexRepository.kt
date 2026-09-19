@@ -19,6 +19,7 @@ import com.geozelot.homer.data.library.ScopedTemplate
 import com.geozelot.homer.data.library.mergeTemplateLines
 import com.geozelot.homer.data.metadata.CoverCache
 import com.geozelot.homer.data.net.NetworkMonitor
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.DeviceIdentity
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -31,8 +32,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +41,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 /**
@@ -326,7 +327,7 @@ class LibraryIndexRepository @Inject constructor(
     /** Whether a shared index is present at all, without downloading it. */
     suspend fun exists(): Boolean {
         if (credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return false
-        return runCatching { webDavClient.exists(pathOf(LibraryFacets.STRUCTURE_FILE)) }.getOrDefault(false)
+        return runCatchingUnlessCancelled { webDavClient.exists(pathOf(LibraryFacets.STRUCTURE_FILE)) }.getOrDefault(false)
     }
 
     // ── pulling ──────────────────────────────────────────────────────────────────────────────
