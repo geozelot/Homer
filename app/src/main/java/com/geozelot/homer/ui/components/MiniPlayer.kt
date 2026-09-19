@@ -17,23 +17,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.Locale
 import com.geozelot.homer.R
 import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.formatCompactDuration
@@ -45,6 +44,7 @@ import com.geozelot.homer.ui.theme.OnAmber
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
+import java.util.Locale
 
 /**
  * Docked mini-player: always one tap from the current book. A live amber hairline across the
@@ -174,17 +174,20 @@ fun MiniPlayer(
             }
             // 48dp touch target around the 38dp button: the circle keeps its size, only the
             // tappable area grows (it also has to swallow the row's own click).
+            val playInteraction = rememberTapInteraction()
             Box(
                 modifier = Modifier
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .clickable { if (state.hasError) onRetry() else onPlayPause() },
+                    .tapTarget(playInteraction) { if (state.hasError) onRetry() else onPlayPause() },
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Amber),
+                        .background(Amber)
+                        // On the circle, not the 48dp target around it — see TapFeedback.kt.
+                        .pressFeedback(playInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

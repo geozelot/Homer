@@ -60,7 +60,10 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.ControlPillHeight
 import com.geozelot.homer.ui.components.DropdownChip
+import com.geozelot.homer.ui.components.pressFeedback
+import com.geozelot.homer.ui.components.rememberTapInteraction
 import com.geozelot.homer.ui.components.rememberTextWidth
+import com.geozelot.homer.ui.components.tapTarget
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
 import com.geozelot.homer.ui.theme.AmberSoft
@@ -276,10 +279,11 @@ private fun Modifier.controlGroupPill(): Modifier = drawBehind {
 /** The one control that opens [ArrangeBand]. Shows no value: the band is where values are read. */
 @Composable
 private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
+    val interaction = rememberTapInteraction()
     Box(
         modifier = Modifier
             .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
-            .clickable(onClick = onClick),
+            .tapTarget(interaction, onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(
@@ -290,6 +294,7 @@ private fun ArrangeChip(open: Boolean, onClick: () -> Unit) {
                 // the control that produced the thing below stays visibly responsible for it.
                 .background(if (open) AmberSoft else Surface1)
                 .border(1.dp, if (open) AmberDeep else Line, RoundedCornerShape(8.dp))
+                .pressFeedback(interaction)
                 .padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -455,11 +460,13 @@ private fun ArrangeField(
  */
 @Composable
 private fun SearchChip(active: Boolean, onClick: () -> Unit) {
+    val interaction = rememberTapInteraction()
     Box(
         modifier = Modifier
-            // Chip-height pill inside a full-height tap target, the same split DropdownChip makes.
+            // Chip-height pill inside a full-height tap target, the same split DropdownChip makes
+            // — so the press is shown on the pill, not on the target. See TapFeedback.kt.
             .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
-            .clickable(onClick = onClick),
+            .tapTarget(interaction, onClick),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -472,6 +479,7 @@ private fun SearchChip(active: Boolean, onClick: () -> Unit) {
                 // what the list CONTAINS; the accent is what the rest of the app uses to mean
                 // live, and this is the chip worth finding without looking for it.
                 .border(1.dp, Amber, RoundedCornerShape(8.dp))
+                .pressFeedback(interaction)
                 // Wider than a glyph needs. It is the control that opens the box, so it gets a
                 // little more presence than the chips that merely rearrange the list.
                 .padding(horizontal = 14.dp),
@@ -775,34 +783,36 @@ private fun ViewToggleButton(
     desc: String,
     onClick: () -> Unit,
 ) {
+    val interaction = rememberTapInteraction()
     Box(
         modifier = Modifier
-            // sizeIn, not size: the segment was 32×28dp, well under the 48dp minimum touch target.
-            // The icon keeps its size; only the tappable segment grows.
-            .sizeIn(minWidth = 44.dp, minHeight = 48.dp)
-            .clickable(onClick = onClick)
-            // Confined to the pill, like the outline around it — filling the whole tap target
-            // would put an amber block a head taller than the chips beside it.
-            .drawBehind {
-                if (!selected) return@drawBehind
-                val h = ControlPillHeight.toPx() - 2.dp.toPx()
-                drawRoundRect(
-                    color = AmberSoft,
-                    topLeft = Offset(1.dp.toPx(), (size.height - h) / 2f),
-                    size = Size(size.width - 2.dp.toPx(), h),
-                    cornerRadius = CornerRadius(7.dp.toPx()),
-                )
-            },
+            // The segment was 32×28dp, well under the 48dp minimum touch target. The icon keeps its
+            // size; only the tappable segment grows — and the press is shown on the pill below,
+            // not on this, or it flashes a rectangle a head taller than the chips beside it.
+            .size(width = ViewToggleSegment, height = ControlTapHeight)
+            .tapTarget(interaction, onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = desc,
-            tint = if (selected) Amber else Faint,
-            modifier = Modifier.size(16.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(width = ViewToggleSegment - 2.dp, height = ControlPillHeight - 2.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .then(if (selected) Modifier.background(AmberSoft) else Modifier)
+                .pressFeedback(interaction),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = desc,
+                tint = if (selected) Amber else Faint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
+
+/** One half of the view toggle. Named because the pill inside it is drawn 2dp narrower. */
+private val ViewToggleSegment = 44.dp
 
 /** Books across the visible entries — the count while a search is narrowing the library. */
 internal fun List<LibraryEntry>.bookCount(): Int = sumOf { entry ->

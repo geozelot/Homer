@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -13,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.material3.Text
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -21,16 +21,18 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.components.CustomNumberDialog
-import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.data.settings.SLEEP_EXTEND_OFF
+import com.geozelot.homer.ui.components.CustomNumberDialog
+import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.SettingsActionPadding
+import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsExplanation
 import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
-import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.theme.Amber
 
 /**
  * How the player behaves: the two numbers that shape its feel, what the sleep timer does, and
@@ -261,10 +263,14 @@ private fun BatteryOptimisationRow() {
                 R.string.set_playback_background_off
             },
         ),
-        onClick = if (exempt) null else ({ context.openBatteryOptimisationSettings() }),
         trailing = {
             if (!exempt) {
-                Text(stringResource(R.string.set_playback_background_action), color = Amber, fontSize = 13.sp)
+                HomerTextButton(
+                    onClick = { context.openBatteryOptimisationSettings() },
+                    contentPadding = SettingsActionPadding,
+                ) {
+                    Text(stringResource(R.string.set_playback_background_action), color = Amber, fontSize = 13.sp)
+                }
             }
         },
     )

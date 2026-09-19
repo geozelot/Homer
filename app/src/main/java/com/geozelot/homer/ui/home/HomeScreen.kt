@@ -90,10 +90,13 @@ import com.geozelot.homer.R
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.sync.facet.IndexActivity
+import com.geozelot.homer.data.update.pendingRelease
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.LibraryHelpCard
 import com.geozelot.homer.ui.components.MiniPlayer
+import com.geozelot.homer.ui.components.UpdateDot
+import com.geozelot.homer.ui.settings.UpdateViewModel
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Faint
 import com.geozelot.homer.ui.theme.Line
@@ -219,6 +222,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
+    updateViewModel: UpdateViewModel = hiltViewModel(),
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val libraryLoaded by viewModel.libraryLoaded.collectAsStateWithLifecycle()
@@ -355,6 +359,12 @@ fun HomeScreen(
     }
 
     // What this window can afford above the first cover — see [libraryChromeFor].
+    // Read here rather than inside each bar: there are two settings buttons and they must not
+    // disagree. A bare hiltViewModel() is safe for this one — UpdateViewModel forwards a singleton
+    // and says so in its own KDoc.
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+    val updateWaiting = updateState.pendingRelease != null
+
     val config = LocalConfiguration.current
     val layout = libraryLayoutFor(
         width = config.screenWidthDp.dp,
@@ -468,7 +478,11 @@ fun HomeScreen(
         // there; the wordmark does not come back until there is height to spare for it.
         if (!layout.mergeTopBar) {
             Box(modifier = dismissSearch) {
-                TopBar(onHelp = { showHelp = true }, onSettings = onOpenSettings)
+                TopBar(
+                    updateWaiting = updateWaiting,
+                    onHelp = { showHelp = true },
+                    onSettings = onOpenSettings,
+                )
             }
         }
 
@@ -529,6 +543,7 @@ fun HomeScreen(
             val railShown = layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent
             if (layout.mergeTopBar) {
                 LibrarySideBar(
+                    updateWaiting = updateWaiting,
                     onHelp = { showHelp = true },
                     onSettings = onOpenSettings,
                     modifier = dismissSearch,
@@ -887,7 +902,7 @@ internal class BookActions(
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(onHelp: () -> Unit, onSettings: () -> Unit) {
+private fun TopBar(updateWaiting: Boolean, onHelp: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -912,12 +927,14 @@ private fun TopBar(onHelp: () -> Unit, onSettings: () -> Unit) {
                 // Straight to settings. This was an overflow menu holding exactly one item ever
                 // since the library folder, sync and storage became their own destinations — two
                 // taps and a popup to reach the only thing in it.
-                IconButton(onClick = onSettings) {
-                    Icon(
-                        Icons.Filled.Tune,
-                        contentDescription = stringResource(R.string.home_cd_settings),
-                        tint = Muted,
-                    )
+                UpdateDot(updateWaiting) {
+                    IconButton(onClick = onSettings) {
+                        Icon(
+                            Icons.Filled.Tune,
+                            contentDescription = stringResource(R.string.home_cd_settings),
+                            tint = Muted,
+                        )
+                    }
                 }
             }
         }
@@ -941,7 +958,12 @@ private val SideBarWidth = 48.dp
  * a shelf.
  */
 @Composable
-private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun LibrarySideBar(
+    updateWaiting: Boolean,
+    onHelp: () -> Unit,
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -963,12 +985,14 @@ private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier:
         // settings is the rightmost thing on the upright bar. Ordering them by how the row reads
         // instead would mean the bar had been rearranged rather than turned — and the wordmark,
         // which lands at the foot by the same rule, would be the only part that had really moved.
-        IconButton(onClick = onSettings) {
-            Icon(
-                Icons.Filled.Tune,
-                contentDescription = stringResource(R.string.home_cd_settings),
-                tint = Muted,
-            )
+        UpdateDot(updateWaiting) {
+            IconButton(onClick = onSettings) {
+                Icon(
+                    Icons.Filled.Tune,
+                    contentDescription = stringResource(R.string.home_cd_settings),
+                    tint = Muted,
+                )
+            }
         }
         IconButton(onClick = onHelp) {
             Icon(
@@ -988,32 +1012,20 @@ private fun VerticalHairline(color: Color) {
     Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(color))
 }
 
-/**
- * Which way the wordmark turns.
- *
- * -90 is ANTICLOCKWISE: the first letter lands at the FOOT of the column and the word reads upward,
- * which is the continental convention for a book spine and the direction asked for. +90 would put
- * the H at the top and read downward. One constant, because it is the kind of thing that can only
- * be settled by looking at it.
- */
+/** Anticlockwise, so the first letter sits at the foot of the bar and the word runs upward. */
 private const val WordmarkTurn = -90f
 
 /**
- * The wordmark, turned to run up the bar.
+ * The wordmark, running up the bar.
  *
- * **Drawn rather than laid out, and that is the point.** Two attempts at this used
- * `Modifier.rotate` — once with a layout that swapped its own constraints, once with a plain
- * rotation inside a box sized for the result — and on a device neither turned a single letter. The
- * modifier is used nowhere else in this app, so there was no working precedent to compare against
- * and no way to tell from here which of my assumptions about it was wrong.
+ * Measured, then drawn: the canvas is sized to the result — the bar's width across, the text's own
+ * length down — and the draw scope turns about the centre the two share. Every number here is one
+ * this function computed, which is why it is written this way; `Modifier.rotate` on a laid-out Text
+ * was tried twice and turned nothing on a device, and it is used nowhere else in the app to compare
+ * against.
  *
- * So this does not ask a layer to rotate a laid-out Text. It measures the text itself, sizes the
- * canvas to the result (the bar's width across, the text's own LENGTH down), and rotates the draw
- * scope about the centre both share. Every number in it is one this function computed: there is no
- * placement to correct, no constraint to swap, and nothing that can quietly decline to happen.
- *
- * A canvas carries no semantics of its own, so the word is stated for a screen reader explicitly —
- * a Text would have done that for free, and losing it is the one thing this costs.
+ * A canvas carries no semantics, so the word is stated for a screen reader by hand. A Text did that
+ * for free; it is the one thing this costs.
  */
 @Composable
 private fun TurnedWordmark(text: String, modifier: Modifier = Modifier) {

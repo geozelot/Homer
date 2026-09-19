@@ -79,3 +79,23 @@ sealed interface UpdateState {
 
     data class Failed(val reason: UpdateFailure) : UpdateState
 }
+
+/**
+ * The release this state is about, or null when it is not about one.
+ *
+ * The single rule behind every "an update is waiting" mark in the app, and deliberately not a list
+ * of cases: a state carries a release exactly while a newer Homer is known and not yet running.
+ * Found, downloading, downloaded, handing over to the installer — all of them mean the same thing
+ * to a reader, and the marks clear on their own when the new build starts up and checks out
+ * [UpToDate]. Nothing has to remember having been seen.
+ */
+val UpdateState.pendingRelease: UpdateRelease?
+    get() = when (this) {
+        is UpdateState.Available -> release
+        is UpdateState.Downloading -> release
+        is UpdateState.ReadyToInstall -> release
+        is UpdateState.Installing -> release
+        UpdateState.Idle, is UpdateState.Checking, is UpdateState.UpToDate,
+        is UpdateState.Failed,
+        -> null
+    }

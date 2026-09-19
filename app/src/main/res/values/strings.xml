@@ -220,6 +220,8 @@
 
     <!-- Settings: shared labels reused across the settings screens -->
     <string name="settings_title">Settings</string>
+    <string name="update_pill_new">New version</string>
+    <string name="update_cd_available">An update is available</string>
     <string name="settings_account">%1$s · %2$s</string>
     <string name="settings_library_share">Share · %1$s</string>
     <string name="settings_storage_folder">Folder: %1$s</string>

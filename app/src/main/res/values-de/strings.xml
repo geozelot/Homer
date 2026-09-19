@@ -208,6 +208,8 @@
 
     <!-- Settings: shared labels reused across the settings screens -->
     <string name="settings_title">Einstellungen</string>
+    <string name="update_pill_new">Neue Version</string>
+    <string name="update_cd_available">Ein Update ist verfügbar</string>
     <string name="settings_account">%1$s · %2$s</string>
     <string name="settings_library_share">Freigabe · %1$s</string>
     <string name="settings_storage_folder">Ordner: %1$s</string>

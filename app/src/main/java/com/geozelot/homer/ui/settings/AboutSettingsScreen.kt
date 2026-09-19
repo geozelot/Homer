@@ -17,9 +17,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.R
@@ -27,6 +27,8 @@ import com.geozelot.homer.data.update.UpdateChannel
 import com.geozelot.homer.data.update.UpdateFailure
 import com.geozelot.homer.data.update.UpdateRelease
 import com.geozelot.homer.data.update.UpdateState
+import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.SettingsActionPadding
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsNavRow
@@ -112,13 +114,22 @@ private fun UpdateSection(viewModel: UpdateViewModel = hiltViewModel()) {
     SettingsDivider()
     SettingsSectionHeader(stringResource(R.string.set_update_header))
 
+    // The action is a BUTTON, not amber words. "Download and install" replaces this build with
+    // another one — the most consequential thing any settings row does — and it was the one action
+    // in the app drawn as bare text, which is the styling a link gets. The row itself is no longer
+    // clickable either: a row that does the same thing as the control inside it gives a reader two
+    // targets for one action and a large silent area that turns out not to be silent.
     SettingsRow(
         label = stringResource(R.string.set_update_check),
         summary = statusSummary(state, lastChecked),
-        onClick = actionFor(state)?.let { action -> { runAction(action, context, viewModel, state) } },
         trailing = {
             actionFor(state)?.let { action ->
-                Text(stringResource(action.label), color = Amber, fontSize = 13.sp)
+                HomerTextButton(
+                    onClick = { runAction(action, context, viewModel, state) },
+                    contentPadding = SettingsActionPadding,
+                ) {
+                    Text(stringResource(action.label), color = Amber, fontSize = 13.sp)
+                }
             }
         },
     )

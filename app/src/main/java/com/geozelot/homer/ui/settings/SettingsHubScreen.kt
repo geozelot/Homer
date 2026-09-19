@@ -12,13 +12,16 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.R
+import com.geozelot.homer.data.update.pendingRelease
 import com.geozelot.homer.ui.components.SettingsDivider
 import com.geozelot.homer.ui.components.SettingsDropdownRow
 import com.geozelot.homer.ui.components.SettingsNavRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
+import com.geozelot.homer.ui.components.UpdatePill
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.theme.Faint
 
@@ -45,6 +48,7 @@ fun SettingsHubScreen(
     onOpenPrivacy: () -> Unit,
     onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier,
+    updateViewModel: UpdateViewModel = hiltViewModel(),
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
     val libraryIsShare by viewModel.libraryIsShare.collectAsStateWithLifecycle()
@@ -56,6 +60,7 @@ fun SettingsHubScreen(
     val unmeasured by viewModel.unmeasuredCount.collectAsStateWithLifecycle()
     val artless by viewModel.artlessCount.collectAsStateWithLifecycle()
     val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
 
     // Asked here as well as on the page itself: a withdrawn folder grant is invisible until
     // somebody goes looking, and this row is what they would have to think to open.
@@ -111,6 +116,9 @@ fun SettingsHubScreen(
             label = stringResource(R.string.set_about_title),
             summary = stringResource(R.string.set_about_summary),
             onClick = onOpenAbout,
+            // No row of its own above the sections for this: the About row is already the way
+            // to the updater, so the pill marks the path rather than laying a second one beside it.
+            badge = if (updateState.pendingRelease != null) ({ UpdatePill() }) else null,
         )
 
         Text(

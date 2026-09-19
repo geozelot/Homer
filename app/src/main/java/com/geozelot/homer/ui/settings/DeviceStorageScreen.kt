@@ -236,10 +236,14 @@ private fun NotificationRow() {
         summary = stringResource(
             if (allowed) R.string.set_device_notify_on else R.string.set_device_notify_off,
         ),
-        onClick = if (allowed) null else ({ context.openNotificationSettings() }),
         trailing = {
             if (!allowed) {
-                Text(stringResource(R.string.set_device_notify_action), color = Amber, fontSize = 13.sp)
+                HomerTextButton(
+                    onClick = { context.openNotificationSettings() },
+                    contentPadding = SettingsActionPadding,
+                ) {
+                    Text(stringResource(R.string.set_device_notify_action), color = Amber, fontSize = 13.sp)
+                }
             }
         },
     )

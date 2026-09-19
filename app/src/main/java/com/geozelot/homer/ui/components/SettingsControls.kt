@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -205,6 +206,8 @@ fun SettingsNavRow(
     modifier: Modifier = Modifier,
     summary: String? = null,
     enabled: Boolean = true,
+    /** Sits between the summary and the chevron — a badge saying why this row is worth opening. */
+    badge: (@Composable () -> Unit)? = null,
 ) {
     SettingsRow(
         label = label,
@@ -213,6 +216,10 @@ fun SettingsNavRow(
         onClick = onClick,
         modifier = modifier,
     ) {
+        badge?.let {
+            it()
+            Spacer(Modifier.width(8.dp))
+        }
         // The chevron dims with the row. Left at full strength it reads as a live affordance on a
         // row that will not respond to it.
         Icon(
@@ -303,6 +310,7 @@ fun <T> DropdownChip(
         // The pill is well under the 48dp minimum touch target, so the tap area is expanded around
         // it — inflating the pill itself would break its alignment with the 11sp label text it sits
         // beside.
+        val chipInteraction = rememberTapInteraction()
         Box(
             modifier = Modifier
                 // Borderless, the chip is one share of a field: it fills that share in both axes so
@@ -317,7 +325,7 @@ fun <T> DropdownChip(
                         Modifier.fillMaxWidth().fillMaxHeight()
                     },
                 )
-                .clickable { open = true },
+                .tapTarget(chipInteraction) { open = true },
             // Centred in its share when borderless: three cells whose contents are each centred
             // read as three equal cells, where three left-aligned ones of different widths read as
             // a row that starts tidily and trails off.
@@ -326,6 +334,8 @@ fun <T> DropdownChip(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
+                    // On the pill, not on the 48dp target around it — see TapFeedback.kt.
+                    .pressFeedback(chipInteraction)
                     .then(
                         if (bordered) {
                             Modifier
