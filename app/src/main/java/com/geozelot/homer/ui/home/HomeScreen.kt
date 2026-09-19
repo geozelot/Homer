@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -67,6 +69,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Constraints
@@ -349,14 +352,21 @@ fun HomeScreen(
         height = config.screenHeightDp.dp,
         smallestWidth = config.smallestScreenWidthDp.dp,
     )
+    // What the system is reserving along the left edge — a side navigation bar, a rotated cutout.
+    // Logged because it has already hidden a whole component once: the turned bar took this inset
+    // OUT of its 48dp instead of adding it on, and a 48dp inset left nothing to draw.
+    val startInset = WindowInsets.safeDrawing
+        .only(WindowInsetsSides.Start)
+        .asPaddingValues()
+        .calculateStartPadding(LocalLayoutDirection.current)
     // Logged on every change, because the last time this was wrong the report could only say the
     // layout "looked like a tablet" and the numbers behind that had to be guessed at. One line per
     // rotation makes the next one a fact.
-    LaunchedEffect(layout, config.screenWidthDp, config.screenHeightDp) {
+    LaunchedEffect(layout, config.screenWidthDp, config.screenHeightDp, startInset) {
         Log.i(
             TAG_UI,
             "library layout=$layout window=${config.screenWidthDp}x${config.screenHeightDp}dp " +
-                "sw=${config.smallestScreenWidthDp}dp",
+                "sw=${config.smallestScreenWidthDp}dp startInset=$startInset",
         )
     }
     // Every rule about when this panel folds lives in ListeningFold, with tests.
@@ -922,15 +932,24 @@ private val SideBarWidth = 48.dp
 private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .width(SideBarWidth)
             .fillMaxHeight()
             // The same flat tone the rail carries, and NO seam between them: two strips down the
             // left would read as clutter, one column with two zones reads as a margin. The only
-            // hairline is the one separating the pair from the library.
+            // hairline is the one separating the pair from the library. Painted OUTSIDE the inset,
+            // so the surface runs under a cutout instead of leaving an unpainted gutter beside it.
             .background(Surface0)
-            // A landscape navigation bar or a cutout can sit along this very edge, which is the one
-            // place in the app where something is pinned to it.
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)),
+            // A landscape navigation bar or a cutout sits along this very edge — this is the one
+            // place in the app pinned to it.
+            //
+            // OUTSIDE the width, and that is the whole point. Inside it, the inset ate the 48dp
+            // rather than being added to it: a phone with a 48dp cutout or side navigation bar in
+            // that rotation left ZERO content width, and since `size` honours its constraints the
+            // icons measured to nothing while the bar's background went on painting the same
+            // colour as the rail beside it. A strip that is exactly as wide as its inset, filled
+            // with the neighbour's colour, is a strip nobody can see. The bar is 48dp of CONTENT
+            // plus whatever the system needs.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+            .width(SideBarWidth),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Before settings, as in the row it came from: it explains the screen you are on rather
