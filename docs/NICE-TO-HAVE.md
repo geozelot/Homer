@@ -4,7 +4,7 @@ Things considered, understood, and deliberately not built. Each one says what it
 in, and what it would cost — so the decision does not have to be re-derived the next time somebody
 notices the same gap.
 
-Not a roadmap. Nothing here is promised.
+Not a roadmap. Nothing here is promised — for work that IS meant to happen, see [NEXT.md](NEXT.md).
 
 ---
 
