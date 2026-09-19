@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.home
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -24,7 +25,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -63,8 +63,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -74,8 +76,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -983,17 +989,6 @@ private fun VerticalHairline(color: Color) {
 }
 
 /**
- * How far the turned wordmark is allowed to run down the column.
- *
- * A fixed length rather than a measured one, because it is what lets the turn be a plain rotation
- * inside a box of known size instead of a layout that has to swap its own constraints and correct
- * the centre it spins about. "Homer" in [SerifDisplay] is nowhere near this even at the largest
- * font scale; the slack costs nothing, since the column has a Spacer above it taking up whatever is
- * left.
- */
-private val WordmarkLength = 160.dp
-
-/**
  * Which way the wordmark turns.
  *
  * -90 is ANTICLOCKWISE: the first letter lands at the FOOT of the column and the word reads upward,
@@ -1006,44 +1001,61 @@ private const val WordmarkTurn = -90f
 /**
  * The wordmark, turned to run up the bar.
  *
- * The box is sized for the RESULT — [SideBarWidth] across, [WordmarkLength] down — and the text is
- * given its full length with `requiredWidth` before being spun about the shared centre. The earlier
- * version measured with swapped constraints and corrected the placement by hand; this needs neither,
- * and a rotation inside a box whose size is already known is a great deal easier to be sure of.
+ * **Drawn rather than laid out, and that is the point.** Two attempts at this used
+ * `Modifier.rotate` — once with a layout that swapped its own constraints, once with a plain
+ * rotation inside a box sized for the result — and on a device neither turned a single letter. The
+ * modifier is used nowhere else in this app, so there was no working precedent to compare against
+ * and no way to tell from here which of my assumptions about it was wrong.
+ *
+ * So this does not ask a layer to rotate a laid-out Text. It measures the text itself, sizes the
+ * canvas to the result (the bar's width across, the text's own LENGTH down), and rotates the draw
+ * scope about the centre both share. Every number in it is one this function computed: there is no
+ * placement to correct, no constraint to swap, and nothing that can quietly decline to happen.
+ *
+ * A canvas carries no semantics of its own, so the word is stated for a screen reader explicitly —
+ * a Text would have done that for free, and losing it is the one thing this costs.
  */
 @Composable
 private fun TurnedWordmark(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.width(SideBarWidth).height(WordmarkLength),
-        contentAlignment = Alignment.Center,
+    val measurer = rememberTextMeasurer()
+    val laid = measurer.measure(wordmarkText(text), style = SerifDisplay.copy(color = Parchment), maxLines = 1)
+    val length = with(LocalDensity.current) { laid.size.width.toDp() }
+    Canvas(
+        modifier = modifier
+            .width(SideBarWidth)
+            .height(length)
+            .semantics { contentDescription = text },
     ) {
-        Wordmark(
-            text,
-            modifier = Modifier.requiredWidth(WordmarkLength).rotate(WordmarkTurn),
-        )
+        rotate(degrees = WordmarkTurn, pivot = center) {
+            drawText(
+                textLayoutResult = laid,
+                topLeft = Offset(center.x - laid.size.width / 2f, center.y - laid.size.height / 2f),
+            )
+        }
+    }
+}
+
+/** "Homer" with an amber initial — the one place the two wordmarks agree on what they say. */
+private fun wordmarkText(text: String): AnnotatedString = buildAnnotatedString {
+    if (text.isNotEmpty()) {
+        withAmber(text.first().toString())
+        append(text.drop(1))
     }
 }
 
 /** "Homer" with an amber initial, in the serif voice. */
 @Composable
-private fun Wordmark(text: String, modifier: Modifier = Modifier) {
+private fun Wordmark(text: String) {
     Text(
-        text = androidx.compose.ui.text.buildAnnotatedString {
-            if (text.isNotEmpty()) {
-                withAmber(text.first().toString())
-                append(text.drop(1))
-            }
-        },
+        text = wordmarkText(text),
         style = SerifDisplay,
         color = Parchment,
         maxLines = 1,
-        textAlign = TextAlign.Center,
-        modifier = modifier,
     )
 }
 
-private fun androidx.compose.ui.text.AnnotatedString.Builder.withAmber(s: String) {
-    pushStyle(androidx.compose.ui.text.SpanStyle(color = Amber))
+private fun AnnotatedString.Builder.withAmber(s: String) {
+    pushStyle(SpanStyle(color = Amber))
     append(s)
     pop()
 }
