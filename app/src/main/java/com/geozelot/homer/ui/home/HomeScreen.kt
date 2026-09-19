@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -63,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -72,6 +74,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -517,14 +520,19 @@ fun HomeScreen(
             // library. They used to ride on the control row, and the control row does not render
             // for an empty shelf — so a reader whose first scan found nothing, in landscape, had
             // no way into the settings that would have let them fix it.
+            val railShown = layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent
             if (layout.mergeTopBar) {
                 LibrarySideBar(
                     onHelp = { showHelp = true },
                     onSettings = onOpenSettings,
                     modifier = dismissSearch,
                 )
+                // The same rule the upright stack draws between the top bar and the listening
+                // panel, in the same place, turned with everything else. Only where there is a
+                // panel for it to close the bar off from.
+                if (railShown) VerticalHairline(Line.copy(alpha = 0.45f))
             }
-            if (layout.listeningRail && listeningShelf.isNotEmpty() && libraryPresent) {
+            if (railShown) {
                 ListeningRail(
                     books = listeningShelf,
                     railState = railState,
@@ -533,12 +541,10 @@ fun HomeScreen(
                     modifier = dismissSearch,
                 )
             }
-            // One seam, at the edge of everything down the left — and keyed on the BAR, not the
+            // And the solid one at the edge of the whole left group — keyed on the BAR, not the
             // rail, because the bar is always there and the rail is not: a reader with nothing in
             // progress would otherwise have the turned bar bleeding straight into the grid.
-            if (layout.mergeTopBar) {
-                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Line))
-            }
+            if (layout.mergeTopBar) VerticalHairline(Line)
             Column(modifier = Modifier.weight(1f)) {
                 // Sort, group and the grid/list toggle are pinned here rather than scrolled away as the
                 // grid's first two items: they are the controls for what is being scrolled, so having to
@@ -933,34 +939,24 @@ private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier:
     Column(
         modifier = modifier
             .fillMaxHeight()
-            // The same flat tone the rail carries, and NO seam between them: two strips down the
-            // left would read as clutter, one column with two zones reads as a margin. The only
-            // hairline is the one separating the pair from the library. Painted OUTSIDE the inset,
-            // so the surface runs under a cutout instead of leaving an unpainted gutter beside it.
-            .background(Surface0)
-            // A landscape navigation bar or a cutout sits along this very edge — this is the one
-            // place in the app pinned to it.
+            // NO background of its own, which is the point: upright, the top bar sits on the same
+            // ground the library does, and a rule separates it from the listening panel. Painting
+            // this Surface0 made it the panel's colour instead and the two ran together — the bar
+            // stopped reading as the bar and started reading as more panel.
             //
-            // OUTSIDE the width, and that is the whole point. Inside it, the inset ate the 48dp
-            // rather than being added to it: a phone with a 48dp cutout or side navigation bar in
-            // that rotation left ZERO content width, and since `size` honours its constraints the
-            // icons measured to nothing while the bar's background went on painting the same
-            // colour as the rail beside it. A strip that is exactly as wide as its inset, filled
-            // with the neighbour's colour, is a strip nobody can see. The bar is 48dp of CONTENT
-            // plus whatever the system needs.
+            // A landscape navigation bar or a cutout sits along this very edge — this is the one
+            // place in the app pinned to it. OUTSIDE the width, and that is the whole point: inside
+            // it, the inset ate the 48dp rather than being added to it, and a 48dp cutout left zero
+            // content width with the icons measuring to nothing.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
             .width(SideBarWidth),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Before settings, as in the row it came from: it explains the screen you are on rather
-        // than taking you off it.
-        IconButton(onClick = onHelp) {
-            Icon(
-                Icons.AutoMirrored.Filled.HelpOutline,
-                contentDescription = stringResource(R.string.home_cd_help),
-                tint = Muted,
-            )
-        }
+        // Settings ABOVE help, which is not the reading order of the row this came from and is
+        // exactly right: a quarter turn anticlockwise sends a row's RIGHT end to the TOP, and
+        // settings is the rightmost thing on the upright bar. Ordering them by how the row reads
+        // instead would mean the bar had been rearranged rather than turned — and the wordmark,
+        // which lands at the foot by the same rule, would be the only part that had really moved.
         IconButton(onClick = onSettings) {
             Icon(
                 Icons.Filled.Tune,
@@ -968,47 +964,69 @@ private fun LibrarySideBar(onHelp: () -> Unit, onSettings: () -> Unit, modifier:
                 tint = Muted,
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
-        // Padding OUTSIDE the turn. Inside it, a bottom pad is laid out on the upright text and
-        // then rotated onto the start edge — the gap ends up beside the word instead of under it,
-        // and the column grows 16dp wider for it.
-        Box(modifier = Modifier.padding(bottom = 16.dp).rotatedQuarterTurn()) {
-            Wordmark(stringResource(R.string.app_name))
+        IconButton(onClick = onHelp) {
+            Icon(
+                Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = stringResource(R.string.home_cd_help),
+                tint = Muted,
+            )
         }
+        Spacer(modifier = Modifier.weight(1f))
+        TurnedWordmark(stringResource(R.string.app_name), Modifier.padding(bottom = 16.dp))
     }
 }
 
+/** A 1dp rule down the full height — the turned counterpart of a [HorizontalDivider]. */
+@Composable
+private fun VerticalHairline(color: Color) {
+    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(color))
+}
+
 /**
- * Turns content a quarter-turn anticlockwise AND gives it the footprint it now occupies.
+ * How far the turned wordmark is allowed to run down the column.
  *
- * `Modifier.rotate` only draws the rotation: the node keeps the size it measured, so a word laid out
- * for a wide row goes on claiming that width inside a 48dp column and is clipped to nothing. This
- * measures with the constraints swapped — the text is laid out against the height available, which
- * is what it will actually run along — reports the swapped size so the column reserves the right
- * space, and offsets the placement to correct the centre the rotation spins about.
+ * A fixed length rather than a measured one, because it is what lets the turn be a plain rotation
+ * inside a box of known size instead of a layout that has to swap its own constraints and correct
+ * the centre it spins about. "Homer" in [SerifDisplay] is nowhere near this even at the largest
+ * font scale; the slack costs nothing, since the column has a Spacer above it taking up whatever is
+ * left.
  */
-private fun Modifier.rotatedQuarterTurn(): Modifier = this
-    .layout { measurable, constraints ->
-        val placeable = measurable.measure(
-            Constraints(
-                minWidth = constraints.minHeight,
-                maxWidth = constraints.maxHeight,
-                minHeight = constraints.minWidth,
-                maxHeight = constraints.maxWidth,
-            ),
+private val WordmarkLength = 160.dp
+
+/**
+ * Which way the wordmark turns.
+ *
+ * -90 is ANTICLOCKWISE: the first letter lands at the FOOT of the column and the word reads upward,
+ * which is the continental convention for a book spine and the direction asked for. +90 would put
+ * the H at the top and read downward. One constant, because it is the kind of thing that can only
+ * be settled by looking at it.
+ */
+private const val WordmarkTurn = -90f
+
+/**
+ * The wordmark, turned to run up the bar.
+ *
+ * The box is sized for the RESULT — [SideBarWidth] across, [WordmarkLength] down — and the text is
+ * given its full length with `requiredWidth` before being spun about the shared centre. The earlier
+ * version measured with swapped constraints and corrected the placement by hand; this needs neither,
+ * and a rotation inside a box whose size is already known is a great deal easier to be sure of.
+ */
+@Composable
+private fun TurnedWordmark(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.width(SideBarWidth).height(WordmarkLength),
+        contentAlignment = Alignment.Center,
+    ) {
+        Wordmark(
+            text,
+            modifier = Modifier.requiredWidth(WordmarkLength).rotate(WordmarkTurn),
         )
-        layout(width = placeable.height, height = placeable.width) {
-            placeable.place(
-                x = -(placeable.width / 2 - placeable.height / 2),
-                y = -(placeable.height / 2 - placeable.width / 2),
-            )
-        }
     }
-    .rotate(-90f)
+}
 
 /** "Homer" with an amber initial, in the serif voice. */
 @Composable
-private fun Wordmark(text: String) {
+private fun Wordmark(text: String, modifier: Modifier = Modifier) {
     Text(
         text = androidx.compose.ui.text.buildAnnotatedString {
             if (text.isNotEmpty()) {
@@ -1018,6 +1036,9 @@ private fun Wordmark(text: String) {
         },
         style = SerifDisplay,
         color = Parchment,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
+        modifier = modifier,
     )
 }
 
