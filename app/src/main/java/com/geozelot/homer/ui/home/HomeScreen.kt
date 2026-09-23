@@ -717,14 +717,24 @@ fun HomeScreen(
                         // shuffle sideways as it appeared. Its letters come from the sort key, so
                         // it can never point somewhere the order did not put things.
                         if (fastScroll) {
-                            FastScrollLane(
-                                letters = laneLetters(
+                            // Remembered against everything that can change the order. Both walks
+                            // are over the whole library, and this sits inside a layout that
+                            // recomposes on a scroll — recomputing an alphabet that only changes
+                            // when the arrangement does would be a full pass per frame.
+                            val letters = remember(
+                                entries, gridView, columns, flatCollections,
+                                expanded.toList(), sortMode, shelfMode,
+                            ) {
+                                laneLetters(
                                     slots = librarySlots(entries, gridView, columns, flatCollections) { series ->
                                         series.books.any { it.id in expanded }
                                     },
                                     sort = sortMode,
                                     shelved = shelfMode != LibraryShelving.ITEM,
-                                ),
+                                )
+                            }
+                            FastScrollLane(
+                                letters = letters,
                                 gridState = gridState,
                                 modifier = Modifier.align(Alignment.CenterEnd),
                             )

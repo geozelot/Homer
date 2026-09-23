@@ -139,7 +139,9 @@ fun DocumentReaderScreen(
             )
             // Set in tabular figures so the counter does not shuffle sideways every time the page
             // number changes width — the same reason every other number in Homer is.
-            if (pageCount > 0) {
+            // Only while a document is actually open: on a retry the count from the last attempt
+            // would otherwise sit over a spinner, counting pages of nothing.
+            if (pageCount > 0 && state is DocumentState.Ready) {
                 Text(
                     stringResource(R.string.reader_page_of, page + 1, pageCount),
                     style = TabularSmall,
@@ -148,8 +150,15 @@ fun DocumentReaderScreen(
             }
         }
 
+        // `weight`, not `fillMaxSize`: in a Column the latter asks for the WHOLE height rather
+        // than what is left under the header, and the page would be pushed off the bottom by
+        // exactly the height of the bar above it.
         Box(
-            modifier = Modifier.fillMaxSize().padding(top = 6.dp).background(Studio),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .background(Studio),
             contentAlignment = Alignment.Center,
         ) {
             when (val current = state) {
