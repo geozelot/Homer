@@ -162,6 +162,7 @@
     <string name="sort_recent">Zuletzt gehört</string>
     <string name="sort_title">Titel</string>
     <string name="sort_author">Autor</string>
+    <string name="sort_author_last">Nachname</string>
     <string name="sort_duration">Länge</string>
     <string name="home_shelf_unknown_author">Unbekannter Autor</string>
     <string name="home_shelf_no_genre">Ohne Genre</string>

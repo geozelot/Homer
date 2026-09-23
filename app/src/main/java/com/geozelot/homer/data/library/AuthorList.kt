@@ -53,6 +53,16 @@ fun encodeAuthors(values: List<String>): String? =
  */
 fun primaryAuthor(raw: String?): String? = decodeAuthors(raw).firstOrNull()
 
+/**
+ * The stored form as the list Homer SHOWS: every name first-name-last, whatever was stored.
+ *
+ * Normalised here, once, on the way out of storage — so a template that captured "Pratchett,
+ * Terry" and a tag that wrote "Terry Pratchett" reach the shelf, the cards, the filter and its
+ * suggestions as the same person, under the same heading. The stored value is never touched; see
+ * [displayAuthor].
+ */
+fun displayAuthors(raw: String?): List<String> = decodeAuthors(raw).map(::displayAuthor)
+
 /** What the edit field's text means — see the header on why this is not a comma. */
 fun authorsFromInput(text: String): List<String> =
     text.split(';').map { it.trim() }.filter { it.isNotBlank() }

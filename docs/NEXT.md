@@ -6,7 +6,7 @@ Different from [NICE-TO-HAVE.md](NICE-TO-HAVE.md), which is the opposite list: t
 and deliberately **not** being built. Everything here is meant to happen; an item leaves this file
 when it ships, or moves to the other one if it turns out not to be worth it after all.
 
-The four below are **2.2.0**.
+The rest of **2.2.0**. Two of the four are done — several authors, and filing by surname.
 
 ---
 
@@ -35,58 +35,6 @@ The fix is to stop emitting straight from `entries`: build a plain list of grid 
 from it, and let the lane read the same list. One source of truth, and the mapping becomes a pure
 function with a test — which is how every other rule in this package is held. It is a real refactor
 of `LibraryGrid.kt` and wants its own commit, before the lane.
-
----
-
-## Several authors, with a primary
-
-**What.** A book can credit more than one author; the first is the one it shelves and sorts under.
-
-**Almost all of this is already decided.** `GenreList.kt` is the same problem solved: genres went
-from one to several by storing them newline-delimited **in the same column**, with the first one
-primary. Read its header before starting — it argues the whole design, including why order carries
-meaning and why a list of one round-trips as the bare string it always was.
-
-Following it means **no Room migration and no change to the `.homer` wire format**: `author` stays a
-nullable String in `BookEntity`, `BookOverrideEntity` and the structure facet. An `AuthorList.kt`
-mirroring `GenreList.kt` is most of the work.
-
-**What follows from the precedent, so it needs no re-arguing:** the author SHELF sections on the
-primary only (otherwise the shelf stops being a partition — counts stop summing to the library and a
-reader meets the same book under three headings); an `author:` filter matches ANY of them, because
-`valuesFor` already returns a list and matching any is what somebody means.
-
-**What genres did not have to answer:** an older Homer on another device reads the stored string
-whole, so a two-author book shows there as one author with a line break in it. Genres made that same
-trade silently. Worth deciding deliberately this time — it is the only cross-device cost.
-
----
-
-## Author sorting by last name
-
-**What.** `Pratchett, Terry` rather than `Terry Pratchett`, with a toggle.
-
-**This is a fix, not a preference.** `unitComparator` sorts `LibrarySort.AUTHOR` on
-`it.author?.lowercase()` — the raw stored string — and the author shelf sections on the same value.
-So today a library sorted by author is alphabetised by FIRST name: Terry Pratchett files under T.
-It reads as an ordering choice rather than a bug, and the shelf headings repeat the name it sorted
-by, so it is self-consistently wrong.
-
-It also gates the item at the top of this list: an alphabetical lane is only worth having if its
-letters agree with how a reader expects the shelf to be ordered.
-
-**Where the toggle goes — recommendation: Arrange, not Settings.** It changes how the library is
-ORDERED, which is precisely what the Arrange field is for, and it belongs beside sort-by-author
-rather than on a page you leave the library to reach. The cost is a fourth control in a field built
-for three, on a row already tight in landscape — so it may want to be a property of the Author sort
-(a second tap cycling the order) rather than a control of its own.
-
-**The hard part is the parsing, and it should not be stored.** "Terry Pratchett" is easy; "Ursula K.
-Le Guin", "Jean-Jacques Rousseau", "Hans Christian Andersen", "Cixin Liu" (already surname-first),
-"Homer", "The Brothers Grimm" are not, and a wrong guess is worse than no reordering. Suggested
-shape: a derived DISPLAY and SORT key computed from the stored name, never written back — so the
-stored value stays what the reader typed and a bad guess is a rendering bug rather than data loss.
-The per-book override already exists as the escape hatch: type the name the way you want it filed.
 
 ---
 

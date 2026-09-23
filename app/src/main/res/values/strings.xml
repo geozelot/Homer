@@ -165,6 +165,7 @@
     <string name="sort_recent">Recently played</string>
     <string name="sort_title">Title</string>
     <string name="sort_author">Author</string>
+    <string name="sort_author_last">Surname</string>
     <string name="sort_duration">Duration</string>
     <!-- The two shelf headings Homer writes itself, for books that name neither. -->
     <string name="home_shelf_unknown_author">Unknown author</string>

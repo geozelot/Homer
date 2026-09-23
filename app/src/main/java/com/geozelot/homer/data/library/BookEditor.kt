@@ -97,7 +97,13 @@ class BookEditor @Inject constructor(
             // semicolon separates two people and a comma does not. Compared as the ENCODED value,
             // like genres, so reordering two authors counts as a correction — the first is the one
             // the book files under.
-            author = encodeAuthors(authorsFromInput(author))?.takeUnless { it == detected?.author },
+            // Compared as the names MEAN, not as they are spelt. The field shows every author
+            // first-name-last whatever the folder captured, so a book detected as "Pratchett,
+            // Terry" and re-saved untouched would otherwise read as a correction — and writing one
+            // pins the book, after which no path template can move it again. The same rule
+            // `language` follows two lines down, for the same reason.
+            author = encodeAuthors(authorsFromInput(author))
+                ?.takeUnless { displayAuthors(it) == displayAuthors(detected?.author) },
             series = correctedSeries,
             seriesIndex = seriesIndex.trim().toIntOrNull()?.takeUnless { it == detected?.seriesIndex },
             collection = correctedCollection,
@@ -209,7 +215,7 @@ class BookEditor @Inject constructor(
             // which no path template can move it again. Setting a shelf's author to the author it
             // already has should not quietly opt forty-one books out of their own template.
             val series = if (namesCollection) base.series else n.takeUnless { it == detected?.series }
-            val author = a.takeUnless { it == detected?.author }
+            val author = a?.takeUnless { displayAuthors(it) == displayAuthors(detected?.author) }
             val genre = g.takeUnless { it == detected?.genre }
             // Compared against the EFFECTIVE series, since a book's thread usually comes from the
             // folder tree rather than from a correction.

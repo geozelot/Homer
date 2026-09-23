@@ -223,6 +223,14 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
     RECENT("recent", R.string.sort_recent),
     TITLE("title", R.string.sort_title),
     AUTHOR("author", R.string.sort_author),
+
+    /**
+     * By surname: Pratchett under P rather than Terry under T.
+     *
+     * A SORT and nothing else. Names go on reading "Terry Pratchett" wherever they are shown,
+     * including the shelf heading this orders — filing is a property of the list, not of the name.
+     */
+    AUTHOR_LAST("author_last", R.string.sort_author_last),
     DURATION("duration", R.string.sort_duration);
 
     companion object {

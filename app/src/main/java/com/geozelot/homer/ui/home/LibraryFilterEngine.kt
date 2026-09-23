@@ -7,8 +7,10 @@ import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.authorSortKey
 import com.geozelot.homer.data.library.decodeAuthors
 import com.geozelot.homer.data.library.decodeGenres
+import com.geozelot.homer.data.library.displayAuthors
 import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookGenre
 import javax.inject.Inject
@@ -90,7 +92,7 @@ class LibraryFilterEngine @Inject constructor() {
             BookListItem(
                 id = book.id,
                 title = book.title,
-                authors = decodeAuthors(book.author),
+                authors = displayAuthors(book.author),
                 isMultiFile = book.isMultiFile,
                 fileCount = book.fileCount,
                 coverModel = eff.coverModel,
@@ -165,8 +167,16 @@ private fun buildEntries(
 
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        LibraryShelving.AUTHOR ->
-            sectioned(ordered, "Unknown author", R.string.home_shelf_unknown_author) { it.author }
+        // The shelves themselves file by surname when that is the sort — which is why this is
+        // the one sort an author shelf does NOT drop as redundant: it is the only one that
+        // reorders the headings rather than the books beneath them. `sortBy` is compared, never
+        // drawn, so the heading keeps the name the reader knows.
+        LibraryShelving.AUTHOR -> sectioned(
+            ordered,
+            "Unknown author",
+            R.string.home_shelf_unknown_author,
+            sortBy = if (sort == LibrarySort.AUTHOR_LAST) ::authorSortKey else { it -> it },
+        ) { it.author }
         // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
         // are one shelf rather than two that mean the same thing. The heading itself resolves to the
         // reader's language when it draws — see LibraryEntry.Header.genre.
@@ -255,6 +265,11 @@ private fun unitComparator(sort: LibrarySort): Comparator<SortUnit> = when (sort
     LibrarySort.TITLE -> compareBy { unitTitle(it).lowercase() }
     LibrarySort.AUTHOR -> compareBy(
         { it.author == null }, { it.author?.lowercase() }, { unitTitle(it).lowercase() },
+    )
+    // By surname. The key is never shown — see AuthorName.kt — so the shelf heading this orders
+    // still reads "Terry Pratchett" while sitting under P.
+    LibrarySort.AUTHOR_LAST -> compareBy(
+        { it.author == null }, { it.author?.let(::authorSortKey) }, { unitTitle(it).lowercase() },
     )
     // Never-played / unmeasured sort last under the descending orders.
     LibrarySort.RECENT -> compareByDescending { unitRecency(it) }
