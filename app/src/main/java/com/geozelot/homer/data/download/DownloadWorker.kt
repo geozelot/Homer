@@ -20,6 +20,8 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
+import com.geozelot.homer.data.library.BookDocumentStore
+import com.geozelot.homer.data.library.decodeDocuments
 import com.geozelot.homer.data.metadata.DurationEnricher
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -53,6 +55,7 @@ class DownloadWorker @AssistedInject constructor(
     private val audioFileDao: AudioFileDao,
     private val downloadDao: DownloadDao,
     private val storage: DownloadStorage,
+    private val documentStore: BookDocumentStore,
     private val durationEnricher: DurationEnricher,
     private val librarySettings: LibrarySettings,
 ) : CoroutineWorker(appContext, params) {
@@ -66,7 +69,8 @@ class DownloadWorker @AssistedInject constructor(
         if (files.isEmpty()) return Result.success()
         val libraryRoot = librarySettings.libraryRoot.first()
 
-        val title = bookDao.findById(bookId)?.title ?: bookId.substringAfterLast('/')
+        val book = bookDao.findById(bookId)
+        val title = book?.title ?: bookId.substringAfterLast('/')
         val notifId = bookId.hashCode()
         ensureChannel()
         // Promote to a foreground service so the download continues if the app is closed.
@@ -108,6 +112,18 @@ class DownloadWorker @AssistedInject constructor(
             if (isStopped) return Result.failure()
             downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DONE, files.size, files.size, now()))
             Log.i(TAG, "downloaded $bookId (${files.size} files)")
+            // The booklet comes too, now the book is here. Taking a book offline is a reader saying
+            // "I will be away from a connection", and a supplementary PDF fetched only on first
+            // open is precisely the thing that would then be missing on the plane it was meant for.
+            //
+            // AFTER the DONE row, outside the counted loop, and best-effort. The loop's file count
+            // is also its resume index, so an extra file inside it would shift where every
+            // part-downloaded book on the device resumes the moment the app updates — and a
+            // booklet that cannot be fetched must never make a downloaded book read as failed.
+            for (document in decodeDocuments(book?.documentFilePaths)) {
+                if (isStopped) break
+                documentStore.obtain(document)
+            }
             // Measure it now it is here. Every file is on the device, so this reads headers off
             // local storage — no network, no timeouts, and it works with the radio off. It is also
             // the moment the answer starts to matter: a downloaded book is the one somebody is
