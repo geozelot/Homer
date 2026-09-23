@@ -11,12 +11,9 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -154,24 +151,23 @@ internal fun LazyGridScope.libraryContent(
     // Neither the Currently-listening shelf nor the library's own header and sort/group bar are items here:
     // HomeScreen pins all three above the grid so they stay reachable while it scrolls.
 
-    // Two headers really can carry the same title — a book whose author metadata literally reads
-    // "Unknown author" gets its own section beside the fallback one — and duplicate keys make the
-    // lazy layout throw. Disambiguating by list position did the job but tied every header's key to
-    // how many rows happened to precede it, so adding one book above re-created the lot; counting
-    // repeats of the title is just as unique and only changes when the titles themselves do.
-    val headerOrdinals = HashMap<String, Int>()
-
-    entries.forEach { entry ->
-        when (entry) {
-            is LibraryEntry.Header -> item(
-                span = { GridItemSpan(maxLineSpan) },
-                key = "header:${entry.title}#${headerOrdinals.merge(entry.title, 1, Int::plus)}",
-            ) {
+    // WHAT is drawn and in WHAT ORDER are two questions, and only the first is answered here. The
+    // order is [librarySlots] — one description of it, which the fast-scroll lane indexes into.
+    items(
+        items = librarySlots(entries, gridView, columns, flatCollections, ::isOpen),
+        key = { it.key },
+        span = { GridItemSpan(if (it.fullSpan) maxLineSpan else 1) },
+    ) { slot ->
+        // The books of a collection read flat are numbered by the collection, so that is what
+        // their corners must show, even for one that also sits in a thread.
+        fun shelfCtx(flat: Boolean) = if (flat) ctx.copy(collectionNumbered = true) else ctx
+        when (slot) {
+            is GridSlot.Heading ->
                 // More air above a shelf heading in LIST view. The gap is the same 12dp in both,
                 // but a grid row is a cover tall and a list row is 46dp — so the same measurement
                 // reads as a pause in one and as a crowd in the other.
                 SectionLabelRow(
-                    headerLabel(entry),
+                    headerLabel(slot.entry),
                     // The grid's cards now carry their own footer gap, so a heading following a row
                     // would sit that much lower than one following a heading. Taking it back here
                     // keeps every heading the same distance from what precedes it.
@@ -181,145 +177,83 @@ internal fun LazyGridScope.libraryContent(
                     // same weight as the meta lines it was organising.
                     color = Parchment,
                 )
-            }
-            is LibraryEntry.Standalone -> {
+
+            is GridSlot.Book ->
                 if (gridView) {
-                    item(key = entry.book.id) {
-                        BookGridCard(entry.book, ctx, onOpen = onBookClick, actions = actions)
-                    }
+                    BookGridCard(slot.book, ctx, onOpen = onBookClick, actions = actions)
                 } else {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = entry.book.id) {
-                        BookListRow(entry.book, startPadding = 0.dp, ctx = ctx, onOpen = onBookClick, actions = actions)
-                    }
+                    BookListRow(slot.book, startPadding = 0.dp, ctx = ctx, onOpen = onBookClick, actions = actions)
                 }
-            }
-            is LibraryEntry.Series -> {
-                val shelfKey = entry.expandKey
-                val shelfOpen = isOpen(entry)
-                // Only a collection has two readings, and only one with threads AND numbers has a
-                // choice worth offering — see CollectionOrderChip.
-                val flat = entry.isCollection && entry.name in flatCollections
-                // The books of a collection read flat are numbered by the collection, so that is
-                // what their corners must show, even for one that also sits in a thread.
-                val shelfCtx = if (flat) ctx.copy(collectionNumbered = true) else ctx
+
+            is GridSlot.Shelf ->
                 if (gridView) {
-                    if (shelfOpen) {
-                        // A header banner, then the episodes a row at a time — every one of them a
-                        // separate lazy item drawing its own slice of the enclosure that wraps the
-                        // whole shelf. See `seriesEnclosure`.
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "series-open:$shelfKey") {
-                            ExpandedSeriesHeader(
-                                series = entry,
-                                ctx = ctx,
-                                flat = flat,
-                                onOrderChange = { onCollectionOrder(entry.name, it) },
-                                onFilter = actions.onFilter,
-                                onCollapse = { close(entry) },
-                            )
-                        }
-                        // An opened COLLECTION breaks into its threads; an opened plain series is
-                        // one run, exactly as before. See `expandedRows`.
-                        val rows = entry.expandedRows(columns, flat = flat)
-                        itemsIndexed(
-                            rows,
-                            span = { _, _ -> GridItemSpan(maxLineSpan) },
-                            // First id in the row: unique across the library (a book sits in one
-                            // series) and stable while the row's membership holds. A sub-heading
-                            // keys on its own label, which is unique within the shelf.
-                            key = { _, row ->
-                                when (row) {
-                                    is ShelfRow.SubHeader -> "sesub:$shelfKey:${row.label}"
-                                    ShelfRow.LooseHeader -> "seloose:$shelfKey"
-                                    is ShelfRow.Books -> "sep:${row.books.first().id}"
-                                }
-                            },
-                        ) { index, row ->
-                            val last = index == rows.lastIndex
-                            when (row) {
-                                is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = last)
-                                ShelfRow.LooseHeader ->
-                                    ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = last)
-                                is ShelfRow.Books -> ExpandedSeriesRow(
-                                    columns = columns,
-                                    books = row.books,
-                                    last = last,
-                                    ctx = shelfCtx,
-                                    onOpen = onBookClick,
-                                    actions = actions,
-                                )
-                            }
-                        }
-                    } else {
-                        item(key = shelfKey) {
-                            SeriesGridCard(
-                                series = entry,
-                                ctx = ctx,
-                                onOpen = { open(entry) },
-                                actions = actions,
-                            )
-                        }
-                    }
+                    SeriesGridCard(
+                        series = slot.series,
+                        ctx = ctx,
+                        onOpen = { open(slot.series) },
+                        actions = actions,
+                    )
                 } else {
                     // Same enclosure as the grid: the shelf row is its top slice and each episode
                     // draws a slice below, so an open series reads as one bordered card here too.
                     // Collapsed, the row stays the self-contained card it has always been.
-                    item(span = { GridItemSpan(maxLineSpan) }, key = shelfKey) {
-                        SeriesShelfRow(
-                            series = entry,
-                            ctx = ctx,
-                            expanded = shelfOpen,
-                            flat = flat,
-                            onOrderChange = { onCollectionOrder(entry.name, it) },
-                            onToggle = { if (shelfOpen) close(entry) else open(entry) },
+                    SeriesShelfRow(
+                        series = slot.series,
+                        ctx = ctx,
+                        expanded = slot.open,
+                        flat = slot.flat,
+                        onOrderChange = { onCollectionOrder(slot.series.name, it) },
+                        onToggle = { if (slot.open) close(slot.series) else open(slot.series) },
+                        actions = actions,
+                    )
+                }
+
+            // A header banner, then the episodes a row at a time — every one of them a separate
+            // lazy item drawing its own slice of the enclosure that wraps the whole shelf. See
+            // `seriesEnclosure`.
+            is GridSlot.ShelfBanner -> ExpandedSeriesHeader(
+                series = slot.series,
+                ctx = ctx,
+                flat = slot.flat,
+                onOrderChange = { onCollectionOrder(slot.series.name, it) },
+                onFilter = actions.onFilter,
+                onCollapse = { close(slot.series) },
+            )
+
+            is GridSlot.ShelfEpisode -> when (val row = slot.row) {
+                is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = slot.last)
+                ShelfRow.LooseHeader ->
+                    ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = slot.last)
+                is ShelfRow.Books ->
+                    if (gridView) {
+                        ExpandedSeriesRow(
+                            columns = columns,
+                            books = row.books,
+                            last = slot.last,
+                            ctx = shelfCtx(slot.flat),
+                            onOpen = onBookClick,
                             actions = actions,
                         )
-                    }
-                    if (shelfOpen) {
-                        // One book per row here, so the same split produces one Books row each and
-                        // the sub-headings land between the threads.
-                        val listRows = entry.expandedRows(columns = 1, flat = flat)
-                        itemsIndexed(
-                            listRows,
-                            span = { _, _ -> GridItemSpan(maxLineSpan) },
-                            key = { _, row ->
-                                when (row) {
-                                    is ShelfRow.SubHeader -> "epsub:$shelfKey:${row.label}"
-                                    ShelfRow.LooseHeader -> "eploose:$shelfKey"
-                                    is ShelfRow.Books -> "ep:${row.books.first().id}"
-                                }
-                            },
-                        ) { index, row ->
-                            val last = index == listRows.lastIndex
-                            if (row is ShelfRow.SubHeader) {
-                                ExpandedSubHeader(row.label, last = last)
-                                return@itemsIndexed
-                            }
-                            if (row is ShelfRow.LooseHeader) {
-                                ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = last)
-                                return@itemsIndexed
-                            }
-                            val book = (row as ShelfRow.Books).books.first()
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .seriesEnclosure(top = false, bottom = last)
-                                    .padding(horizontal = SeriesListEnclosurePad)
-                                    .padding(bottom = if (last) SeriesListEnclosurePad else 0.dp),
-                            ) {
-                                // 2dp on top of the enclosure's own inset keeps each episode at
-                                // exactly the indent it had before the border went round them.
-                                BookListRow(
-                                    book,
-                                    startPadding = 2.dp,
-                                    ctx = shelfCtx,
-                                    onOpen = onBookClick,
-                                    actions = actions,
-                                    bordered = false,
-                                )
-                            }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .seriesEnclosure(top = false, bottom = slot.last)
+                                .padding(horizontal = SeriesListEnclosurePad)
+                                .padding(bottom = if (slot.last) SeriesListEnclosurePad else 0.dp),
+                        ) {
+                            // 2dp on top of the enclosure's own inset keeps each episode at
+                            // exactly the indent it had before the border went round them.
+                            BookListRow(
+                                row.books.first(),
+                                startPadding = 2.dp,
+                                ctx = shelfCtx(slot.flat),
+                                onOpen = onBookClick,
+                                actions = actions,
+                                bordered = false,
+                            )
                         }
                     }
-                }
             }
         }
     }
