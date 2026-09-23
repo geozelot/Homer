@@ -122,6 +122,15 @@ data class StructureBook(
     val contentHash: String? = null,
     /** Library-relative path to a folder cover image: a file on disk, so a structural fact. */
     val coverFilePath: String? = null,
+    /**
+     * Library-root-relative paths of the book's supplementary PDFs.
+     *
+     * Part of structure rather than derived, because it is a fact about the folder tree that the
+     * crawl saw — not something a device worked out by reading a file. Defaulted empty, so a facet
+     * written by an older Homer reads back as "no documents" and an older Homer reading this one
+     * ignores the field instead of choking on it.
+     */
+    val documentFilePaths: List<String> = emptyList(),
     val isMultiFile: Boolean = false,
     val files: List<StructureFile> = emptyList(),
     val updatedAt: Long = 0,

@@ -40,6 +40,12 @@ class BookDetector @Inject constructor() {
     fun buildBooks(
         folders: List<AudioFolder>,
         folderImages: Map<String, List<DavResource>>,
+        /**
+         * Every visited folder's PDF files, keyed by path. Same shape as [folderImages] and for a
+         * related reason, but the lookup is not the same: a cover is taken from the book folder,
+         * whereas a document CLIMBS — see [documentPathsFor].
+         */
+        folderDocuments: Map<String, List<DavResource>>,
         libraryRoot: String,
         now: Long,
         /**
@@ -67,8 +73,19 @@ class BookDetector @Inject constructor() {
             byBook.getOrPut(bookPath) { mutableListOf() }.add(folder)
         }
         Log.i(TAG, "buildBooks: grouped ${folders.size} folders into ${byBook.size} books")
+        val documentsByFolder = folderDocuments.mapValues { (_, files) ->
+            files.map { it.path }.sortedWith(AudioFormats::naturalCompare)
+        }
         return byBook.map { (bookPath, members) ->
-            buildBook(bookPath, members, folderImages[bookPath].orEmpty(), root, now, templates)
+            buildBook(
+                bookPath,
+                members,
+                folderImages[bookPath].orEmpty(),
+                documentsByFolder,
+                root,
+                now,
+                templates,
+            )
         }
     }
 
@@ -76,6 +93,7 @@ class BookDetector @Inject constructor() {
         bookPath: String,
         members: List<AudioFolder>,
         bookFolderImages: List<DavResource>,
+        documentsByFolder: Map<String, List<String>>,
         root: String,
         now: Long,
         templates: List<ScopedTemplate>,
@@ -124,6 +142,7 @@ class BookDetector @Inject constructor() {
         val series = parsed[TemplateField.SERIES]
         val collection = parsed[TemplateField.COLLECTION]
         val cover = images.minByOrNull { coverRank(it.name) }?.path?.let(::strip)
+        val documents = documentPathsFor(bookPath, root, documentsByFolder).map(::strip)
 
         val fileEntities = orderedAudio.mapIndexed { index, resource ->
             AudioFileEntity(
@@ -155,6 +174,7 @@ class BookDetector @Inject constructor() {
             collection = collection,
             relativePath = relToRoot,
             coverFilePath = cover,
+            documentFilePaths = encodeDocuments(documents),
             localCoverPath = null,
             chapterTier = CHAPTER_TIER_UNDETERMINED,
             isMultiFile = fileEntities.size > 1,

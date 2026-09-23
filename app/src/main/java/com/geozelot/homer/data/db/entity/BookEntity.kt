@@ -53,6 +53,15 @@ data class BookEntity(
     val relativePath: String,
     /** Relative path of a cover image file in the book folder (remote), if any. */
     val coverFilePath: String?,
+    /**
+     * Library-root-relative paths of this book's supplementary PDFs, newline-delimited — booklet,
+     * libretto, map, score. Null when it has none, which is most books.
+     *
+     * Stored rather than looked up on demand, because the alternative is a PROPFIND every time a
+     * details card opens, on a network that may not be there. Resolved by the crawl; see
+     * [com.geozelot.homer.data.library.documentPathsFor] for which folder a book takes them from.
+     */
+    val documentFilePaths: String? = null,
     /** Absolute path of a locally cached cover (e.g. extracted embedded art), if any. */
     val localCoverPath: String?,
     /** Absolute path of a user-chosen custom cover (device-local; wins over all detected art). */

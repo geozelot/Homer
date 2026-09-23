@@ -38,6 +38,20 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * Adds the supplementary PDFs a book carries.
+ *
+ * One nullable column, no default, so every existing row reads as "no documents" and shows no
+ * booklet button — which is also exactly what it showed before. The paths themselves are filled in
+ * by the next crawl; nothing here has to go and find them, and a library that is never rescanned
+ * simply keeps behaving as it did.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE books ADD COLUMN documentFilePaths TEXT")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -50,7 +64,7 @@ object DatabaseModule {
             // were deleted with the rest of the v1 path, because 1.x was withdrawn when 2.0 landed.
             // From 2.0.0 onwards every step carries a real migration — the released version is
             // somebody's actual library now, and losing it is not a thing a version bump may do.
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .apply {
                 // Destructive fallback for a MISSING FORWARD MIGRATION stays a DEBUG-ONLY
                 // convenience. In a release build that case must fail loudly instead of silently

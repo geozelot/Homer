@@ -260,6 +260,8 @@ class LibraryScanner @Inject constructor(
         val audioFolders = mutableListOf<BookDetector.AudioFolder>()
         /** Every visited folder's image files, so a book-level cover beside part folders is found. */
         val folderImages = HashMap<String, List<DavResource>>()
+        /** Every visited folder's PDFs, so a book can climb to the nearest one that has any. */
+        val folderDocuments = HashMap<String, List<DavResource>>()
         val skippedRoots = mutableListOf<String>()
         var directoriesVisited = 0
 
@@ -278,6 +280,7 @@ class LibraryScanner @Inject constructor(
             val children = entries.filter { it.path != dir }
             val audioFiles = children.filter { !it.isCollection && AudioFormats.isAudio(it.name) }
             val imageFiles = children.filter { !it.isCollection && AudioFormats.isImage(it.name) }
+            val documentFiles = children.filter { !it.isCollection && AudioFormats.isDocument(it.name) }
             val childDirs = children.filter { it.isCollection }
             val isBookFolder = audioFiles.isNotEmpty()
 
@@ -289,6 +292,10 @@ class LibraryScanner @Inject constructor(
             // (`Book/cover.jpg` + `Book/CD1/*.mp3`); that book folder holds no audio, so its cover
             // used to be discarded and the book showed a placeholder.
             if (imageFiles.isNotEmpty()) folderImages[dir] = imageFiles
+            // Likewise for documents, and here EVERY folder genuinely matters rather than merely
+            // helping: the booklet a book takes may sit at the series or author level, which is a
+            // folder holding no audio and no cover either.
+            if (documentFiles.isNotEmpty()) folderDocuments[dir] = documentFiles
 
             for (childDir in childDirs) {
                 val childPath = childDir.path.trim('/')
@@ -309,7 +316,9 @@ class LibraryScanner @Inject constructor(
             onProgress(directoriesVisited, audioFolders.size)
         }
 
-        val books = detector.buildBooks(audioFolders, folderImages, root, now, templates)
+        val books = detector.buildBooks(
+            audioFolders, folderImages, folderDocuments, root, now, templates,
+        )
 
         // Everything past this point mutates the index, and it belongs together: the upserts, the
         // moved-book re-links and the prune used to be independent writes, so a process death

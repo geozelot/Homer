@@ -7,12 +7,24 @@ object AudioFormats {
     )
     private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
 
+    /**
+     * What counts as a supplementary document: PDF, and only PDF.
+     *
+     * Deliberately one format. The reader is the platform's `PdfRenderer`, so anything else in this
+     * set would be discovered, shown as a button, and then fail to open — a promise the app cannot
+     * keep. EPUB and CBZ are the obvious additions, and each needs a reader before it needs an
+     * extension here.
+     */
+    private val DOCUMENT_EXTENSIONS = setOf("pdf")
+
     private fun extensionOf(name: String): String =
         name.substringAfterLast('.', "").lowercase()
 
     fun isAudio(name: String): Boolean = extensionOf(name) in AUDIO_EXTENSIONS
 
     fun isImage(name: String): Boolean = extensionOf(name) in IMAGE_EXTENSIONS
+
+    fun isDocument(name: String): Boolean = extensionOf(name) in DOCUMENT_EXTENSIONS
 
     /**
      * Natural (numeric-aware) filename comparison so `2 - foo.mp3` sorts before

@@ -30,6 +30,7 @@ class BookDetectorTest {
     private fun hashOf(files: List<DavResource>): String? = detector.buildBooks(
         folders = listOf(BookDetector.AudioFolder("lib/Author/Book", files, emptyList())),
         folderImages = emptyMap(),
+        folderDocuments = emptyMap(),
         libraryRoot = "lib",
         now = 0L,
     ).single().book.contentHash
@@ -58,6 +59,7 @@ class BookDetectorTest {
                 ),
             ),
             folderImages = emptyMap(),
+            folderDocuments = emptyMap(),
             libraryRoot = "lib",
             now = 0L,
         ).single().book.contentHash

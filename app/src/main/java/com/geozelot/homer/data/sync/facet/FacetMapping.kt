@@ -7,6 +7,8 @@ import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.EditFields
 import com.geozelot.homer.data.db.entity.ChapterTier
+import com.geozelot.homer.data.library.decodeDocuments
+import com.geozelot.homer.data.library.encodeDocuments
 
 /**
  * Between the database and the three facets.
@@ -35,6 +37,7 @@ object FacetMapping {
         collectionIndex = book.collectionIndex,
         contentHash = book.contentHash,
         coverFilePath = book.coverFilePath,
+        documentFilePaths = decodeDocuments(book.documentFilePaths),
         isMultiFile = book.isMultiFile,
         // Written in sort order, because the position IS the sort index once published.
         files = files.sortedBy { it.sortIndex }.map {
@@ -195,6 +198,11 @@ object FacetMapping {
         language = derived?.language ?: existing?.language,
         relativePath = id,
         coverFilePath = structure.coverFilePath ?: existing?.coverFilePath,
+        // Kept when the facet carries none, like `collectionIndex` above and for the same reason:
+        // an older Homer republishing structure knows nothing of this field, and its silence must
+        // not read as "this book has no booklet" and delete what a crawl here already found.
+        documentFilePaths = encodeDocuments(structure.documentFilePaths)
+            ?: existing?.documentFilePaths,
         localCoverPath = existing?.localCoverPath,
         customCoverPath = existing?.customCoverPath,
         coverAttempted = existing?.coverAttempted ?: false,

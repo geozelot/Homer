@@ -81,6 +81,7 @@ object EditFields {
         "contentHash",
         "relativePath",
         "coverFilePath",
+        "documentFilePaths",
         "localCoverPath",
         "customCoverPath",
         "coverAttempted",
