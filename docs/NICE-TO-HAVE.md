@@ -88,3 +88,23 @@ progress, download state.
 **Status.** Reworked several times and left at *"not super happy with the visual distribution of
 info, but it's not bad either."* No specific complaint to fix, so nothing to do until one exists.
 Recorded because the next person to feel it should know it is a known feeling and not a new find.
+
+---
+
+## More than PDFs, and a longer view of them
+
+**What.** Two gaps the supplementary-document feature leaves open on purpose.
+
+**Other formats.** `AudioFormats.isDocument` recognises PDF and nothing else. EPUB and CBZ are the
+obvious additions and each needs a READER before it needs an extension in that set — listing a
+format Homer cannot open would show a button that fails, which is worse than showing none.
+
+**A continuous scroll instead of a pager.** The reader turns one page at a time. A single scroll of
+every page is what a desktop PDF reader does, and it is what keeps several full-resolution bitmaps
+alive at once; a zoomed A4 page is twenty-odd megabytes. Holding one page is what makes it
+affordable to re-render that page at the zoom actually asked for rather than magnifying a blurry
+thumbnail, and legible small print is the thing somebody zooms in FOR. Changing this means a
+render/recycle budget across visible pages, which is a different piece of work from what is there.
+
+**What it would cost.** Little for a format whose renderer already exists on the device; a real
+piece of work for the scroll.
