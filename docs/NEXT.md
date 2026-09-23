@@ -6,35 +6,8 @@ Different from [NICE-TO-HAVE.md](NICE-TO-HAVE.md), which is the opposite list: t
 and deliberately **not** being built. Everything here is meant to happen; an item leaves this file
 when it ships, or moves to the other one if it turns out not to be worth it after all.
 
-The rest of **2.2.0**. Two of the four are done — several authors, and filing by surname.
-
----
-
-## A fast-scroll lane down the library
-
-**What.** A narrow alphabetical lane at the edge of the library that fades in while scrolling and
-back out when it stops. Tap or drag a letter to jump there. A setting turns it off.
-
-**Which letters, and when there are none.** The lane's letters are the list's own sort key, not the
-title: under sort-by-title it is the title's initial, under sort-by-author the author's. Under
-**Recent** and **Duration** an alphabetical lane means nothing, so it does not appear — the
-alternative is a control that looks like it navigates and lands somewhere arbitrary. When the
-library is shelved (by author, genre, series) the lane targets the SHELF HEADINGS, which is what a
-reader is actually aiming at.
-
-Only letters that exist get a slot. A full A–Z with two thirds greyed out is mostly dead targets,
-and on a short landscape window there is not room for twenty-six of anything.
-
-**The part that needs deciding before code.** Jumping means `scrollToItem(index)`, and the grid's
-item index is not the entry index: `libraryContent` emits a variable number of items per entry (a
-header is one, a standalone is one, an open series is several) and the count changes as shelves
-open. Computing that mapping a second time, beside the code that emits it, is exactly the kind of
-duplicate that drifts.
-
-The fix is to stop emitting straight from `entries`: build a plain list of grid slots first, emit
-from it, and let the lane read the same list. One source of truth, and the mapping becomes a pure
-function with a test — which is how every other rule in this package is held. It is a real refactor
-of `LibraryGrid.kt` and wants its own commit, before the lane.
+The last of **2.2.0**. Three of the four are done — several authors, filing by surname, and the
+fast-scroll lane.
 
 ---
 
@@ -63,6 +36,7 @@ different amount of work by an order of magnitude.
 ---
 
 *Shipped from this list so far: the gold dot and the About pill for a waiting update; "Download and
-install" as a real button, with the sweep that found two more rows whose action was bare text; and
-press feedback bounded to the control rather than to its tap target, with the sweep that found four
-more (`TapFeedback.kt` holds the rule).*
+install" as a real button, with the sweep that found two more rows whose action was bare text; press
+feedback bounded to the control rather than to its tap target, with the sweep that found four more
+(`TapFeedback.kt` holds the rule); and the fast-scroll lane, which first needed the grid's emission
+order turned into a value (`LibraryGridSlots.kt`) so the lane and the list could not disagree.*
