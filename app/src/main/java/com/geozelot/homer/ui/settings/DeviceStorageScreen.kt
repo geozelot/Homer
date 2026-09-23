@@ -59,6 +59,7 @@ fun DeviceStorageScreen(
     val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val downloaded by viewModel.downloadedCount.collectAsStateWithLifecycle()
+    val fastScroll by viewModel.fastScroll.collectAsStateWithLifecycle()
     val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
 
     // Re-asked on every resume, not once: the way a folder grant is lost is that the user leaves
@@ -142,6 +143,18 @@ fun DeviceStorageScreen(
             }
         }
         SettingsNote(stringResource(R.string.settings_storage_picker_desc))
+
+        SettingsDivider()
+
+        // A per-device display preference, which is what this page is for: it changes how THIS
+        // phone shows the library, not anything the library itself carries.
+        SettingsSectionHeader(stringResource(R.string.set_device_browsing_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_fast_scroll),
+            checked = fastScroll,
+            onCheckedChange = viewModel::setFastScroll,
+            description = stringResource(R.string.settings_fast_scroll_desc),
+        )
 
         SettingsDivider()
 

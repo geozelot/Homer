@@ -140,6 +140,7 @@
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Search</string>
     <string name="home_cd_settings">Settings</string>
+    <string name="home_cd_fast_scroll">Jump to a letter</string>
     <string name="home_cd_help">What this screen shows</string>
     <string name="home_cd_close_search">Close search</string>
     <string name="home_search_placeholder">Title, author, genre, tag…</string>
@@ -373,6 +374,9 @@
     <string name="set_device_location_header">WHERE DOWNLOADS ARE KEPT</string>
     <string name="set_device_choose_folder">Choose folder…</string>
     <string name="set_device_downloads_header">DOWNLOADING</string>
+    <string name="set_device_browsing_header">BROWSING</string>
+    <string name="settings_fast_scroll">Jump-to-letter lane</string>
+    <string name="settings_fast_scroll_desc">A strip of initials appears at the edge while the library scrolls. Its letters follow whatever the list is sorted by, and it stays away under sorts that have no alphabet.</string>
     <string name="set_device_delete_downloads">Delete downloaded books</string>
     <!-- %1$s is a books count, formatted as a plural by the caller. -->
     <string name="set_device_delete_downloads_count">Frees the space %1$s are using</string>

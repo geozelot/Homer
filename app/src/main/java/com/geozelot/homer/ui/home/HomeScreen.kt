@@ -231,6 +231,7 @@ fun HomeScreen(
     val listeningShelf by viewModel.listeningShelf.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
+    val fastScroll by viewModel.fastScroll.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
@@ -707,6 +708,23 @@ fun HomeScreen(
                                 expanded = expanded,
                                 onBookClick = onBookClick,
                                 actions = actions,
+                            )
+                        }
+                        // Over the grid, not beside it: a strip that comes and goes must not
+                        // change the width of what it sits next to, or every cover on screen would
+                        // shuffle sideways as it appeared. Its letters come from the sort key, so
+                        // it can never point somewhere the order did not put things.
+                        if (fastScroll) {
+                            FastScrollLane(
+                                letters = laneLetters(
+                                    slots = librarySlots(entries, gridView, columns, flatCollections) { series ->
+                                        series.books.any { it.id in expanded }
+                                    },
+                                    sort = sortMode,
+                                    shelved = shelfMode != LibraryShelving.ITEM,
+                                ),
+                                gridState = gridState,
+                                modifier = Modifier.align(Alignment.CenterEnd),
                             )
                         }
                     }

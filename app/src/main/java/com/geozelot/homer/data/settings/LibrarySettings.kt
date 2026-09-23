@@ -78,6 +78,14 @@ class LibrarySettings @Inject constructor(
         context.settingsDataStore.edit { it[KEY_GRID_VIEW] = value }
     }
 
+    /** Whether the alphabetical lane appears while the library is scrolling. */
+    val fastScroll: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_FAST_SCROLL] ?: true }
+
+    suspend fun setFastScroll(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_FAST_SCROLL] = value }
+    }
+
     /**
      * The collections that read as one numbered run rather than as their threads.
      *
@@ -497,6 +505,7 @@ class LibrarySettings @Inject constructor(
     private companion object {
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
+        val KEY_FAST_SCROLL = booleanPreferencesKey("library_fast_scroll")
         val KEY_FLAT_COLLECTIONS = stringSetPreferencesKey("library_flat_collections")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_LANGUAGE_FILTER = stringPreferencesKey("library_language_filter")

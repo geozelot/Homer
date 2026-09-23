@@ -547,6 +547,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { librarySettings.setCollectionFlat(collection, flat) }
     }
 
+    /** Whether the alphabetical lane appears while the library scrolls; persisted. */
+    val fastScroll: StateFlow<Boolean> = librarySettings.fastScroll
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setFastScroll(value: Boolean) {
+        viewModelScope.launch { librarySettings.setFastScroll(value) }
+    }
+
     /** Cover grid (true) vs. scannable list (false); persisted. */
     val gridView: StateFlow<Boolean> = librarySettings.gridView
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)

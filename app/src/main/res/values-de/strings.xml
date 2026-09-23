@@ -141,6 +141,7 @@
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Suchen</string>
     <string name="home_cd_settings">Einstellungen</string>
+    <string name="home_cd_fast_scroll">Zu einem Buchstaben springen</string>
     <string name="home_cd_help">Was dieser Bildschirm zeigt</string>
     <string name="home_cd_close_search">Suche schließen</string>
     <string name="home_search_placeholder">Titel, Autor, Genre, Schlagwort…</string>
@@ -348,6 +349,9 @@
     <string name="set_device_location_header">WO DOWNLOADS LIEGEN</string>
     <string name="set_device_choose_folder">Ordner auswählen…</string>
     <string name="set_device_downloads_header">HERUNTERLADEN</string>
+    <string name="set_device_browsing_header">BLÄTTERN</string>
+    <string name="settings_fast_scroll">Buchstabenleiste</string>
+    <string name="settings_fast_scroll_desc">Beim Scrollen erscheint am Rand eine Leiste mit Anfangsbuchstaben. Sie folgt der gewählten Sortierung und bleibt aus, wenn diese kein Alphabet hat.</string>
     <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>
     <string name="set_device_delete_downloads_count">Gibt den Platz frei, den %1$s belegen</string>
     <string name="set_device_delete_downloads_none">Es ist nichts heruntergeladen. Dateien aus einer Bibliothek, von der du dich abgemeldet hast, werden mit entfernt</string>
