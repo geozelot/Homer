@@ -94,6 +94,11 @@ data class BookListItem(
     val language: String?,
     /** User tags (from the override layer); empty if none. */
     val tags: List<String>,
+    /**
+     * Library-root-relative paths of the PDFs that belong to this book — booklet, libretto, map,
+     * score. Empty for almost every book.
+     */
+    val documents: List<String> = emptyList(),
     /** Whether somebody has corrected any of this book's fields — the `is:edited` filter. */
     val hasEdits: Boolean = false,
     val totalDurationMs: Long?,

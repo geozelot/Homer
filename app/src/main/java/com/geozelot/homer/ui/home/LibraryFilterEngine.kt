@@ -9,6 +9,7 @@ import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.library.authorSortKey
 import com.geozelot.homer.data.library.decodeAuthors
+import com.geozelot.homer.data.library.decodeDocuments
 import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.library.displayAuthors
 import com.geozelot.homer.data.library.hasMetadataEdit
@@ -104,6 +105,7 @@ class LibraryFilterEngine @Inject constructor() {
                 genres = decodeGenres(book.genre),
                 language = book.language,
                 tags = eff.tags,
+                documents = decodeDocuments(book.documentFilePaths),
                 hasEdits = eff.hasEdits,
                 totalDurationMs = total,
                 timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,

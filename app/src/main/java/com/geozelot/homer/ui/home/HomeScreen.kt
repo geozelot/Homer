@@ -220,6 +220,8 @@ internal fun libraryLayoutFor(width: Dp, height: Dp, smallestWidth: Dp): Library
 fun HomeScreen(
     onBookClick: (String) -> Unit,
     onBookClickAt: (String, Long) -> Unit,
+    /** Opens a book's supplementary PDF, by its library-root-relative path. */
+    onOpenDocument: (String) -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -793,6 +795,7 @@ fun HomeScreen(
             book = book,
             onEdit = { detailsId = null; editingId = book.id },
             onFilter = { detailsId = null; searching = false; viewModel.addFilterToken(it) },
+            onOpenDocument = { detailsId = null; onOpenDocument(it) },
             onDismiss = { detailsId = null },
         )
     }

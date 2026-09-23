@@ -86,6 +86,8 @@ fun PlayerScreen(
     details: BookListItem? = null,
     /** Applies a filter token and leaves for the library, which is the only place one means anything. */
     onFilter: (FilterToken) -> Unit = {},
+    /** Opens one of the book's supplementary PDFs, by its library-root-relative path. */
+    onOpenDocument: (String) -> Unit = {},
     /** Seeds the template editor for this book's folder; null where patterns are somebody else's. */
     onReadFolderDifferently: (() -> Unit)? = null,
     /**
@@ -178,11 +180,13 @@ fun PlayerScreen(
             offline = offline,
             downloading = DownloadStatus.isActive(download?.status),
             canShowDetails = details != null,
+            documents = details?.documents.orEmpty(),
             onBack = onBack,
             onMarkCompleted = viewModel::markCompleted,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
             onDetails = { showDetails = true },
             onBookmarks = { showBookmarksDialog = true },
+            onOpenDocument = onOpenDocument,
             onHelp = { showHelp = true },
         )
     }
@@ -404,6 +408,7 @@ fun PlayerScreen(
                 book = book,
                 onEdit = { showDetails = false; showEditDialog = true },
                 onFilter = { showDetails = false; onFilter(it) },
+                onOpenDocument = { showDetails = false; onOpenDocument(it) },
                 onDismiss = { showDetails = false },
             )
         }

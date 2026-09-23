@@ -16,6 +16,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.geozelot.homer.ui.reader.ARG_DOCUMENT_PATH
+import com.geozelot.homer.ui.reader.DocumentReaderScreen
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
@@ -56,6 +58,7 @@ private const val ROUTE_SETTINGS_PLAYBACK = "settings/playback"
 private const val ROUTE_SETTINGS_PRIVACY = "settings/privacy"
 private const val ROUTE_SETTINGS_ABOUT = "settings/about"
 private const val ARG_BOOK_ID = "bookId"
+private const val ROUTE_READER = "reader"
 
 /**
  * Navigation within the authenticated area: the library list, the player, and the settings tree.
@@ -90,6 +93,9 @@ fun LibraryNavHost() {
                 onBookClickAt = { bookId, atMs ->
                     entry.navigateOnce(navController, "player/${Uri.encode(bookId)}?at=$atMs")
                 },
+                onOpenDocument = { path ->
+                    entry.navigateOnce(navController, "$ROUTE_READER/${Uri.encode(path)}")
+                },
                 onOpenSettings = { entry.navigateOnce(navController, ROUTE_SETTINGS) },
                 onOpenTemplates = { entry.navigateOnce(navController, ROUTE_SETTINGS_TEMPLATES) },
             )
@@ -117,6 +123,9 @@ fun LibraryNavHost() {
                 bookId = bookId,
                 startAtMs = entry.arguments?.getLong(ARG_AT_MS) ?: -1L,
                 details = entries.findBook(bookId),
+                onOpenDocument = { path ->
+                    entry.navigateOnce(navController, "$ROUTE_READER/${Uri.encode(path)}")
+                },
                 // A filter only means something on the library, so applying one leaves for it.
                 onFilter = { token ->
                     library.addFilterToken(token)
@@ -132,6 +141,16 @@ fun LibraryNavHost() {
                 },
                 onBack = { navController.popBackStack() },
             )
+        }
+
+        // A supplementary PDF, full screen. Reached from the library's details card and from the
+        // player's top bar, and it is the same destination from both — the document is a fact about
+        // the book, not about which screen asked for it.
+        composable(
+            route = "$ROUTE_READER/{$ARG_DOCUMENT_PATH}",
+            arguments = listOf(navArgument(ARG_DOCUMENT_PATH) { type = NavType.StringType }),
+        ) {
+            DocumentReaderScreen(onBack = { navController.popBackStack() })
         }
 
         // ── Settings ─────────────────────────────────────────────────────────

@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Rule
@@ -44,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.geozelot.homer.R
+import com.geozelot.homer.data.library.documentLabel
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.metadata.BookGenre
@@ -146,44 +150,83 @@ private fun chip(icon: ImageVector, facet: FilterFacet, label: String, value: St
 private fun DetailChipRow(label: String, chips: List<DetailChip>, onFilter: (FilterToken) -> Unit) {
     if (chips.isEmpty()) return
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-        // The same 96dp column [Fact] uses, so a chip row and a text row share one left edge for
-        // their values.
-        Text(
-            label,
-            color = Faint,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-            modifier = Modifier.width(96.dp).padding(end = 10.dp, top = 3.dp),
-        )
-        FlowRow(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        ChipRowLabel(label)
+        ChipFlow {
             chips.forEach { chip ->
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Surface2)
-                        .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
-                        .clickable { onFilter(chip.token) }
-                        .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Icon(chip.icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
-                    Text(
-                        chip.label,
-                        color = Muted,
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                ChipPill(chip.icon, chip.label) { onFilter(chip.token) }
             }
         }
+    }
+}
+
+/**
+ * The PDFs sitting in the book's folder, each one a way into the reader.
+ *
+ * Shaped as a chip row rather than as a [Fact], because these are things you PRESS and the card
+ * already says that with a pill. What they are not is filters — nothing narrows the library to
+ * "books with a booklet" — so they sit in the last block with the location rather than up among the
+ * chips that do, which is the same line the card divides on everywhere else.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DocumentRow(documents: List<String>, onOpen: (String) -> Unit) {
+    if (documents.isEmpty()) return
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        ChipRowLabel(stringResource(R.string.details_documents))
+        ChipFlow {
+            documents.forEach { path ->
+                ChipPill(Icons.AutoMirrored.Filled.MenuBook, documentLabel(path)) { onOpen(path) }
+            }
+        }
+    }
+}
+
+/** The 96dp label column [Fact] and every chip row share, so their values keep one left edge. */
+@Composable
+private fun ChipRowLabel(text: String) {
+    Text(
+        text,
+        color = Faint,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        modifier = Modifier.width(96.dp).padding(end = 10.dp, top = 3.dp),
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RowScope.ChipFlow(content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        content = content,
+    )
+}
+
+/** One pill: a mark saying what kind of thing this is, its name, and what pressing it does. */
+@Composable
+private fun ChipPill(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Surface2)
+            .border(1.dp, LineShelf, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = Faint, modifier = Modifier.size(11.dp))
+        Text(
+            label,
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -239,6 +282,8 @@ fun BookDetailsCard(
     book: BookListItem,
     onEdit: () -> Unit,
     onFilter: (FilterToken) -> Unit,
+    /** Opens one of the book's supplementary PDFs, by its library-root-relative path. */
+    onOpenDocument: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -348,6 +393,8 @@ fun BookDetailsCard(
                 Fact(stringResource(R.string.details_offline), book.offlineLine(context))
 
                 FactDivider()
+
+                DocumentRow(book.documents, onOpenDocument)
 
                 // The path is the book's identity — it is the primary key, the fetch URL and the
                 // key every shared facet uses. When something is wrong with a book this is the

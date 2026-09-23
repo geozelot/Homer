@@ -518,6 +518,13 @@
     <string name="details_kind_collection">Kollektion</string>
     <string name="menu_details">Details</string>
     <string name="menu_bookmarks">Lesezeichen</string>
+
+    <!-- Supplementary documents: a booklet, libretto, map or score sitting beside the book -->
+    <string name="details_documents">Auch im Ordner</string>
+    <string name="reader_page_of">%1$d / %2$d</string>
+    <string name="reader_not_here">Dieses Dokument liegt noch nicht auf dem Gerät und konnte nicht geladen werden. Es öffnet sich, sobald die Bibliothek wieder erreichbar ist.</string>
+    <string name="reader_unreadable">Homer kann diese Datei nicht lesen. Sie ist womöglich beschädigt oder passwortgeschützt.</string>
+    <string name="player_cd_documents">Beiheft</string>
     <plurals name="details_file_count">
         <item quantity="one">%d Datei</item>
         <item quantity="other">%d Dateien</item>

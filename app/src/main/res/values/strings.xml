@@ -549,6 +549,13 @@
     <string name="details_kind_collection">Collection</string>
     <string name="menu_details">Details</string>
     <string name="menu_bookmarks">Bookmarks</string>
+
+    <!-- Supplementary documents: a booklet, libretto, map or score sitting beside the book -->
+    <string name="details_documents">Also in the folder</string>
+    <string name="reader_page_of">%1$d / %2$d</string>
+    <string name="reader_not_here">This document isn\'t on the device yet, and it couldn\'t be fetched. It will open once the library is reachable again.</string>
+    <string name="reader_unreadable">Homer can\'t read this file. It may be damaged, or password-protected.</string>
+    <string name="player_cd_documents">Booklet</string>
     <plurals name="details_file_count">
         <item quantity="one">%d file</item>
         <item quantity="other">%d files</item>
