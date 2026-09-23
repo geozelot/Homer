@@ -90,6 +90,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.authorsToInput
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.data.update.pendingRelease
 import com.geozelot.homer.ui.components.EditBookDialog
@@ -879,7 +880,8 @@ internal fun List<LibraryEntry>.findSeries(key: String?): LibraryEntry.Series? {
 private fun BookListItem.toEditable() = EditableBook(
     id = id,
     title = title,
-    author = author,
+    // The edit field's form, semicolon-separated — BookEditor turns it back. See AuthorList.kt.
+    author = authorsToInput(authors),
     series = series,
     seriesIndex = seriesIndex,
     collection = collection,

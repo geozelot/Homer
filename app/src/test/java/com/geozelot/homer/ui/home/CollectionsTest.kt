@@ -22,7 +22,7 @@ class CollectionsTest {
     ) = BookListItem(
         id = id,
         title = title,
-        author = author,
+        authors = listOfNotNull(author),
         isMultiFile = false,
         fileCount = 1,
         coverModel = null,
@@ -49,7 +49,7 @@ class CollectionsTest {
     private fun shelf(n: Int, withArt: Set<Int> = (1..n).toSet()) = LibraryEntry.Series(
         key = "k",
         name = "Discworld",
-        author = "Pratchett",
+        authors = listOf("Pratchett"),
         books = (1..n).map { i ->
             book("b$i").copy(coverModel = if (i in withArt) "art$i" else null)
         },

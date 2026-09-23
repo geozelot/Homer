@@ -2,29 +2,32 @@ package com.geozelot.homer.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
-import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
+import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
-import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.authorsToInput
+import com.geozelot.homer.data.library.decodeAuthors
 import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.settings.LibrarySettings
-import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.webdav.WebDavClient
 import com.geozelot.homer.playback.PlaybackConnection
 import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.components.EditableBook
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,7 +41,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
  * One entry in the player's chapter picker. Exactly one of [startMs] (embedded mark — seek within
@@ -237,7 +239,8 @@ class PlayerViewModel @Inject constructor(
             EditableBook(
                 id = book.id,
                 title = eff.title,
-                author = eff.author,
+                // Field form, semicolon-separated — see AuthorList.kt.
+                author = authorsToInput(decodeAuthors(eff.author)),
                 series = eff.series,
                 seriesIndex = eff.seriesIndex,
                 collection = eff.collection,

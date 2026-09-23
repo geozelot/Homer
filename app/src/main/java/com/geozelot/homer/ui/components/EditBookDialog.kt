@@ -166,6 +166,9 @@ fun EditBookDialog(
                     value = author,
                     onValueChange = { author = it },
                     label = { Text(stringResource(R.string.edit_field_author)) },
+                    // A semicolon separates people; a comma does not, because a name may contain
+                    // one. See AuthorList.kt.
+                    placeholder = { Text(stringResource(R.string.edit_authors_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )

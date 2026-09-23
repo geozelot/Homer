@@ -267,11 +267,11 @@ fun BookDetailsCard(
                 // Widening from the book outwards, then the two facts that classify it.
                 DetailChipRow(
                     stringResource(FilterFacet.AUTHOR.label),
-                    listOfNotNull(
-                        book.author?.takeIf { it.isNotBlank() }?.let {
-                            chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
-                        },
-                    ),
+                    // Every author, primary first — the details card is where the whole credit
+                    // belongs, even though the cards and the shelf show only the one it files under.
+                    book.authors.filter { it.isNotBlank() }.map {
+                        chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                    },
                     onFilter,
                 )
                 DetailChipRow(

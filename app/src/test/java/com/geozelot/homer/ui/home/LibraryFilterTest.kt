@@ -22,7 +22,7 @@ class LibraryFilterTest {
     ) = BookListItem(
         id = id,
         title = title,
-        author = author,
+        authors = listOfNotNull(author),
         isMultiFile = false,
         fileCount = 1,
         coverModel = null,

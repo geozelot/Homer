@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.data.library.authorsToInput
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.GenrePickerField
 import com.geozelot.homer.ui.components.HomerTextButton
@@ -60,7 +61,7 @@ internal fun ShelfEditDialog(
     val namesCollection = series.isCollection
     // rememberSaveable, like the book dialog: a rotation used to throw away what was typed.
     var name by rememberSaveable { mutableStateOf(series.name) }
-    var author by rememberSaveable { mutableStateOf(series.author.orEmpty()) }
+    var author by rememberSaveable { mutableStateOf(authorsToInput(series.authors)) }
     // Prefilled only when the whole shelf already agrees. Showing one member's genre would make
     // Save quietly impose it on the rest, and blank means "leave it to detection" — so a shelf that
     // disagrees with itself starts empty and the user is choosing, not confirming.
@@ -119,6 +120,9 @@ internal fun ShelfEditDialog(
                     value = author,
                     onValueChange = { author = it },
                     label = { Text(stringResource(R.string.edit_field_author)) },
+                    // A semicolon separates people; a comma does not, because a name may contain
+                    // one. See AuthorList.kt.
+                    placeholder = { Text(stringResource(R.string.edit_authors_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )

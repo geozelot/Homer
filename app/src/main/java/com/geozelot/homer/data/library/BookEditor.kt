@@ -5,15 +5,17 @@ import android.net.Uri
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.library.authorsFromInput
+import com.geozelot.homer.data.library.encodeAuthors
 import com.geozelot.homer.data.metadata.BookLanguage
 import com.geozelot.homer.data.metadata.CoverCache
-import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import com.geozelot.homer.data.sync.HomerSyncRepository
+import com.geozelot.homer.data.sync.facet.LibraryIndexRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The single owner of user metadata corrections (the override layer) and custom covers, so the
@@ -90,7 +92,12 @@ class BookEditor @Inject constructor(
         val row = BookOverrideEntity(
             bookId = bookId,
             title = correction(title, detected?.title),
-            author = correction(author, detected?.author),
+            // Parsed here and nowhere else: every caller between the dialog and this row
+            // passes the field's text through untouched, so there is one place that knows a
+            // semicolon separates two people and a comma does not. Compared as the ENCODED value,
+            // like genres, so reordering two authors counts as a correction — the first is the one
+            // the book files under.
+            author = encodeAuthors(authorsFromInput(author))?.takeUnless { it == detected?.author },
             series = correctedSeries,
             seriesIndex = seriesIndex.trim().toIntOrNull()?.takeUnless { it == detected?.seriesIndex },
             collection = correctedCollection,
@@ -190,7 +197,7 @@ class BookEditor @Inject constructor(
     ) {
         val now = System.currentTimeMillis()
         val n = name.trim().ifBlank { null }
-        val a = author.trim().ifBlank { null }
+        val a = encodeAuthors(authorsFromInput(author))
         val g = encodeGenres(genres)
         val c = if (namesCollection) n else collection.trim().ifBlank { null }
         for (id in bookIds) {

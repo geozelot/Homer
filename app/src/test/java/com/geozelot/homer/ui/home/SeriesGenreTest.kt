@@ -26,7 +26,7 @@ class SeriesGenreTest {
     private fun blank(id: String) = BookListItem(
         id = id,
         title = id,
-        author = "A",
+        authors = listOf("A"),
         isMultiFile = false,
         fileCount = 1,
         coverModel = null,
@@ -74,7 +74,7 @@ class SeriesGenreTest {
         val units = collapseIntoUnits(
             listOf(
                 book("a", series = "Chronicles"),
-                blank("b").copy(series = "Chronicles", author = "B"),
+                blank("b").copy(series = "Chronicles", authors = listOf("B")),
             ),
         )
         assertEquals(2, units.filterIsInstance<SortUnit.Ser>().size)

@@ -164,7 +164,9 @@ enum class BookState(
  * See [suggestionValuesFor] for the deliberately narrower set the suggestion list offers.
  */
 internal fun BookListItem.valuesFor(facet: FilterFacet): List<String> = when (facet) {
-    FilterFacet.AUTHOR -> listOfNotNull(author)
+    // Every author, not just the primary: `author:` should find a book by its co-author as
+    // readily as by the name it files under, which is what somebody searching for one means.
+    FilterFacet.AUTHOR -> authors
     FilterFacet.SERIES -> listOfNotNull(series)
     // The effective collection, so filtering by a collection also finds the books of a plain series
     // standing in as its own — the same fallback the shelf stacks by.

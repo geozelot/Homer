@@ -69,6 +69,7 @@
     <string name="edit_title">Buch bearbeiten</string>
     <string name="edit_field_title">Titel</string>
     <string name="edit_field_author">Autor</string>
+    <string name="edit_authors_placeholder">Pratchett, Terry; Neil Gaiman</string>
     <string name="edit_field_series">Serie</string>
     <string name="edit_field_series_index">Serien-Nr.</string>
     <string name="edit_field_genre">Genre</string>

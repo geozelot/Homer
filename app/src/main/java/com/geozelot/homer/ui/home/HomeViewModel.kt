@@ -75,7 +75,8 @@ import kotlinx.coroutines.launch
 data class BookListItem(
     val id: String,
     val title: String,
-    val author: String?,
+    /** Every author, primary first. Read [author] for the one the book files under. */
+    val authors: List<String> = emptyList(),
     val isMultiFile: Boolean,
     val fileCount: Int,
     val coverModel: Any?,
@@ -137,6 +138,14 @@ data class BookListItem(
      * longer sum to the library, a reader scrolling would meet the same book three times, and the
      * grid's item keys would collide. The first is that one, so the choice is made by typing.
      */
+    /**
+     * The author the book files and displays under: the first it carries.
+     *
+     * A property rather than a field, so every card, shelf heading and comparator that asked for
+     * "the author" goes on asking and goes on getting one answer — the same trick genres played.
+     */
+    val author: String? get() = authors.firstOrNull()
+
     val genre: String? get() = genres.firstOrNull()
 }
 
@@ -186,7 +195,14 @@ sealed interface LibraryEntry {
     data class Series(
         val key: String,
         val name: String,
-        val author: String?,
+        /**
+         * Every author the shelf's books are credited to, primary first.
+         *
+         * The whole list and not just the primary, because the shelf EDIT dialog writes this value
+         * back over every member: prefilled with one name, saving would have quietly dropped the
+         * co-authors off forty-one books at once.
+         */
+        val authors: List<String> = emptyList(),
         val books: List<BookListItem>,
         /**
          * Whether this shelf is a real COLLECTION — a parent grouping somebody expressed — rather
@@ -196,7 +212,10 @@ sealed interface LibraryEntry {
          * fallback exists to keep a plain series stacked at collection depth, not to relabel it.
          */
         val isCollection: Boolean = false,
-    ) : LibraryEntry
+    ) : LibraryEntry {
+        /** The author the shelf files under — its books' primary. */
+        val author: String? get() = authors.firstOrNull()
+    }
 }
 
 /** How the library list is ordered (within each shelf). */

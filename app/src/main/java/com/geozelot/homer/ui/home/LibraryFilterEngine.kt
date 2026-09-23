@@ -7,6 +7,7 @@ import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.library.decodeAuthors
 import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookGenre
@@ -89,7 +90,7 @@ class LibraryFilterEngine @Inject constructor() {
             BookListItem(
                 id = book.id,
                 title = book.title,
-                author = book.author,
+                authors = decodeAuthors(book.author),
                 isMultiFile = book.isMultiFile,
                 fileCount = book.fileCount,
                 coverModel = eff.coverModel,
@@ -236,7 +237,7 @@ internal fun collapseIntoUnits(
             LibraryEntry.Series(
                 key = key,
                 name = nameOf(members.first())!!,
-                author = members.first().author,
+                authors = members.first().authors,
                 books = members.sortedWith(order),
                 // Named only when it is a real parent. A collection that exists purely because a
                 // series fell back to being its own is not a collection anybody made, and drawing
