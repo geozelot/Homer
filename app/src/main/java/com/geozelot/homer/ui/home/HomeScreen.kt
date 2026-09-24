@@ -730,7 +730,7 @@ fun HomeScreen(
                                         series.books.any { it.id in expanded }
                                     },
                                     sort = sortMode,
-                                    shelved = shelfMode != LibraryShelving.ITEM,
+                                    shelving = shelfMode,
                                 )
                             }
                             FastScrollLane(

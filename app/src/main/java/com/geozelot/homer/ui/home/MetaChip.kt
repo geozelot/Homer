@@ -183,7 +183,14 @@ internal fun List<BookListItem>.shelfGenres(): List<String> {
  */
 internal fun metaChipFor(
     genres: List<String>,
-    author: String?,
+    /**
+     * Every author, primary first — a LIST for the same reason the genres beside it are one.
+     *
+     * A chip already knows how to carry several values: it shows the first and a `+n`, and tapping
+     * it opens the rest, each its own filter. Handed only the primary, a book by two people wore a
+     * chip that filtered to one of them and gave no way to reach the other.
+     */
+    authors: List<String>,
     shelving: LibraryShelving,
     /**
      * True when the arrangement groups nothing — no shelves, no stacks. Then the row is the only
@@ -192,23 +199,19 @@ internal fun metaChipFor(
     unshelved: Boolean = false,
 ): List<Pair<MetaChipKind, List<String>>> {
     val genre = genres.takeIf { it.isNotEmpty() }
-    val named = author?.takeIf { it.isNotBlank() }
-    return when (shelving) {
-        LibraryShelving.AUTHOR -> listOfNotNull(genre?.let { MetaChipKind.GENRE to it })
-        LibraryShelving.GENRE -> listOfNotNull(named?.let { MetaChipKind.AUTHOR to listOf(it) })
+    val named = authors.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }
+    return when {
+        shelving.isByAuthor -> listOfNotNull(genre?.let { MetaChipKind.GENRE to it })
+        shelving == LibraryShelving.GENRE -> listOfNotNull(named?.let { MetaChipKind.AUTHOR to it })
         // Both, in that order, when nothing overhead is saying either. Author first: it is the fact
         // people navigate a library by, and the genre qualifies it rather than the other way round.
-        else -> if (unshelved) {
-            listOfNotNull(
-                named?.let { MetaChipKind.AUTHOR to listOf(it) },
-                genre?.let { MetaChipKind.GENRE to it },
-            )
-        } else {
-            listOfNotNull(
-                genre?.let { MetaChipKind.GENRE to it }
-                    ?: named?.let { MetaChipKind.AUTHOR to listOf(it) },
-            )
-        }
+        unshelved -> listOfNotNull(
+            named?.let { MetaChipKind.AUTHOR to it },
+            genre?.let { MetaChipKind.GENRE to it },
+        )
+        else -> listOfNotNull(
+            genre?.let { MetaChipKind.GENRE to it } ?: named?.let { MetaChipKind.AUTHOR to it },
+        )
     }
 }
 

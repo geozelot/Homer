@@ -156,6 +156,7 @@
     <string name="home_cd_list_view">Listenansicht</string>
     <string name="shelve_item">Ohne</string>
     <string name="shelve_author">Autor</string>
+    <string name="shelve_author_last">Nachname</string>
     <string name="shelve_genre">Genre</string>
     <string name="depth_collection">Kollektion</string>
     <string name="depth_series">Serien</string>

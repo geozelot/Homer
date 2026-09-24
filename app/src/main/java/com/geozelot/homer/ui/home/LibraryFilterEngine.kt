@@ -169,15 +169,14 @@ private fun buildEntries(
 
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        // The shelves themselves file by surname when that is the sort — which is why this is
-        // the one sort an author shelf does NOT drop as redundant: it is the only one that
-        // reorders the headings rather than the books beneath them. `sortBy` is compared, never
-        // drawn, so the heading keeps the name the reader knows.
-        LibraryShelving.AUTHOR -> sectioned(
+        // Which of the two author shelvings decides how the SHELVES file — by given name or by
+        // surname. `sortBy` is compared, never drawn, so a shelf sitting under P still reads
+        // "Terry Pratchett".
+        LibraryShelving.AUTHOR, LibraryShelving.AUTHOR_LAST -> sectioned(
             ordered,
             "Unknown author",
             R.string.home_shelf_unknown_author,
-            sortBy = if (sort == LibrarySort.AUTHOR_LAST) ::authorSortKey else { it -> it },
+            sortBy = if (shelving == LibraryShelving.AUTHOR_LAST) ::authorSortKey else { it -> it },
         ) { it.author }
         // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
         // are one shelf rather than two that mean the same thing. The heading itself resolves to the
@@ -331,6 +330,9 @@ private fun sectioned(
                 LibraryEntry.Header(
                     title = key ?: fallback,
                     titleRes = if (key == null) fallbackRes else null,
+                    // The very value the line above ordered these keys by — so anything that needs
+                    // to know where a heading sits asks the ordering rather than the drawn text.
+                    fileKey = key?.let(sortBy) ?: fallback,
                     genre = key.takeIf { asGenre },
                 ),
             )

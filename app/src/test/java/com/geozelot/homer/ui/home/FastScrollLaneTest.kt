@@ -49,7 +49,7 @@ class FastScrollLaneTest {
             book("1", "Anansi Boys", "Neil Gaiman"),
             book("2", "Mort", "Terry Pratchett"),
         )
-        assertEquals(listOf("A", "M"), laneLetters(slots, LibrarySort.TITLE, shelved = false).map { it.label })
+        assertEquals(listOf("A", "M"), laneLetters(slots, LibrarySort.TITLE, shelving = LibraryShelving.ITEM).map { it.label })
     }
 
     @Test
@@ -60,15 +60,46 @@ class FastScrollLaneTest {
             book("1", "Anansi Boys", "Neil Gaiman"),
             book("2", "Mort", "Terry Pratchett"),
         )
-        assertEquals(listOf("G", "P"), laneLetters(slots, LibrarySort.AUTHOR_LAST, shelved = false).map { it.label })
-        assertEquals(listOf("N", "T"), laneLetters(slots, LibrarySort.AUTHOR, shelved = false).map { it.label })
+        assertEquals(listOf("G", "P"), laneLetters(slots, LibrarySort.AUTHOR_LAST, shelving = LibraryShelving.ITEM).map { it.label })
+        assertEquals(listOf("N", "T"), laneLetters(slots, LibrarySort.AUTHOR, shelving = LibraryShelving.ITEM).map { it.label })
     }
 
     @Test
-    fun `a sort with no alphabet offers no lane`() {
+    fun `an unshelved list with no alphabet offers no lane`() {
         val slots = flat(book("1", "Mort", "Terry Pratchett"))
-        assertTrue(laneLetters(slots, LibrarySort.RECENT, shelved = false).isEmpty())
-        assertTrue(laneLetters(slots, LibrarySort.DURATION, shelved = false).isEmpty())
+        assertTrue(laneLetters(slots, LibrarySort.RECENT, shelving = LibraryShelving.ITEM).isEmpty())
+        assertTrue(laneLetters(slots, LibrarySort.DURATION, shelving = LibraryShelving.ITEM).isEmpty())
+    }
+
+    @Test
+    fun `a shelved list keeps its lane whatever the books under it are sorted by`() {
+        // The headings are alphabetical no matter what orders the books beneath them, so refusing
+        // the lane on the SORT alone took it away from a perfectly good alphabet of shelves.
+        val entries = listOf(
+            LibraryEntry.Header("Adams", fileKey = "adams"),
+            LibraryEntry.Standalone(book("1", "Mostly Harmless", "Adams")),
+        )
+        val slots = librarySlots(entries, true, 3, emptySet()) { false }
+        assertEquals(
+            listOf("A"),
+            laneLetters(slots, LibrarySort.RECENT, LibraryShelving.AUTHOR).map { it.label },
+        )
+    }
+
+    @Test
+    fun `a heading's letter follows how it FILES, not how it reads`() {
+        // A shelf filed by surname reads "Terry Pratchett" and sits under P. Taking the initial
+        // from the drawn title would offer T — a letter in a place the library is not ordered by.
+        val entries = listOf(
+            LibraryEntry.Header("Douglas Adams", fileKey = "adams douglas"),
+            LibraryEntry.Standalone(book("1", "Mostly Harmless", "Douglas Adams")),
+            LibraryEntry.Header("Terry Pratchett", fileKey = "pratchett terry"),
+            LibraryEntry.Standalone(book("2", "Mort", "Terry Pratchett")),
+        )
+        val slots = librarySlots(entries, true, 3, emptySet()) { false }
+        val lane = laneLetters(slots, LibrarySort.TITLE, LibraryShelving.AUTHOR_LAST)
+        assertEquals(listOf("A", "P"), lane.map { it.label })
+        assertEquals(listOf(0, 2), lane.map { it.index })
     }
 
     @Test
@@ -78,7 +109,7 @@ class FastScrollLaneTest {
             book("2", "American Gods", "A"),
             book("3", "Mort", "B"),
         )
-        val lane = laneLetters(slots, LibrarySort.TITLE, shelved = false)
+        val lane = laneLetters(slots, LibrarySort.TITLE, shelving = LibraryShelving.ITEM)
         assertEquals(listOf("A", "M"), lane.map { it.label })
         assertEquals(listOf(0, 2), lane.map { it.index })
     }
@@ -92,7 +123,7 @@ class FastScrollLaneTest {
             LibraryEntry.Standalone(book("2", "Mort", "Pratchett")),
         )
         val slots = librarySlots(entries, true, 3, emptySet()) { false }
-        val lane = laneLetters(slots, LibrarySort.AUTHOR, shelved = true)
+        val lane = laneLetters(slots, LibrarySort.AUTHOR, shelving = LibraryShelving.AUTHOR)
         assertEquals(listOf("A", "P"), lane.map { it.label })
         // Indices 0 and 2 — the headings, not the books under them.
         assertEquals(listOf(0, 2), lane.map { it.index })

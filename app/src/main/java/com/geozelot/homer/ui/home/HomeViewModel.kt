@@ -178,6 +178,19 @@ sealed interface LibraryEntry {
         val title: String,
         @StringRes val titleRes: Int? = null,
         /**
+         * The value this heading was FILED under — what decided its place among the others.
+         *
+         * Usually the title itself, and deliberately not always: an author shelf filed by surname
+         * sits under "Pratchett" while reading "Terry Pratchett", and a genre shelf is ordered by
+         * its canonical key while reading the reader's own language for it.
+         *
+         * Carried rather than re-derived because the fast-scroll lane offers an initial per
+         * heading, and an initial taken from the drawn title would put T where the shelf sits
+         * under P — a lane whose letters run out of order and whose jumps land somewhere nobody
+         * asked for. One value, set where the ordering happens.
+         */
+        val fileKey: String = title,
+        /**
          * An ISO language code whose NAME is the heading — resolved when the row draws, for the
          * same reason [titleRes] is. `title` keeps the code, so the header's identity (and the
          * grid's duplicate-title key) does not move when the interface language does.
@@ -232,8 +245,13 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
     /**
      * By surname: Pratchett under P rather than Terry under T.
      *
-     * A SORT and nothing else. Names go on reading "Terry Pratchett" wherever they are shown,
-     * including the shelf heading this orders — filing is a property of the list, not of the name.
+     * A SORT and nothing else. Names go on reading "Terry Pratchett" wherever they are shown —
+     * filing is a property of the list, not of the name.
+     *
+     * Offered only when the list is NOT shelved by author. On an author shelf the choice is not
+     * about ordering books inside a shelf (they all share the author) but about ordering the
+     * SHELVES, which is a question about the shelving — so it is asked there, as
+     * [LibraryShelving.AUTHOR_LAST], and dropped from here.
      */
     AUTHOR_LAST("author_last", R.string.sort_author_last),
     DURATION("duration", R.string.sort_duration);
@@ -247,7 +265,7 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
          * rather than left as an option that appears to do nothing.
          */
         fun offeredFor(shelving: LibraryShelving): List<LibrarySort> =
-            values().filterNot { it == AUTHOR && shelving == LibraryShelving.AUTHOR }
+            values().filterNot { (it == AUTHOR || it == AUTHOR_LAST) && shelving.isByAuthor }
     }
 }
 
@@ -265,7 +283,23 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
 enum class LibraryShelving(val key: String, @StringRes val label: Int) {
     ITEM("none", R.string.shelve_item),
     AUTHOR("author", R.string.shelve_author),
+
+    /**
+     * The same shelves, filed by surname: Pratchett under P rather than Terry under T.
+     *
+     * A shelving rather than a sort, because that is what it actually decides. Sorting a list
+     * already sectioned by author cannot reorder books within a shelf — they all have the same
+     * author — so the only thing left for it to do is reorder the HEADINGS, which is a property of
+     * how the library is shelved. It sat in the sort menu as the one entry there that did nothing
+     * to the books it claimed to sort.
+     *
+     * It changes nothing about how a name is SHOWN: the heading still reads "Terry Pratchett".
+     */
+    AUTHOR_LAST("author_last", R.string.shelve_author_last),
     GENRE("genre", R.string.shelve_genre);
+
+    /** Both author shelvings. They differ only in how the shelves file, never in what is on them. */
+    val isByAuthor: Boolean get() = this == AUTHOR || this == AUTHOR_LAST
 
     companion object {
         /**

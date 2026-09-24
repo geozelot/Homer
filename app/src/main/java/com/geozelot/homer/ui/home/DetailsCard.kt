@@ -453,11 +453,12 @@ fun SeriesDetailsCard(
                 // threads inside it, everything its books are about.
                 DetailChipRow(
                     stringResource(FilterFacet.AUTHOR.label),
-                    listOfNotNull(
-                        series.author?.takeIf { it.isNotBlank() }?.let {
-                            chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
-                        },
-                    ),
+                    // Every author the shelf is credited to, one chip each — the same rule the
+                    // book card follows. The primary alone gave a co-written shelf no way to reach
+                    // its second name.
+                    series.authors.filter { it.isNotBlank() }.map {
+                        chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                    },
                     onFilter,
                 )
                 // Only a collection has threads inside it to name, and only when they are named.

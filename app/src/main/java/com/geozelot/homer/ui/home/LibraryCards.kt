@@ -206,7 +206,7 @@ private fun GridCardText(
 internal fun bookChip(book: BookListItem, ctx: RowContext) =
     metaChipFor(
         book.genres,
-        book.author,
+        book.authors,
         ctx.shelving,
         // Shelved by nothing: no heading above this card says either fact, so the card says both.
         //
@@ -222,7 +222,7 @@ internal fun bookChip(book: BookListItem, ctx: RowContext) =
 internal fun shelfChip(series: LibraryEntry.Series, ctx: RowContext) =
     metaChipFor(
         series.books.shelfGenres(),
-        series.author,
+        series.authors,
         ctx.shelving,
         // Same rule as a book's: a shelf card standing in an unshelved list has no heading over it
         // either, and two cards side by side should not describe themselves differently.
@@ -363,8 +363,11 @@ private fun bookMeta(
     // the shelf IS the author, or the chip when it took the name. Asked of `metaChipFor` rather
     // than re-derived here — one rule, subtracted, so the two cannot drift into printing the name
     // twice or dropping it from both.
-    if (ctx.shelving != LibraryShelving.AUTHOR && !bookChip(book, ctx).carriesAuthor()) {
-        add(book.author ?: context.getString(R.string.unknown_author))
+    if (!ctx.shelving.isByAuthor && !bookChip(book, ctx).carriesAuthor()) {
+        // Every author, as they are read out: "first last, first last". The primary alone was the
+        // one place a co-written book quietly lost its co-author.
+        add(book.authors.takeIf { it.isNotEmpty() }?.joinToString(", ")
+            ?: context.getString(R.string.unknown_author))
     }
     // Genres are the chip's, and only the chip's. They used to be joined into this line with the
     // author and the tags, which on a narrow cell meant three ellipsised genres and no author.

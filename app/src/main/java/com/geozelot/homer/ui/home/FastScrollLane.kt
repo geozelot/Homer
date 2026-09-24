@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,9 +60,21 @@ import kotlinx.coroutines.launch
 /** A letter and the grid item it jumps to. */
 internal data class LaneLetter(val label: String, val index: Int)
 
-/** Whether an alphabetical lane means anything under this sort. */
-internal fun sortIsAlphabetical(sort: LibrarySort): Boolean =
-    sort == LibrarySort.TITLE || sort == LibrarySort.AUTHOR || sort == LibrarySort.AUTHOR_LAST
+/**
+ * Whether an alphabetical lane means anything here.
+ *
+ * Two different questions, because the library is ordered by two different things. SHELVED, the
+ * lane offers headings, and those are alphabetical whatever the books under them are sorted by —
+ * which is the case that used to be missed: shelved by author and sorted by Recent, the headings
+ * still ran A to Z and the lane refused to appear. UNSHELVED, there are no headings, so the sort
+ * is the only order there is and it has to be an alphabetical one.
+ */
+internal fun laneIsAlphabetical(sort: LibrarySort, shelving: LibraryShelving): Boolean =
+    if (shelving == LibraryShelving.ITEM) {
+        sort == LibrarySort.TITLE || sort == LibrarySort.AUTHOR || sort == LibrarySort.AUTHOR_LAST
+    } else {
+        true
+    }
 
 /**
  * The lane for a drawn library: one entry per initial, in list order, pointing at the first grid
@@ -74,12 +87,22 @@ internal fun sortIsAlphabetical(sort: LibrarySort): Boolean =
  * is aiming at, and jumping into the middle of a shelf would land past the heading that says where
  * you are. Unshelved, the targets are the books and shelves themselves.
  */
-internal fun laneLetters(slots: List<GridSlot>, sort: LibrarySort, shelved: Boolean): List<LaneLetter> {
-    if (!sortIsAlphabetical(sort)) return emptyList()
+internal fun laneLetters(
+    slots: List<GridSlot>,
+    sort: LibrarySort,
+    shelving: LibraryShelving,
+): List<LaneLetter> {
+    if (!laneIsAlphabetical(sort, shelving)) return emptyList()
+    val shelved = shelving != LibraryShelving.ITEM
     val out = mutableListOf<LaneLetter>()
     slots.forEachIndexed { index, slot ->
         val key = when {
-            shelved -> (slot as? GridSlot.Heading)?.entry?.title
+            // The heading's FILING key, never its drawn title. A shelf filed by surname reads
+            // "Terry Pratchett" and sits under P; a genre shelf reads "Kurzgeschichten" and is
+            // ordered by its canonical key. Taking the initial from the words on screen would put
+            // the lane's letters in an order the library is not in, and every jump would land
+            // somewhere the reader did not ask for.
+            shelved -> (slot as? GridSlot.Heading)?.entry?.fileKey
             slot is GridSlot.Book -> bookLaneKey(slot.book, sort)
             slot is GridSlot.Shelf -> shelfLaneKey(slot.series, sort)
             else -> null
@@ -167,6 +190,14 @@ internal fun FastScrollLane(
                 .clip(RoundedCornerShape(999.dp))
                 .background(Surface2.copy(alpha = 0.92f))
                 .onSizeChanged { laneHeight = it.height }
+                // A tap lands where a drag would have started, which is the whole of it: a reader
+                // who can see "P" wants to press it, and a lane that only answered to a drag made
+                // the obvious gesture do nothing at all. Separate from the drag detector rather
+                // than folded into it — `detectTransformGestures` and friends never fire for a
+                // touch that does not travel, so a tap is genuinely a second gesture here.
+                .pointerInput(letters) {
+                    detectTapGestures { position -> jumpTo(position.y) }
+                }
                 .pointerInput(letters) {
                     detectVerticalDragGestures(
                         onDragStart = { dragging = true; jumpTo(it.y) },

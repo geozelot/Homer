@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.EditableBook
+import com.geozelot.homer.data.library.authorsFromInput
 import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.home.FilterFacet
 import com.geozelot.homer.ui.home.FilterToken
@@ -112,16 +113,27 @@ internal fun BookHeader(
     ) {
         // Reserved, like everything below it: a book with no author must not pull the title up.
         Box(modifier = Modifier.height(BookHeaderAuthorLine.scaled(scale)), contentAlignment = Alignment.Center) {
-            book?.author?.takeIf { it.isNotBlank() }?.let {
-                // A chip like the two below it. It was bare text, which made the one fact up here
-                // you can act on look like the one fact you cannot — and three things that all
-                // filter the library should not be drawn three different ways.
-                LineageChip(
-                    label = it,
-                    icon = HomerIcons.Author,
-                    scale = scale,
-                    onClick = { onFilter(FilterToken(FilterFacet.AUTHOR, it)) },
-                )
+            // ONE CHIP PER AUTHOR. The field this comes from is the edit form — semicolon-joined,
+            // because a name may contain a comma — so a single chip labelled it verbatim: a
+            // co-written book read "Marc Vierhaus; Asja Maass" and filtered on that whole string,
+            // which matches nobody. Split back through the same function the field is written with,
+            // so the two cannot disagree about where one name ends.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                authorsFromInput(book?.author.orEmpty()).forEach { author ->
+                    // A chip like the two below it. It was bare text, which made the one fact up
+                    // here you can act on look like the one fact you cannot — and three things that
+                    // all filter the library should not be drawn three different ways.
+                    LineageChip(
+                        label = author,
+                        icon = HomerIcons.Author,
+                        scale = scale,
+                        onClick = { onFilter(FilterToken(FilterFacet.AUTHOR, author)) },
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
             }
         }
         // Two lines' worth, always — a one-line title leaves the second empty rather than letting
@@ -186,9 +198,10 @@ private fun LineageChip(
     icon: ImageVector,
     scale: Float,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(Surface2)
             .border(1.dp, LineShelf, RoundedCornerShape(999.dp))

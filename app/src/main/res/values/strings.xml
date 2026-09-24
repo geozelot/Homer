@@ -159,6 +159,7 @@
          translation shows English chips. -->
     <string name="shelve_item">Item</string>
     <string name="shelve_author">Author</string>
+    <string name="shelve_author_last">Surname</string>
     <string name="shelve_genre">Genre</string>
     <string name="depth_collection">Collections</string>
     <string name="depth_series">Series</string>
