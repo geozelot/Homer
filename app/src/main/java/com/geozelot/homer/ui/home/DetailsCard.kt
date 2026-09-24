@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.geozelot.homer.R
-import com.geozelot.homer.data.library.documentLabel
+import com.geozelot.homer.data.library.documentLabels
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.metadata.BookGenre
@@ -174,8 +174,9 @@ private fun DocumentRow(documents: List<String>, onOpen: (String) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         ChipRowLabel(stringResource(R.string.details_documents))
         ChipFlow {
-            documents.forEach { path ->
-                ChipPill(Icons.AutoMirrored.Filled.MenuBook, documentLabel(path)) { onOpen(path) }
+            val labels = documentLabels(documents)
+            documents.forEachIndexed { index, path ->
+                ChipPill(Icons.AutoMirrored.Filled.MenuBook, labels[index]) { onOpen(path) }
             }
         }
     }

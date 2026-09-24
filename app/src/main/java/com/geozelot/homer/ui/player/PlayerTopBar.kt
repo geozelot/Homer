@@ -28,7 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.geozelot.homer.R
-import com.geozelot.homer.data.library.documentLabel
+import com.geozelot.homer.data.library.documentLabels
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Muted
@@ -97,9 +97,10 @@ internal fun PlayerTopBar(
                         onDismissRequest = { documentsOpen = false },
                     ) {
                         MenuHeader(stringResource(R.string.details_documents))
-                        documents.forEach { path ->
+                        val labels = documentLabels(documents)
+                        documents.forEachIndexed { index, path ->
                             DropdownMenuItem(
-                                text = { Text(documentLabel(path)) },
+                                text = { Text(labels[index]) },
                                 onClick = {
                                     documentsOpen = false
                                     onOpenDocument(path)

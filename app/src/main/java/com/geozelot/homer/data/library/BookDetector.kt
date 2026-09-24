@@ -142,7 +142,14 @@ class BookDetector @Inject constructor() {
         val series = parsed[TemplateField.SERIES]
         val collection = parsed[TemplateField.COLLECTION]
         val cover = images.minByOrNull { coverRank(it.name) }?.path?.let(::strip)
-        val documents = documentPathsFor(bookPath, root, documentsByFolder).map(::strip)
+        val documents = documentPathsFor(
+            bookPath = bookPath,
+            libraryRoot = root,
+            folderDocuments = documentsByFolder,
+            // The folders the audio is actually in, in the order the book reads. A PDF filed in
+            // `CD1/` beside the files belongs to this book, and nothing that climbs would find it.
+            partPaths = orderedMembers.map { it.path },
+        ).map(::strip)
 
         val fileEntities = orderedAudio.mapIndexed { index, resource ->
             AudioFileEntity(

@@ -9,49 +9,71 @@ package com.geozelot.homer.data.library
  * found, and how a cover sitting at the book level is found while the audio sits under `CD1/`. The
  * same listing yields the PDFs. No extra request, no second pass.
  *
- * ## Which folder a book takes its documents from
+ * ## Which folders a book takes its documents from: ALL of them, up to the root
  *
- * **The nearest one that has any, starting at the book's own folder and climbing.** A booklet
- * usually sits beside the audio; a series map sits at the series folder and belongs to every book
- * under it, exactly as a cover would if a cover climbed.
+ * The book's own folder, then the part folders its audio actually sits in, then every ancestor —
+ * nearest first. A booklet beside the audio, a map at the series folder and a family tree at the
+ * collection folder are three different documents about the same book, and a reader who filed them
+ * at three levels meant all three to be reachable.
  *
- * Nearest-wins rather than collect-everything, for the same reason the cover picks ONE image: a
- * book that showed its own booklet plus three unrelated maps from two levels up would be a control
- * whose contents nobody can predict from where they put the file. With this rule the answer is
- * always "the closest PDFs win", which is a sentence a reader can hold.
+ * This started as nearest-wins, on the reasoning that a predictable single source beats a pile
+ * from three levels. That was wrong about what people actually file: a series map belongs to every
+ * book in the series AND each book keeps its own booklet, and nearest-wins silently hid whichever
+ * one was further away. Each document is labelled by its file name, so a list of three says what
+ * the three are.
+ *
+ * ## The part folders, because that is where the audio is
+ *
+ * A book split across `CD1/`, `CD2/` is one book whose folder holds no audio at all. A PDF sitting
+ * in `CD1/` beside the files is as much that book's as one at the book level — and climbing alone
+ * never looks there, because climbing only ever goes up. Same reason the cover search reads the
+ * part folders' images: the book is where its audio is.
  *
  * ## The library root is where the climb stops, and stops SHORT
  *
  * The root is excluded deliberately. It is the one folder that is nobody's book in particular, and
  * it is where a stray PDF is most likely to be sitting — a manual, an export, something a sync
- * client dropped. Included, one such file would attach itself to every book in the library that has
- * none of its own, which is a false positive with the widest possible blast radius.
+ * client dropped. Included, one such file would attach itself to every book in the library, which
+ * is a false positive with the widest possible blast radius.
+ *
+ * Everything below the root is fair game, which does mean a PDF in an author folder reaches every
+ * book by that author. That is the same rule working — those books do share that folder — and it
+ * is undone by moving the file down a level, where a root PDF's reach could not be.
  *
  * A book's OWN folder always counts, even in the degenerate library whose root directly holds the
  * audio: there the root is the book, and a booklet beside it is plainly that book's.
  */
 
 /**
- * The document paths for a book, nearest folder first. Empty when nothing was found.
+ * Every document path for a book, nearest folder first. Empty when nothing was found.
  *
  * [folderDocuments] is keyed by folder path (library-root-relative or absolute — the same space as
  * [bookPath] and [libraryRoot], whichever the caller is working in), and holds only folders that
  * actually contain a document.
+ *
+ * @param partPaths the book's own audio-bearing subfolders — `CD1`, `Part 2` — when it has any.
+ *   Read straight after the book folder, because a PDF filed with the audio is the book's however
+ *   deep the audio was put.
  */
 fun documentPathsFor(
     bookPath: String,
     libraryRoot: String,
     folderDocuments: Map<String, List<String>>,
+    partPaths: List<String> = emptyList(),
 ): List<String> {
     val root = libraryRoot.trim('/')
+    // A set, ordered: the same folder can be reached twice (a part folder IS the book folder for a
+    // book with no parts), and a document offered twice is a duplicate button.
+    val found = LinkedHashSet<String>()
     var current = bookPath.trim('/')
-    folderDocuments[current]?.takeIf { it.isNotEmpty() }?.let { return it }
+    folderDocuments[current]?.let(found::addAll)
+    partPaths.forEach { part -> folderDocuments[part.trim('/')]?.let(found::addAll) }
     while (current.contains('/')) {
         current = current.substringBeforeLast('/')
         if (current == root) break
-        folderDocuments[current]?.takeIf { it.isNotEmpty() }?.let { return it }
+        folderDocuments[current]?.let(found::addAll)
     }
-    return emptyList()
+    return found.toList()
 }
 
 /**
@@ -76,3 +98,25 @@ fun encodeDocuments(values: List<String>): String? =
  */
 fun documentLabel(path: String): String =
     path.substringAfterLast('/').substringBeforeLast('.').ifBlank { path.substringAfterLast('/') }
+
+/**
+ * The labels for a whole set of documents, with collisions resolved by where they came from.
+ *
+ * Only a problem since documents stopped being taken from one folder: a book folder and its series
+ * folder both very reasonably hold a `Booklet.pdf`, and two buttons both reading "Booklet" is a
+ * choice nobody can make. The one that is not unique gains the folder it sits in — "Booklet ·
+ * Discworld" — which is exactly the thing that distinguishes them, and is said only where it has
+ * to be. Unique names are left alone.
+ */
+fun documentLabels(paths: List<String>): List<String> {
+    val counts = paths.groupingBy(::documentLabel).eachCount()
+    return paths.map { path ->
+        val label = documentLabel(path)
+        if (counts[label] == 1) {
+            label
+        } else {
+            val folder = path.substringBeforeLast('/', "").substringAfterLast('/')
+            if (folder.isBlank()) label else "$label · $folder"
+        }
+    }
+}
