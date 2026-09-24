@@ -13,6 +13,7 @@ import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.webdav.DavResource
@@ -143,14 +144,9 @@ internal fun planWrites(
                 durationAttempted = previous?.durationAttempted ?: moved?.durationAttempted ?: false,
             )
         }
-        // Recomputed from the current file set, so removing or adding a file stays correct — and
-        // left null unless EVERY file is measured, because a partial total reads as "finished" and
-        // hides the book.
-        val total = if (merged.isNotEmpty() && merged.all { it.durationMs != null }) {
-            merged.sumOf { it.durationMs!! }
-        } else {
-            null
-        }
+        // Recomputed from the current file set, so removing or adding a file stays correct. The
+        // rule for what counts as measured enough lives in one place — see [bookTotalDurationMs].
+        val total = bookTotalDurationMs(merged)
         // A folder cover we can see but haven't cached yet earns a fresh attempt, even if an
         // earlier pass gave up on this book: caching it is one cheap GET, and it's what makes the
         // cover load instantly and work offline instead of being fetched on every display.

@@ -4,6 +4,7 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
@@ -286,15 +287,12 @@ class DurationEnricher @Inject constructor(
                 if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} embedded chapters")
             }
 
-            // All-or-nothing, matching LibraryScanner: a PARTIAL sum under-reports the book
-            // length, so whole-book elapsed exceeds it and the book reads as "finished" —
-            // which is what silently emptied the Currently-listening shelf. A later open measures the
-            // rest and the total lands then.
+            // The same rule LibraryScanner applies, from the same function so the two cannot
+            // drift: a total once nothing is still coming, counting a proven-unreadable file as
+            // arrived rather than waiting on it for ever. See [bookTotalDurationMs].
             val all = audioFileDao.findForBook(bookId)
             val durations = all.mapNotNull { it.durationMs }
-            if (all.isNotEmpty() && durations.size == all.size) {
-                bookDao.updateTotalDuration(bookId, durations.sum())
-            }
+            bookTotalDurationMs(all)?.let { bookDao.updateTotalDuration(bookId, it) }
             Log.i(
                 TAG,
                 "book $bookId: ${durations.size}/${all.size} files measured " +

@@ -19,6 +19,14 @@ data class BookProgress(
     val fileCount: Int,
     /** How many of [fileCount] files have a measured duration. */
     val measuredCount: Int,
+    /**
+     * How many files are still WAITING to be measured — no duration, and no attempt written off.
+     *
+     * The difference between this and `fileCount - measuredCount` is the whole point: a file that
+     * has been probed and proven unreadable is neither measured nor pending. It is never going to
+     * produce a number, and a book must not be held in "unmeasured" for ever because of it.
+     */
+    val pendingCount: Int,
 ) {
     /**
      * Real listening progress — past the very start of the first chapter. Deliberately derived
@@ -29,11 +37,26 @@ data class BookProgress(
     val started: Boolean get() = positionMs > 0L || chapterIndex > 0
 
     /**
-     * True only when every file has a measured duration, so a whole-book total, percentage and
-     * time-left are trustworthy. A partial measurement makes elapsed exceed the (also partial)
-     * total, which otherwise reads as "finished".
+     * True when nothing is left to measure, so a whole-book total, percentage and time-left are as
+     * good as they are going to get.
+     *
+     * It used to read `measuredCount == fileCount`, and the reasoning behind that still holds for
+     * the case it was written for: a book measured half way makes elapsed exceed the (also partial)
+     * total, which reads as "finished" and hides it. But it held a book hostage to a file that
+     * could never be measured at all — one unreadable chapter in twenty-two, and the book showed no
+     * length and no time left for ever, with nothing on screen to say why.
+     *
+     * So the test is "is anything still coming", not "did everything arrive". A file only leaves
+     * [pendingCount] once the probe gave an answer it could TRUST — the file was on the device, or
+     * the device was still online — so a dropped connection still counts as pending and the book
+     * measures properly later. See `DurationEnricher.markDurationAttempted`.
+     *
+     * **The honest cost:** a book carrying a written-off file reports a total short by that file's
+     * length, so its time-left runs a little fast and it may read as finished slightly early. That
+     * is a small, bounded error that corrects itself the moment the file is fixed — against a book
+     * that says nothing at all, for ever.
      */
-    val fullyMeasured: Boolean get() = fileCount > 0 && measuredCount == fileCount
+    val fullyMeasured: Boolean get() = fileCount > 0 && measuredCount > 0 && pendingCount == 0
 }
 
 @Dao
@@ -81,7 +104,10 @@ interface PlaybackStateDao {
                ), 0) AS elapsedMs,
                (SELECT COUNT(*) FROM audio_files af WHERE af.bookId = ps.bookId) AS fileCount,
                (SELECT COUNT(*) FROM audio_files af
-                WHERE af.bookId = ps.bookId AND af.durationMs IS NOT NULL) AS measuredCount
+                WHERE af.bookId = ps.bookId AND af.durationMs IS NOT NULL) AS measuredCount,
+               (SELECT COUNT(*) FROM audio_files af
+                WHERE af.bookId = ps.bookId
+                  AND af.durationMs IS NULL AND af.durationAttempted = 0) AS pendingCount
         FROM playback_state ps
         """,
     )

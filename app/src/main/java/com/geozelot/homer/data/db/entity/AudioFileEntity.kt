@@ -39,3 +39,38 @@ data class AudioFileEntity(
      */
     val durationAttempted: Boolean = false,
 )
+
+/**
+ * The whole-book length these files support, or null while anything is still coming.
+ *
+ * ## Why it is not simply the sum
+ *
+ * A PARTIAL sum under-reports the book, so whole-book elapsed exceeds it and the book reads as
+ * "finished" — which is what once silently emptied the Currently-listening shelf. So nothing is
+ * reported until the measuring has stopped.
+ *
+ * ## Why "stopped" is not "every file measured"
+ *
+ * A file that has been probed and proven unreadable — an unsupported container, a damaged rip —
+ * will never yield a number. Holding the book until it does means one bad chapter in twenty-two
+ * leaves the whole book with no length and no time left, for ever, with nothing on screen saying
+ * why. [AudioFileEntity.durationAttempted] is only set on an answer the probe could TRUST (the file
+ * was on the device, or the device was still online), so a dropped connection still counts as
+ * pending and the book measures properly later.
+ *
+ * The total then runs short by the written-off file's length: time-left is a little fast and the
+ * book may read as finished slightly early. Bounded, self-correcting the moment the file is fixed,
+ * and far better than a book that says nothing at all.
+ *
+ * ## One function, three callers
+ *
+ * `LibraryScanner.planWrites` and `DurationEnricher` both decide this, and `BookProgress`
+ * .fullyMeasured asks the same question in SQL. The first two used to carry the rule as their own
+ * expression and had to be changed in step — exactly the duplication that drifts.
+ */
+fun bookTotalDurationMs(files: List<AudioFileEntity>): Long? {
+    if (files.isEmpty()) return null
+    if (files.any { it.durationMs == null && !it.durationAttempted }) return null
+    val measured = files.mapNotNull { it.durationMs }
+    return measured.sum().takeIf { measured.isNotEmpty() }
+}
