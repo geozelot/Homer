@@ -370,7 +370,11 @@ class LibraryScanner @Inject constructor(
         Log.i(
             TAG,
             "crawl of '$root': $directoriesVisited dir(s) listed, ${skippedRoots.size} subtree(s) " +
-                "unchanged and skipped, ${audioFolders.size} with audio, complete=$complete",
+                "unchanged and skipped, ${audioFolders.size} with audio, " +
+                // Counted here for the same reason the audio folders are: without it there is no
+                // way to tell "this library has no PDFs" from "discovery found none", and those
+                // two need different things done about them.
+                "${folderDocuments.size} with a document, complete=$complete",
         )
 
         return Result(bookDao.count(), complete = complete)

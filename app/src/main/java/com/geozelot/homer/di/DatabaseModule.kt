@@ -42,13 +42,31 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
  * Adds the supplementary PDFs a book carries.
  *
  * One nullable column, no default, so every existing row reads as "no documents" and shows no
- * booklet button — which is also exactly what it showed before. The paths themselves are filled in
- * by the next crawl; nothing here has to go and find them, and a library that is never rescanned
- * simply keeps behaving as it did.
+ * booklet button — which is also exactly what it showed before.
+ *
+ * ## …and why the crawl ETags go with it
+ *
+ * The column is derived from the FOLDER TREE, and nothing else can fill it. An incremental scan
+ * skips every subtree whose ETag is unchanged — which, on a library nobody has touched, is all of
+ * them — so the books already in the index would never be rewritten and would carry a null column
+ * for ever. On a real device that is 171 of 177 books showing no booklet no matter what sits beside
+ * them, which does not read as "the scan has not got there yet". It reads as the feature not
+ * working.
+ *
+ * Dropping the stored ETags makes the next ordinary scan list everything once. It costs one full
+ * crawl, on the first launch after the update, and nothing after that.
+ *
+ * **It is safe, and not for a small reason.** That pass is still an INCREMENTAL scan, so
+ * `sweepOrphans` stays false and nothing a user typed can be deleted by it; a crawl that fails or
+ * is cancelled part-way throws before `applyScan` is reached, so there is no partial pass to prune
+ * against; and `planWrites` carries covers, genres, languages, chapter tiers, collection indices
+ * and measured durations across a re-detect. This is exactly what the full refresh in Upkeep
+ * already does, asked for once on the app's behalf rather than on the user's.
  */
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE books ADD COLUMN documentFilePaths TEXT")
+        connection.execSQL("DELETE FROM crawl_dirs")
     }
 }
 
