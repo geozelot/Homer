@@ -70,6 +70,24 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * Changes no schema, and exists anyway.
+ *
+ * [MIGRATION_2_3] shipped in `2.2.0-BETA.106` WITHOUT the ETag drop below it, so a device that
+ * already installed that beta sits at version 3 with the fix applied to nobody: Room does not
+ * re-run a migration for a database that has already passed it. That device would keep a null
+ * document column on every book until somebody happened to run a full refresh by hand — which is
+ * precisely the failure the drop was added to prevent, surviving the fix for it.
+ *
+ * So the step is repeated as its own version. A device coming from 2 runs both and drops the ETags
+ * twice, which costs nothing: the second delete finds an empty table.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("DELETE FROM crawl_dirs")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -82,7 +100,7 @@ object DatabaseModule {
             // were deleted with the rest of the v1 path, because 1.x was withdrawn when 2.0 landed.
             // From 2.0.0 onwards every step carries a real migration — the released version is
             // somebody's actual library now, and losing it is not a thing a version bump may do.
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .apply {
                 // Destructive fallback for a MISSING FORWARD MIGRATION stays a DEBUG-ONLY
                 // convenience. In a release build that case must fail loudly instead of silently

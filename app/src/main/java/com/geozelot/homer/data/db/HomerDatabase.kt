@@ -34,10 +34,11 @@ import com.geozelot.homer.data.db.entity.PlaybackStateEntity
         ChapterEntity::class,
     ],
     // 1 was 2.0.0's baseline (the 1.x schema history was deleted with the rest of the v1 path).
-    // 2 adds collections, 3 the supplementary-document paths. Every version from here carries a
-    // real Migration in DatabaseModule — 2.0.0 is released, so a destructive fallback would now be
-    // somebody's actual library.
-    version = 3,
+    // 2 adds collections, 3 the supplementary-document paths, 4 nothing at all — it exists so the
+    // ETag drop that 3 should have carried also reaches a device that already ran 3. Every version
+    // from here carries a real Migration in DatabaseModule — 2.0.0 is released, so a destructive
+    // fallback would now be somebody's actual library.
+    version = 4,
     // Export the schema (to app/schemas/) so migrations have a committed record and can be
     // verified with Room's MigrationTestHelper. See app/build.gradle.kts room.schemaLocation.
     exportSchema = true,
