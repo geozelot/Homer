@@ -664,6 +664,9 @@ private fun InlineSearchField(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .size(width = LeadingActionWidth, height = if (enclosed) ControlPillHeight else ControlTapHeight)
+                // Clipped before the tap, so the press is a rounded patch inside a rounded field
+                // rather than a hard-cornered rectangle in the corner of one.
+                .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
@@ -681,6 +684,7 @@ private fun InlineSearchField(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .size(width = TrailingActionWidth, height = if (enclosed) ControlPillHeight else ControlTapHeight)
+                    .clip(RoundedCornerShape(8.dp))
                     .clickable { onQueryChange("") },
                 contentAlignment = Alignment.Center,
             ) {
@@ -731,10 +735,14 @@ internal fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit, mod
         listOf(asCollection, asSeries),
         TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal),
     )
+    val interaction = rememberTapInteraction()
     Box(
         modifier = modifier
             .sizeIn(minHeight = ControlTapHeight, minWidth = 44.dp)
-            .clickable { onChange(!flat) },
+            // The target takes the tap and shows nothing; the pill shows the press. Without the
+            // split the ripple filled the whole 48dp target around a 26dp pill, which reads as
+            // having missed the control and hit the header behind it. See TapFeedback.kt.
+            .tapTarget(interaction) { onChange(!flat) },
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -743,6 +751,7 @@ internal fun CollectionOrderChip(flat: Boolean, onChange: (Boolean) -> Unit, mod
                 .clip(RoundedCornerShape(8.dp))
                 .background(Surface1)
                 .border(1.dp, Line, RoundedCornerShape(8.dp))
+                .pressFeedback(interaction)
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),

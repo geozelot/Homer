@@ -32,6 +32,9 @@ import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.data.library.authorsFromInput
 import com.geozelot.homer.ui.components.HomerIcons
+import com.geozelot.homer.ui.components.pressFeedback
+import com.geozelot.homer.ui.components.rememberTapInteraction
+import com.geozelot.homer.ui.components.tapTarget
 import com.geozelot.homer.ui.home.FilterFacet
 import com.geozelot.homer.ui.home.FilterToken
 import com.geozelot.homer.ui.theme.Faint
@@ -48,16 +51,18 @@ import com.geozelot.homer.ui.theme.Surface2
 internal fun ChapterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     // The tap area is expanded to the 48dp minimum around the pill rather than by inflating the
     // pill itself, so the visual stays the compact chip the layout was designed around.
+    val interaction = rememberTapInteraction()
     Box(
         modifier = modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .clickable(onClick = onClick),
+            .tapTarget(interaction, onClick),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
                 .background(Surface2)
+                .pressFeedback(interaction)
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),

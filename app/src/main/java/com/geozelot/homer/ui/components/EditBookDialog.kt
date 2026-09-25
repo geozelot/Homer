@@ -47,16 +47,20 @@ import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.components.pressFeedback
+import com.geozelot.homer.ui.components.rememberTapInteraction
+import com.geozelot.homer.ui.components.tapTarget
 import com.geozelot.homer.ui.theme.Surface2
 
 /** A small selectable chip for the tri-state "on play" mode in the edit dialog. */
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     // The pill stays compact; the tap area around it is raised to the 48dp minimum.
+    val interaction = rememberTapInteraction()
     Box(
         modifier = Modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .clickable(onClick = onClick),
+            .tapTarget(interaction, onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -67,6 +71,7 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
                 .clip(RoundedCornerShape(50))
                 .border(1.dp, if (selected) Amber else Line, RoundedCornerShape(50))
                 .background(if (selected) AmberSoft else Surface2)
+                .pressFeedback(interaction)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
