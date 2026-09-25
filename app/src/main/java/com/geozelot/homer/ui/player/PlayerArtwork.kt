@@ -87,32 +87,48 @@ internal fun PlayerArtwork(
         // over, so a cover insisting on a minimum would push the transport off the screen to keep
         // itself large. Small is a cost the artwork can bear; missing controls are not.
         val coverWidth = minOf(maxWidth * 0.82f, maxHeight)
-        CoverImage(
-            model = model,
-            modifier = Modifier
-                .width(coverWidth)
-                .aspectRatio(1f)
-                .shadow(
-                    elevation = 30.dp,
-                    shape = RoundedCornerShape(14.dp),
-                    ambientColor = Amber,
-                    spotColor = AmberDeep,
-                )
-                .clip(RoundedCornerShape(14.dp)),
-        )
-        SleepCountdown(sleepRemainingMs, Modifier.align(Alignment.BottomCenter))
-        DocumentsPill(
-            documents = documents,
-            onOpen = onOpenDocument,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                // Inset by the cover's own margin, so the pill sits ON the artwork rather than
-                // beside it — `coverWidth` is 82% of the slot, and the pill has to come in by the
-                // half that is left plus a little.
-                // The 48dp target starts at the cover's top edge and centres the pill inside it,
-                // so no top padding of its own.
-                .padding(end = (maxWidth - coverWidth) / 2 + 10.dp),
-        )
+        // ── A box that IS the cover, and everything drawn on the cover inside it ─────────
+        //
+        // The slot this composable is given is LEFTOVER space: the Column above hands the artwork
+        // whatever the top bar and the control cluster did not take. Its height is therefore
+        // different on every device, and anything positioned against the SLOT drifts away from the
+        // cover by however much slack that device happened to leave — half above, half below.
+        //
+        // Both overlays were doing exactly that, and both were wrong in a way that only showed up
+        // on somebody else's screen: the countdown aligned to the slot's bottom edge, the pill to
+        // its top-right, each drifting clear of the artwork once the slot was taller than the
+        // square cover. The arithmetic that compensated only ever covered one axis.
+        //
+        // A box the size of the cover makes "on the cover" true by construction rather than by a
+        // calculation that has to be got right twice.
+        Box(
+            modifier = Modifier.width(coverWidth).aspectRatio(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            CoverImage(
+                model = model,
+                modifier = Modifier
+                    .matchParentSize()
+                    .shadow(
+                        elevation = 30.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = Amber,
+                        spotColor = AmberDeep,
+                    )
+                    .clip(RoundedCornerShape(14.dp)),
+            )
+            // Dead centre of the artwork, both axes — the one place on a square that is the same
+            // place on every screen.
+            SleepCountdown(sleepRemainingMs)
+            DocumentsPill(
+                documents = documents,
+                onOpen = onOpenDocument,
+                // The cover's bottom-right corner. Its 48dp target reaches the bottom edge and
+                // centres the 26dp pill inside itself, which is what sets the inset there; the
+                // 10dp is the one on the right.
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp),
+            )
+        }
     }
 }
 
@@ -200,6 +216,10 @@ private fun DocumentsPill(
  * because a number floating over the artwork reads as temporary — which it is. Seconds here,
  * minutes in the notification: redrawing THIS costs nothing.
  *
+ * Centred on the artwork, both axes. It sat at the bottom edge of the artwork SLOT, which is
+ * leftover space and so a different distance from the cover on every device — on a tall slot it
+ * floated below the picture entirely.
+ *
  * A composable of its own so that stays true. The remaining time changes every second; read in
  * [PlayerArtwork]'s body it would recompose the cover with it, and read a level further up it would
  * recompose the entire player once a second for as long as a timer runs. Here, a pill redraws.
@@ -209,7 +229,6 @@ private fun SleepCountdown(remainingMs: () -> Long?, modifier: Modifier = Modifi
     remainingMs()?.let { remaining ->
         Row(
             modifier = modifier
-                .padding(bottom = 14.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Studio.copy(alpha = 0.82f))
                 .padding(horizontal = 12.dp, vertical = 5.dp),

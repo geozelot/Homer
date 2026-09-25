@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.player
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -305,6 +307,23 @@ fun PlayerScreen(
         val viewportHeight = maxHeight
         val viewportWidth = maxWidth
         val scale = playerScale(viewportHeight, viewportWidth)
+        // What this screen decided, and the numbers it decided from.
+        //
+        // The library already logs its window for this reason, and the reason is the same here: a
+        // report that the transport "looks huge" or that something sits off the cover can only say
+        // what it looked like, and the numbers behind it had to be guessed at. `scale` is the one
+        // that matters — everything below the cover is drawn at it — and it is a step function of
+        // the viewport in DP, which is exactly what a reader changes when they change the system
+        // display size. One line makes the next report a fact.
+        val playerConfig = LocalConfiguration.current
+        LaunchedEffect(viewportWidth, viewportHeight, scale) {
+            Log.i(
+                TAG_PLAYER_UI,
+                "player viewport=${viewportWidth.value.toInt()}x${viewportHeight.value.toInt()}dp " +
+                    "sw=${playerConfig.smallestScreenWidthDp}dp fontScale=${playerConfig.fontScale} " +
+                    "scale=$scale stacked=${viewportHeight >= SIDE_BY_SIDE_BELOW}",
+            )
+        }
         if (viewportHeight < SIDE_BY_SIDE_BELOW) {
             // Short viewport (landscape, split screen): stacking cannot work here — the control
             // cluster is fixed-height, so it takes what it needs and a weighted cover above it
@@ -461,6 +480,9 @@ fun PlayerScreen(
 }
 
 // ── Scale ────────────────────────────────────────────────────────────────────
+
+/** Log tag for what the player's viewport is and what it drew at. Mirrors the library's `HomerUI`. */
+private const val TAG_PLAYER_UI = "HomerUI"
 
 /** Below this viewport height the cover and the control cluster sit side by side, not stacked. */
 private val SIDE_BY_SIDE_BELOW = 520.dp
