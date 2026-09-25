@@ -169,7 +169,8 @@ class BookDetector @Inject constructor() {
             id = relToRoot,
             contentHash = contentHash(fileEntities),
             // Free: the crawl already holds every name this looks at, so a library nobody has
-            // tagged still gets a language out of "Kapitel 03.mp3". A tag read later wins over it.
+            // tagged still gets a language out of "Kapitel 03.mp3". It is a real answer, so the
+            // tag is only read for a book where this found nothing — see `DurationEnricher`.
             language = BookLanguage.fromNames(
                 folderName = relToRoot.substringAfterLast('/'),
                 fileNames = fileEntities.map { it.fileName },

@@ -85,6 +85,7 @@ object FacetMerge {
         val older = if (newer === l) r else l
         return DerivedBook(
             genre = pick(l.genre, r.genre, newer.genre),
+            language = pick(l.language, r.language, newer.language),
             totalDurationMs = pick(l.totalDurationMs, r.totalDurationMs, newer.totalDurationMs),
             // A fact about the server, not about either device: if one of them uploaded the art,
             // it is in the shared cache for everyone.

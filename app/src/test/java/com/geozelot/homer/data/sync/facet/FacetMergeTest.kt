@@ -182,6 +182,55 @@ class FacetMergeTest {
     }
 
     @Test
+    fun `a language survives the merge like a genre does`() {
+        val merged = FacetMerge.derived(
+            derived("a" to DerivedBook(language = "de", updatedAt = 100)),
+            derived("a" to DerivedBook(fileDurationsMs = mapOf("f1" to 1), updatedAt = 900)),
+        )
+        assertEquals("de", merged.books.getValue("a").language)
+    }
+
+    /**
+     * Every field set, so merging it with an empty entry must hand every one of them back.
+     *
+     * `mergeDerivedBook` builds its result field by field, and a field it does not name silently
+     * takes its default. `language` shipped that way in 2.0.0: every merged facet dropped it, and no
+     * device ever received a language through the shared index.
+     */
+    private val full = DerivedBook(
+        genre = "Fantasy",
+        language = "de",
+        totalDurationMs = 9_000,
+        hasCachedCover = true,
+        chapterTier = "EMBEDDED",
+        chapters = listOf(DerivedChapter(0, "One")),
+        fileDurationsMs = mapOf("f1" to 1000),
+        updatedAt = 100,
+    )
+
+    @Test
+    fun `no derived field is lost merging against an empty entry, from either side`() {
+        val empty = DerivedBook(updatedAt = 200)
+        for ((l, r) in listOf(full to empty, empty to full)) {
+            val merged = FacetMerge.derived(derived("a" to l), derived("a" to r)).books.getValue("a")
+            assertEquals(full.copy(updatedAt = 200), merged)
+        }
+    }
+
+    @Test
+    fun `the full entry above sets every DerivedBook field`() {
+        // Without this, a new field left at its default in `full` passes the test above while the
+        // merge drops it — exactly how `language` went unnoticed.
+        val defaults = DerivedBook()
+        val unset = DerivedBook::class.java.declaredFields
+            .filterNot { it.isSynthetic || java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            .onEach { it.isAccessible = true }
+            .filter { it.get(full) == it.get(defaults) }
+            .map { it.name }
+        assertTrue("set these in `full`: $unset", unset.isEmpty())
+    }
+
+    @Test
     fun `an established absence of chapters is still an answer`() {
         val merged = FacetMerge.derived(
             derived("a" to DerivedBook(chapterTier = null, updatedAt = 100)),
