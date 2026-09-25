@@ -25,6 +25,25 @@ class DownloadStorage @Inject constructor(
     suspend fun uri(relativePath: String): Uri? = storageLocation.area().uri(path(relativePath))
 
     /**
+     * A presence test bound to ONE resolved area, for asking the question many times over.
+     *
+     * [uri] resolves the area on every call, which is right for a one-off and ruinous for a sweep.
+     * Resolving reads two settings and builds a fresh [com.geozelot.homer.data.storage.StorageArea]
+     * — and a SAF area's whole path cache lives on that instance, so a per-call area throws the
+     * cache away before it can ever be used. Adopting downloads probed the first file of every book
+     * in the library that way: a new area, two settings reads and a walk from the tree root, per
+     * book. On a 337-book library that measured THIRTEEN SECONDS on every app open.
+     *
+     * One area for the batch, so `downloads/` and each author folder are resolved once between them.
+     * Returned rather than taking a block so the caller's loop stays readable; hold it no longer
+     * than the sweep, because a cached path is only as true as the folder was when it was cached.
+     */
+    suspend fun presenceProbe(): suspend (String) -> Boolean {
+        val area = storageLocation.area()
+        return { relativePath -> area.uri(path(relativePath)) != null }
+    }
+
+    /**
      * Removes every downloaded file, by deleting the whole area.
      *
      * The blunt version on purpose. Reclaiming only the files that no book points at would need a

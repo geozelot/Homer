@@ -18,6 +18,10 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE bookId = :bookId")
     suspend fun findByBookId(bookId: String): DownloadEntity?
 
+    /** Every book with a download on record — what [observeAll] says, asked once. */
+    @Query("SELECT bookId FROM downloads")
+    suspend fun recordedBookIds(): List<String>
+
     @Upsert
     suspend fun upsert(download: DownloadEntity)
 

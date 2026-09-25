@@ -31,6 +31,21 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
     /** rel (POSIX dir path) → its resolved document Uri, to avoid re-walking within one instance. */
     private val dirCache = HashMap<String, Uri>()
 
+    /**
+     * Directories this instance has looked for and not found.
+     *
+     * An ABSENCE is an answer too, and it was the one being thrown away. Adopting downloads asks
+     * whether the first file of every book in the library is present; almost all of them are not,
+     * and each miss re-listed `downloads/` looking for an author folder that had already been shown
+     * not to be there. Remembering the misses turns a library's worth of identical questions into
+     * one per author.
+     *
+     * Only consulted for a READ. A create walks the real tree, because the point of creating is
+     * that the answer is about to change — and it drops the entry on the way, so nothing afterwards
+     * is told the folder is missing.
+     */
+    private val absentDirs = HashSet<String>()
+
     /** The child document named [name] directly under [parent], or null if absent. */
     private fun findChild(parent: Uri, name: String): Uri? {
         val parentDocId = DocumentsContract.getDocumentId(parent)
@@ -58,25 +73,41 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
     private fun resolveDir(rel: String, create: Boolean): Uri? {
         if (rel.isEmpty()) return rootUri
         dirCache[rel]?.let { return it }
+        if (!create && rel in absentDirs) return null
         val segs = rel.split('/').filter { it.isNotEmpty() }
         var current = rootUri
         val built = StringBuilder()
         for (seg in segs) {
+            if (built.isNotEmpty()) built.append('/')
+            built.append(seg)
+            val here = built.toString()
+            // Cache keys are the RAW path, so callers go on addressing by the original rel.
+            val cached = dirCache[here]
+            if (cached != null) {
+                current = cached
+                continue
+            }
+            // A level already shown to be missing makes everything under it missing, with no
+            // question to ask the provider.
+            if (!create && here in absentDirs) return null
             // Address the provider by a volume-legal name (same mapping as FileStorageArea), so a
             // FUSE/vfat-backed tree that rewrites illegal chars doesn't leave a file we can't find
-            // again. Cache keys stay the raw path so callers keep addressing by the original rel.
+            // again.
             val safe = safeStorageSegment(seg)
             var child = findChild(current, safe)
             if (child == null) {
-                if (!create) return null
+                if (!create) {
+                    absentDirs += here
+                    return null
+                }
                 child = DocumentsContract.createDocument(
                     resolver, current, DocumentsContract.Document.MIME_TYPE_DIR, safe,
                 ) ?: throw IOException("SAF: could not create directory $seg (in $rel)")
             }
             current = child
-            if (built.isNotEmpty()) built.append('/')
-            built.append(seg)
-            dirCache[built.toString()] = current
+            dirCache[here] = current
+            // It exists now, whatever this instance believed a moment ago.
+            absentDirs -= here
         }
         return current
     }

@@ -81,12 +81,18 @@ class LocalMirror @Inject constructor(
     suspend fun adoptDownloads() {
         val now = System.currentTimeMillis()
         var adopted = 0
+        // One resolved area for the whole sweep. Asking [DownloadStorage.uri] per file resolved a
+        // fresh one every time, which threw away the SAF path cache before it could be used — see
+        // [DownloadStorage.presenceProbe].
+        val present = downloadStorage.presenceProbe()
+        // What is on record, so the no-op case can be told from a real one below.
+        val recorded = downloadDao.recordedBookIds().toHashSet()
         for (book in bookDao.getAll()) {
             val files = audioFileDao.findForBook(book.id)
             // The worker downloads sequentially and resumes from downloadedFiles, so "downloaded"
             // means a contiguous leading run of present files.
             var prefix = 0
-            while (prefix < files.size && downloadStorage.uri(files[prefix].relativePath) != null) prefix++
+            while (prefix < files.size && present(files[prefix].relativePath)) prefix++
             when {
                 files.isNotEmpty() && prefix == files.size -> {
                     downloadDao.upsert(DownloadEntity(book.id, DownloadStatus.DONE, files.size, files.size, now))
@@ -95,7 +101,11 @@ class LocalMirror @Inject constructor(
                 prefix > 0 -> {
                     downloadDao.upsert(DownloadEntity(book.id, DownloadStatus.PAUSED, prefix, files.size, now))
                 }
-                else -> downloadDao.delete(book.id)
+                // Only where there is something to remove. This ran for every book in the library
+                // that was not downloaded — on a 337-book library with three downloads, 334 DELETEs
+                // against rows that were never there, every one of them invalidating the table the
+                // library list observes, while that list was being drawn.
+                book.id in recorded -> downloadDao.delete(book.id)
             }
         }
         Log.i(TAG, "adopted $adopted downloaded book(s) from the storage folder")
