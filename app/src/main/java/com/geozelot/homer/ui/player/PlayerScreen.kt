@@ -180,13 +180,11 @@ fun PlayerScreen(
             offline = offline,
             downloading = DownloadStatus.isActive(download?.status),
             canShowDetails = details != null,
-            documents = details?.documents.orEmpty(),
             onBack = onBack,
             onMarkCompleted = viewModel::markCompleted,
             onToggleOffline = { if (offline) viewModel.deleteDownload() else viewModel.download() },
             onDetails = { showDetails = true },
             onBookmarks = { showBookmarksDialog = true },
-            onOpenDocument = onOpenDocument,
             onHelp = { showHelp = true },
         )
     }
@@ -195,6 +193,8 @@ fun PlayerScreen(
             // Live cover (updates on refresh/extraction) → play-time snapshot → embedded art.
             model = cover ?: state.coverModel ?: state.artworkData?.bytes,
             sleepRemainingMs = { stateHolder.value.sleepRemainingMs },
+            documents = details?.documents.orEmpty(),
+            onOpenDocument = onOpenDocument,
             onCollapse = onBack,
             modifier = slotModifier,
         )

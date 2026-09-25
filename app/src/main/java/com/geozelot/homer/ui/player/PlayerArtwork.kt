@@ -1,6 +1,16 @@
 package com.geozelot.homer.ui.player
 
 import androidx.compose.foundation.background
+import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.data.library.documentLabels
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -8,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.CoverImage
+import com.geozelot.homer.ui.components.pressFeedback
+import com.geozelot.homer.ui.components.rememberTapInteraction
+import com.geozelot.homer.ui.components.tapTarget
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.AmberDeep
 import com.geozelot.homer.ui.theme.Studio
@@ -42,6 +56,9 @@ internal fun PlayerArtwork(
      * ONLY, because it changes every second and this composable holds the cover.
      */
     sleepRemainingMs: () -> Long?,
+    /** The book's supplementary PDFs; empty for almost every book, and then no pill is drawn. */
+    documents: List<String>,
+    onOpenDocument: (String) -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -84,6 +101,90 @@ internal fun PlayerArtwork(
                 .clip(RoundedCornerShape(14.dp)),
         )
         SleepCountdown(sleepRemainingMs, Modifier.align(Alignment.BottomCenter))
+        DocumentsPill(
+            documents = documents,
+            onOpen = onOpenDocument,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                // Inset by the cover's own margin, so the pill sits ON the artwork rather than
+                // beside it — `coverWidth` is 82% of the slot, and the pill has to come in by the
+                // half that is left plus a little.
+                // The 48dp target starts at the cover's top edge and centres the pill inside it,
+                // so no top padding of its own.
+                .padding(end = (maxWidth - coverWidth) / 2 + 10.dp),
+        )
+    }
+}
+
+/**
+ * The booklet, on the cover.
+ *
+ * Shaped like the chapter pill under the title, because it does the same KIND of thing: it names a
+ * list and opens it. Drawn like the sleep countdown rather than like that pill, because it sits on
+ * artwork rather than on the ground — a translucent plate over a picture, where [Surface2] over a
+ * photograph would read as a hole cut in it.
+ *
+ * On the cover, and not in the top bar where it started, for the reason the countdown is there: the
+ * cover is the one region of this screen with room to spare, and a booklet is about the BOOK — the
+ * thing the artwork is — rather than about this listening. Only drawn for a book that has one.
+ *
+ * One document opens straight away; several open the list, because choosing between a libretto and
+ * a score is a question the pill cannot answer.
+ */
+@Composable
+private fun DocumentsPill(
+    documents: List<String>,
+    onOpen: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (documents.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    val interaction = rememberTapInteraction()
+    // A 26dp pill inside a 48dp-tall target, and the press shown on the pill rather than on the
+    // box around it — the split `TapFeedback.kt` states, which every small control in Homer makes.
+    Box(
+        modifier = modifier
+            .sizeIn(minHeight = 48.dp)
+            .tapTarget(interaction) {
+                if (documents.size == 1) onOpen(documents.first()) else open = true
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Studio.copy(alpha = 0.82f))
+                .pressFeedback(interaction)
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.MenuBook,
+                contentDescription = null,
+                tint = Parchment,
+                modifier = Modifier.size(13.dp),
+            )
+            Text(
+                stringResource(R.string.player_documents),
+                color = Parchment,
+                fontSize = 11.5.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            val labels = documentLabels(documents)
+            documents.forEachIndexed { index, path ->
+                DropdownMenuItem(
+                    text = { Text(labels[index]) },
+                    onClick = {
+                        open = false
+                        onOpen(path)
+                    },
+                )
+            }
+        }
     }
 }
 

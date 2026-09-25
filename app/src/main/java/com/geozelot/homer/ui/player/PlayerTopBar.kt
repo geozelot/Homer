@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.geozelot.homer.R
-import com.geozelot.homer.data.library.documentLabels
 import com.geozelot.homer.ui.components.HomerSwitch
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Muted
@@ -42,14 +40,11 @@ internal fun PlayerTopBar(
     offline: Boolean,
     downloading: Boolean,
     canShowDetails: Boolean,
-    /** The book's supplementary PDFs; empty for almost every book, and then there is no button. */
-    documents: List<String>,
     onBack: () -> Unit,
     onMarkCompleted: () -> Unit,
     onToggleOffline: () -> Unit,
     onDetails: () -> Unit,
     onBookmarks: () -> Unit,
-    onOpenDocument: (String) -> Unit,
     onHelp: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
@@ -65,51 +60,6 @@ internal fun PlayerTopBar(
         }
         Text(stringResource(R.string.player_now_playing), style = SectionLabel, color = Muted)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // The booklet, on the bar rather than in the overflow.
-            //
-            // It is the one thing here that is CONTENT — something to read, alongside the thing
-            // being listened to — and a book that has one is a book whose reader wants it while
-            // the audio runs, not after two taps through a menu of settings. It also appears only
-            // when there is one, so it is never a dead glyph.
-            //
-            // One document opens straight away; several open a list, because picking between a
-            // libretto and a score is a question and the button cannot answer it.
-            if (documents.isNotEmpty()) {
-                Box {
-                    var documentsOpen by remember { mutableStateOf(false) }
-                    IconButton(
-                        onClick = {
-                            if (documents.size == 1) {
-                                onOpenDocument(documents.first())
-                            } else {
-                                documentsOpen = true
-                            }
-                        },
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.MenuBook,
-                            contentDescription = stringResource(R.string.player_cd_documents),
-                            tint = Muted,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = documentsOpen,
-                        onDismissRequest = { documentsOpen = false },
-                    ) {
-                        MenuHeader(stringResource(R.string.details_documents))
-                        val labels = documentLabels(documents)
-                        documents.forEachIndexed { index, path ->
-                            DropdownMenuItem(
-                                text = { Text(labels[index]) },
-                                onClick = {
-                                    documentsOpen = false
-                                    onOpenDocument(path)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
             // Beside the menu rather than inside it: it explains what is on the screen, which is
             // not the same kind of thing as the actions the menu holds.
             IconButton(onClick = onHelp) {

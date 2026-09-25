@@ -147,7 +147,10 @@
     <string name="home_search_placeholder">Titel, Autor, Genre, Schlagwort…</string>
 
     <!-- Home: library content -->
-    <string name="home_section_listening">Gerade am Hören · %1$d</string>
+    <plurals name="home_section_listening">
+        <item quantity="one">Gerade am Hören · %1$d Buch</item>
+        <item quantity="other">Gerade am Hören · %1$d Bücher</item>
+    </plurals>
     <plurals name="home_section_library">
         <item quantity="one">Bibliothek · %1$d Buch</item>
         <item quantity="other">Bibliothek · %1$d Bücher</item>
@@ -525,7 +528,7 @@
     <string name="reader_page_of">%1$d / %2$d</string>
     <string name="reader_not_here">Dieses Dokument liegt noch nicht auf dem Gerät und konnte nicht geladen werden. Es öffnet sich, sobald die Bibliothek wieder erreichbar ist.</string>
     <string name="reader_unreadable">Homer kann diese Datei nicht lesen. Sie ist womöglich beschädigt oder passwortgeschützt.</string>
-    <string name="player_cd_documents">Beiheft</string>
+    <string name="player_documents">Beiheft</string>
     <plurals name="details_file_count">
         <item quantity="one">%d Datei</item>
         <item quantity="other">%d Dateien</item>

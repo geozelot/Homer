@@ -300,7 +300,7 @@ private fun ToolButton(
  * identically.
  */
 @Composable
-internal fun MenuHeader(text: String) {
+private fun MenuHeader(text: String) {
     Text(
         text,
         style = SectionLabel,
