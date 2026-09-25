@@ -79,6 +79,80 @@ class ScanCarryOverTest {
             files = files.map { it.copy(durationMs = null, durationAttempted = false) },
         )
 
+    // ── Re-reading a file that was written over ───────────────────────────────
+
+    @Test
+    fun `a book re-tagged in place forgets the genre it read from the old tag`() {
+        // The case this exists for. Somebody fixes a book's tags on the server; the file is the
+        // same file at the same path, one byte longer. Carried forward, the stored genre describes
+        // a tag that is no longer there, and the tag read is gated on the book having NO genre —
+        // so nothing ever goes back to look, through any action in the app.
+        val planned = planWrites(
+            detected = listOf(detected("A/One", file("A/One", "01.mp3", sizeBytes = 5000))),
+            existingById = mapOf(
+                "A/One" to book("A/One", genre = "Vocal", metadataAttempted = true, chapterTier = 3),
+            ),
+            filesByBook = mapOf("A/One" to listOf(file("A/One", "01.mp3", sizeBytes = 4096))),
+            movedFrom = emptyMap(),
+        )
+        val written = planned.books.single()
+        assertNull("the genre came from the old tag", written.genre)
+        assertFalse("and the probe has to be allowed to run again", written.metadataAttempted)
+        assertEquals("the chapter tier is re-derived too", 0, written.chapterTier)
+    }
+
+    @Test
+    fun `an untouched book keeps everything read off it`() {
+        // The other half, and the one that must not regress: re-reading the first file of every
+        // book on every scan is the cost the "tried once" flag exists to prevent.
+        val planned = planWrites(
+            detected = listOf(detected("A/One", file("A/One", "01.mp3"))),
+            existingById = mapOf(
+                "A/One" to book("A/One", genre = "Fantasy", metadataAttempted = true, chapterTier = 1),
+            ),
+            filesByBook = mapOf("A/One" to listOf(file("A/One", "01.mp3", durationMs = 1000))),
+            movedFrom = emptyMap(),
+        )
+        val written = planned.books.single()
+        assertEquals("Fantasy", written.genre)
+        assertTrue(written.metadataAttempted)
+        assertEquals(1, written.chapterTier)
+    }
+
+    @Test
+    fun `a moved book is not mistaken for a rewritten one`() {
+        // A renamed folder puts every file at a new path. Matched only by path, the whole book
+        // looks new, and moving a shelf would silently re-probe every book on it.
+        val stored = file("A/One", "01.mp3", durationMs = 1000)
+        val planned = planWrites(
+            detected = listOf(detected("B/One", file("B/One", "01.mp3"))),
+            existingById = mapOf("A/One" to book("A/One", genre = "Fantasy", metadataAttempted = true)),
+            filesByBook = mapOf("A/One" to listOf(stored)),
+            movedFrom = mapOf("B/One" to "A/One"),
+        )
+        val written = planned.books.single()
+        assertEquals("Fantasy", written.genre)
+        assertTrue(written.metadataAttempted)
+    }
+
+    @Test
+    fun `a changed ETag at the same size is a rewrite, and a missing one is not a guess`() {
+        val same = file("A/One", "01.mp3")
+        fun plan(detectedFile: AudioFileEntity) = planWrites(
+            detected = listOf(detected("A/One", detectedFile)),
+            existingById = mapOf("A/One" to book("A/One", genre = "Fantasy", metadataAttempted = true)),
+            filesByBook = mapOf("A/One" to listOf(same)),
+            movedFrom = emptyMap(),
+        ).books.single()
+
+        assertNull("a new ETag on the same bytes still means re-tagged", plan(same.copy(etag = "new")).genre)
+        // A server that publishes no ETag must not have its silence read as a change, or every
+        // scan re-probes the whole library.
+        assertEquals("Fantasy", plan(same.copy(etag = null)).genre)
+        // `lastModified` moves on a copy, a restore, a touch — none of which rewrites a tag.
+        assertEquals("Fantasy", plan(same.copy(lastModified = 9_999)).genre)
+    }
+
     // ── Durations ─────────────────────────────────────────────────────────────
 
     @Test

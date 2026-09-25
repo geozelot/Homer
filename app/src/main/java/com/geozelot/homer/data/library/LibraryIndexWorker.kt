@@ -191,7 +191,7 @@ class LibraryIndexWorker @AssistedInject constructor(
                 // re-arms what was tried and could not be measured, plus the tag read that rides
                 // along with it.
                 if (request.deep) libraryRepository.rearmDurations()
-                val pending = bookDao.idsWithoutDuration()
+                val pending = bookDao.idsWithPendingProbe()
                 Log.i(TAG, "measuring lengths for ${pending.size} book(s)")
                 report(request.pass)
                 var lastMeasureNotifyMs = 0L

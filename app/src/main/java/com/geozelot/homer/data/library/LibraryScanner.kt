@@ -114,6 +114,43 @@ internal data class PlannedWrites(val books: List<BookEntity>, val files: List<A
  *
  * Pure, and separate from [LibraryScanner], so those rules are testable without a database.
  */
+/**
+ * Whether this book's audio is not the bytes the index last saw.
+ *
+ * ## What it is for
+ *
+ * A book's DETECTED metadata — the genre and language read out of a tag, the chapter marks — is a
+ * description of particular bytes. The index copies it forward on every rescan, which is right
+ * while the files are the files it was read from, and wrong the moment they are not: a book
+ * re-tagged in place kept the genre of the tag it used to carry, and nothing in the app ever went
+ * back to look, because the tag read is gated on the book having no genre yet.
+ *
+ * ## What counts as changed, and what deliberately does not
+ *
+ * A different size, a different ETag where BOTH sides have one, or a file that was not there
+ * before. Not `lastModified`: it moves when a file is copied, restored from a backup or touched by
+ * a sync client, none of which changes a tag — and a false positive here re-reads the first file of
+ * every book in the library on every scan, which is the exact cost the "tried once" flag exists to
+ * prevent. A server that publishes no ETags falls back to size alone and simply never false-fires.
+ *
+ * [storedByName] is the moved-book case: a renamed folder puts every file at a new path, and the
+ * old rows match by file NAME. Without it, moving a book would look like replacing all of it.
+ */
+internal fun audioRewritten(
+    detected: List<AudioFileEntity>,
+    storedAtPath: Map<String, AudioFileEntity>,
+    storedByName: Map<String, AudioFileEntity> = emptyMap(),
+): Boolean = detected.any { file ->
+    val previous = storedAtPath[file.relativePath]
+        ?: storedByName[file.fileName]
+        ?: return@any true
+    when {
+        previous.sizeBytes != file.sizeBytes -> true
+        previous.etag != null && file.etag != null -> previous.etag != file.etag
+        else -> false
+    }
+}
+
 internal fun planWrites(
     detected: List<BookDetector.Detected>,
     existingById: Map<String, BookEntity>,
@@ -147,6 +184,8 @@ internal fun planWrites(
         // Recomputed from the current file set, so removing or adding a file stays correct. The
         // rule for what counts as measured enough lives in one place — see [bookTotalDurationMs].
         val total = bookTotalDurationMs(merged)
+        // Are these still the bytes the stored description was read from? See [audioRewritten].
+        val rewritten = audioRewritten(book.files, atPath, byName)
         // A folder cover we can see but haven't cached yet earns a fresh attempt, even if an
         // earlier pass gave up on this book: caching it is one cheap GET, and it's what makes the
         // cover load instantly and work offline instead of being fetched on every display.
@@ -155,14 +194,23 @@ internal fun planWrites(
             localCoverPath = source?.localCoverPath,
             customCoverPath = source?.customCoverPath,
             coverAttempted = if (uncachedFolderCover) false else (source?.coverAttempted ?: false),
-            metadataAttempted = source?.metadataAttempted ?: false,
-            genre = source?.genre,
-            // Carried like genre: an established language is not re-litigated by a rescan. The
-            // names are only consulted for a book that has none — which also means a language
-            // seeded into the shared index, or read from a tag, survives a rename that leaves the
-            // filenames saying something else.
-            language = source?.language ?: book.book.language,
-            chapterTier = source?.chapterTier ?: book.book.chapterTier,
+            // Detected metadata is carried forward only while the audio is unchanged. Re-tag a file
+            // on the server and the stored genre describes a tag that is no longer there — so the
+            // flags are re-armed and the detected values dropped, and the next lengths pass reads
+            // them again. The same argument `collection` already makes below: a fact taken from the
+            // files has to follow the files.
+            //
+            // Nothing a USER typed is touched. Corrections live on `book_overrides` and are applied
+            // over the top of these, so a hand-set genre survives every word of this.
+            metadataAttempted = if (rewritten) false else (source?.metadataAttempted ?: false),
+            genre = if (rewritten) null else source?.genre,
+            // Carried like genre while the bytes hold: an established language is not re-litigated
+            // by a rescan. The names are only consulted for a book that has none — which also means
+            // a language seeded into the shared index, or read from a tag, survives a rename that
+            // leaves the filenames saying something else. Rewritten, it falls back to what this
+            // crawl read out of the names, and a tag read fills it only if they said nothing.
+            language = if (rewritten) book.book.language else (source?.language ?: book.book.language),
+            chapterTier = if (rewritten) book.book.chapterTier else (source?.chapterTier ?: book.book.chapterTier),
             // `collection` is deliberately NOT carried — it comes from the folder, so moving a book
             // out of Discworld/ has to re-parent it. `collectionIndex` is the opposite: nothing in
             // a folder name says a book is Discworld #5, so a rescan that dropped it would quietly

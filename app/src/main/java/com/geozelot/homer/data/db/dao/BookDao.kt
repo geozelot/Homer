@@ -125,13 +125,29 @@ interface BookDao {
     suspend fun idsUnder(path: String, descendants: String): List<String>
 
     /**
-     * Books with no known total length — the work list for a "measure lengths" pass. A book only
-     * gets a total once EVERY one of its files is measured, so this is exactly the set that still
-     * has probing to do (and books whose files all proved unmeasurable are skipped cheaply inside
-     * the enricher, which remembers that).
+     * The work list for a lengths pass: every book that still has something to read off its files.
+     *
+     * TWO kinds of pending, and the second used to be missing. A book with no total has files left
+     * to measure — that much was always here. A book with no detected genre and no settled attempt
+     * has a TAG left to read, and the pass reads tags as well as durations.
+     *
+     * Leaving the second out meant a book whose files were all measured could never have its tags
+     * looked at again, whatever cleared its flags: re-tagged on the server, the crawl re-armed the
+     * probe and the pass that performs it was never given the book. Nothing was broken in either
+     * half; they simply did not meet.
+     *
+     * It costs no extra work on a settled library. A genre found puts a book out of this set, and
+     * so does a probe that came back empty — that is what `metadataAttempted` records — so the set
+     * empties exactly as it did before.
      */
-    @Query("SELECT id FROM books WHERE totalDurationMs IS NULL ORDER BY id")
-    suspend fun idsWithoutDuration(): List<String>
+    @Query(
+        """
+        SELECT id FROM books
+        WHERE totalDurationMs IS NULL OR (genre IS NULL AND metadataAttempted = 0)
+        ORDER BY id
+        """,
+    )
+    suspend fun idsWithPendingProbe(): List<String>
 
     /** How many of those there are, so the settings row can say whether it is worth tapping. */
     @Query("SELECT COUNT(*) FROM books WHERE totalDurationMs IS NULL")
