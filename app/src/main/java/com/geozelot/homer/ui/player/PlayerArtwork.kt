@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.data.library.documentLabels
 import androidx.compose.runtime.setValue
@@ -156,8 +157,8 @@ private fun DocumentsPill(
     if (documents.isEmpty()) return
     var open by remember { mutableStateOf(false) }
     val interaction = rememberTapInteraction()
-    // A 26dp pill inside a 48dp-tall target, and the press shown on the pill rather than on the
-    // box around it — the split `TapFeedback.kt` states, which every small control in Homer makes.
+    // The pill inside a 48dp-tall target, and the press shown on the pill rather than on the box
+    // around it — the split `TapFeedback.kt` states, which every small control in Homer makes.
     Box(
         modifier = modifier
             .sizeIn(minHeight = 48.dp)
@@ -170,22 +171,34 @@ private fun DocumentsPill(
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
                 .background(Studio.copy(alpha = 0.82f))
+                // An amber hairline and an amber mark, and the words left [Parchment].
+                //
+                // This is the only thing on the cover you can PRESS, and it had no way of saying
+                // so: the same plate and the same ink as the countdown beside it, which is a
+                // readout. An outline is already how Homer says "a fact you can press" wherever a
+                // chip is drawn, and the accent is what carries it over artwork, where the library's
+                // muted hairline would vanish.
+                //
+                // Deliberately not a FILLED amber pill: that is what this app uses for a control
+                // that is ON, and this one is an offer — the same argument the player's own series
+                // chip makes about not wearing the accent as a fill.
+                .border(1.dp, AmberDeep, RoundedCornerShape(999.dp))
                 .pressFeedback(interaction)
-                .padding(horizontal = 12.dp, vertical = 5.dp),
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.MenuBook,
                 contentDescription = null,
-                tint = Parchment,
-                modifier = Modifier.size(13.dp),
+                tint = Amber,
+                modifier = Modifier.size(15.dp),
             )
             Text(
                 stringResource(R.string.player_documents),
                 color = Parchment,
-                fontSize = 11.5.sp,
-                lineHeight = 14.sp,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -231,7 +244,9 @@ private fun SleepCountdown(remainingMs: () -> Long?, modifier: Modifier = Modifi
             modifier = modifier
                 .clip(RoundedCornerShape(999.dp))
                 .background(Studio.copy(alpha = 0.82f))
-                .padding(horizontal = 12.dp, vertical = 5.dp),
+                // Same plate and same insets as the booklet pill below it. They are siblings on one
+                // surface, and two different sizes of the same shape reads as an accident.
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -239,14 +254,14 @@ private fun SleepCountdown(remainingMs: () -> Long?, modifier: Modifier = Modifi
                 Icons.Filled.Bedtime,
                 contentDescription = stringResource(R.string.player_sleep),
                 tint = Amber,
-                modifier = Modifier.size(13.dp),
+                modifier = Modifier.size(15.dp),
             )
             Text(
                 formatTime(remaining),
                 // TabularSmall is the app's own "numbers that must not jitter" style, which is
                 // exactly what a countdown is: without it the pill changes width every time a
                 // 1 ticks past.
-                style = TabularSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                style = TabularSmall.copy(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold),
                 color = Amber,
             )
         }
