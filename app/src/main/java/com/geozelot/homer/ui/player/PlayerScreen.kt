@@ -458,7 +458,12 @@ fun PlayerScreen(
         }
     }
 
-    if (showHelp) PlayerHelpCard(onDismiss = { showHelp = false })
+    if (showHelp) {
+        PlayerHelpCard(
+            hasDocuments = details?.documents.orEmpty().isNotEmpty(),
+            onDismiss = { showHelp = false },
+        )
+    }
 
     if (customSpeed) {
         CustomSpeedDialog(

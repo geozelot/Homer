@@ -834,6 +834,9 @@ fun HomeScreen(
         // front of them are the ones worth decoding.
         LibraryHelpCard(
             gridView = gridView,
+            // The setting AND an arrangement that spells an alphabet — the same rule the lane
+            // itself is drawn by, so the card cannot describe one that is not there.
+            lane = fastScroll && laneIsAlphabetical(sortMode, shelfMode),
             shelved = shelfMode != LibraryShelving.ITEM,
             stacked = seriesMode != LibraryDepth.FLAT,
             numbered = seriesMode != LibraryDepth.FLAT,

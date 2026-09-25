@@ -754,7 +754,7 @@
 
     <string name="help_mark_series">A series: books that run in order. The bracket holds one thing.</string>
     <string name="help_mark_collection">A collection: several series, or several books, gathered under one name. A bracket inside a bracket.</string>
-    <string name="help_mark_author">Who wrote it.</string>
+    <string name="help_mark_author">Who wrote it. A book can credit several; the chip shows the first and a count.</string>
     <string name="help_mark_genre">What it is about. A book can carry several; the chip shows the first and a count.</string>
     <string name="help_mark_series_player">The series this book belongs to, and its number in it.</string>
     <string name="help_mark_collection_player">The collection that series sits in.</string>
@@ -767,12 +767,14 @@
     <string name="help_do_chip_filter">Tap any chip to narrow the library to it. Tap a genre chip carrying a count to see the rest.</string>
     <string name="help_do_long_press">Long-press a book for details, bookmarks, and offline.</string>
     <string name="help_do_search">Search filters as you type, and its suggestions become filters you can stack.</string>
+    <string name="help_do_fast_scroll">Tap or drag the letters down the edge to jump. They are whatever the library is sorted by, so sorting by surname files under P for Pratchett.</string>
     <string name="help_do_arrange">Arrange changes what the library is broken into and how it is sorted.</string>
     <string name="help_do_arrange_shelved">Arrange changes the shelving — the headings above are what it is set to.</string>
 
     <string name="help_player_chapters">Tap the chapter pill for the whole list, with each chapter\'s length and where it begins.</string>
     <string name="help_player_settings">Speed, volume and cut-silence sit together in the middle of the bottom row.</string>
-    <string name="help_player_sleep">The sleep timer counts down on the cover, and in a notification of its own if you want one. Shake to carry on once it has run out.</string>
+    <string name="help_player_sleep">A running sleep timer, counting down. It also has a notification of its own if you want one; shake to carry on once it has run out.</string>
+    <string name="help_cover_booklet">A booklet, libretto or map filed beside the book. Tap to read it — swipe for the next page, pinch to zoom.</string>
     <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
     <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
 </resources>

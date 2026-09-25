@@ -721,7 +721,7 @@
 
     <string name="help_mark_series">Eine Serie: Bücher in fester Reihenfolge. Die Klammer hält eines.</string>
     <string name="help_mark_collection">Eine Kollektion: mehrere Serien oder Bücher unter einem Namen. Eine Klammer in einer Klammer.</string>
-    <string name="help_mark_author">Wer es geschrieben hat.</string>
+    <string name="help_mark_author">Wer es geschrieben hat. Ein Buch kann mehrere nennen; der Chip zeigt den ersten und eine Anzahl.</string>
     <string name="help_mark_genre">Worum es geht. Ein Buch kann mehrere haben; der Chip zeigt das erste und eine Anzahl.</string>
     <string name="help_mark_series_player">Die Serie, zu der dieses Buch gehört, und seine Nummer darin.</string>
     <string name="help_mark_collection_player">Die Kollektion, in der diese Serie steht.</string>
@@ -734,12 +734,14 @@
     <string name="help_do_chip_filter">Tippe einen Chip an, um die Bibliothek darauf einzugrenzen. Ein Genre-Chip mit Anzahl zeigt angetippt die übrigen.</string>
     <string name="help_do_long_press">Halte ein Buch gedrückt für Details, Lesezeichen und Offline.</string>
     <string name="help_do_search">Die Suche filtert beim Tippen, und ihre Vorschläge werden zu Filtern, die sich kombinieren lassen.</string>
+    <string name="help_do_fast_scroll">Tippe oder ziehe die Buchstaben am Rand, um zu springen. Sie zeigen, wonach die Bibliothek sortiert ist — nach Nachname steht Pratchett also unter P.</string>
     <string name="help_do_arrange">Anordnen bestimmt, wonach die Bibliothek aufgeteilt und wie sie sortiert wird.</string>
     <string name="help_do_arrange_shelved">Anordnen bestimmt die Regale — die Überschriften oben zeigen, worauf es steht.</string>
 
     <string name="help_player_chapters">Tippe die Kapitel-Pille an für die ganze Liste, mit Länge und Beginn jedes Kapitels.</string>
     <string name="help_player_settings">Tempo, Lautstärke und Stille kürzen stehen zusammen in der Mitte der unteren Reihe.</string>
-    <string name="help_player_sleep">Der Einschlaftimer läuft auf dem Cover, und auf Wunsch in einer eigenen Benachrichtigung. Schütteln setzt fort, wenn er abgelaufen ist.</string>
+    <string name="help_player_sleep">Ein laufender Schlummer-Timer, der herunterzählt. Auf Wunsch auch als eigene Benachrichtigung; schütteln, um nach Ablauf weiterzuhören.</string>
+    <string name="help_cover_booklet">Ein Beiheft, Libretto oder eine Karte neben dem Buch. Zum Lesen tippen — wischen für die nächste Seite, zum Zoomen aufziehen.</string>
     <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest.</string>
     <string name="help_player_swipe">Wische auf dem Cover nach unten, um den Player zu verlassen, ohne ihn zu stoppen.</string>
 </resources>

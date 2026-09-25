@@ -16,6 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -157,6 +160,9 @@ private fun HelpCard(title: String, onDismiss: () -> Unit, body: @Composable () 
  * The library's card, answering for the arrangement actually on screen.
  *
  * @param gridView which view is showing — the two put the same facts in different places.
+ * @param lane whether the fast-scroll lane is available in this arrangement — the setting is on
+ *   AND the order it would spell is an alphabetical one. Asked rather than assumed, because a card
+ *   that describes a lane nobody can see is exactly what the rest of this is written to avoid.
  * @param shelved whether the list is broken into shelves at all.
  * @param stacked whether series and collections are stacked into one item, or spread out flat.
  * @param numbered whether corner numbers are being drawn under the current arrangement.
@@ -164,6 +170,7 @@ private fun HelpCard(title: String, onDismiss: () -> Unit, body: @Composable () 
 @Composable
 fun LibraryHelpCard(
     gridView: Boolean,
+    lane: Boolean,
     shelved: Boolean,
     stacked: Boolean,
     numbered: Boolean,
@@ -216,6 +223,7 @@ fun LibraryHelpCard(
             HelpLine(stringResource(R.string.help_do_chip_filter))
             HelpLine(stringResource(R.string.help_do_long_press))
             HelpLine(stringResource(R.string.help_do_search))
+            if (lane) HelpLine(stringResource(R.string.help_do_fast_scroll))
             HelpLine(
                 stringResource(
                     if (shelved) R.string.help_do_arrange_shelved else R.string.help_do_arrange,
@@ -227,7 +235,11 @@ fun LibraryHelpCard(
 
 /** The player's card. */
 @Composable
-fun PlayerHelpCard(onDismiss: () -> Unit) {
+fun PlayerHelpCard(
+    /** Whether this book has a booklet, so the line is drawn only where there is one to open. */
+    hasDocuments: Boolean,
+    onDismiss: () -> Unit,
+) {
     HelpCard(stringResource(R.string.help_player_title), onDismiss) {
         Text(
             stringResource(R.string.help_player_lead),
@@ -254,10 +266,23 @@ fun PlayerHelpCard(onDismiss: () -> Unit) {
             )
         }
 
+        // Two things are drawn ON the artwork now, and neither is obvious from looking at it: a
+        // countdown that only exists while a timer runs, and a pill that only exists for a book
+        // that has a booklet. The library's card already names what sits on ITS covers; this is
+        // the same section, for the same reason.
+        HelpSection(stringResource(R.string.help_section_covers)) {
+            HelpMark(Icons.Filled.Bedtime, stringResource(R.string.help_player_sleep))
+            if (hasDocuments) {
+                HelpMark(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    stringResource(R.string.help_cover_booklet),
+                )
+            }
+        }
+
         HelpSection(stringResource(R.string.help_section_doing)) {
             HelpLine(stringResource(R.string.help_player_chapters))
             HelpLine(stringResource(R.string.help_player_settings))
-            HelpLine(stringResource(R.string.help_player_sleep))
             HelpLine(stringResource(R.string.help_player_mark))
             HelpLine(stringResource(R.string.help_player_swipe))
         }
