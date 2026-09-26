@@ -611,23 +611,81 @@ class PlaybackConnection @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        controller?.seekTo(positionMs)
+        val c = controller ?: return
+        c.seekTo(positionMs)
+        pushState()
     }
 
-    /** Relative seek within the current chapter by [deltaMs] (negative = back), clamped in range. */
+    /**
+     * Relative seek by [deltaMs] (negative = back), ACROSS chapter boundaries.
+     *
+     * ## It used to stop at the edge of the file it was in
+     *
+     * A multi-file book is one media item per file, and a seek clamped to the current one. Thirty
+     * seconds back, ten seconds into a chapter, went to the chapter's start and stopped — losing
+     * the twenty seconds you were actually reaching for, which are the twenty at the END of the
+     * chapter before. That is not a skip-back; it is a jump-to-top wearing a skip-back's glyph.
+     *
+     * So the leftover travels. The delta is walked chapter by chapter until it fits, and what
+     * remains lands as an offset into the chapter it lands in.
+     *
+     * ## And only as far as it can actually see
+     *
+     * Crossing needs to know how long the neighbouring chapter is. The prepared player knows only
+     * about the one it is in, so the answer comes from the measured durations this class already
+     * holds — the same ones the scrubber falls back to before playback prepares. An UNMEASURED
+     * neighbour stops the walk rather than being guessed at: clamping at this chapter's edge is the
+     * old behaviour and is merely unhelpful, where treating an unknown length as zero would sail
+     * through it to the start of the book.
+     *
+     * ## It pushes the new position itself
+     *
+     * The state is otherwise re-derived on a player event, or by the position loop — and the loop
+     * only ticks while something is PLAYING. So a seek on a book that was opened and not yet
+     * started had nothing to report it: the controller moved and the screen did not, which reads
+     * exactly like a button that does nothing.
+     */
     fun seekBy(deltaMs: Long) {
         val c = controller ?: return
-        val target = (c.currentPosition + deltaMs).coerceAtLeast(0L)
-        val duration = c.duration
-        c.seekTo(if (duration > 0) target.coerceAtMost(duration) else target)
+        val landing = seekTarget(
+            index = c.currentMediaItemIndex,
+            positionMs = c.currentPosition,
+            deltaMs = deltaMs,
+            chapterCount = c.mediaItemCount,
+        ) { chapterDurationAt(c, it) }
+        c.seekTo(landing.index, landing.positionMs)
+        pushState()
+    }
+
+    /**
+     * How long chapter [index] runs.
+     *
+     * The player's own answer for the chapter it is in, because that one is exact once prepared;
+     * the measured value for every other, because a prepared player knows nothing about them and an
+     * unprepared one knows nothing at all. Zero means "not measured", which every caller has to
+     * treat as "cannot cross this".
+     */
+    private fun chapterDurationAt(c: MediaController, index: Int): Long {
+        if (index == c.currentMediaItemIndex) c.duration.takeIf { it > 0 }?.let { return it }
+        return currentDurations[c.getMediaItemAt(index).mediaId] ?: 0L
     }
 
     fun nextChapter() {
-        controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+        controller?.let {
+            if (it.hasNextMediaItem()) {
+                it.seekToNextMediaItem()
+                pushState()
+            }
+        }
     }
 
     fun previousChapter() {
-        controller?.let { if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem() }
+        controller?.let {
+            if (it.hasPreviousMediaItem()) {
+                it.seekToPreviousMediaItem()
+                pushState()
+            }
+        }
     }
 
     /** Sets playback speed and remembers it as the global default. */
