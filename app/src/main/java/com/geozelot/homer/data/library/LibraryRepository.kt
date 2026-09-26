@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.util.Log
 
 /**
  * Library-facing surface for the UI: the observable book list and scan lifecycle.
@@ -66,6 +67,10 @@ class LibraryRepository @Inject constructor(
 
     suspend fun setLibraryRoot(path: String) = librarySettings.setLibraryRoot(path)
 
+    private companion object {
+        const val TAG = "HomerScan"
+    }
+
     /** Runs a scan, updating [scanState]. No-op if a scan is already running. Cover extraction
      *  is driven separately by [LibraryIndexWorker] after the scan completes. */
     suspend fun scan(incremental: Boolean = false) {
@@ -105,6 +110,9 @@ class LibraryRepository @Inject constructor(
             _scanState.value = ScanState.Idle
             throw e
         } catch (e: Exception) {
+            // Logged, not only surfaced. This codebase diagnoses by logcat, and a failed scan was
+            // the one outcome that never reached it: the screen said "failed", the log said nothing.
+            Log.w(TAG, "scan failed", e)
             _scanState.value = ScanState.Error(e.message ?: "Scan failed")
         }
     }

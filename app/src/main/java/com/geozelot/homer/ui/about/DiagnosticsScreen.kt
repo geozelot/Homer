@@ -134,6 +134,10 @@ private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
  */
 private fun redact(raw: String): String = raw
     .replace(Regex("""(/remote\.php/dav/files/)[^/\s]+"""), "$1<account>")
+    // A public share's token IS its credential — it is the Basic-auth username on the WebDAV path,
+    // and the last segment of the link a person pastes. Masked in both places it can appear.
+    .replace(Regex("""(/public\.php/(?:dav|webdav)/files/)[^/\s]+"""), "$1<share>")
+    .replace(Regex("""(/(?:index\.php/)?s/)[A-Za-z0-9]+"""), "$1<share>")
     .replace(Regex("""https?://[^/\s"']+"""), "https://<server>")
 
 private val HOMER_TAGS = listOf(

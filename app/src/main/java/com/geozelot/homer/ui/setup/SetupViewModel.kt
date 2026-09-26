@@ -272,7 +272,9 @@ class SetupViewModel @Inject constructor(
         if (!force && _state.value.candidates.isNotEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(discovering = true) }
-            val found = runCatching { discovery.discover() }.getOrElse { emptyList() }
+            // Not plain runCatching: that catches the CancellationException of leaving this screen
+            // mid-search and hands it back as an ANSWER — "no libraries found" — written into state.
+            val found = runCatchingUnlessCancelled { discovery.discover() }.getOrElse { emptyList() }
             _state.update { current ->
                 current.copy(
                     discovering = false,
