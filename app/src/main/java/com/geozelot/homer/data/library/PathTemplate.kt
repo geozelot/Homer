@@ -20,8 +20,32 @@ package com.geozelot.homer.data.library
 class PathTemplate private constructor(
     val source: String,
     private val regex: Regex,
-    private val fields: List<TemplateField>,
+    private val slots: List<Slot>,
 ) {
+
+    /**
+     * One capture in the pattern, and what to do with what it caught.
+     *
+     * A slot is not the same thing as a [TemplateField]: three of them can target the same field.
+     * `{author}` takes a segment whole, `{author_surname}` takes a PIECE of a name that another
+     * slot completes, and `{authors[;]}` takes a run that is several names at once. All three end
+     * up in the `author` column, because that is where an author lives — the distinction is how the
+     * path spells it, not what it means, and keeping it out of [TemplateField] keeps it out of
+     * every consumer downstream that only ever wanted the field.
+     */
+    internal class Slot(
+        val field: TemplateField,
+        /** Set when this slot is one HALF of a name; the halves are joined after the match. */
+        val part: NamePart? = null,
+        /** Split the capture on this, when the field holds several values. Null = one value. */
+        val delimiter: String? = null,
+        /** Read each value with this, for a list whose items have a shape of their own. */
+        val each: PathTemplate? = null,
+        val list: Boolean = false,
+    )
+
+    /** Which half of a name a slot caught. */
+    internal enum class NamePart { GIVEN, SURNAME }
     /**
      * What [path] says under this template, or null if it does not fit the shape.
      *
@@ -32,11 +56,52 @@ class PathTemplate private constructor(
     fun parse(path: String): Map<TemplateField, String>? {
         val match = regex.matchEntire(path.trim('/')) ?: return null
         val out = LinkedHashMap<TemplateField, String>()
-        // groupValues[0] is the whole match, so the fields start at 1 and stay in template order.
-        fields.forEachIndexed { i, field ->
-            match.groupValues.getOrNull(i + 1)?.trim()?.takeIf { it.isNotEmpty() }?.let { out[field] = it }
+        var given: String? = null
+        var surname: String? = null
+        // groupValues[0] is the whole match, so the slots start at 1 and stay in template order.
+        slots.forEachIndexed { i, slot ->
+            val captured = match.groupValues.getOrNull(i + 1)?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return@forEachIndexed
+            when {
+                slot.part == NamePart.GIVEN -> given = captured
+                slot.part == NamePart.SURNAME -> surname = captured
+                slot.list -> encodeList(slot, captured)?.let { out[slot.field] = it }
+                else -> out[slot.field] = captured
+            }
+        }
+        // A name caught in halves becomes the one name everything else stores: given name first,
+        // in the column that already holds it. Homer keeps names first-last in storage and decides
+        // how to SHOW them separately, so a folder filed `Pratchett, Terry` and one filed
+        // `Terry Pratchett` reach the library as the same person.
+        //
+        // Skipped when a list slot already answered for the author: a template naming both is
+        // saying the same thing twice, and the list is the more specific claim.
+        if (TemplateField.AUTHOR !in out) {
+            listOfNotNull(given, surname).takeIf { it.isNotEmpty() }
+                ?.let { out[TemplateField.AUTHOR] = it.joinToString(" ") }
         }
         return out
+    }
+
+    /**
+     * A captured run as the stored list form: split, each item read, then newline-joined.
+     *
+     * An item the sub-pattern cannot read falls back to the raw text rather than being dropped.
+     * A list is very often mixed — `Pratchett, Terry - Neil Gaiman` — and the halves that do not
+     * match a shape are still names; [displayAuthor] straightens them out on the way to the screen
+     * anyway. Dropping them would lose an author to a punctuation mismatch, silently.
+     */
+    private fun encodeList(slot: Slot, captured: String): String? {
+        val items = slot.delimiter?.let { captured.split(it) } ?: listOf(captured)
+        val values = items.mapNotNull { item ->
+            val trimmed = item.trim()
+            if (trimmed.isEmpty()) null else slot.each?.parse(trimmed)?.get(slot.field) ?: trimmed
+        }
+        return when (slot.field) {
+            TemplateField.AUTHOR -> encodeAuthors(values)
+            TemplateField.GENRE -> encodeGenres(values)
+            else -> values.joinToString("\n").takeIf { it.isNotEmpty() }
+        }
     }
 
     override fun toString(): String = source
@@ -55,9 +120,25 @@ class PathTemplate private constructor(
          * No JVM test can catch that difference, which is why [PLACEHOLDER_SOURCE] is exposed and
          * asserted on as a plain string instead.
          */
-        internal const val PLACEHOLDER_SOURCE = """\{([a-zA-Z*]+)\}"""
+        internal const val PLACEHOLDER_SOURCE = """\{([a-zA-Z_*]+)((?:\[[^\[\]]*\])*)\}"""
 
         private val PLACEHOLDER = Regex(PLACEHOLDER_SOURCE)
+
+        /**
+         * One `[…]` group after a field name. Several may follow, and their ORDER does not matter.
+         *
+         * A group is a sub-pattern when it contains a brace and a delimiter when it does not, which
+         * is unambiguous because a delimiter with a `{` in it would be a delimiter nobody could
+         * type by accident. That is what lets both of these mean what they look like:
+         *
+         *  - `{authors[;]}` — several authors, separated by a semicolon
+         *  - `{authors[{author_surname}, {author_firstname}]}` — one author, written surname-first
+         *  - `{authors[ - ][{author_surname}, {author_firstname}]}` — both at once
+         *
+         * A `]` cannot appear inside either, which is the price of not needing an escape character
+         * in a syntax whose whole point is that it is not a regular expression.
+         */
+        private val BRACKET = Regex("""\[([^\[\]]*)\]""")
 
         /**
          * Compiles [template], or returns null if it names a field this build does not have.
@@ -69,7 +150,7 @@ class PathTemplate private constructor(
         fun compile(template: String): PathTemplate? {
             val trimmed = template.trim().trim('/')
             if (trimmed.isEmpty()) return null
-            val fields = mutableListOf<TemplateField>()
+            val slots = mutableListOf<Slot>()
             val pattern = StringBuilder()
             var cursor = 0
             for (m in PLACEHOLDER.findAll(trimmed)) {
@@ -93,15 +174,30 @@ class PathTemplate private constructor(
                     // care about".
                     pattern.append("[^/]+?")
                 } else {
-                    val field = TemplateField.from(name) ?: return null
-                    fields += field
-                    pattern.append(if (field.numeric) "(\\d+)" else "([^/]+?)")
+                    val groups = BRACKET.findAll(m.groupValues[2]).map { it.groupValues[1] }.toList()
+                    val each = groups.firstOrNull { it.contains('{') }?.let { compile(it) ?: return null }
+                    val delimiter = groups.firstOrNull { !it.contains('{') }?.takeIf { it.isNotEmpty() }
+                    val slot = when (name.lowercase()) {
+                        // The halves of a name. A folder reading `Pratchett, Terry` is a perfectly
+                        // ordinary way to file an author and had no way to be read at all:
+                        // `{author}` took the whole thing, comma and all, and the library grew a
+                        // heading for a person whose name appeared to start with their surname.
+                        "author_firstname" -> Slot(TemplateField.AUTHOR, part = NamePart.GIVEN)
+                        "author_surname" -> Slot(TemplateField.AUTHOR, part = NamePart.SURNAME)
+                        // The plural forms. Both columns have held several values since genres and
+                        // authors became lists; only the path had no way to say so.
+                        "authors" -> Slot(TemplateField.AUTHOR, delimiter = delimiter, each = each, list = true)
+                        "genres" -> Slot(TemplateField.GENRE, delimiter = delimiter, each = each, list = true)
+                        else -> TemplateField.from(name)?.let { Slot(it) } ?: return null
+                    }
+                    slots += slot
+                    pattern.append(if (slot.field.numeric) "(\\d+)" else "([^/]+?)")
                 }
                 cursor = m.range.last + 1
             }
             pattern.append(Regex.escape(trimmed.substring(cursor)))
-            if (fields.isEmpty()) return null
-            return runCatching { PathTemplate(trimmed, Regex(pattern.toString()), fields) }.getOrNull()
+            if (slots.isEmpty()) return null
+            return runCatching { PathTemplate(trimmed, Regex(pattern.toString()), slots) }.getOrNull()
         }
 
         /**

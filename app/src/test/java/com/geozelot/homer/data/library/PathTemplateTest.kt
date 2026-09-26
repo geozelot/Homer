@@ -188,6 +188,82 @@ class PathTemplateTest {
 
     // ── the engine difference no JVM test can exercise ───────────────────────────────────────
 
+    // ── Names in halves, and fields that hold several values ──────────────────
+
+    @Test
+    fun `a name filed surname-first is read as one name, given name leading`() {
+        // `{author}` took the whole folder, comma and all, and the library grew a heading for
+        // somebody whose name appeared to begin with their surname.
+        val t = PathTemplate.compile("{author_surname}, {author_firstname}/{title}")!!
+        assertEquals(
+            mapOf(TemplateField.AUTHOR to "Terry Pratchett", TemplateField.TITLE to "Mort"),
+            t.parse("Pratchett, Terry/Mort"),
+        )
+    }
+
+    @Test
+    fun `either half alone is still a name`() {
+        val t = PathTemplate.compile("{author_surname}/{title}")!!
+        assertEquals("Pratchett", t.parse("Pratchett/Mort")?.get(TemplateField.AUTHOR))
+    }
+
+    @Test
+    fun `several authors, split on the delimiter the template names`() {
+        val t = PathTemplate.compile("{authors[; ]}/{title}")!!
+        assertEquals(
+            "Terry Pratchett\nNeil Gaiman",
+            t.parse("Terry Pratchett; Neil Gaiman/Good Omens")?.get(TemplateField.AUTHOR),
+        )
+    }
+
+    @Test
+    fun `several genres, in the column that already holds several`() {
+        val t = PathTemplate.compile("{author}/{genres[, ]}/{title}")!!
+        assertEquals(
+            "Krimi\nThriller",
+            t.parse("Someone/Krimi, Thriller/A Book")?.get(TemplateField.GENRE),
+        )
+    }
+
+    @Test
+    fun `a list whose items have a shape of their own`() {
+        // The full form: split on one thing, then read each piece with a pattern.
+        val t = PathTemplate.compile("{authors[ - ][{author_surname}, {author_firstname}]}/{title}")!!
+        assertEquals(
+            "Terry Pratchett\nNeil Gaiman",
+            t.parse("Pratchett, Terry - Gaiman, Neil/Good Omens")?.get(TemplateField.AUTHOR),
+        )
+    }
+
+    @Test
+    fun `an item the sub-pattern cannot read is kept, not dropped`() {
+        // A real list is mixed. Losing an author to a missing comma would be silent, and
+        // `displayAuthor` straightens the odd one out on the way to the screen anyway.
+        val t = PathTemplate.compile("{authors[ - ][{author_surname}, {author_firstname}]}/{title}")!!
+        assertEquals(
+            "Terry Pratchett\nNeil Gaiman",
+            t.parse("Pratchett, Terry - Neil Gaiman/Good Omens")?.get(TemplateField.AUTHOR),
+        )
+    }
+
+    @Test
+    fun `a sub-pattern without a delimiter reads one value`() {
+        val t = PathTemplate.compile("{authors[{author_surname}, {author_firstname}]}/{title}")!!
+        assertEquals("Terry Pratchett", t.parse("Pratchett, Terry/Mort")?.get(TemplateField.AUTHOR))
+    }
+
+    @Test
+    fun `a list field still will not cross a folder boundary`() {
+        val t = PathTemplate.compile("{authors[; ]}/{title}")!!
+        assertNull(t.parse("A; B/Series/Mort"))
+    }
+
+    @Test
+    fun `a template naming a field this build does not have still compiles to nothing`() {
+        assertNull(PathTemplate.compile("{narrators[;]}/{title}"))
+        assertNull(PathTemplate.compile("{authors[ - ][{narrator}]}/{title}"))
+    }
+
     @Test
     fun `every brace in the placeholder pattern is escaped`() {
         // Android's java.util.regex is ICU-backed and REJECTS a lone `}`; the JVM accepts it as a

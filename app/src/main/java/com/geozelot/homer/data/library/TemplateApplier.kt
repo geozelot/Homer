@@ -182,7 +182,12 @@ class TemplateApplier @Inject constructor(
                 // Canonicalised like an edit is: a folder named "Kurzgeschichten" captured as a
                 // genre has to land on the same shelf as one named "Short Stories", or a template is
                 // one more way to split a genre in two.
-                genre = parsed[TemplateField.GENRE]?.let { BookGenre.canonical(it) } ?: book.genre,
+                // Canonicalised per VALUE, because a template can now capture several at once —
+                // `{genres[;]}` arrives here as the stored newline list, and running the whole
+                // string through `canonical` would resolve none of them.
+                genre = parsed[TemplateField.GENRE]
+                    ?.let { encodeGenres(decodeGenres(it).map(BookGenre::canonical)) }
+                    ?: book.genre,
                 // Normalised like every other language Homer stores, so a template capturing "German"
                 // and one capturing "de" produce the same shelf.
                 language = parsed[TemplateField.LANGUAGE]?.let { BookLanguage.normalise(it) } ?: book.language,
