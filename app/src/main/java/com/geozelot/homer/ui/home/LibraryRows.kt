@@ -47,7 +47,7 @@ import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Studio
-import com.geozelot.homer.ui.theme.Surface1
+import com.geozelot.homer.ui.theme.Well
 
 // ── List rows ────────────────────────────────────────────────────────────────
 //
@@ -81,7 +81,7 @@ internal fun BookListRow(
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
                         .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(Surface1)
+                        .background(Well)
                 } else {
                     Modifier
                 },
@@ -237,7 +237,7 @@ internal fun SeriesShelfRow(
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
                         .border(1.dp, LineShelf, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(Surface1)
+                        .background(Well)
                 },
             )
             .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true }),

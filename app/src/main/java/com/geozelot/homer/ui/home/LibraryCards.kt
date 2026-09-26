@@ -1,6 +1,7 @@
 package com.geozelot.homer.ui.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Studio
+import com.geozelot.homer.ui.theme.Well
 import java.util.Locale
 
 // ── Grid cards ───────────────────────────────────────────────────────────────
@@ -62,6 +64,7 @@ internal fun BookGridCard(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (book.hidden) 0.5f else 1f)
+            .gridCardWell()
             .combinedClickable(
                 onClick = { onOpen(book.id) },
                 onLongClick = { menuOpen = true },
@@ -135,6 +138,20 @@ internal fun BookGridCard(
 }
 
 /**
+ * The faint well a grid card sits in — cover, title and chips together, one object.
+ *
+ * Drawn on the card's Column rather than on its cover box so the text and the chips are inside it
+ * too: the cover alone already had an edge, and it was the words underneath that floated. The
+ * corner matches the cover's own, so where the cover meets the card's top edge the two curves are
+ * one. Clipped before the click so the ripple fills the card's shape rather than its bounding box.
+ */
+private fun Modifier.gridCardWell(): Modifier =
+    this.clip(RoundedCornerShape(10.dp)).background(Well)
+
+/** How far a grid card's text stands in from the sides of its well. */
+private val GridCardTextPad = 4.dp
+
+/**
  * Title (2 reserved lines) + the genre chip's reserved row + meta (2 reserved lines) — a
  * fixed-height block, so every grid card (book or series) is exactly the same total height and
  * their bottoms line up.
@@ -160,14 +177,20 @@ private fun GridCardText(
      */
     chip: @Composable () -> Unit,
 ) {
-    // The footer stands off whatever is below it.
+    // The footer stands off the well's edges.
     //
-    // The grid spaces its rows 12dp apart, which is the gap between a row's tallest CARD and the
-    // next row's cover — and a card's last line is small muted text, so 12dp put one card's meta
-    // line closer to the next book's artwork than to its own title. The extra is on the card
-    // rather than on the grid so a full-span heading, which is its own item, does not inherit it;
-    // see the header's own top padding, which gives that gap back.
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = GridCardFooterGap)) {
+    // Before the card had a well this bottom gap was bare air, keeping one card's meta line from
+    // sitting closer to the next book's artwork than to its own title. It is inside the well now,
+    // where it keeps that line off the card's bottom edge instead — and it still belongs to the
+    // card rather than to the grid, so a full-span heading, which is its own item, does not
+    // inherit it; see the header's own top padding, which gives that gap back. The sides are the
+    // well's too: text run flush to a filled edge reads as cut off.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = GridCardTextPad)
+            .padding(bottom = GridCardFooterGap),
+    ) {
         // Indented to where the chip's TEXT starts, not to where its outline does. The pill's
         // hairline hangs into the margin instead of shunting the words it belongs to sideways, so
         // the title, the chip's label and the meta line share one left edge.
@@ -458,6 +481,7 @@ internal fun SeriesGridCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .gridCardWell()
             .combinedClickable(onClick = onOpen, onLongClick = { menuOpen = true }),
     ) {
         BoxWithConstraints(

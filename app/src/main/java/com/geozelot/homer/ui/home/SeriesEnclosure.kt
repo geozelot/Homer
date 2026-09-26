@@ -47,7 +47,7 @@ import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
-import com.geozelot.homer.ui.theme.Surface1
+import com.geozelot.homer.ui.theme.Well
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -109,7 +109,8 @@ internal fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier =
         )
     }
     clipRect(top = clipTop, bottom = clipBottom) {
-        drawPath(path, Surface1)
+        // The same well a folded card sits in, so opening a shelf does not change what colour it is.
+        drawPath(path, Well)
         drawPath(path, Line, style = Stroke(stroke))
     }
 }

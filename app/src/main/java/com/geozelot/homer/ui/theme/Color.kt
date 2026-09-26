@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.Color
 
 val Ground = Color(0xFF15110E)      // app background
 val Studio = Color(0xFF0E0B09)      // deepest ground (gradient base, scrim)
+val Well = Color(0xFF110E0B)        // a library item's card — a faint step BELOW the ground, so a
+                                    // card reads as a place a book sits rather than a panel raised over it
 val Surface0 = Color(0xFF1A1511)    // pinned chrome — a step off the ground, below a card
 val Surface1 = Color(0xFF211B16)    // cards, bars
 val Surface2 = Color(0xFF2C241D)    // raised surfaces, menus, track backgrounds
