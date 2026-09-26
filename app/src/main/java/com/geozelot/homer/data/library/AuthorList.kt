@@ -61,7 +61,8 @@ fun primaryAuthor(raw: String?): String? = decodeAuthors(raw).firstOrNull()
  * suggestions as the same person, under the same heading. The stored value is never touched; see
  * [displayAuthor].
  */
-fun displayAuthors(raw: String?): List<String> = decodeAuthors(raw).map(::displayAuthor)
+fun displayAuthors(raw: String?, surnameFirst: Boolean = false): List<String> =
+    decodeAuthors(raw).map { displayAuthor(it, surnameFirst) }
 
 /** What the edit field's text means — see the header on why this is not a comma. */
 fun authorsFromInput(text: String): List<String> =

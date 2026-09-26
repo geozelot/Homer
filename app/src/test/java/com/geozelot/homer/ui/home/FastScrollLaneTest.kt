@@ -53,15 +53,21 @@ class FastScrollLaneTest {
     }
 
     @Test
-    fun `under sort-by-surname the letters are surnames`() {
+    fun `the lane follows the device's own filing preference`() {
         // The case the lane exists to get right: by title these are A and M, by first name N and
         // T, and by surname G and P. Only the last agrees with how the shelf was ordered.
         val slots = flat(
             book("1", "Anansi Boys", "Neil Gaiman"),
             book("2", "Mort", "Terry Pratchett"),
         )
-        assertEquals(listOf("G", "P"), laneLetters(slots, LibrarySort.AUTHOR_LAST, shelving = LibraryShelving.ITEM).map { it.label })
-        assertEquals(listOf("N", "T"), laneLetters(slots, LibrarySort.AUTHOR, shelving = LibraryShelving.ITEM).map { it.label })
+        assertEquals(
+            listOf("G", "P"),
+            laneLetters(slots, LibrarySort.AUTHOR, LibraryShelving.ITEM, bySurname = true).map { it.label },
+        )
+        assertEquals(
+            listOf("N", "T"),
+            laneLetters(slots, LibrarySort.AUTHOR, LibraryShelving.ITEM, bySurname = false).map { it.label },
+        )
     }
 
     @Test
@@ -97,7 +103,7 @@ class FastScrollLaneTest {
             LibraryEntry.Standalone(book("2", "Mort", "Terry Pratchett")),
         )
         val slots = librarySlots(entries, true, 3, emptySet()) { false }
-        val lane = laneLetters(slots, LibrarySort.TITLE, LibraryShelving.AUTHOR_LAST)
+        val lane = laneLetters(slots, LibrarySort.TITLE, LibraryShelving.AUTHOR)
         assertEquals(listOf("A", "P"), lane.map { it.label })
         assertEquals(listOf(0, 2), lane.map { it.index })
     }

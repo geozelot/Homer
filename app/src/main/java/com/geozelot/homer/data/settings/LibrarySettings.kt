@@ -87,6 +87,37 @@ class LibrarySettings @Inject constructor(
     }
 
     /**
+     * Whether authors file under their surname rather than their given name.
+     *
+     * A per-device preference, and the ONE place the answer lives. It was a shelving — a fourth
+     * entry beside Author and Genre — which put it in a menu about what the library is broken
+     * into, when it is a question about how names are ordered whether or not anything is shelved
+     * at all. Sorting by author, shelving by author, and the letters the fast-scroll lane offers
+     * all follow this single switch now, so the three cannot disagree.
+     */
+    val authorBySurname: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_AUTHOR_BY_SURNAME] ?: false }
+
+    suspend fun setAuthorBySurname(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_AUTHOR_BY_SURNAME] = value }
+    }
+
+    /**
+     * Whether a name is also SHOWN the way it files — "Pratchett, Terry".
+     *
+     * Meaningful only alongside [authorBySurname], and the caller is expected to hold it to that:
+     * writing names back to front in a list that is not in that order is showing an index of
+     * something else. Off by default, because the stored, spoken form of a name is first-name-last
+     * and that is what a book's cover says.
+     */
+    val authorShowFiled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_AUTHOR_SHOW_FILED] ?: false }
+
+    suspend fun setAuthorShowFiled(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_AUTHOR_SHOW_FILED] = value }
+    }
+
+    /**
      * The collections that read as one numbered run rather than as their threads.
      *
      * A SET of the exceptions, not a value per collection: threaded is the answer for almost every
@@ -506,6 +537,8 @@ class LibrarySettings @Inject constructor(
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_FAST_SCROLL = booleanPreferencesKey("library_fast_scroll")
+        val KEY_AUTHOR_BY_SURNAME = booleanPreferencesKey("library_author_by_surname")
+        val KEY_AUTHOR_SHOW_FILED = booleanPreferencesKey("library_author_show_filed")
         val KEY_FLAT_COLLECTIONS = stringSetPreferencesKey("library_flat_collections")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_LANGUAGE_FILTER = stringPreferencesKey("library_language_filter")

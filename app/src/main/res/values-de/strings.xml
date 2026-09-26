@@ -159,7 +159,10 @@
     <string name="home_cd_list_view">Listenansicht</string>
     <string name="shelve_item">Ohne</string>
     <string name="shelve_author">Autor</string>
-    <string name="shelve_author_last">Nachname</string>
+    <string name="settings_author_by_surname">Autoren nach Nachname einsortieren</string>
+    <string name="settings_author_by_surname_desc">Pratchett unter P statt Terry unter T. Gilt überall, wo Autoren geordnet werden — beim Sortieren nach Autor, bei den Regalüberschriften und bei den Buchstaben der Schnellspur.</string>
+    <string name="settings_author_show_filed">Auch so anzeigen</string>
+    <string name="settings_author_show_filed_desc">Schreibt einen Namen als „Pratchett, Terry“. Aus gelesen steht ein Name immer so, wie man ihn spricht — unabhängig von der Reihenfolge.</string>
     <string name="shelve_genre">Genre</string>
     <string name="depth_collection">Kollektion</string>
     <string name="depth_series">Serien</string>
@@ -167,7 +170,6 @@
     <string name="sort_recent">Zuletzt gehört</string>
     <string name="sort_title">Titel</string>
     <string name="sort_author">Autor</string>
-    <string name="sort_author_last">Nachname</string>
     <string name="sort_duration">Länge</string>
     <string name="home_shelf_unknown_author">Unbekannter Autor</string>
     <string name="home_shelf_no_genre">Ohne Genre</string>
@@ -350,17 +352,16 @@
     <string name="set_sign_out_confirm_body">Homer vergisst diesen Server und löscht die Bibliothek dieses Geräts: die gefundenen Bücher, deine Stelle darin, deine Lesezeichen und deine Korrekturen. Deine Bücher bleiben, wo sie auf dem Server sind, und ebenso alles, was in deinem Konto gespeichert ist. Schon heruntergeladene Dateien bleiben in deinem Speicherordner.</string>
 
     <!-- Settings: on this device -->
-    <string name="set_device_location_header">WO DOWNLOADS LIEGEN</string>
+    <string name="set_device_storage_header">SPEICHER</string>
+    <string name="set_device_playback_header">WIEDERGABE</string>
+    <string name="settings_wifi_only_desc">Gilt nur für Downloads. Ein Buch, das nicht heruntergeladen ist, wird über jede verfügbare Verbindung gestreamt.</string>
     <string name="set_device_choose_folder">Ordner auswählen…</string>
-    <string name="set_device_downloads_header">HERUNTERLADEN</string>
     <string name="set_device_browsing_header">BLÄTTERN</string>
     <string name="settings_fast_scroll">Buchstabenleiste</string>
     <string name="settings_fast_scroll_desc">Beim Scrollen erscheint am Rand eine Leiste mit Anfangsbuchstaben. Sie folgt der gewählten Sortierung und bleibt aus, wenn diese kein Alphabet hat.</string>
     <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>
     <string name="set_device_delete_downloads_count">Gibt den Platz frei, den %1$s belegen</string>
     <string name="set_device_delete_downloads_none">Es ist nichts heruntergeladen. Dateien aus einer Bibliothek, von der du dich abgemeldet hast, werden mit entfernt</string>
-    <string name="set_device_notify_header">BENACHRICHTIGUNGEN</string>
-    <string name="set_device_reclaim_header">PLATZ FREIGEBEN</string>
     <string name="set_device_notify_label">Homer darf Benachrichtigungen senden</string>
     <string name="set_device_notify_on">Erlaubt. Wiedergabesteuerung, Scans und Downloads zeigen ihren Fortschritt.</string>
     <string name="set_device_notify_off">Blockiert — Scans, Downloads und Wiedergabe laufen still, ohne Anzeige.</string>

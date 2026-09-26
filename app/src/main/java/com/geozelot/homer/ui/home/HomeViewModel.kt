@@ -242,18 +242,6 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
     TITLE("title", R.string.sort_title),
     AUTHOR("author", R.string.sort_author),
 
-    /**
-     * By surname: Pratchett under P rather than Terry under T.
-     *
-     * A SORT and nothing else. Names go on reading "Terry Pratchett" wherever they are shown —
-     * filing is a property of the list, not of the name.
-     *
-     * Offered only when the list is NOT shelved by author. On an author shelf the choice is not
-     * about ordering books inside a shelf (they all share the author) but about ordering the
-     * SHELVES, which is a question about the shelving — so it is asked there, as
-     * [LibraryShelving.AUTHOR_LAST], and dropped from here.
-     */
-    AUTHOR_LAST("author_last", R.string.sort_author_last),
     DURATION("duration", R.string.sort_duration);
 
     companion object {
@@ -265,9 +253,34 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
          * rather than left as an option that appears to do nothing.
          */
         fun offeredFor(shelving: LibraryShelving): List<LibrarySort> =
-            values().filterNot { (it == AUTHOR || it == AUTHOR_LAST) && shelving.isByAuthor }
+            values().filterNot { it == AUTHOR && shelving.isByAuthor }
     }
 }
+
+/**
+ * How authors file, and whether they are shown that way.
+ *
+ * Not a [LibrarySort] and not a [LibraryShelving], which is the correction this represents: filing
+ * by surname was briefly a fourth shelving, in a menu about what the library is broken INTO, when
+ * it is a question about how names are ordered whether anything is shelved or not. It is a device
+ * preference now, and the sort, the shelf headings and the fast-scroll lane all read it.
+ */
+data class AuthorFiling(val bySurname: Boolean = false, val showFiled: Boolean = false)
+
+/**
+ * Everything that decides the SHAPE of the list, as one value.
+ *
+ * Bundled because `combine` runs out of typed arities at five and the alternative was threading a
+ * sixth flow through as an untyped array. Naming the bundle is the better answer anyway: what the
+ * library is sorted by, broken into, stacked to, and how its names file are one question asked
+ * four ways, and the arrange control asks them together.
+ */
+data class Arrangement(
+    val sort: LibrarySort,
+    val shelving: LibraryShelving,
+    val depth: LibraryDepth,
+    val filing: AuthorFiling,
+)
 
 /**
  * How the library list is sectioned into shelves.
@@ -283,23 +296,18 @@ enum class LibrarySort(val key: String, @StringRes val label: Int) {
 enum class LibraryShelving(val key: String, @StringRes val label: Int) {
     ITEM("none", R.string.shelve_item),
     AUTHOR("author", R.string.shelve_author),
-
-    /**
-     * The same shelves, filed by surname: Pratchett under P rather than Terry under T.
-     *
-     * A shelving rather than a sort, because that is what it actually decides. Sorting a list
-     * already sectioned by author cannot reorder books within a shelf — they all have the same
-     * author — so the only thing left for it to do is reorder the HEADINGS, which is a property of
-     * how the library is shelved. It sat in the sort menu as the one entry there that did nothing
-     * to the books it claimed to sort.
-     *
-     * It changes nothing about how a name is SHOWN: the heading still reads "Terry Pratchett".
-     */
-    AUTHOR_LAST("author_last", R.string.shelve_author_last),
     GENRE("genre", R.string.shelve_genre);
 
-    /** Both author shelvings. They differ only in how the shelves file, never in what is on them. */
-    val isByAuthor: Boolean get() = this == AUTHOR || this == AUTHOR_LAST
+    /**
+     * Shelved by author.
+     *
+     * Kept as a name rather than an `== AUTHOR` at four call sites, because it briefly WAS two
+     * values — a second entry for filing by surname — and that was the wrong place for it: how
+     * names are ordered is a question whether or not anything is shelved at all. It is a setting
+     * now (see [com.geozelot.homer.data.settings.LibrarySettings.authorBySurname]), and this stays
+     * because the four places that ask are asking the right question.
+     */
+    val isByAuthor: Boolean get() = this == AUTHOR
 
     companion object {
         /**
@@ -439,13 +447,26 @@ class HomeViewModel @Inject constructor(
             }
         }
 
+    /**
+     * How authors are ordered and shown on this device.
+     *
+     * One value because the two travel together: showing a name the way it files only makes sense
+     * in a list that IS in that order, so the display half is switched off here rather than being
+     * left for every reader of it to remember.
+     */
+    val authorFiling: StateFlow<AuthorFiling> =
+        combine(librarySettings.authorBySurname, librarySettings.authorShowFiled) { bySurname, filed ->
+            AuthorFiling(bySurname = bySurname, showFiled = filed && bySurname)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AuthorFiling())
+
     private val books: StateFlow<List<BookListItem>> =
         combine(
             effectiveBooks,
             playbackStateDao.observeProgress(),
             downloadDao.observeAll(),
-        ) { effective, progress, downloads ->
-            filterEngine.rows(effective, progress, downloads)
+            authorFiling,
+        ) { effective, progress, downloads, filing ->
+            filterEngine.rows(effective, progress, downloads, filedNames = filing.showFiled)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
 
@@ -547,9 +568,12 @@ class HomeViewModel @Inject constructor(
     }
 
     /** Library list, filtered by [filter], ordered by [sortMode], sectioned by [shelfMode]. */
+    private val arrangement: Flow<Arrangement> =
+        combine(sortMode, shelfMode, seriesMode, authorFiling, ::Arrangement)
+
     val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, filter, sortMode, shelfMode, seriesMode) { list, filter, sort, shelving, series ->
-            filterEngine.arrange(list, filter, sort, shelving, series)
+        combine(books, filter, arrangement) { list, filter, a ->
+            filterEngine.arrange(list, filter, a.sort, a.shelving, a.depth, a.filing.bySurname)
         }
             // Filtering AND grouping the whole library, per keystroke, was running on
             // Main.immediate. Both are pure functions of their inputs and the result is a plain
@@ -1227,6 +1251,14 @@ class HomeViewModel @Inject constructor(
 
     /** Throws the draft away, reverting the editor to what is stored. */
     fun discardTemplateDraft() = bookEdit.discardTemplateDraft()
+
+    fun setAuthorBySurname(value: Boolean) {
+        viewModelScope.launch { librarySettings.setAuthorBySurname(value) }
+    }
+
+    fun setAuthorShowFiled(value: Boolean) {
+        viewModelScope.launch { librarySettings.setAuthorShowFiled(value) }
+    }
 
     fun setSeriesMode(mode: LibraryDepth) {
         viewModelScope.launch { librarySettings.setSeriesMode(mode.key) }

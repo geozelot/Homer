@@ -76,6 +76,8 @@ class LibraryFilterEngine @Inject constructor() {
         effective: List<EffectiveBook>,
         progress: List<BookProgress>,
         downloads: List<DownloadEntity>,
+        /** Show names the way they file — "Pratchett, Terry". Resolved once, here, for every row. */
+        filedNames: Boolean = false,
     ): List<BookListItem> {
         val progressByBook = progress.associateBy { it.bookId }
         val downloadByBook = downloads.associateBy { it.bookId }
@@ -93,7 +95,7 @@ class LibraryFilterEngine @Inject constructor() {
             BookListItem(
                 id = book.id,
                 title = book.title,
-                authors = displayAuthors(book.author),
+                authors = displayAuthors(book.author, filedNames),
                 isMultiFile = book.isMultiFile,
                 fileCount = book.fileCount,
                 coverModel = eff.coverModel,
@@ -128,11 +130,13 @@ class LibraryFilterEngine @Inject constructor() {
         sort: LibrarySort,
         shelving: LibraryShelving,
         series: LibraryDepth,
+        /** File authors under their surname — the device setting, not a sort of its own. */
+        bySurname: Boolean = false,
     ): List<LibraryEntry> {
         // Filtering runs BEFORE the grouping: it changes which books are on which shelf, so a
         // shelf that loses its last book has to disappear rather than stand there empty.
         val filtered = if (filter.isEmpty) books else books.filter { filter.matches(it) }
-        return buildEntries(filtered, sort, shelving, series)
+        return buildEntries(filtered, bySurname, sort, shelving, series)
     }
 
     /** In-progress books: actually started (real progress), not finished/at-end, not hidden;
@@ -157,6 +161,7 @@ class LibraryFilterEngine @Inject constructor() {
  */
 private fun buildEntries(
     books: List<BookListItem>,
+    bySurname: Boolean,
     sort: LibrarySort,
     shelving: LibraryShelving,
     series: LibraryDepth,
@@ -165,18 +170,19 @@ private fun buildEntries(
     // "by genre" silently flattened every series while "by author" kept them stacked — nobody
     // chose that, it fell out of one expression.
     val units = collapseIntoUnits(books, series)
-    val ordered = units.sortedWith(unitComparator(sort))
+    val ordered = units.sortedWith(unitComparator(sort, bySurname))
 
     return when (shelving) {
         LibraryShelving.ITEM -> ordered.map { it.toEntry() }
-        // Which of the two author shelvings decides how the SHELVES file — by given name or by
-        // surname. `sortBy` is compared, never drawn, so a shelf sitting under P still reads
-        // "Terry Pratchett".
-        LibraryShelving.AUTHOR, LibraryShelving.AUTHOR_LAST -> sectioned(
+        // The SHELVES file the way the setting says names file — and by the same key the books
+        // above were ordered with, so the headings and what is under them cannot disagree.
+        // `sortBy` is compared, never drawn, so a shelf sitting under P reads whatever the display
+        // setting renders.
+        LibraryShelving.AUTHOR -> sectioned(
             ordered,
             "Unknown author",
             R.string.home_shelf_unknown_author,
-            sortBy = if (shelving == LibraryShelving.AUTHOR_LAST) ::authorSortKey else { it -> it },
+            sortBy = if (bySurname) ::authorSortKey else { it -> it },
         ) { it.author }
         // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
         // are one shelf rather than two that mean the same thing. The heading itself resolves to the
@@ -262,15 +268,15 @@ internal fun collapseIntoUnits(
     return units
 }
 
-private fun unitComparator(sort: LibrarySort): Comparator<SortUnit> = when (sort) {
+private fun unitComparator(sort: LibrarySort, bySurname: Boolean): Comparator<SortUnit> = when (sort) {
     LibrarySort.TITLE -> compareBy { unitTitle(it).lowercase() }
+    // One author sort, whose direction is the device's own filing preference rather than a second
+    // entry in this menu. Sorting by author and shelving by author used to be able to disagree
+    // about which end of a name counts; they read the same switch now.
     LibrarySort.AUTHOR -> compareBy(
-        { it.author == null }, { it.author?.lowercase() }, { unitTitle(it).lowercase() },
-    )
-    // By surname. The key is never shown — see AuthorName.kt — so the shelf heading this orders
-    // still reads "Terry Pratchett" while sitting under P.
-    LibrarySort.AUTHOR_LAST -> compareBy(
-        { it.author == null }, { it.author?.let(::authorSortKey) }, { unitTitle(it).lowercase() },
+        { it.author == null },
+        { if (bySurname) it.author?.let(::authorSortKey) else it.author?.lowercase() },
+        { unitTitle(it).lowercase() },
     )
     // Never-played / unmeasured sort last under the descending orders.
     LibrarySort.RECENT -> compareByDescending { unitRecency(it) }

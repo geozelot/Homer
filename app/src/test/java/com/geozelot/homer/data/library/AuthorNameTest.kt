@@ -84,4 +84,35 @@ class AuthorNameTest {
             shelf.sortedBy(::authorSortKey),
         )
     }
+
+    // ── Showing a name the way it files ───────────────────────────────────────
+
+    @Test
+    fun `the filed form is built from the same split the sort key uses`() {
+        // What a reader sees and what the list is ordered by cannot disagree, because they come
+        // from one split: a heading reading "Le Guin, Ursula K." is under L because that is what
+        // put it there.
+        assertEquals("Pratchett, Terry", filedAuthor("Terry Pratchett"))
+        assertEquals("Le Guin, Ursula K.", filedAuthor("Ursula K. Le Guin"))
+        assertEquals("Davis, Sammy Jr.", filedAuthor("Sammy Davis Jr."))
+    }
+
+    @Test
+    fun `a name with nothing in front of the surname is left alone`() {
+        assertEquals("Homer", filedAuthor("Homer"))
+    }
+
+    @Test
+    fun `an already-filed name is normalised before it is filed again`() {
+        // Flipping stored text directly would leave this one untouched and turn its neighbour
+        // around, so one shelf would carry both spellings of the same convention.
+        assertEquals("Pratchett, Terry", displayAuthor("Pratchett, Terry", surnameFirst = true))
+        assertEquals("Pratchett, Terry", displayAuthor("Terry Pratchett", surnameFirst = true))
+    }
+
+    @Test
+    fun `showing is off by default and does not touch the stored form`() {
+        assertEquals("Terry Pratchett", displayAuthor("Pratchett, Terry"))
+        assertEquals("Terry Pratchett", displayAuthor("Terry Pratchett"))
+    }
 }

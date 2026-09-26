@@ -71,7 +71,7 @@ internal data class LaneLetter(val label: String, val index: Int)
  */
 internal fun laneIsAlphabetical(sort: LibrarySort, shelving: LibraryShelving): Boolean =
     if (shelving == LibraryShelving.ITEM) {
-        sort == LibrarySort.TITLE || sort == LibrarySort.AUTHOR || sort == LibrarySort.AUTHOR_LAST
+        sort == LibrarySort.TITLE || sort == LibrarySort.AUTHOR
     } else {
         true
     }
@@ -91,6 +91,8 @@ internal fun laneLetters(
     slots: List<GridSlot>,
     sort: LibrarySort,
     shelving: LibraryShelving,
+    /** Authors file under their surname — the same device setting the order itself reads. */
+    bySurname: Boolean = false,
 ): List<LaneLetter> {
     if (!laneIsAlphabetical(sort, shelving)) return emptyList()
     val shelved = shelving != LibraryShelving.ITEM
@@ -103,8 +105,8 @@ internal fun laneLetters(
             // the lane's letters in an order the library is not in, and every jump would land
             // somewhere the reader did not ask for.
             shelved -> (slot as? GridSlot.Heading)?.entry?.fileKey
-            slot is GridSlot.Book -> bookLaneKey(slot.book, sort)
-            slot is GridSlot.Shelf -> shelfLaneKey(slot.series, sort)
+            slot is GridSlot.Book -> bookLaneKey(slot.book, sort, bySurname)
+            slot is GridSlot.Shelf -> shelfLaneKey(slot.series, sort, bySurname)
             else -> null
         } ?: return@forEachIndexed
         val letter = initialOf(key) ?: return@forEachIndexed
@@ -114,19 +116,19 @@ internal fun laneLetters(
 }
 
 /** The same value the list was ordered by, so the lane and the order cannot disagree. */
-private fun bookLaneKey(book: BookListItem, sort: LibrarySort): String? = when (sort) {
-    LibrarySort.TITLE -> book.title
-    LibrarySort.AUTHOR -> book.author
-    LibrarySort.AUTHOR_LAST -> book.author?.let(::authorSortKey)
-    else -> null
-}
+private fun bookLaneKey(book: BookListItem, sort: LibrarySort, bySurname: Boolean): String? =
+    when (sort) {
+        LibrarySort.TITLE -> book.title
+        LibrarySort.AUTHOR -> book.author?.let { if (bySurname) authorSortKey(it) else it }
+        else -> null
+    }
 
-private fun shelfLaneKey(series: LibraryEntry.Series, sort: LibrarySort): String? = when (sort) {
-    LibrarySort.TITLE -> series.name
-    LibrarySort.AUTHOR -> series.author
-    LibrarySort.AUTHOR_LAST -> series.author?.let(::authorSortKey)
-    else -> null
-}
+private fun shelfLaneKey(series: LibraryEntry.Series, sort: LibrarySort, bySurname: Boolean): String? =
+    when (sort) {
+        LibrarySort.TITLE -> series.name
+        LibrarySort.AUTHOR -> series.author?.let { if (bySurname) authorSortKey(it) else it }
+        else -> null
+    }
 
 /**
  * The initial a key files under: a letter, or `#` for everything that is not one.

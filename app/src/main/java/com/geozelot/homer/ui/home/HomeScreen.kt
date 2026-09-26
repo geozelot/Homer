@@ -234,6 +234,7 @@ fun HomeScreen(
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
     val fastScroll by viewModel.fastScroll.collectAsStateWithLifecycle()
+    val authorFiling by viewModel.authorFiling.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
     val shelfMode by viewModel.shelfMode.collectAsStateWithLifecycle()
     val seriesMode by viewModel.seriesMode.collectAsStateWithLifecycle()
@@ -723,7 +724,7 @@ fun HomeScreen(
                             // when the arrangement does would be a full pass per frame.
                             val letters = remember(
                                 entries, gridView, columns, flatCollections,
-                                expanded.toList(), sortMode, shelfMode,
+                                expanded.toList(), sortMode, shelfMode, authorFiling,
                             ) {
                                 laneLetters(
                                     slots = librarySlots(entries, gridView, columns, flatCollections) { series ->
@@ -731,6 +732,7 @@ fun HomeScreen(
                                     },
                                     sort = sortMode,
                                     shelving = shelfMode,
+                                    bySurname = authorFiling.bySurname,
                                 )
                             }
                             FastScrollLane(
