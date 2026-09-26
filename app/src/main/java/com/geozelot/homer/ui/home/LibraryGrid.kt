@@ -89,13 +89,12 @@ internal val ControlRowInset = (ControlTapHeight - ControlPillHeight) / 2
 internal val LibraryGridSpacing = 12.dp
 
 /**
- * Extra air under a grid card's text block, so its last line belongs to it rather than to the
- * cover beneath.
+ * How far a grid card's cover and text stand in from the card's ground.
  *
- * Small on purpose: the grid's own 12dp is nearly right, and a card that stands too far off its
- * neighbours stops reading as part of a shelf.
+ * Small on purpose: enough that the ground reads as a frame rather than as a border the cover
+ * already has, not so much that the cover — the thing a grid is for — gives up its width to it.
  */
-internal val GridCardFooterGap = 5.dp
+internal val GridCardInset = 4.dp
 
 /** The grid's horizontal content padding. */
 internal val LibraryGridPadding = 16.dp
@@ -168,10 +167,10 @@ internal fun LazyGridScope.libraryContent(
                 // reads as a pause in one and as a crowd in the other.
                 SectionLabelRow(
                     headerLabel(slot.entry),
-                    // The grid's cards now carry their own footer gap, so a heading following a row
-                    // would sit that much lower than one following a heading. Taking it back here
-                    // keeps every heading the same distance from what precedes it.
-                    topPadding = if (gridView) 12.dp - GridCardFooterGap else 20.dp,
+                    // Measured from the card's ground, which is its visible edge — so a little more
+                    // above the heading than the 8dp below it, and the heading reads as the start
+                    // of what follows rather than the end of what came before.
+                    topPadding = if (gridView) 12.dp else 20.dp,
                     // A step brighter than the rows under it. A heading that names a shelf is the
                     // structure of the list rather than a note about it, and at Muted it sat at the
                     // same weight as the meta lines it was organising.

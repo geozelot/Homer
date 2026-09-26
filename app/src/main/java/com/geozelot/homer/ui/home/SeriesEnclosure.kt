@@ -43,11 +43,11 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.ItemGround
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
-import com.geozelot.homer.ui.theme.Well
 
 // ── Expanded series enclosure ─────────────────────────────────────────────────
 //
@@ -109,8 +109,8 @@ internal fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier =
         )
     }
     clipRect(top = clipTop, bottom = clipBottom) {
-        // The same well a folded card sits in, so opening a shelf does not change what colour it is.
-        drawPath(path, Well)
+        // The same ground a folded card sits on, so opening a shelf does not change what colour it is.
+        drawPath(path, ItemGround)
         drawPath(path, Line, style = Stroke(stroke))
     }
 }
@@ -242,10 +242,12 @@ internal fun ExpandedSeriesRow(
         modifier = Modifier
             .fillMaxWidth()
             .seriesEnclosure(top = false, bottom = last)
+            // Less the cards' own inset, so the covers inside an opened shelf still line up with
+            // the edge of the banner above them rather than sitting 4dp further in.
             .padding(
-                start = SeriesEnclosurePad,
-                end = SeriesEnclosurePad,
-                bottom = if (last) SeriesEnclosurePad else 0.dp,
+                start = SeriesEnclosurePad - GridCardInset,
+                end = SeriesEnclosurePad - GridCardInset,
+                bottom = if (last) SeriesEnclosurePad - GridCardInset else 0.dp,
             ),
         horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
     ) {

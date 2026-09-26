@@ -42,12 +42,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.theme.Faint
+import com.geozelot.homer.ui.theme.ItemGround
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Studio
-import com.geozelot.homer.ui.theme.Well
 
 // ── List rows ────────────────────────────────────────────────────────────────
 //
@@ -81,7 +81,7 @@ internal fun BookListRow(
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
                         .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(Well)
+                        .background(ItemGround)
                 } else {
                     Modifier
                 },
@@ -237,7 +237,7 @@ internal fun SeriesShelfRow(
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
                         .border(1.dp, LineShelf, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(Well)
+                        .background(ItemGround)
                 },
             )
             .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true }),
