@@ -194,6 +194,17 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
 
     override suspend fun uri(rel: String): Uri? = withContext(Dispatchers.IO) { resolveFile(rel) }
 
+    override suspend fun size(rel: String): Long? = withContext(Dispatchers.IO) {
+        val uri = resolveFile(rel) ?: return@withContext null
+        // COLUMN_SIZE is optional in the SAF contract, and a provider that leaves it null is saying
+        // "unknown", not "empty" — which the caller treats as "cannot verify, fall back to presence".
+        runCatching {
+            resolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+            }
+        }.getOrNull()
+    }
+
     override suspend fun exists(rel: String): Boolean = withContext(Dispatchers.IO) {
         resolveFile(rel) != null || resolveDir(rel, create = false) != null
     }

@@ -44,6 +44,16 @@ interface StorageArea {
     /** Opens [rel] for streaming reads (caller closes), or null if absent — for large-file copies. */
     suspend fun openInputStream(rel: String): InputStream?
 
+    /**
+     * The size of the file at [rel] in bytes, or null when it is absent or the backend cannot say.
+     *
+     * Exists so a copy can be VERIFIED rather than merely found: a file that answers [exists] may be
+     * the truncated leftover of an interrupted write on a backend that cannot rename into place.
+     * Null is not a mismatch — callers that need a verdict fall back to presence when either side
+     * cannot report, which is how a size-less provider behaved before this existed.
+     */
+    suspend fun size(rel: String): Long?
+
     /** Deletes the file or directory subtree at [rel] (best-effort). */
     suspend fun delete(rel: String)
 
@@ -122,6 +132,10 @@ class FileStorageArea(private val root: File, private val sanitize: Boolean = fa
     }
 
     override suspend fun exists(rel: String): Boolean = withContext(Dispatchers.IO) { file(rel).exists() }
+
+    override suspend fun size(rel: String): Long? = withContext(Dispatchers.IO) {
+        file(rel).takeIf { it.isFile }?.length()
+    }
 
     override suspend fun readBytes(rel: String): ByteArray? = withContext(Dispatchers.IO) {
         file(rel).takeIf { it.exists() }?.readBytes()

@@ -95,7 +95,7 @@ class StorageCoordinator @Inject constructor(
      * between then leaves a row still pointing at what is left, for a later pass to finish.
      */
     suspend fun deleteAllDownloads() {
-        runCatching { downloadStorage.deleteAll() }
+        runCatchingUnlessCancelled { downloadStorage.deleteAll() }
             .onFailure { Log.w(TAG_STORAGE, "could not delete the downloads folder", it) }
         downloadDao.deleteAll()
     }

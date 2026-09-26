@@ -21,6 +21,7 @@ import com.geozelot.homer.data.webdav.WebDavClient
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 
 /**
  * A `LIKE` pattern matching everything beneath [path], with LIKE's own wildcards neutralised.
@@ -386,7 +387,7 @@ class LibraryScanner @Inject constructor(
         // at them if the process died in between, which is the leak this is meant to close.
         if (orphanedDownloads.isNotEmpty()) {
             for (bookId in orphanedDownloads) {
-                runCatching { downloadStorage.deleteBook(bookId) }
+                runCatchingUnlessCancelled { downloadStorage.deleteBook(bookId) }
                     .onFailure { Log.w(TAG, "could not remove downloaded files for pruned book $bookId", it) }
             }
             downloadDao.deleteOrphans()

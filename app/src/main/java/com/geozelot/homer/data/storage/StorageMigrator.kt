@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 
 /**
  * Moves all of Homer's on-device data — offline downloads, cached covers, and the local `.homer`
@@ -169,9 +170,12 @@ class StorageMigrator @Inject constructor(
         for (book in bookDao.getAll()) {
             val path = book.customCoverPath ?: continue
             val name = Uri.parse(path).lastPathSegment?.substringAfterLast('/')
-            val moved = name != null && runCatching {
+            // Not plain runCatching: a cancelled move would otherwise count every remaining cover
+            // as one that failed to carry, and CLEAR its stored path below — losing the reference
+            // to a cover that was never touched.
+            val moved = name != null && runCatchingUnlessCancelled {
                 val rel = "covers/$name"
-                val bytes = source.readBytes(rel) ?: return@runCatching false
+                val bytes = source.readBytes(rel) ?: return@runCatchingUnlessCancelled false
                 bookDao.updateCustomCover(book.id, target.write(rel, bytes).toString())
                 true
             }.onFailure { Log.w(TAG, "could not carry the custom cover for ${book.id}", it) }
@@ -200,6 +204,10 @@ class StorageMigrator @Inject constructor(
         return try {
             source.write(probe, ByteArray(0))
             target.exists(probe)
+        } catch (e: CancellationException) {
+            // Before the catch-all, which would otherwise answer a cancelled probe with "not the
+            // same folder" and let the migration it was guarding carry on.
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "could not probe for a source/target alias", e)
             false
@@ -233,7 +241,6 @@ class StorageMigrator @Inject constructor(
         coroutineContext.ensureActive()
         return try {
             copyThenDeleteSource(source, target, rel, overwrite)
-            true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -242,12 +249,40 @@ class StorageMigrator @Inject constructor(
         }
     }
 
-    private suspend fun copyThenDeleteSource(source: StorageArea, target: StorageArea, rel: String, overwrite: Boolean) {
-        if (overwrite || !target.exists(rel)) {
-            val input = source.openInputStream(rel) ?: return // nothing at source → don't touch target
+    /**
+     * Copies [rel] across, and deletes the source only once the copy is VERIFIED — returning whether
+     * it was, which is what counts a file as moved.
+     *
+     * It trusted presence: a target that merely existed was skipped and the source deleted. On a
+     * provider that cannot rename into place, an earlier move interrupted mid-write leaves exactly
+     * such a file — present, and short. Skipping it deleted the one complete copy. And a file that
+     * could not be verified has to count as NOT moved, not just be spared the per-file delete: the
+     * caller recursively clears the whole source subtree when nothing failed, so "spared" would only
+     * have postponed the loss by a few lines.
+     *
+     * Verification compares sizes where both sides can report one, and falls back to presence where
+     * either cannot — which is how a size-less provider behaved before, and still no worse.
+     */
+    private suspend fun copyThenDeleteSource(
+        source: StorageArea,
+        target: StorageArea,
+        rel: String,
+        overwrite: Boolean,
+    ): Boolean {
+        if (!source.exists(rel)) return true // nothing at source → nothing to move, target untouched
+        val sourceSize = source.size(rel)
+        suspend fun landed(): Boolean {
+            if (!target.exists(rel)) return false
+            val targetSize = target.size(rel)
+            return sourceSize == null || targetSize == null || targetSize == sourceSize
+        }
+        if (overwrite || !landed()) {
+            val input = source.openInputStream(rel) ?: return true
             target.writeStream(rel) { out -> input.use { it.copyTo(out) } }
         }
-        if (target.exists(rel)) source.delete(rel)
+        val verified = landed()
+        if (verified) source.delete(rel)
+        return verified
     }
 
     private suspend fun report(label: String, done: Int, total: Int, onProgress: suspend (Progress) -> Unit) {

@@ -16,6 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 
 /**
  * Keeps a local `progress.json` mirror inside the active [StorageLocation] area, so
@@ -44,7 +45,7 @@ class LocalMirror @Inject constructor(
         val books = states.associate { s ->
             s.bookId to HomerBookState(mediaId = s.currentMediaId, positionMs = s.positionMs, updatedAt = s.updatedAt)
         }
-        runCatching {
+        runCatchingUnlessCancelled {
             val area = storageLocation.area()
             area.write(MIRROR_PATH, json.encodeToString(HomerIndex(books = books)).toByteArray())
         }.onFailure { Log.w(TAG, "local mirror export failed", it) }
@@ -53,7 +54,7 @@ class LocalMirror @Inject constructor(
     /** Merges positions from the area's `progress.json` into Room (last write wins). */
     suspend fun import() {
         val area = storageLocation.area()
-        val bytes = runCatching { area.readBytes(MIRROR_PATH) }.getOrNull() ?: return
+        val bytes = runCatchingUnlessCancelled { area.readBytes(MIRROR_PATH) }.getOrNull() ?: return
         val index = runCatching { json.decodeFromString<HomerIndex>(String(bytes)) }.getOrElse {
             Log.w(TAG, "local mirror unparseable; skipping import")
             return
