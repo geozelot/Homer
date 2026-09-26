@@ -136,6 +136,26 @@ class FastScrollLaneTest {
     }
 
     @Test
+    fun `the current letter is the last one at or above the top of the grid`() {
+        val lane = listOf(LaneLetter("A", 0), LaneLetter("M", 5), LaneLetter("P", 9))
+
+        assertEquals(0, laneLetterAt(lane, 0))
+        assertEquals(0, laneLetterAt(lane, 4))
+        // A letter's own first item is already that letter.
+        assertEquals(1, laneLetterAt(lane, 5))
+        assertEquals(1, laneLetterAt(lane, 8))
+        assertEquals(2, laneLetterAt(lane, 40))
+    }
+
+    @Test
+    fun `above the first lettered item the first letter is current`() {
+        // Shelved, the first target is a heading that need not be item 0.
+        val lane = listOf(LaneLetter("A", 2), LaneLetter("P", 6))
+
+        assertEquals(0, laneLetterAt(lane, 0))
+    }
+
+    @Test
     fun `everything that is not a letter shares one bucket`() {
         assertEquals("#", initialOf("1984"))
         assertEquals("#", initialOf("(Prologue)"))

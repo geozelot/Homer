@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
@@ -36,7 +38,9 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.authorSortKey
 import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberSoft
 import com.geozelot.homer.ui.theme.Muted
+import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.Surface2
 import kotlin.math.roundToInt
@@ -142,6 +146,14 @@ internal fun initialOf(key: String): String? {
     return if (c.isLetter()) c.uppercase() else "#"
 }
 
+/**
+ * Which of [letters] the library is at, with [topItem] the first grid item on screen: the last
+ * letter whose first item is at or above it. Before the first letter's item — nothing above it
+ * files under a letter — it is the first.
+ */
+internal fun laneLetterAt(letters: List<LaneLetter>, topItem: Int): Int =
+    letters.indexOfLast { it.index <= topItem }.coerceAtLeast(0)
+
 /** How long the lane lingers after the library stops moving. */
 private const val LingerMs = 1_200L
 
@@ -177,6 +189,12 @@ internal fun FastScrollLane(
         }
     }
 
+    // Derived, so a scroll that stays inside one letter does not recompose the lane at all — it is
+    // read on every frame of a fling, and only a change of letter is news.
+    val current by remember(letters, gridState) {
+        derivedStateOf { laneLetterAt(letters, gridState.firstVisibleItemIndex) }
+    }
+
     fun jumpTo(y: Float) {
         if (laneHeight <= 0) return
         val slot = (y / laneHeight * letters.size).roundToInt().coerceIn(0, letters.lastIndex)
@@ -190,7 +208,10 @@ internal fun FastScrollLane(
                 .fillMaxHeight()
                 .padding(vertical = 8.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(Surface2.copy(alpha = 0.92f))
+                // See-through: it is drawn OVER the covers, and at 92% it sat on them as a solid
+                // bar. Not much further than this, though — 9sp letters still need a ground of
+                // their own to be read against.
+                .background(Surface2.copy(alpha = LaneAlpha))
                 .onSizeChanged { laneHeight = it.height }
                 // A tap lands where a drag would have started, which is the whole of it: a reader
                 // who can see "P" wants to press it, and a lane that only answered to a drag made
@@ -212,13 +233,28 @@ internal fun FastScrollLane(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            letters.forEach { letter ->
+            letters.forEachIndexed { index, letter ->
+                val here = index == current
                 Text(
                     letter.label,
                     style = SectionLabel,
                     fontSize = 9.sp,
                     lineHeight = 11.sp,
-                    color = if (dragging) Amber else Muted,
+                    // The rest brighten while the lane is held, so it reads as taken up; the letter
+                    // the library is at is the accent either way, and is what moves under a drag.
+                    color = when {
+                        here -> Amber
+                        dragging -> Parchment
+                        else -> Muted
+                    },
+                    // Drawn BEHIND the glyph rather than as a box around it, so the highlighted
+                    // letter takes exactly the room every other one does — a lane packed tight on a
+                    // short window must not grow a row for the one it is pointing at.
+                    modifier = if (here) {
+                        Modifier.drawBehind { drawCircle(AmberSoft, radius = LaneMarkRadius.toPx()) }
+                    } else {
+                        Modifier
+                    },
                 )
             }
         }
@@ -226,3 +262,9 @@ internal fun FastScrollLane(
 }
 
 private val LaneWidth = 22.dp
+
+/** The lane's ground: see where it is drawn. */
+private const val LaneAlpha = 0.7f
+
+/** The disc behind the current letter: inside the lane's width with room either side. */
+private val LaneMarkRadius = 8.dp
