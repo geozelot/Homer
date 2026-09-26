@@ -259,6 +259,29 @@ class PathTemplateTest {
     }
 
     @Test
+    fun `brackets on a field that holds one value are refused, not ignored`() {
+        // `{genre[, ]}` is the plural missing one letter. Ignored, it captured "Krimi, Thriller"
+        // as a single genre with nothing to say why.
+        assertNull(PathTemplate.compile("{genre[, ]}/{title}"))
+        assertNull(PathTemplate.compile("{title[;]}"))
+        assertNull(PathTemplate.compile("{author_surname[, ]}, {author_firstname}/{title}"))
+    }
+
+    @Test
+    fun `a second delimiter or a second shape is refused, not dropped`() {
+        assertNull(PathTemplate.compile("{authors[; ][, ]}/{title}"))
+        assertNull(PathTemplate.compile("{authors[{author_surname}][{author_firstname}]}/{title}"))
+    }
+
+    @Test
+    fun `one of each, in either order, still compiles`() {
+        val a = PathTemplate.compile("{authors[ - ][{author_surname}, {author_firstname}]}/{title}")
+        val b = PathTemplate.compile("{authors[{author_surname}, {author_firstname}][ - ]}/{title}")
+        val path = "Pratchett, Terry - Gaiman, Neil/Good Omens"
+        assertEquals(a!!.parse(path), b!!.parse(path))
+    }
+
+    @Test
     fun `a template naming a field this build does not have still compiles to nothing`() {
         assertNull(PathTemplate.compile("{narrators[;]}/{title}"))
         assertNull(PathTemplate.compile("{authors[ - ][{narrator}]}/{title}"))

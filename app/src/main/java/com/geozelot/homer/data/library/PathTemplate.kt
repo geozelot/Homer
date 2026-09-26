@@ -41,8 +41,16 @@ class PathTemplate private constructor(
         val delimiter: String? = null,
         /** Read each value with this, for a list whose items have a shape of their own. */
         val each: PathTemplate? = null,
-        val list: Boolean = false,
-    )
+        /**
+         * How the values of a list are stored — set only on the plural fields, so its presence is
+         * what MAKES a slot a list. Carried on the slot rather than chosen by a `when` over the field,
+         * which needed a default branch nothing could reach and would have given any future plural
+         * field the wrong column codec silently.
+         */
+        val codec: ((List<String>) -> String?)? = null,
+    ) {
+        val list: Boolean get() = codec != null
+    }
 
     /** Which half of a name a slot caught. */
     internal enum class NamePart { GIVEN, SURNAME }
@@ -97,11 +105,7 @@ class PathTemplate private constructor(
             val trimmed = item.trim()
             if (trimmed.isEmpty()) null else slot.each?.parse(trimmed)?.get(slot.field) ?: trimmed
         }
-        return when (slot.field) {
-            TemplateField.AUTHOR -> encodeAuthors(values)
-            TemplateField.GENRE -> encodeGenres(values)
-            else -> values.joinToString("\n").takeIf { it.isNotEmpty() }
-        }
+        return slot.codec?.invoke(values)
     }
 
     override fun toString(): String = source
@@ -175,8 +179,15 @@ class PathTemplate private constructor(
                     pattern.append("[^/]+?")
                 } else {
                     val groups = BRACKET.findAll(m.groupValues[2]).map { it.groupValues[1] }.toList()
-                    val each = groups.firstOrNull { it.contains('{') }?.let { compile(it) ?: return null }
-                    val delimiter = groups.firstOrNull { !it.contains('{') }?.takeIf { it.isNotEmpty() }
+                    val patterns = groups.filter { it.contains('{') }
+                    val delimiters = groups.filterNot { it.contains('{') }
+                    // Refused rather than quietly narrowed. A second delimiter or a second shape
+                    // has no meaning, and taking the first of each and dropping the rest is exactly
+                    // the kind of "it compiled, so it must work" this syntax exists to avoid: the
+                    // templates preview would show one author for "A, B" and nothing would say why.
+                    if (patterns.size > 1 || delimiters.size > 1) return null
+                    val each = patterns.firstOrNull()?.let { compile(it) ?: return null }
+                    val delimiter = delimiters.firstOrNull()?.takeIf { it.isNotEmpty() }
                     val slot = when (name.lowercase()) {
                         // The halves of a name. A folder reading `Pratchett, Terry` is a perfectly
                         // ordinary way to file an author and had no way to be read at all:
@@ -186,10 +197,15 @@ class PathTemplate private constructor(
                         "author_surname" -> Slot(TemplateField.AUTHOR, part = NamePart.SURNAME)
                         // The plural forms. Both columns have held several values since genres and
                         // authors became lists; only the path had no way to say so.
-                        "authors" -> Slot(TemplateField.AUTHOR, delimiter = delimiter, each = each, list = true)
-                        "genres" -> Slot(TemplateField.GENRE, delimiter = delimiter, each = each, list = true)
+                        "authors" -> Slot(TemplateField.AUTHOR, delimiter = delimiter, each = each, codec = ::encodeAuthors)
+                        "genres" -> Slot(TemplateField.GENRE, delimiter = delimiter, each = each, codec = ::encodeGenres)
                         else -> TemplateField.from(name)?.let { Slot(it) } ?: return null
                     }
+                    // Brackets only mean something on the plural fields. On `{genre[, ]}` — the
+                    // singular, by one missing letter — they were dropped without a word, and the
+                    // whole segment "Krimi, Thriller" became one genre. Refusing to compile is what
+                    // the unknown-field rule above already does for a typo, for the same reason.
+                    if (groups.isNotEmpty() && !slot.list) return null
                     slots += slot
                     pattern.append(if (slot.field.numeric) "(\\d+)" else "([^/]+?)")
                 }
