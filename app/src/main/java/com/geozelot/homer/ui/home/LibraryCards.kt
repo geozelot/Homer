@@ -56,6 +56,8 @@ internal fun BookGridCard(
     ctx: RowContext,
     onOpen: (String) -> Unit,
     actions: BookActions,
+    /** Whether any card in this card's grid row has a meta line — see [gridMetaRows]. */
+    metaLine: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val showProgress = book.hasVisibleProgress()
@@ -126,6 +128,7 @@ internal fun BookGridCard(
         GridCardText(
             title = book.title,
             meta = bookMeta(book, ctx, LocalContext.current, withDuration = false, withIndex = false),
+            metaLine = metaLine,
             chip = {
                 MetaChipSlot(
                     chips = bookChip(book, ctx),
@@ -176,13 +179,24 @@ private fun GridCardText(
      * same height or the grid stops lining up.
      */
     chip: @Composable () -> Unit,
+    /**
+     * Whether to reserve the meta line even when [meta] is empty.
+     *
+     * Decided for the whole grid ROW, because the cards in it have to end level. A row where no card
+     * has a meta line drops it, so the chips sit off the card's bottom edge by the same inset the
+     * cover sits off its top — an empty reserved line had put a blank line's worth of ground under
+     * them. A card that does have one draws it whatever this says: a disagreement costs that card
+     * its level bottom, never its text.
+     */
+    metaLine: Boolean,
 ) {
     // No padding of its own: the card's inset keeps it off the ground's edges, and the ground's
     // edge is what separates one card's last line from the next one's cover.
+    //
+    // No indent either. The title, the chip's OUTLINE, the meta line and the cover above share one
+    // left edge. The text used to stand in to where the chip's label starts, and against a cover and
+    // a pill that both run to the edge, a title 7dp in read as a mistake rather than a choice.
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Indented to where the chip's TEXT starts, not to where its outline does. The pill's
-        // hairline hangs into the margin instead of shunting the words it belongs to sideways, so
-        // the title, the chip's label and the meta line share one left edge.
         Text(
             title,
             color = Parchment,
@@ -192,19 +206,21 @@ private fun GridCardText(
             minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 5.dp),
+            modifier = Modifier.padding(top = 5.dp),
         )
         Box(modifier = Modifier.padding(top = MetaChipSlot.TitleGap)) { chip() }
-        Text(
-            meta,
-            color = Muted,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
-            minLines = 1,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = MetaChipSlot.TextInset, top = 1.dp),
-        )
+        if (metaLine || meta.isNotEmpty()) {
+            Text(
+                meta,
+                color = Muted,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                minLines = 1,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 1.dp),
+            )
+        }
     }
 }
 
@@ -337,6 +353,58 @@ internal data class RowContext(
 )
 
 /**
+ * Whether a book's meta line names its author: unless something else on the card is already saying
+ * it — the heading overhead when the shelf IS the author, or the chip when it took the name. One
+ * rule, shared by [bookMeta] and [gridMetaRows], so the line and the space kept for it cannot
+ * disagree.
+ */
+internal fun metaNamesAuthor(book: BookListItem, ctx: RowContext): Boolean =
+    !ctx.shelving.isByAuthor && !bookChip(book, ctx).carriesAuthor()
+
+/** The same, for a folded shelf's line — see [seriesMeta]. */
+internal fun metaNamesAuthor(series: LibraryEntry.Series, ctx: RowContext): Boolean =
+    !ctx.shelving.isByAuthor && !shelfChip(series, ctx).carriesAuthor()
+
+/**
+ * Whether a GRID card's meta line has anything to say, without building it: the grid draws
+ * [bookMeta] with the length, the volume number, the offline marker and the progress all left to
+ * the cover, which leaves the author and the tags.
+ */
+internal fun gridCardHasMeta(book: BookListItem, ctx: RowContext): Boolean =
+    metaNamesAuthor(book, ctx) || book.tags.isNotEmpty()
+
+/** The same, for whatever a grid slot draws; a folded shelf's line is its author or nothing. */
+internal fun gridCardHasMeta(slot: GridSlot, ctx: RowContext): Boolean = when (slot) {
+    is GridSlot.Book -> gridCardHasMeta(slot.book, ctx)
+    is GridSlot.Shelf -> metaNamesAuthor(slot.series, ctx)
+    else -> false
+}
+
+/**
+ * The keys of the grid cards that must reserve a meta line: every card in a row where at least one
+ * card has something to say. Rows are what LazyVerticalGrid makes of the slots — up to [columns]
+ * cells, broken early by anything full-span.
+ */
+internal fun gridMetaRows(slots: List<GridSlot>, columns: Int, hasMeta: (GridSlot) -> Boolean): Set<String> {
+    val out = HashSet<String>()
+    val row = ArrayList<GridSlot>(columns)
+    fun close() {
+        if (row.any(hasMeta)) row.mapTo(out) { it.key }
+        row.clear()
+    }
+    for (slot in slots) {
+        if (slot.fullSpan) {
+            close()
+            continue
+        }
+        row += slot
+        if (row.size == columns) close()
+    }
+    close()
+    return out
+}
+
+/**
  * The line under a book's title: the facts the current arrangement is NOT already showing.
  *
  * Shelved by author, the author is the section heading — repeating it on every row beneath is
@@ -380,7 +448,7 @@ private fun bookMeta(
     // the shelf IS the author, or the chip when it took the name. Asked of `metaChipFor` rather
     // than re-derived here — one rule, subtracted, so the two cannot drift into printing the name
     // twice or dropping it from both.
-    if (!ctx.shelving.isByAuthor && !bookChip(book, ctx).carriesAuthor()) {
+    if (metaNamesAuthor(book, ctx)) {
         // Every author, as they are read out: "first last, first last". The primary alone was the
         // one place a co-written book quietly lost its co-author.
         add(book.shownAuthors.takeIf { it.isNotEmpty() }?.joinToString(", ")
@@ -465,6 +533,8 @@ internal fun SeriesGridCard(
     ctx: RowContext,
     onOpen: () -> Unit,
     actions: BookActions,
+    /** See [BookGridCard]. */
+    metaLine: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Column(
@@ -539,6 +609,7 @@ internal fun SeriesGridCard(
         GridCardText(
             title = series.name,
             meta = seriesCardMeta(series, ctx, LocalContext.current),
+            metaLine = metaLine,
             // What most of its books shelve under, then everything else any of them carries —
             // so a shelf can say "Krimi +3" where no single volume carries four.
             chip = {

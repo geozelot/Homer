@@ -69,6 +69,12 @@ private val SeriesEnclosurePad = 12.dp
  */
 internal val SeriesListEnclosurePad = 8.dp
 
+/** How far an episode row inside an opened list shelf stands in from the enclosure's own inset. */
+internal val EpisodeIndent = 2.dp
+
+/** An episode row's padding round its cover, in place of the card a top-level row draws. */
+internal val EpisodeRowPad = 6.dp
+
 /**
  * Half the grid's `verticalArrangement` spacing. Each slice paints this far into the gaps above
  * and below it, so the side rails meet across the gap instead of the enclosure looking like a
@@ -159,7 +165,6 @@ internal fun ExpandedSeriesHeader(
                     lineHeight = ListRowTitleLineHeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
                 )
                 // The same header the list view draws, built the same way: what this shelf is,
                 // then what it holds, on one line.
@@ -209,12 +214,17 @@ internal fun ExpandedSeriesHeader(
  * the same weight the two would compete.
  */
 @Composable
-internal fun ExpandedSubHeader(label: String, last: Boolean) {
+internal fun ExpandedSubHeader(label: String, last: Boolean, gridView: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .seriesEnclosure(top = false, bottom = last)
-            .padding(horizontal = SeriesListEnclosurePad)
+            // On the left edge of the covers it labels: the grid's rows stand at the banner's own
+            // inset, the list's episodes a little further in (see BookListRow's `bordered`).
+            .padding(
+                start = if (gridView) SeriesEnclosurePad else SeriesListEnclosurePad + EpisodeIndent + EpisodeRowPad,
+                end = if (gridView) SeriesEnclosurePad else SeriesListEnclosurePad,
+            )
             .padding(bottom = if (last) SeriesListEnclosurePad else 0.dp),
     ) {
         Text(
@@ -223,7 +233,7 @@ internal fun ExpandedSubHeader(label: String, last: Boolean) {
             // A step brighter, like the shelf headings outside the enclosure — a sub-series is the
             // structure of what is open, not a footnote to it.
             color = Muted,
-            modifier = Modifier.padding(start = 2.dp, top = 10.dp, bottom = 4.dp),
+            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
         )
     }
 }
@@ -251,9 +261,11 @@ internal fun ExpandedSeriesRow(
             ),
         horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
     ) {
+        // One row, so one answer for all of it — the same rule the top-level grid applies per row.
+        val metaLine = books.any { gridCardHasMeta(it, ctx) }
         books.forEach { book ->
             Box(modifier = Modifier.weight(1f)) {
-                BookGridCard(book, ctx, onOpen = onOpen, actions = actions)
+                BookGridCard(book, ctx, onOpen = onOpen, actions = actions, metaLine = metaLine)
             }
         }
         // Hold the last row's cards to the same width as a full row's.
@@ -312,7 +324,7 @@ internal fun seriesMeta(
     }
     // Folded: exactly what a book row says, by the same rule — the author, unless the heading or
     // the chip is already carrying it.
-    if (!ctx.shelving.isByAuthor && !shelfChip(series, ctx).carriesAuthor()) {
+    if (metaNamesAuthor(series, ctx)) {
         add(series.shownAuthors.takeIf { it.isNotEmpty() }?.joinToString(", ")
             ?: context.getString(R.string.unknown_author))
     }

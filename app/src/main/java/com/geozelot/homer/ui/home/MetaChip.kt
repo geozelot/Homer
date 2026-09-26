@@ -101,15 +101,6 @@ object MetaChipSlot {
     val SlotHeight: Dp = 15.dp
 
     /**
-     * How far the chip's TEXT sits from the chip's left edge: the hairline plus its padding.
-     *
-     * The title above is indented by this, so the two read as one left edge and the chip's outline
-     * hangs into the margin rather than shunting the text it belongs to. Derived rather than typed
-     * twice, because the alignment breaks silently the moment either number moves.
-     */
-    val TextInset: Dp = 7.dp
-
-    /**
      * The gap between the title above and the chip.
      *
      * Bigger than the 2dp it started at, and the reason is what a chip IS: an outlined pill sitting
@@ -291,7 +282,6 @@ internal fun MetaChipSlot(
                 lineHeight = 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = if (chips.isEmpty()) MetaChipSlot.TextInset else 0.dp),
             )
         }
         return

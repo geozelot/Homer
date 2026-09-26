@@ -152,8 +152,10 @@ internal fun LazyGridScope.libraryContent(
 
     // WHAT is drawn and in WHAT ORDER are two questions, and only the first is answered here. The
     // order is [librarySlots] — one description of it, which the fast-scroll lane indexes into.
+    val slots = librarySlots(entries, gridView, columns, flatCollections, ::isOpen)
+    val metaRows = if (gridView) gridMetaRows(slots, columns) { gridCardHasMeta(it, ctx) } else emptySet()
     items(
-        items = librarySlots(entries, gridView, columns, flatCollections, ::isOpen),
+        items = slots,
         key = { it.key },
         span = { GridItemSpan(if (it.fullSpan) maxLineSpan else 1) },
     ) { slot ->
@@ -171,6 +173,10 @@ internal fun LazyGridScope.libraryContent(
                     // above the heading than the 8dp below it, and the heading reads as the start
                     // of what follows rather than the end of what came before.
                     topPadding = if (gridView) 12.dp else 20.dp,
+                    // On the covers' edge in the grid, which the cards' inset moved 4dp in from the
+                    // page margin. The list's cards run to the margin, so there it stays where the
+                    // pinned headers are.
+                    startPadding = if (gridView) GridCardInset else SectionLabelStart,
                     // A step brighter than the rows under it. A heading that names a shelf is the
                     // structure of the list rather than a note about it, and at Muted it sat at the
                     // same weight as the meta lines it was organising.
@@ -179,7 +185,13 @@ internal fun LazyGridScope.libraryContent(
 
             is GridSlot.Book ->
                 if (gridView) {
-                    BookGridCard(slot.book, ctx, onOpen = onBookClick, actions = actions)
+                    BookGridCard(
+                        slot.book,
+                        ctx,
+                        onOpen = onBookClick,
+                        actions = actions,
+                        metaLine = slot.key in metaRows,
+                    )
                 } else {
                     BookListRow(slot.book, startPadding = 0.dp, ctx = ctx, onOpen = onBookClick, actions = actions)
                 }
@@ -191,6 +203,7 @@ internal fun LazyGridScope.libraryContent(
                         ctx = ctx,
                         onOpen = { open(slot.series) },
                         actions = actions,
+                        metaLine = slot.key in metaRows,
                     )
                 } else {
                     // Same enclosure as the grid: the shelf row is its top slice and each episode
@@ -220,9 +233,13 @@ internal fun LazyGridScope.libraryContent(
             )
 
             is GridSlot.ShelfEpisode -> when (val row = slot.row) {
-                is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = slot.last)
+                is ShelfRow.SubHeader -> ExpandedSubHeader(row.label, last = slot.last, gridView = gridView)
                 ShelfRow.LooseHeader ->
-                    ExpandedSubHeader(stringResource(R.string.home_shelf_loose), last = slot.last)
+                    ExpandedSubHeader(
+                        stringResource(R.string.home_shelf_loose),
+                        last = slot.last,
+                        gridView = gridView,
+                    )
                 is ShelfRow.Books ->
                     if (gridView) {
                         ExpandedSeriesRow(
@@ -245,7 +262,7 @@ internal fun LazyGridScope.libraryContent(
                             // exactly the indent it had before the border went round them.
                             BookListRow(
                                 row.books.first(),
-                                startPadding = 2.dp,
+                                startPadding = EpisodeIndent,
                                 ctx = shelfCtx(slot.flat),
                                 onOpen = onBookClick,
                                 actions = actions,
@@ -289,15 +306,19 @@ internal fun SectionLabelRow(
     bottomPadding: Dp = 8.dp,
     large: Boolean = false,
     color: Color = Muted,
+    startPadding: Dp = SectionLabelStart,
 ) {
     Text(
         text = text.uppercase(),
         style = SectionLabel,
         fontSize = if (large) SectionLabelLargeSize else SectionLabel.fontSize,
         color = color,
-        modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = 2.dp),
+        modifier = Modifier.padding(top = topPadding, bottom = bottomPadding, start = startPadding),
     )
 }
+
+/** A section label's nudge off the page margin — letter-spaced capitals read as set back from it. */
+internal val SectionLabelStart = 2.dp
 
 /** Resting size of the two pinned headers; they fall back to [SectionLabel]'s 12sp on scroll. */
 internal val SectionLabelLargeSize = 14.sp

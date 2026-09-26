@@ -94,7 +94,7 @@ internal fun BookListRow(
                 onClick = { onOpen(book.id) },
                 onLongClick = { menuOpen = true },
             )
-            .padding(if (bordered) SeriesListEnclosurePad else 6.dp)
+            .padding(if (bordered) SeriesListEnclosurePad else EpisodeRowPad)
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -159,7 +159,6 @@ internal fun BookListRow(
                 lineHeight = ListRowTitleLineHeight,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = MetaChipSlot.TextInset),
             )
             // The chip, and nothing else. Everything the meta line used to carry is either on the
             // cover (the length, offline, the volume number), in the chip (author or genre), or
@@ -295,7 +294,6 @@ internal fun SeriesShelfRow(
                     lineHeight = ListRowTitleLineHeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = MetaChipSlot.TextInset),
                 )
                 // One slot, one height, both states — which is what stops the title and the line
                 // under it stepping up and down as a shelf is opened and closed. Folded it carries
