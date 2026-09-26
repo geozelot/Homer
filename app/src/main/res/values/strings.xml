@@ -312,7 +312,8 @@
     <string name="set_source_summary">Where your books come from</string>
     <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
     <string name="set_source_summary_books">%1$s · %2$s</string>
-    <string name="set_device_title">On this device</string>
+    <string name="set_storage_title">Storage</string>
+    <string name="set_browsing_title">Browsing</string>
     <string name="set_playback_title">Playback</string>
     <string name="set_playback_summary">Skip buttons jump %1$ds</string>
     <string name="set_privacy_title">Privacy &amp; security</string>
@@ -377,11 +378,14 @@
     <string name="set_sign_out_confirm_body">Homer will forget this server and clear this device\'s library: the books it found, your place in them, your bookmarks and your corrections. Your books stay where they are on the server, and so does anything saved to your account. Files you have already downloaded stay in your storage folder.</string>
 
     <!-- Settings: on this device -->
-    <string name="set_device_storage_header">STORAGE</string>
-    <string name="set_device_playback_header">PLAYBACK</string>
+    <string name="set_device_location_header">WHERE DOWNLOADS ARE KEPT</string>
+    <string name="set_device_downloads_header">DOWNLOADING</string>
+    <string name="set_device_reclaim_header">FREEING UP SPACE</string>
+    <string name="set_playback_download_header">WHEN YOU PRESS PLAY</string>
     <string name="settings_wifi_only_desc">Applies to downloading only. Streaming a book you have not downloaded always uses whatever connection is available.</string>
     <string name="set_device_choose_folder">Choose folder…</string>
-    <string name="set_device_browsing_header">BROWSING</string>
+    <string name="set_browsing_scroll_header">SCROLLING</string>
+    <string name="set_browsing_authors_header">AUTHOR NAMES</string>
     <string name="settings_fast_scroll">Jump-to-letter lane</string>
     <string name="settings_fast_scroll_desc">A strip of initials appears at the edge while the library scrolls. Its letters follow whatever the list is sorted by, and it stays away under sorts that have no alphabet.</string>
     <string name="set_device_delete_downloads">Delete downloaded books</string>

@@ -45,7 +45,8 @@ fun SettingsHubScreen(
     onBack: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenUpkeep: () -> Unit,
-    onOpenDevice: () -> Unit,
+    onOpenStorage: () -> Unit,
+    onOpenBrowsing: () -> Unit,
     onOpenPlayback: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -97,9 +98,13 @@ fun SettingsHubScreen(
         SettingsSectionHeader(stringResource(R.string.set_cat_device))
         // "What's stored here" — downloads and covers on this phone.
         SettingsNavRow(
-            label = stringResource(R.string.set_device_title),
+            label = stringResource(R.string.set_storage_title),
             summary = storageSummary(customStoragePath, customStorageUri, storageLost),
-            onClick = onOpenDevice,
+            onClick = onOpenStorage,
+        )
+        SettingsNavRow(
+            label = stringResource(R.string.set_browsing_title),
+            onClick = onOpenBrowsing,
         )
         SettingsNavRow(
             label = stringResource(R.string.set_playback_title),
@@ -208,7 +213,7 @@ private fun sourceSummary(
 }
 
 /**
- * Where downloads live, named the way the "On this device" page names it — or, when the grant on
+ * Where downloads live, named the way the Storage page names it — or, when the grant on
  * that folder is gone, the fact that it is, in place of a folder name that is no longer true.
  */
 @Composable

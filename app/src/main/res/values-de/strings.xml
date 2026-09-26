@@ -296,7 +296,8 @@
     <string name="set_upkeep_reader_summary">Wird von einem anderen Gerät gepflegt</string>
     <string name="set_source_summary">Woher deine Bücher kommen</string>
     <string name="set_source_summary_books">%1$s · %2$s</string>
-    <string name="set_device_title">Auf diesem Gerät</string>
+    <string name="set_storage_title">Speicher</string>
+    <string name="set_browsing_title">Blättern</string>
     <string name="set_playback_title">Wiedergabe</string>
     <string name="set_playback_summary">Tasten springen %1$d s</string>
     <string name="set_privacy_title">Datenschutz &amp; Sicherheit</string>
@@ -352,11 +353,14 @@
     <string name="set_sign_out_confirm_body">Homer vergisst diesen Server und löscht die Bibliothek dieses Geräts: die gefundenen Bücher, deine Stelle darin, deine Lesezeichen und deine Korrekturen. Deine Bücher bleiben, wo sie auf dem Server sind, und ebenso alles, was in deinem Konto gespeichert ist. Schon heruntergeladene Dateien bleiben in deinem Speicherordner.</string>
 
     <!-- Settings: on this device -->
-    <string name="set_device_storage_header">SPEICHER</string>
-    <string name="set_device_playback_header">WIEDERGABE</string>
+    <string name="set_device_location_header">WO DOWNLOADS LIEGEN</string>
+    <string name="set_device_downloads_header">HERUNTERLADEN</string>
+    <string name="set_device_reclaim_header">PLATZ FREIGEBEN</string>
+    <string name="set_playback_download_header">BEIM ABSPIELEN</string>
     <string name="settings_wifi_only_desc">Gilt nur für Downloads. Ein Buch, das nicht heruntergeladen ist, wird über jede verfügbare Verbindung gestreamt.</string>
     <string name="set_device_choose_folder">Ordner auswählen…</string>
-    <string name="set_device_browsing_header">BLÄTTERN</string>
+    <string name="set_browsing_scroll_header">SCROLLEN</string>
+    <string name="set_browsing_authors_header">AUTORENNAMEN</string>
     <string name="settings_fast_scroll">Buchstabenleiste</string>
     <string name="settings_fast_scroll_desc">Beim Scrollen erscheint am Rand eine Leiste mit Anfangsbuchstaben. Sie folgt der gewählten Sortierung und bleibt aus, wenn diese kein Alphabet hat.</string>
     <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>

@@ -32,11 +32,13 @@ import com.geozelot.homer.ui.components.SettingsRow
 import com.geozelot.homer.ui.components.SettingsSectionHeader
 import com.geozelot.homer.ui.components.SettingsSwitchRow
 import com.geozelot.homer.ui.home.HomeViewModel
+import com.geozelot.homer.ui.notificationsEnabled
+import com.geozelot.homer.ui.openNotificationSettings
 import com.geozelot.homer.ui.theme.Amber
 
 /**
- * How the player behaves: the two numbers that shape its feel, what the sleep timer does, and
- * whether the system will let playback continue off screen.
+ * How the player behaves: the two numbers that shape its feel, what the sleep timer does, whether
+ * pressing Play keeps the book, and whether the system will let playback continue off screen.
  *
  * The sleep settings used to live in a dialog behind the player's sleep button — two preferences
  * hidden inside a transient control, where they were both hard to find and impossible to change
@@ -56,6 +58,7 @@ fun PlaybackSettingsScreen(
     val rewindOnReturn by viewModel.rewindOnReturnSeconds.collectAsStateWithLifecycle()
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
+    val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var customSeek by remember { mutableStateOf(false) }
@@ -157,8 +160,23 @@ fun PlaybackSettingsScreen(
         )
 
         SettingsDivider()
+        // Here rather than with storage: it is triggered by playing. Its counterpart — whether a
+        // download may use mobile data — is a fact about the bytes and stays on the storage page.
+        SettingsSectionHeader(stringResource(R.string.set_playback_download_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_download_on_play),
+            checked = downloadOnPlay,
+            onCheckedChange = viewModel::setDownloadOnPlay,
+            description = stringResource(R.string.settings_download_on_play_desc),
+        )
+
+        SettingsDivider()
         SettingsSectionHeader(stringResource(R.string.set_playback_background_header))
         BatteryOptimisationRow()
+        // The lock-screen controls are the half of this anybody looks for, which is what puts it
+        // with playing off screen; the explanation says it also covers a running scan and a
+        // running download.
+        NotificationRow()
     }
 
     if (customSeek) {
@@ -275,6 +293,49 @@ private fun BatteryOptimisationRow() {
         },
     )
     SettingsExplanation(stringResource(R.string.set_playback_background_desc))
+}
+
+/**
+ * Whether Homer may post notifications, and a way back for the user who said no.
+ *
+ * Homer asks for the permission once, on the way into the library. Android only ever shows that
+ * dialog a couple of times, so for anybody who refused it this row is the only route back — and
+ * without it a scan, a download and a playback control all run with nothing on screen to show for
+ * them.
+ *
+ * Re-read on every resume, because the change is made in system Settings and the user comes back.
+ */
+@Composable
+private fun NotificationRow() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var allowed by remember { mutableStateOf(context.notificationsEnabled()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) allowed = context.notificationsEnabled()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    SettingsRow(
+        label = stringResource(R.string.set_device_notify_label),
+        summary = stringResource(
+            if (allowed) R.string.set_device_notify_on else R.string.set_device_notify_off,
+        ),
+        trailing = {
+            if (!allowed) {
+                HomerTextButton(
+                    onClick = { context.openNotificationSettings() },
+                    contentPadding = SettingsActionPadding,
+                ) {
+                    Text(stringResource(R.string.set_device_notify_action), color = Amber, fontSize = 13.sp)
+                }
+            }
+        },
+    )
+    SettingsExplanation(stringResource(R.string.set_device_notify_desc))
 }
 
 private fun Context.isIgnoringBatteryOptimisations(): Boolean =

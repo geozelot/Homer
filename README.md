@@ -125,7 +125,7 @@ permission at all:
   and the scheduled check that would find an update is off unless you turn it on.
 - **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
   at install or first run. Homer only sends you to the system grant screen if you explicitly choose
-  to keep downloads in a folder you pick yourself (Settings → *On this device* → *Browse device*).
+  to keep downloads in a folder you pick yourself (Settings → *Storage* → *Browse device*).
   It exists
   because the Android document picker (SAF) is refused on some ROMs — certain LineageOS builds
   return no folder at all — which otherwise leaves no way to use a user-visible, uninstall-surviving
