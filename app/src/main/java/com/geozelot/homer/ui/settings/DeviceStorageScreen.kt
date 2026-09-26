@@ -60,6 +60,7 @@ fun DeviceStorageScreen(
     val wifiOnly by viewModel.wifiOnlyDownloads.collectAsStateWithLifecycle()
     val downloaded by viewModel.downloadedCount.collectAsStateWithLifecycle()
     val fastScroll by viewModel.fastScroll.collectAsStateWithLifecycle()
+    val authorFiling by viewModel.authorFiling.collectAsStateWithLifecycle()
     val storageLost by viewModel.storageAccessLost.collectAsStateWithLifecycle()
 
     // Re-asked on every resume, not once: the way a folder grant is lost is that the user leaves
@@ -92,7 +93,13 @@ fun DeviceStorageScreen(
     val custom = customStoragePath ?: customStorageUri
 
     SettingsScaffold(stringResource(R.string.set_device_title), onBack, modifier) {
-        SettingsSectionHeader(stringResource(R.string.set_device_location_header))
+        // ── Storage ──────────────────────────────────────────────────────────────
+        //
+        // Everything about bytes on this phone: where they are kept, what is allowed to fetch
+        // them, and how to be rid of them. The three groups this replaces — a location, a
+        // downloading pair and a reclaim row — were each correct and, stacked, read as five
+        // unrelated pages rather than one question asked three ways.
+        SettingsSectionHeader(stringResource(R.string.set_device_storage_header))
         Text(
             when {
                 customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath!!)
@@ -143,40 +150,15 @@ fun DeviceStorageScreen(
             }
         }
         SettingsNote(stringResource(R.string.settings_storage_picker_desc))
-
-        SettingsDivider()
-
-        // A per-device display preference, which is what this page is for: it changes how THIS
-        // phone shows the library, not anything the library itself carries.
-        SettingsSectionHeader(stringResource(R.string.set_device_browsing_header))
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_fast_scroll),
-            checked = fastScroll,
-            onCheckedChange = viewModel::setFastScroll,
-            description = stringResource(R.string.settings_fast_scroll_desc),
-        )
-
-        SettingsDivider()
-
-        SettingsSectionHeader(stringResource(R.string.set_device_downloads_header))
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_download_on_play),
-            checked = downloadOnPlay,
-            onCheckedChange = viewModel::setDownloadOnPlay,
-            description = stringResource(R.string.settings_download_on_play_desc),
-        )
         SettingsSwitchRow(
             label = stringResource(R.string.settings_wifi_only),
             checked = wifiOnly,
             onCheckedChange = viewModel::setWifiOnlyDownloads,
+            description = stringResource(R.string.settings_wifi_only_desc),
         )
-
-        SettingsDivider()
-
-        SettingsSectionHeader(stringResource(R.string.set_device_reclaim_header))
-        // The only way to reclaim this space, and the only way to be rid of files a library this
-        // device no longer has left behind — signing into a different account orphans them, and
-        // nothing else on disk knows they are orphans.
+        // Last in the section, because it is the one row here that destroys something. It is also
+        // the only way to be rid of files a library this device no longer has left behind —
+        // signing into a different account orphans them, and nothing else on disk knows they are.
         SettingsRow(
             label = stringResource(R.string.set_device_delete_downloads),
             summary = if (downloaded > 0) {
@@ -192,7 +174,51 @@ fun DeviceStorageScreen(
 
         SettingsDivider()
 
-        SettingsSectionHeader(stringResource(R.string.set_device_notify_header))
+        // ── Browsing ─────────────────────────────────────────────────────────────
+        //
+        // How THIS phone shows the library — never anything the library itself carries, which is
+        // the line this whole page sits on.
+        SettingsSectionHeader(stringResource(R.string.set_device_browsing_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_fast_scroll),
+            checked = fastScroll,
+            onCheckedChange = viewModel::setFastScroll,
+            description = stringResource(R.string.settings_fast_scroll_desc),
+        )
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_author_by_surname),
+            checked = authorFiling.bySurname,
+            onCheckedChange = viewModel::setAuthorBySurname,
+            description = stringResource(R.string.settings_author_by_surname_desc),
+        )
+        // Only while the list is actually in that order. Writing names back to front in a list
+        // sorted by given name would be showing the index of a different arrangement — so the
+        // switch is not merely ignored when it does not apply, it is not offered.
+        if (authorFiling.bySurname) {
+            SettingsSwitchRow(
+                label = stringResource(R.string.settings_author_show_filed),
+                checked = authorFiling.showFiled,
+                onCheckedChange = viewModel::setAuthorShowFiled,
+                description = stringResource(R.string.settings_author_show_filed_desc),
+            )
+        }
+
+        SettingsDivider()
+
+        // ── Playback ─────────────────────────────────────────────────────────────
+        //
+        // What happens when a book is PLAYED. "Download it while I listen" belongs here rather
+        // than with the storage rows: it is triggered by playing, and its counterpart — whether a
+        // download may use mobile data — is a fact about the bytes and stays up there with them.
+        SettingsSectionHeader(stringResource(R.string.set_device_playback_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_download_on_play),
+            checked = downloadOnPlay,
+            onCheckedChange = viewModel::setDownloadOnPlay,
+            description = stringResource(R.string.settings_download_on_play_desc),
+        )
+        // The lock-screen controls are the half of this anybody looks for, which is what puts it
+        // here; the explanation says it also covers a running scan and a running download.
         NotificationRow()
     }
 
