@@ -565,14 +565,6 @@ class HomeViewModel @Inject constructor(
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** How many books the filter leaves, and how many there are — the "41 of 313" line. */
-    val filterCount: StateFlow<Pair<Int, Int>> =
-        combine(books, filter) { list, active ->
-            (if (active.isEmpty) list.size else list.count { active.matches(it) }) to list.size
-        }
-            // Walks the library with the same matcher as `entries` — same reason.
-            .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     fun addFilterToken(token: FilterToken) {
         // Committing a suggestion consumes the text that produced it: leaving it behind would go on
@@ -622,6 +614,21 @@ class HomeViewModel @Inject constructor(
             // list, so there is nothing here that wants the main thread — see `suggestions`.
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * How many books the filter leaves, and how many there are — the "41 of 313" line.
+     *
+     * Declared AFTER [entries], and it has to be: property initialisers run top to bottom, and
+     * `combine(entries, …)` above it would capture a null and throw on every construction.
+     */
+    val filterCount: StateFlow<Pair<Int, Int>> =
+        // Counted off the ARRANGED list rather than by matching the library again. `entries` has
+        // already applied exactly this filter to exactly these books, so a second walk with the same
+        // matcher on every keystroke was pure repetition — one of three full passes per character.
+        combine(entries, books) { arranged, list -> arranged.bookCount() to list.size }
+            // Walks the library with the same matcher as `entries` — same reason.
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     /**
      * The currently-playing book as its live library row, so the docked mini-player shows an
@@ -768,11 +775,18 @@ class HomeViewModel @Inject constructor(
 
     val scanState: StateFlow<ScanState> = libraryRepository.scanState
 
-    private val _libraryRoot = MutableStateFlow("")
-    val libraryRoot: StateFlow<String> = _libraryRoot.asStateFlow()
+    /**
+     * The configured library root, live from settings.
+     *
+     * It was a one-shot COPY, filled by an async read in `init` and written back to settings on
+     * every Scan and Rebuild. Nothing ever edited the copy, so the write-back only ever did harm:
+     * a Scan tapped before that read landed persisted `""` as the root, and the next crawl walked
+     * the whole WebDAV account. Read-only now, and the scan takes the root from where it lives.
+     */
+    val libraryRoot: StateFlow<String> = libraryRepository.libraryRoot
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     init {
-        viewModelScope.launch { _libraryRoot.value = libraryRepository.libraryRoot.first() }
         // One-time relocation to the siloed Homer/ storage root — see the coordinator.
         viewModelScope.launch { storage.relocateLegacyDownloadsOnce() }
         // Surface an already-running playback session in the mini-player on cold start, before the
@@ -810,22 +824,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun scan() {
-        viewModelScope.launch {
-            // Persist the root first; the worker reads it. Scan + covers (+ shared-index publish)
-            // then run in the foreground worker so they survive the app being backgrounded.
-            libraryRepository.setLibraryRoot(_libraryRoot.value)
-            libraryIndexManager.scan()
-        }
-    }
+    /**
+     * Scan + covers (+ shared-index publish), in the foreground worker so they survive the app being
+     * backgrounded. The worker reads the root from settings, where it lives — this used to write a
+     * cached copy back first, which is how a Scan tapped too early persisted an empty root.
+     */
+    fun scan() = libraryIndexManager.scan()
 
     /** Deep re-scan: rebuild the library and re-fetch all cover art. */
-    fun fullScan() {
-        viewModelScope.launch {
-            libraryRepository.setLibraryRoot(_libraryRoot.value)
-            libraryIndexManager.fullScan()
-        }
-    }
+    fun fullScan() = libraryIndexManager.fullScan()
 
     /**
      * Try again for the books that still have no artwork.
