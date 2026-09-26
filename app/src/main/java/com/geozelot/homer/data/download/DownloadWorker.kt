@@ -78,7 +78,17 @@ class DownloadWorker @AssistedInject constructor(
 
         // Resume from the last completed file: a paused (or retried) download keeps its progress
         // count, so already-finished files are skipped rather than re-fetched.
-        val startIndex = (downloadDao.findByBookId(bookId)?.downloadedFiles ?: 0).coerceIn(0, files.size)
+        //
+        // The stored count is a HINT, checked against the disk before it is trusted. It is an index
+        // into the file list as it was when the count was written, and a rescan in between that adds
+        // or reorders a file shifts every index after it: resuming blind skipped the new file and
+        // marked the book DONE with a chapter missing. Walking the prefix that is actually present,
+        // up to the stored count, resumes at the first file that is not there — through one resolved
+        // storage area, so it costs a lookup per finished file rather than a whole area each.
+        val stored = (downloadDao.findByBookId(bookId)?.downloadedFiles ?: 0).coerceIn(0, files.size)
+        val present = storage.presenceProbe()
+        var startIndex = 0
+        while (startIndex < stored && present(files[startIndex].relativePath)) startIndex++
         downloadDao.upsert(DownloadEntity(bookId, DownloadStatus.DOWNLOADING, startIndex, files.size, now()))
         // Notification updates are throttled because Android's notify rate limit (~5/s) is
         // PER PACKAGE, not per notification. A book of many small files posted an update per file
