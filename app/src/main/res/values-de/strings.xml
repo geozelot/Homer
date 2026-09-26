@@ -298,6 +298,7 @@
     <string name="set_source_summary_books">%1$s · %2$s</string>
     <string name="set_storage_title">Speicher</string>
     <string name="set_browsing_title">Blättern</string>
+    <string name="set_browsing_summary">Anzeigegröße %1$d %%</string>
     <string name="set_playback_title">Wiedergabe</string>
     <string name="set_playback_summary">Tasten springen %1$d s</string>
     <string name="set_privacy_title">Datenschutz &amp; Sicherheit</string>
@@ -359,8 +360,12 @@
     <string name="set_playback_download_header">BEIM ABSPIELEN</string>
     <string name="settings_wifi_only_desc">Gilt nur für Downloads. Ein Buch, das nicht heruntergeladen ist, wird über jede verfügbare Verbindung gestreamt.</string>
     <string name="set_device_choose_folder">Ordner auswählen…</string>
+    <string name="set_browsing_display_header">ANZEIGE</string>
     <string name="set_browsing_scroll_header">SCROLLEN</string>
     <string name="set_browsing_authors_header">AUTORENNAMEN</string>
+    <string name="settings_display_size">Anzeigegröße</string>
+    <string name="settings_display_size_value">%1$d %%</string>
+    <string name="settings_display_size_desc">Macht alles, was Homer zeigt, größer oder kleiner — so wie Androids eigene Einstellung „Anzeigegröße“ für das ganze Telefon. Die in Android eingestellte Schriftgröße gilt zusätzlich. Homer baut die Ansicht einmal neu auf, wenn du den Regler loslässt.</string>
     <string name="settings_fast_scroll">Buchstabenleiste</string>
     <string name="settings_fast_scroll_desc">Beim Scrollen erscheint am Rand eine Leiste mit Anfangsbuchstaben. Sie folgt der gewählten Sortierung und bleibt aus, wenn diese kein Alphabet hat.</string>
     <string name="set_device_delete_downloads">Heruntergeladene Bücher löschen</string>

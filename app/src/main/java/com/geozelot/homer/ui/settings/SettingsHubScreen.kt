@@ -102,8 +102,11 @@ fun SettingsHubScreen(
             summary = storageSummary(customStoragePath, customStorageUri, storageLost),
             onClick = onOpenStorage,
         )
+        // Read here rather than collected: a new display size recreates the activity, this page
+        // with it, so the value cannot change while the row is on screen.
         SettingsNavRow(
             label = stringResource(R.string.set_browsing_title),
+            summary = stringResource(R.string.set_browsing_summary, DisplayScale.current(LocalContext.current)),
             onClick = onOpenBrowsing,
         )
         SettingsNavRow(

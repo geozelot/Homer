@@ -78,7 +78,7 @@ enum class AppLanguage(val tag: String, val label: String) {
             // notifications and workers on the next launch rather than this instant — which is why
             // this branch does not exist above Android 13, where the framework restarts the process
             // state properly.
-            findActivity(context)?.recreate()
+            context.findActivity()?.recreate()
         }
 
         /**
@@ -109,15 +109,18 @@ enum class AppLanguage(val tag: String, val label: String) {
                 .getString(KEY_TAG, null)
                 ?.takeIf { it.isNotBlank() }
                 ?.let(Locale::forLanguageTag)
-
-        /** The Activity behind a Compose `LocalContext`, which is usually a wrapper around one. */
-        private fun findActivity(context: Context): Activity? {
-            var current = context
-            while (current is ContextWrapper) {
-                if (current is Activity) return current
-                current = current.baseContext
-            }
-            return null
-        }
     }
+}
+
+/**
+ * The Activity behind a Compose `LocalContext`, which is usually a wrapper around one. Shared by the
+ * two settings that apply by recreating it — the language and [DisplayScale].
+ */
+internal fun Context.findActivity(): Activity? {
+    var current = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }

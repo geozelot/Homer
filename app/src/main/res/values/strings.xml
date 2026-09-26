@@ -314,6 +314,7 @@
     <string name="set_source_summary_books">%1$s · %2$s</string>
     <string name="set_storage_title">Storage</string>
     <string name="set_browsing_title">Browsing</string>
+    <string name="set_browsing_summary">Display size %1$d%%</string>
     <string name="set_playback_title">Playback</string>
     <string name="set_playback_summary">Skip buttons jump %1$ds</string>
     <string name="set_privacy_title">Privacy &amp; security</string>
@@ -384,8 +385,12 @@
     <string name="set_playback_download_header">WHEN YOU PRESS PLAY</string>
     <string name="settings_wifi_only_desc">Applies to downloading only. Streaming a book you have not downloaded always uses whatever connection is available.</string>
     <string name="set_device_choose_folder">Choose folder…</string>
+    <string name="set_browsing_display_header">DISPLAY</string>
     <string name="set_browsing_scroll_header">SCROLLING</string>
     <string name="set_browsing_authors_header">AUTHOR NAMES</string>
+    <string name="settings_display_size">Display size</string>
+    <string name="settings_display_size_value">%1$d%%</string>
+    <string name="settings_display_size_desc">Makes everything Homer draws larger or smaller, the way Android’s own display size setting does for the whole phone. The text size set in Android still applies on top. Homer redraws once when you let go of the slider.</string>
     <string name="settings_fast_scroll">Jump-to-letter lane</string>
     <string name="settings_fast_scroll_desc">A strip of initials appears at the edge while the library scrolls. Its letters follow whatever the list is sorted by, and it stays away under sorts that have no alphabet.</string>
     <string name="set_device_delete_downloads">Delete downloaded books</string>

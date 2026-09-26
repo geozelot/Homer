@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.geozelot.homer.ui.HomerApp
 import com.geozelot.homer.ui.settings.AppLanguage
+import com.geozelot.homer.ui.settings.DisplayScale
 import com.geozelot.homer.ui.lock.BiometricGate
 import com.geozelot.homer.ui.theme.HomerTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,10 +21,14 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     /**
      * Applies the chosen interface language below Android 13, where there is no framework API for
-     * it. Above that [AppLanguage.wrap] is the identity and the platform has already done it.
+     * it (above that [AppLanguage.wrap] is the identity and the platform has already done it), and
+     * Homer's own display size, which is the identity at 100%.
+     *
+     * Here and not in the Application: a display size is a fact about windows, and the application
+     * context draws none. Notifications and workers are better off at the density the system gave.
      */
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(AppLanguage.wrap(newBase))
+        super.attachBaseContext(DisplayScale.wrap(AppLanguage.wrap(newBase)))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
