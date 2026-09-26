@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.delay
 
 /**
  * When the position leaves the device.
@@ -25,7 +26,7 @@ import org.junit.Test
  */
 class PositionSyncerTest {
 
-    private class RecordingDao : PlaybackStateDao {
+    private class RecordingDao(private val writeDelayMs: Long = 0) : PlaybackStateDao {
         val upserts = mutableListOf<PlaybackStateEntity>()
         override suspend fun findByBookId(bookId: String): PlaybackStateEntity? = null
         override suspend fun getAll(): List<PlaybackStateEntity> = emptyList()
@@ -35,15 +36,17 @@ class PositionSyncerTest {
         override suspend fun updateCurrentMediaId(bookId: String, mediaId: String) = Unit
         override suspend fun deleteOrphans() = Unit
         override suspend fun upsert(state: PlaybackStateEntity) {
+            if (writeDelayMs > 0) delay(writeDelayMs)
             upserts += state
         }
     }
 
     /** The syncer with its manifest side recorded as an event log ("export", "sync", "sync(forced)"). */
-    private class Harness(scope: CoroutineScope) {
-        val dao = RecordingDao()
+    private class Harness(scope: CoroutineScope, writeDelayMs: Long = 0) {
+        val dao = RecordingDao(writeDelayMs)
         var snapshot: PositionSnapshot? = PositionSnapshot("book", "book/ch02.mp3", 42_000L)
         val events = mutableListOf<String>()
+        val savedAtExport = mutableListOf<Int>()
 
         /** Captured rather than ignored, so the test can BE the process lifecycle. */
         private var background: (() -> Unit)? = null
@@ -52,7 +55,8 @@ class PositionSyncerTest {
             scope = scope,
             playbackStateDao = dao,
             snapshot = { snapshot },
-            exportMirror = { events += "export" },
+            // Records how many writes had LANDED when the export ran — the export reads them.
+            exportMirror = { events += "export"; savedAtExport += dao.upserts.size },
             syncManifest = { force -> events += if (force) "sync(forced)" else "sync" },
             observeBackgrounding = { onBackground -> background = onBackground },
         )
@@ -120,6 +124,17 @@ class PositionSyncerTest {
         assertEquals("book", saved.bookId)
         assertEquals("book/ch02.mp3", saved.currentMediaId)
         assertEquals(42_000L, saved.positionMs)
+    }
+
+    @Test
+    fun `the push reads the position it was flushed with, even when the write is slow`() = runTest {
+        // The race this pins: the save and the push were two independent launches, and the push
+        // reads Room. With a write that takes any time at all, the export ran against the position
+        // from BEFORE the flush — and the forced flush on backgrounding is the one that loses it.
+        val h = Harness(this, writeDelayMs = 500)
+        h.syncer.flush(force = true)
+        advanceUntilIdle()
+        assertEquals(listOf(1), h.savedAtExport)
     }
 
     @Test

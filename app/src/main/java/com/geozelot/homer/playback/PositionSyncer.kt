@@ -71,7 +71,11 @@ class PositionSyncer(
      * second a debounced job would still be sleeping, silently dropping the push.
      */
     fun flush(force: Boolean = false) {
-        save()
+        // Kept as a handle rather than fired and forgotten, because the push below READS what this
+        // writes. The two used to be independent launches, so the push could export the position
+        // from before the save — and the push that loses that race most often is the forced one on
+        // backgrounding, which is the one another device is waiting for.
+        val saving = scope.launch { saveNow() }
         // Only the WAIT is cancellable. Collapsing a burst is what the debounce is for, and
         // cancelling a job still sleeping costs nothing — but a forced flush starts its push at
         // once, so with one cancel covering both a pause followed by a backgrounding aborted a
@@ -81,6 +85,7 @@ class PositionSyncer(
         debounceJob = scope.launch {
             if (!force) delay(SYNC_DEBOUNCE_MS)
             scope.launch {
+                saving.join()
                 pushLock.withLock {
                     // Local mirror first (cheap, offline-safe, all tiers), then the server manifest.
                     exportMirror()
