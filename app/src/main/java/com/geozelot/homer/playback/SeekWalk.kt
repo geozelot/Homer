@@ -29,6 +29,14 @@ internal data class SeekTarget(val index: Int, val positionMs: Long)
  *
  * The forward walk stops at the last chapter for the same reason there is nowhere past it: the
  * end of the book is the end of the book, and a seek past it clamps there rather than wrapping.
+ *
+ * ## A backward crossing lands short of the end, never on it
+ *
+ * The neighbour's length is a MEASUREMENT, and a header estimate can run a fraction of a second
+ * past what the stream actually decodes. Landing inside that fraction puts the player past the real
+ * end, it clamps, it auto-advances — and a skip BACK has carried the listener forward, to the start
+ * of the chapter they were in. So a landing reached by crossing backwards is held at least
+ * [END_MARGIN_MS] clear of the chapter's end. A second is well inside what a skip-back is for.
  */
 internal fun seekTarget(
     index: Int,
@@ -37,7 +45,11 @@ internal fun seekTarget(
     chapterCount: Int,
     durationAt: (Int) -> Long,
 ): SeekTarget {
-    var at = index.coerceIn(0, (chapterCount - 1).coerceAtLeast(0))
+    // No chapters, no walk: asking [durationAt] anything here would be asking about a chapter that
+    // does not exist, which is exactly how the caller used to crash.
+    if (chapterCount <= 0) return SeekTarget(0, (positionMs + deltaMs).coerceAtLeast(0L))
+    val start = index.coerceIn(0, chapterCount - 1)
+    var at = start
     var target = positionMs + deltaMs
 
     while (target < 0 && at > 0) {
@@ -54,5 +66,13 @@ internal fun seekTarget(
     }
 
     val duration = durationAt(at)
-    return SeekTarget(at, target.coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE))
+    val end = when {
+        duration <= 0 -> Long.MAX_VALUE
+        at < start -> (duration - END_MARGIN_MS).coerceAtLeast(0L)
+        else -> duration
+    }
+    return SeekTarget(at, target.coerceIn(0L, end))
 }
+
+/** How far clear of a chapter's measured end a backward crossing lands. See [seekTarget]. */
+internal const val END_MARGIN_MS = 1_000L

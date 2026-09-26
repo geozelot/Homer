@@ -379,7 +379,7 @@ class PlaybackConnection @Inject constructor(
                 downloadReloadWatcher.watch(
                     bookId = bookId,
                     isOffline = { currentOffline },
-                    onSourceFlip = { reloadCurrentBook() },
+                    onSourceFlip = { reloadCurrentBook(bookId) },
                 )
             }
         }
@@ -465,7 +465,7 @@ class PlaybackConnection @Inject constructor(
                 downloadReloadWatcher.watch(
                     bookId = bookId,
                     isOffline = { currentOffline },
-                    onSourceFlip = { reloadCurrentBook() },
+                    onSourceFlip = { reloadCurrentBook(bookId) },
                 )
 
                 // In the background, pull a possibly-newer cross-device position and apply it — but
@@ -485,12 +485,20 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
-    /** Rebuilds the current playlist from the latest source, keeping chapter + position. */
-    private suspend fun reloadCurrentBook() {
-        val c = controller ?: return
-        if (c.mediaItemCount == 0) return // nothing loaded yet — playBook is still setting up
-        val bookId = currentBookId ?: return
-        val playlist = playlistResolver.resolve(bookId) ?: return
+    /**
+     * Rebuilds [forBook]'s playlist from the latest source, keeping chapter + position.
+     *
+     * Under [switchMutex], and only if [forBook] is still the book loaded. It took neither, and the
+     * outgoing book's download watcher stays alive until the incoming one replaces it — AFTER the
+     * switch has loaded the new queue. So a download finishing mid-switch fired a reload that read
+     * the NEW book id and seeked it to the OLD book's chapter and position, as a second writer on
+     * the queue concurrently with the switch.
+     */
+    private suspend fun reloadCurrentBook(forBook: String) = switchMutex.withLock {
+        val c = controller ?: return@withLock
+        if (c.mediaItemCount == 0) return@withLock // nothing loaded yet — playBook is still setting up
+        val bookId = currentBookId?.takeIf { it == forBook } ?: return@withLock
+        val playlist = playlistResolver.resolve(bookId) ?: return@withLock
         currentOffline = playlist.offline
         currentCoverModel = playlist.coverModel
         val index = c.currentMediaItemIndex
@@ -647,25 +655,33 @@ class PlaybackConnection @Inject constructor(
      */
     fun seekBy(deltaMs: Long) {
         val c = controller ?: return
+        // Nothing loaded, nothing to move — and nothing to walk, which is where this used to crash.
+        if (c.mediaItemCount == 0) return
         val landing = seekTarget(
             index = c.currentMediaItemIndex,
             positionMs = c.currentPosition,
             deltaMs = deltaMs,
             chapterCount = c.mediaItemCount,
-        ) { chapterDurationAt(c, it) }
+        ) { durationOf(c, it) }
         c.seekTo(landing.index, landing.positionMs)
         pushState()
     }
 
     /**
-     * How long chapter [index] runs.
+     * How long chapter [index] runs — the ONE answer both the scrubber and the skip buttons use.
      *
      * The player's own answer for the chapter it is in, because that one is exact once prepared;
      * the measured value for every other, because a prepared player knows nothing about them and an
      * unprepared one knows nothing at all. Zero means "not measured", which every caller has to
-     * treat as "cannot cross this".
+     * treat as "cannot cross this". It was written twice, once here and once in [pushState], and the
+     * two had already started to differ in what they did with an empty queue.
      */
-    private fun chapterDurationAt(c: MediaController, index: Int): Long {
+    private fun durationOf(c: MediaController, index: Int): Long {
+        // Out of range answers "unknown" rather than throwing. An empty queue is a real state — the
+        // gap between connecting and a playlist landing, or a book whose files could not be
+        // resolved — and `getMediaItemAt` on it is an IndexOutOfBoundsException, which took the
+        // app down from a skip button.
+        if (index !in 0 until c.mediaItemCount) return 0L
         if (index == c.currentMediaItemIndex) c.duration.takeIf { it > 0 }?.let { return it }
         return currentDurations[c.getMediaItemAt(index).mediaId] ?: 0L
     }
@@ -1047,7 +1063,7 @@ class PlaybackConnection @Inject constructor(
             positionMs = position,
             // Before playback prepares the player, c.duration is unknown — fall back to the
             // measured chapter duration so the scrubber shows real progress on a resumed book.
-            durationMs = c.duration.takeIf { it > 0 } ?: (currentDurations[c.currentMediaItem?.mediaId] ?: 0L),
+            durationMs = durationOf(c, c.currentMediaItemIndex),
             bookElapsedMs = before + position,
             bookTotalMs = bookTotal,
             playbackSpeed = c.playbackParameters.speed,

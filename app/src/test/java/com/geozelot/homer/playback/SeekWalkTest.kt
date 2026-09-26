@@ -63,6 +63,32 @@ class SeekWalkTest {
     }
 
     @Test
+    fun `a backward crossing that would land in the last second is held clear of the end`() {
+        // Ten seconds in, 10.5 back: half a second before the previous chapter's MEASURED end —
+        // inside the slack a header estimate can have, where the player clamps and auto-advances.
+        assertEquals(SeekTarget(0, ten - END_MARGIN_MS), walk(1, 10_000, -10_500))
+    }
+
+    @Test
+    fun `a backward landing well clear of the end is left exactly where it falls`() {
+        assertEquals(SeekTarget(0, ten - 20_000), walk(1, 10_000, -30_000))
+    }
+
+    @Test
+    fun `an empty queue asks nothing about chapters that do not exist`() {
+        // The crash this guards: the walk used to query chapter 0 of an empty timeline.
+        var asked = false
+        val target = seekTarget(0, 5_000, -30_000, chapterCount = 0) { asked = true; ten }
+        assertEquals(SeekTarget(0, 0), target)
+        assertEquals(false, asked)
+    }
+
+    @Test
+    fun `an index past the end is read as the last chapter`() {
+        assertEquals(SeekTarget(2, 130_000), walk(7, 100_000, 30_000))
+    }
+
+    @Test
     fun `a single-file book behaves exactly as it always did`() {
         assertEquals(SeekTarget(0, 0), walk(0, 10_000, -30_000, count = 1))
         assertEquals(SeekTarget(0, ten), walk(0, ten - 5_000, 30_000, count = 1))
