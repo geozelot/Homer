@@ -59,6 +59,7 @@ import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
+import com.geozelot.homer.data.library.filedAuthor
 
 /**
  * The one fact under an item's title that the shelf it is standing on does not already say.
@@ -325,7 +326,7 @@ private fun MetaChip(
             MetaChipKind.GENRE -> BookGenre.display(value, ctx.locale)
             MetaChipKind.SHELF ->
                 BookState.from(value)?.let { stringResource(it.label) } ?: value
-            MetaChipKind.AUTHOR -> value
+            MetaChipKind.AUTHOR -> if (ctx.filedNames) filedAuthor(value) else value
         }
     }
     Box {

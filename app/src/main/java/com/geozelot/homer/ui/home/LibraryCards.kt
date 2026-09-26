@@ -317,6 +317,11 @@ internal data class RowContext(
      * the interface language changes, so the locale has to arrive from the composition that has it.
      */
     val locale: Locale = Locale.ENGLISH,
+    /**
+     * Draw author names filed — "Pratchett, Terry". A LABEL rule only: an author chip still carries
+     * the spoken name as its value, so the filter it commits is the same whichever way it reads.
+     */
+    val filedNames: Boolean = false,
 )
 
 /**
@@ -366,7 +371,7 @@ private fun bookMeta(
     if (!ctx.shelving.isByAuthor && !bookChip(book, ctx).carriesAuthor()) {
         // Every author, as they are read out: "first last, first last". The primary alone was the
         // one place a co-written book quietly lost its co-author.
-        add(book.authors.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        add(book.shownAuthors.takeIf { it.isNotEmpty() }?.joinToString(", ")
             ?: context.getString(R.string.unknown_author))
     }
     // Genres are the chip's, and only the chip's. They used to be joined into this line with the

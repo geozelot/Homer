@@ -59,6 +59,15 @@ data class PinningBlock(val host: String, val offered: List<String>)
 private fun String?.toPinList(): List<String> =
     this?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
+
+/**
+ * What filing by surname was stored as while it was a shelving, and before that a sort.
+ *
+ * Top-level rather than on [LibrarySettings]'s companion because the shelving enum reads it too:
+ * both the shelf-mode fallback and the surname default have to recognise the same old value.
+ */
+const val LEGACY_AUTHOR_LAST = "author_last"
+
 @Singleton
 class LibrarySettings @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -96,7 +105,14 @@ class LibrarySettings @Inject constructor(
      * all follow this single switch now, so the three cannot disagree.
      */
     val authorBySurname: Flow<Boolean> =
-        context.settingsDataStore.data.map { it[KEY_AUTHOR_BY_SURNAME] ?: false }
+        context.settingsDataStore.data.map { prefs ->
+            // Unset means "never chosen", and a reader who chose surname filing in a build where it
+            // was a shelving or a sort has already answered this question. Read the answer out of
+            // what they stored rather than writing a migration: nothing is lost if they never open
+            // the setting, and touching the switch settles it for good.
+            prefs[KEY_AUTHOR_BY_SURNAME]
+                ?: (prefs[KEY_SHELF_MODE] == LEGACY_AUTHOR_LAST || prefs[KEY_SORT_MODE] == LEGACY_AUTHOR_LAST)
+        }
 
     suspend fun setAuthorBySurname(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_AUTHOR_BY_SURNAME] = value }
@@ -539,6 +555,7 @@ class LibrarySettings @Inject constructor(
         val KEY_FAST_SCROLL = booleanPreferencesKey("library_fast_scroll")
         val KEY_AUTHOR_BY_SURNAME = booleanPreferencesKey("library_author_by_surname")
         val KEY_AUTHOR_SHOW_FILED = booleanPreferencesKey("library_author_show_filed")
+
         val KEY_FLAT_COLLECTIONS = stringSetPreferencesKey("library_flat_collections")
         val KEY_SORT_MODE = stringPreferencesKey("library_sort_mode")
         val KEY_LANGUAGE_FILTER = stringPreferencesKey("library_language_filter")

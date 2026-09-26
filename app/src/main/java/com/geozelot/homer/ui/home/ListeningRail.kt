@@ -158,7 +158,7 @@ private fun ListeningRailItem(book: BookListItem, onOpen: (String) -> Unit, acti
                 val timeLeftMs = book.timeLeftMs
                 Text(
                     text = when {
-                        timeLeftMs == null -> book.author ?: stringResource(R.string.unknown_author)
+                        timeLeftMs == null -> book.shownAuthor ?: stringResource(R.string.unknown_author)
                         timeLeftMs <= 0 -> stringResource(R.string.status_finished)
                         else -> stringResource(R.string.time_left, formatCompactDuration(timeLeftMs))
                     },

@@ -278,6 +278,7 @@ internal fun LazyGridScope.libraryContent(
 @Composable
 private fun headerLabel(entry: LibraryEntry.Header): String = when {
     entry.titleRes != null -> stringResource(entry.titleRes)
+    entry.shown != null -> entry.shown
     entry.genre != null -> BookGenre.display(entry.genre, LocalConfiguration.current.locales[0])
     else -> entry.title
 }

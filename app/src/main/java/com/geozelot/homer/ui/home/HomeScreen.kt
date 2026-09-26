@@ -707,6 +707,7 @@ fun HomeScreen(
                                     series = seriesMode,
                                     gridView = gridView,
                                     locale = interfaceLocale,
+                                    filedNames = authorFiling.showFiled,
                                 ),
                                 expanded = expanded,
                                 onBookClick = onBookClick,

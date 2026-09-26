@@ -271,7 +271,7 @@ private fun ListeningItem(
             // the one remaining line. The author only stands in when there is no position yet.
             val timeLeftMs = book.timeLeftMs
             val meta = when {
-                timeLeftMs == null -> book.author ?: stringResource(R.string.unknown_author)
+                timeLeftMs == null -> book.shownAuthor ?: stringResource(R.string.unknown_author)
                 timeLeftMs <= 0 -> stringResource(R.string.status_finished)
                 else -> stringResource(R.string.time_left, formatCompactDuration(timeLeftMs))
             }

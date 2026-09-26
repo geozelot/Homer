@@ -15,6 +15,7 @@ import com.geozelot.homer.data.library.displayAuthors
 import com.geozelot.homer.data.library.hasMetadataEdit
 import com.geozelot.homer.data.metadata.BookGenre
 import javax.inject.Inject
+import com.geozelot.homer.data.library.filedAuthor
 
 // ── The list pipeline ─────────────────────────────────────────────────────────
 //
@@ -92,10 +93,13 @@ class LibraryFilterEngine @Inject constructor() {
             // elapsed > total, which reads as "finished" and hides it from the listening shelf.
             val measured = total != null && total > 0 && elapsed != null &&
                 bookProgress.fullyMeasured
+            // Spoken form for everything that compares; filed form only for what is drawn.
+            val authors = displayAuthors(book.author)
             BookListItem(
                 id = book.id,
                 title = book.title,
-                authors = displayAuthors(book.author, filedNames),
+                authors = authors,
+                shownAuthors = if (filedNames) authors.map(::filedAuthor) else authors,
                 isMultiFile = book.isMultiFile,
                 fileCount = book.fileCount,
                 coverModel = eff.coverModel,
@@ -132,11 +136,13 @@ class LibraryFilterEngine @Inject constructor() {
         series: LibraryDepth,
         /** File authors under their surname — the device setting, not a sort of its own. */
         bySurname: Boolean = false,
+        /** Draw author headings filed — "Pratchett, Terry". Changes the text only, never the key. */
+        filedNames: Boolean = false,
     ): List<LibraryEntry> {
         // Filtering runs BEFORE the grouping: it changes which books are on which shelf, so a
         // shelf that loses its last book has to disappear rather than stand there empty.
         val filtered = if (filter.isEmpty) books else books.filter { filter.matches(it) }
-        return buildEntries(filtered, bySurname, sort, shelving, series)
+        return buildEntries(filtered, bySurname, filedNames, sort, shelving, series)
     }
 
     /** In-progress books: actually started (real progress), not finished/at-end, not hidden;
@@ -162,6 +168,7 @@ class LibraryFilterEngine @Inject constructor() {
 private fun buildEntries(
     books: List<BookListItem>,
     bySurname: Boolean,
+    filedNames: Boolean,
     sort: LibrarySort,
     shelving: LibraryShelving,
     series: LibraryDepth,
@@ -183,6 +190,7 @@ private fun buildEntries(
             "Unknown author",
             R.string.home_shelf_unknown_author,
             sortBy = if (bySurname) ::authorSortKey else { it -> it },
+            shownAs = if (filedNames) ::filedAuthor else null,
         ) { it.author }
         // Grouped on the CANONICAL genre and sorted by it, so "Kurzgeschichten" and "Short Stories"
         // are one shelf rather than two that mean the same thing. The heading itself resolves to the
@@ -255,6 +263,7 @@ internal fun collapseIntoUnits(
                 key = key,
                 name = nameOf(members.first())!!,
                 authors = members.first().authors,
+                shownAuthors = members.first().shownAuthors,
                 books = members.sortedWith(order),
                 // Named only when it is a real parent. A collection that exists purely because a
                 // series fell back to being its own is not a collection anybody made, and drawing
@@ -322,6 +331,8 @@ private fun sectioned(
     fallback: String,
     @StringRes fallbackRes: Int,
     sortBy: (String) -> String = { it },
+    /** What to draw for a heading, when it is not the key itself — see [LibraryEntry.Header.shown]. */
+    shownAs: ((String) -> String)? = null,
     asGenre: Boolean = false,
     keyOf: (SortUnit) -> String?,
 ): List<LibraryEntry> {
@@ -339,6 +350,7 @@ private fun sectioned(
                     // The very value the line above ordered these keys by — so anything that needs
                     // to know where a heading sits asks the ordering rather than the drawn text.
                     fileKey = key?.let(sortBy) ?: fallback,
+                    shown = key?.let { k -> shownAs?.invoke(k) },
                     genre = key.takeIf { asGenre },
                 ),
             )

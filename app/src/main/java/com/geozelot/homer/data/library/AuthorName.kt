@@ -24,7 +24,7 @@ package com.geozelot.homer.data.library
  * never stored: it exists to be compared. That split is what lets the surname order be a heuristic
  * at all — get "Ursula K. Le Guin" wrong and a shelf is in the wrong place, which a reader can see
  * and correct, rather than a name being rendered wrongly for ever. [filedAuthor] renders the same
- * split for the eye, which is why they share one [splitName] and cannot disagree.
+ * split for the eye, which is why they share one [splitGivenFirst] and cannot disagree.
  *
  * The heuristic is deliberately small. Particles travel with the surname (`Le Guin`, `van Gogh`,
  * `von Humboldt`), generational suffixes do not file (`Jr.`), and a single-word name is its own
@@ -49,33 +49,43 @@ private val NameSuffixes = setOf("jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "p
  * comma is left alone rather than rearranged into something nobody wrote.
  */
 fun displayAuthor(name: String, surnameFirst: Boolean = false): String {
-    val trimmed = name.trim()
-    val givenFirst = if (trimmed.count { it == ',' } != 1) {
-        trimmed
-    } else {
-        val (surname, rest) = trimmed.split(',', limit = 2).map { it.trim() }
-        if (surname.isEmpty() || rest.isEmpty()) trimmed else "$rest $surname"
-    }
+    val givenFirst = givenFirst(name)
     // Normalised to one form FIRST, then turned around if asked. Flipping the stored text directly
     // would leave a name that already read "Pratchett, Terry" untouched and one that read "Terry
     // Pratchett" flipped, so a shelf would carry both spellings of the same convention.
-    return if (surnameFirst) filedAuthor(givenFirst) else givenFirst
+    //
+    // Handed on already normalised, so the filed form does not normalise it a second time — this
+    // runs for every author of every row whenever the library list is rebuilt, which is on the
+    // position-save path during playback.
+    return if (surnameFirst) filed(splitGivenFirst(givenFirst), givenFirst) else givenFirst
+}
+
+/** The comma rule, and only the comma rule: "Pratchett, Terry" becomes "Terry Pratchett". */
+private fun givenFirst(name: String): String {
+    val trimmed = name.trim()
+    if (trimmed.count { it == ',' } != 1) return trimmed
+    val (surname, rest) = trimmed.split(',', limit = 2).map { it.trim() }
+    return if (surname.isEmpty() || rest.isEmpty()) trimmed else "$rest $surname"
 }
 
 /**
  * The name as an index writes it: "Pratchett, Terry".
  *
- * Built from the same [splitName] the sort key uses, so what a reader sees and what the list is
+ * Built from the same [splitGivenFirst] the sort key uses, so what a reader sees and what the list is
  * ordered by cannot disagree — a heading reading "Le Guin, Ursula K." is under L because that is
  * the same split that put it there.
  *
  * A name with nothing in front of the surname is left as it is: "Homer, " is not a name.
  */
 fun filedAuthor(name: String): String {
-    val parts = splitName(name)
+    val given = givenFirst(name)
+    return filed(splitGivenFirst(given), given)
+}
+
+private fun filed(parts: NameParts, fallback: String): String {
     val rest = listOf(parts.given, parts.trailing).filter { it.isNotEmpty() }.joinToString(" ")
     return when {
-        parts.surname.isEmpty() -> name.trim()
+        parts.surname.isEmpty() -> fallback
         rest.isEmpty() -> parts.surname
         else -> "${parts.surname}, $rest"
     }
@@ -85,13 +95,15 @@ fun filedAuthor(name: String): String {
 private class NameParts(val surname: String, val given: String, val trailing: String)
 
 /**
- * Where the surname starts and ends.
+ * Where the surname starts and ends, in a name already written given-name-first.
  *
- * The heuristic, in one place. Particles travel with the surname, generational suffixes file with
- * nothing, and a single-word name is its own surname.
+ * The heuristic, in one place. Particles travel with the surname, a single-word name is its own
+ * surname, and a generational suffix never decides the letter a name files under — it rides at
+ * the END of the key instead, as a tiebreak. So "Davis" files before "Davis Jr.", the way a library
+ * shelves a father before his son, and neither is ever filed under J.
  */
-private fun splitName(name: String): NameParts {
-    val tokens = displayAuthor(name).split(' ', '\t').map { it.trim() }.filter { it.isNotEmpty() }
+private fun splitGivenFirst(givenFirst: String): NameParts {
+    val tokens = givenFirst.split(' ', '\t').map { it.trim() }.filter { it.isNotEmpty() }
     if (tokens.isEmpty()) return NameParts("", "", "")
     if (tokens.size == 1) return NameParts(tokens[0], "", "")
 
@@ -117,6 +129,6 @@ private fun splitName(name: String): NameParts {
  * Takes [displayAuthor]'s form as its input, so a stored "Pratchett, Terry" and a stored "Terry
  * Pratchett" file identically — which they must, being the same person.
  */
-fun authorSortKey(name: String): String = with(splitName(name)) {
+fun authorSortKey(name: String): String = with(splitGivenFirst(givenFirst(name))) {
     listOf(surname, given, trailing).filter { it.isNotEmpty() }.joinToString(" ").lowercase()
 }

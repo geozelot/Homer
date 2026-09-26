@@ -300,7 +300,7 @@ fun BookDetailsCard(
                     .heightIn(max = detailsBodyMaxHeight())
                     .verticalScroll(rememberScrollState()),
             ) {
-                DetailsHeader(book.coverModel, book.title, book.author)
+                DetailsHeader(book.coverModel, book.title, book.shownAuthor)
 
                 FactDivider()
 
@@ -315,8 +315,10 @@ fun BookDetailsCard(
                     stringResource(FilterFacet.AUTHOR.label),
                     // Every author, primary first — the details card is where the whole credit
                     // belongs, even though the cards and the shelf show only the one it files under.
-                    book.authors.filter { it.isNotBlank() }.map {
-                        chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                    // Drawn filed if asked, FILTERED spoken: the chip's value is the name as search and
+                    // every other chip know it, whichever way the label reads.
+                    book.authors.zip(book.shownAuthors).filter { it.first.isNotBlank() }.map { (value, label) ->
+                        chip(HomerIcons.Author, FilterFacet.AUTHOR, label, value)
                     },
                     onFilter,
                 )
@@ -457,8 +459,8 @@ fun SeriesDetailsCard(
                     // Every author the shelf is credited to, one chip each — the same rule the
                     // book card follows. The primary alone gave a co-written shelf no way to reach
                     // its second name.
-                    series.authors.filter { it.isNotBlank() }.map {
-                        chip(HomerIcons.Author, FilterFacet.AUTHOR, it, it)
+                    series.authors.zip(series.shownAuthors).filter { it.first.isNotBlank() }.map { (value, label) ->
+                        chip(HomerIcons.Author, FilterFacet.AUTHOR, label, value)
                     },
                     onFilter,
                 )

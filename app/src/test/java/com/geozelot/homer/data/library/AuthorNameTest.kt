@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -114,5 +115,16 @@ class AuthorNameTest {
     fun `showing is off by default and does not touch the stored form`() {
         assertEquals("Terry Pratchett", displayAuthor("Pratchett, Terry"))
         assertEquals("Terry Pratchett", displayAuthor("Terry Pratchett"))
+    }
+
+    @Test
+    fun `a generational suffix never files, but breaks the tie at the end of the key`() {
+        // Pinned because it moved: the key for "Davis Jr." used to drop the suffix entirely and
+        // compare equal to a bare "Davis". It now rides at the end, so a father files before his
+        // son — and neither is ever filed under J.
+        assertEquals("davis", authorSortKey("Davis"))
+        assertEquals("davis jr.", authorSortKey("Davis Jr."))
+        assertTrue(authorSortKey("Davis") < authorSortKey("Davis Jr."))
+        assertEquals("davis sammy jr.", authorSortKey("Sammy Davis Jr."))
     }
 }

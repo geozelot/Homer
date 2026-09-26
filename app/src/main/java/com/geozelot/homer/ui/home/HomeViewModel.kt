@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.geozelot.homer.data.settings.LEGACY_AUTHOR_LAST
 
 /**
  * A library row: enough to render without touching the DB entity in the UI.
@@ -75,8 +76,23 @@ import kotlinx.coroutines.launch
 data class BookListItem(
     val id: String,
     val title: String,
-    /** Every author, primary first. Read [author] for the one the book files under. */
+    /**
+     * Every author, primary first, as the name is SPOKEN — "Terry Pratchett". Read [author] for the
+     * one the book files under.
+     *
+     * This is the form everything that COMPARES reads: search, filter tokens, suggestions, the
+     * grouping and sort keys, the edit field. It never changes with a display setting, and that is
+     * the point of keeping it apart from [shownAuthors]. It used to be both at once, so switching
+     * names to "Pratchett, Terry" also changed what search indexed and what a filter chip held — a
+     * name typed the spoken way stopped matching, and a chip made before the switch matched nothing
+     * after it.
+     */
     val authors: List<String> = emptyList(),
+    /**
+     * The same authors, the way this device DRAWS them. Equal to [authors] unless names are set to
+     * be shown filed — see `AuthorFiling`. Only ever painted; never compared.
+     */
+    val shownAuthors: List<String> = authors,
     val isMultiFile: Boolean,
     val fileCount: Int,
     val coverModel: Any?,
@@ -151,6 +167,9 @@ data class BookListItem(
      */
     val author: String? get() = authors.firstOrNull()
 
+    /** The primary author as it is drawn — see [shownAuthors]. */
+    val shownAuthor: String? get() = shownAuthors.firstOrNull()
+
     val genre: String? get() = genres.firstOrNull()
 }
 
@@ -177,6 +196,14 @@ sealed interface LibraryEntry {
     data class Header(
         val title: String,
         @StringRes val titleRes: Int? = null,
+        /**
+         * What to DRAW, when that is not [title].
+         *
+         * An author shelf is keyed and filed by the spoken name, and shown filed — "Pratchett,
+         * Terry" — only when the device asks for that. Keeping the drawn text out of [title] keeps
+         * the heading's identity (and the grid key built from it) stable when the setting flips.
+         */
+        val shown: String? = null,
         /**
          * The value this heading was FILED under — what decided its place among the others.
          *
@@ -230,6 +257,11 @@ sealed interface LibraryEntry {
          * fallback exists to keep a plain series stacked at collection depth, not to relabel it.
          */
         val isCollection: Boolean = false,
+        /**
+         * [authors] as they are drawn — the same split [BookListItem] makes, for the same reason.
+         * Last in the list so every existing positional construction keeps its meaning.
+         */
+        val shownAuthors: List<String> = authors,
     ) : LibraryEntry {
         /** The author the shelf files under — its books' primary. */
         val author: String? get() = authors.firstOrNull()
@@ -275,7 +307,7 @@ data class AuthorFiling(val bySurname: Boolean = false, val showFiled: Boolean =
  * library is sorted by, broken into, stacked to, and how its names file are one question asked
  * four ways, and the arrange control asks them together.
  */
-data class Arrangement(
+private data class Arrangement(
     val sort: LibrarySort,
     val shelving: LibraryShelving,
     val depth: LibraryDepth,
@@ -315,7 +347,13 @@ enum class LibraryShelving(val key: String, @StringRes val label: Int) {
          * shelving by language: an install that had it stored falls back to the unshelved list
          * rather than to an empty screen, and never sees the option again.
          */
-        fun from(key: String?) = entries.firstOrNull { it.key == key } ?: ITEM
+        fun from(key: String?) = when (key) {
+            // Filing by surname was briefly a shelving of its own. A reader who chose it chose to
+            // shelve BY AUTHOR — the surname half is carried over by `authorBySurname` — and
+            // falling through to ITEM would have silently unshelved their library on update.
+            LEGACY_AUTHOR_LAST -> AUTHOR
+            else -> entries.firstOrNull { it.key == key } ?: ITEM
+        }
     }
 }
 
@@ -573,7 +611,11 @@ class HomeViewModel @Inject constructor(
 
     val entries: StateFlow<List<LibraryEntry>> =
         combine(books, filter, arrangement) { list, filter, a ->
-            filterEngine.arrange(list, filter, a.sort, a.shelving, a.depth, a.filing.bySurname)
+            filterEngine.arrange(
+                list, filter, a.sort, a.shelving, a.depth,
+                bySurname = a.filing.bySurname,
+                filedNames = a.filing.showFiled,
+            )
         }
             // Filtering AND grouping the whole library, per keystroke, was running on
             // Main.immediate. Both are pure functions of their inputs and the result is a plain

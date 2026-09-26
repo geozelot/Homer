@@ -3,6 +3,7 @@ package com.geozelot.homer.ui.home
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.geozelot.homer.data.library.filedAuthor
 
 /**
  * The pipeline as one function: books in, shelves out.
@@ -177,5 +178,42 @@ class LibraryFilterEngineTest {
         assertEquals(12, shelf.size)
         assertEquals("b20", shelf.first().id)
         assertTrue(shelf.zipWithNext().all { (a, b) -> a.lastPlayedAt!! >= b.lastPlayedAt!! })
+    }
+
+    // ── Names drawn filed, compared spoken ────────────────────────────────────
+
+    /** A book as `rows` produces it with names shown filed: spoken for logic, filed for paint. */
+    private fun filedBook(id: String, author: String) =
+        book(id, author = author).copy(shownAuthors = listOf(filedAuthor(author)))
+
+    @Test
+    fun `an author chip filters by the spoken name whichever way it is drawn`() {
+        // The chip made before the display switch and the chip made after it are the same token,
+        // because neither ever held the drawn text. It used to hold it, and went dead on a flip.
+        val books = listOf(filedBook("mort", "Terry Pratchett"), filedBook("coraline", "Neil Gaiman"))
+        val filter = LibraryFilter().plus(FilterToken(FilterFacet.AUTHOR, "Terry Pratchett"))
+        assertEquals(listOf("mort"), books.filter { filter.matches(it) }.map { it.id })
+    }
+
+    @Test
+    fun `search finds a name typed the way it is spoken while it is drawn filed`() {
+        val book = filedBook("mort", "Terry Pratchett")
+        assertTrue(book.matchesText("terry pratchett"))
+    }
+
+    @Test
+    fun `an author heading draws filed and keeps its spoken identity`() {
+        val entries = engine.arrange(
+            listOf(filedBook("mort", "Terry Pratchett")),
+            LibraryFilter(),
+            LibrarySort.TITLE,
+            LibraryShelving.AUTHOR,
+            LibraryDepth.SERIES,
+            bySurname = true,
+            filedNames = true,
+        )
+        val heading = entries.filterIsInstance<LibraryEntry.Header>().single()
+        assertEquals("Terry Pratchett", heading.title)
+        assertEquals("Pratchett, Terry", heading.shown)
     }
 }

@@ -310,7 +310,7 @@ internal fun seriesMeta(
     // Folded: exactly what a book row says, by the same rule — the author, unless the heading or
     // the chip is already carrying it.
     if (!ctx.shelving.isByAuthor && !shelfChip(series, ctx).carriesAuthor()) {
-        add(series.authors.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        add(series.shownAuthors.takeIf { it.isNotEmpty() }?.joinToString(", ")
             ?: context.getString(R.string.unknown_author))
     }
 }.joinToString(" · ")
