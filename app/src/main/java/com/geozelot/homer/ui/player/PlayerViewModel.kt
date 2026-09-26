@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 
 /**
  * One entry in the player's chapter picker. Exactly one of [startMs] (embedded mark — seek within
@@ -205,12 +206,12 @@ class PlayerViewModel @Inject constructor(
             if (id == null) flowOf(null)
             // Empty-first (see [bookFiles]) so time-left doesn't briefly use the old book's durations.
             else audioFileDao.observeForBook(id).onStart { emit(emptyList()) }.map { files ->
-                // Null until every chapter is measured, so "time left" is never misleading.
-                if (files.isNotEmpty() && files.all { it.durationMs != null }) {
-                    files.map { it.durationMs!! }
-                } else {
-                    null
-                }
+                // Null while anything is still COMING, so "time left" is never misleading — and by
+                // the same rule the library uses for the book's length, so the shelf and the player
+                // cannot disagree. A file proven unreadable counts as zero rather than as pending;
+                // demanding every file here meant a book the library gave a length showed no time
+                // left in the player, for ever.
+                if (bookTotalDurationMs(files) != null) files.map { it.durationMs ?: 0L } else null
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
