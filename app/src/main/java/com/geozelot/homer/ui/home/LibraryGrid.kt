@@ -193,7 +193,7 @@ internal fun LazyGridScope.libraryContent(
                         metaLine = slot.key in metaRows,
                     )
                 } else {
-                    BookListRow(slot.book, startPadding = 0.dp, ctx = ctx, onOpen = onBookClick, actions = actions)
+                    BookListRow(slot.book, ctx = ctx, onOpen = onBookClick, actions = actions)
                 }
 
             is GridSlot.Shelf ->
@@ -258,11 +258,10 @@ internal fun LazyGridScope.libraryContent(
                                 .padding(horizontal = SeriesListEnclosurePad)
                                 .padding(bottom = if (slot.last) SeriesListEnclosurePad else 0.dp),
                         ) {
-                            // 2dp on top of the enclosure's own inset keeps each episode at
-                            // exactly the indent it had before the border went round them.
+                            // A row on its own ground at a top-level row's padding, the enclosure's
+                            // inset either side — so its cover stands where it always has.
                             BookListRow(
                                 row.books.first(),
-                                startPadding = EpisodeIndent,
                                 ctx = shelfCtx(slot.flat),
                                 onOpen = onBookClick,
                                 actions = actions,

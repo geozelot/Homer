@@ -65,18 +65,13 @@ internal enum class CoverCorner {
 /**
  * How large a piece of cover furniture is.
  *
- * A size, not a `compact` flag. There are three of them now and a boolean could not say which: the
- * top corners of a grid card carry the two facts somebody reads at arm's length and were the ones
- * asked to grow; the bottom corner carries a duration and was explicitly left where it was; a list
- * row's cover is 38dp wide and everything on it has to be measured against that.
+ * A size, not a `compact` flag: the top corners of a grid card carry the two facts somebody reads at
+ * arm's length and were the ones asked to grow; the bottom corner carries a duration and was
+ * explicitly left where it was.
  *
- * ## [slant] is relaxed on the small size, and it is the only reason it fits
- *
- * The slanted edge costs width proportional to the badge's HEIGHT, so a bigger glyph buys a taller
- * badge which buys more dead diagonal. At [SMALL] with the usual 0.55 a 13dp glyph occupies 29 of
- * the 38dp cover — three quarters of the artwork, for one symbol. At 0.35 it is 25dp. The shape is
- * marginally less raked than its larger siblings, which is a smaller price than a badge that eats
- * the picture it is annotating.
+ * There was a third, for a list row's cover, with its slant relaxed to fit at all — and even then
+ * two of them took a third of a 46dp cover. A list row writes the same facts beside its menu now
+ * (`RowMarks`), so every cover with corners on it is a grid cover.
  */
 internal enum class BadgeSize(
     val glyph: Dp,
@@ -96,9 +91,6 @@ internal enum class BadgeSize(
 
     /** The bottom corner of a grid card — a duration, and no glyph to make legible. */
     MEDIUM(15.dp, 12.sp, 14.sp, 8.dp, 13.dp, 4.dp, 4.dp, 0.55f),
-
-    /** Anything on a list row's cover. */
-    SMALL(13.dp, 9.5.sp, 11.sp, 5.dp, 11.dp, 3.5.dp, 3.dp, 0.35f),
 }
 
 /** The scrim behind cover furniture: dark enough to read on any artwork, light enough to see through. */
@@ -254,9 +246,6 @@ internal fun OfflineBadge(
  * `CollectionsBookmark` on the strength of the name matching the description of the reviewed mark,
  * and that icon is a different shape — so what was on the device was never what was approved. See
  * [HomerIcons].
- *
- * [count] is omitted on a list row, where the meta line beside the cover already says "8 books" and
- * a badge repeating it would put the same number twice on one row two centimetres apart.
  */
 @Composable
 internal fun ShelfBadge(

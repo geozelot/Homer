@@ -738,6 +738,9 @@
 
     <string name="help_cover_shelf">Oben links auf einem Regal: wie viele Bücher darin stehen.</string>
     <string name="help_cover_index">Oben links auf einem Buch: wo es im Regal steht, auf dem es liegt.</string>
+    <string name="help_section_row_marks">Am Ende einer Zeile</string>
+    <string name="help_row_shelf">Bei einem Regal: ob es eine Serie oder eine Sammlung ist.</string>
+    <string name="help_row_index">Bei einem Buch: wo es im Regal steht, auf dem es liegt.</string>
     <string name="help_cover_index_off">Wo ein Buch in seiner Serie steht — bei einzelner Anordnung ausgeblendet, weil das zugehörige Regal gar nicht zu sehen ist.</string>
 
     <string name="help_do_open_shelf">Tippe ein Regal an, um es zu öffnen; tippe die Kopfzeile erneut an, um es zu schließen.</string>

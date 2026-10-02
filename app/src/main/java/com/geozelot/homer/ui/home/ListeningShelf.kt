@@ -94,9 +94,10 @@ internal fun ListeningShelf(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        // Sized against a real grid cover rather than a literal dp, so it stays proportional on
-        // every screen width instead of drifting when the grid's padding or column count changes.
-        val coverWidth = gridCellWidth(maxWidth) / ListeningCoverFraction
+        // A grid cover, exactly: the cell less the card's inset either side. Derived from the grid's
+        // own arithmetic rather than a literal, so the two cannot drift apart when its padding or
+        // column count changes.
+        val coverWidth = gridCellWidth(maxWidth) - GridCardInset * 2
 
         Column(
             modifier = Modifier
@@ -134,11 +135,15 @@ internal fun ListeningShelf(
             }
             LazyRow(
                 state = rowState,
-                horizontalArrangement = Arrangement.spacedBy(LibraryGridSpacing),
+                // Open, on the grid's own columns: a cell's inset either side of each cover, so at
+                // rest the covers up here stand exactly over the covers in the library below.
+                horizontalArrangement = Arrangement.spacedBy(
+                    if (expanded) LibraryGridSpacing + GridCardInset * 2 else LibraryGridSpacing,
+                ),
                 // Padding on the row (not the parent) so cards bleed off the edge while scrolling
                 // instead of stopping at a hard margin.
                 contentPadding = PaddingValues(
-                    horizontal = LibraryGridPadding,
+                    horizontal = if (expanded) LibraryGridPadding + GridCardInset else LibraryGridPadding,
                     vertical = if (expanded) 6.dp else 4.dp,
                 ),
                 modifier = Modifier.fillMaxWidth(),
@@ -203,27 +208,12 @@ internal val ListeningPullToExpand = 64.dp
 private val ListeningFoldedCover = 46.dp
 
 /**
- * How much smaller than a grid cover a listening item is.
- *
- * **This is the one number to turn if the panel wants to be taller or shorter.** The collapsed strip
- * used 2.5; this is a little above it, per the brief, and the panel's whole height follows from it
- * because the cover is square and everything else on the item is a fixed line of text.
- *
- * The panel lost about a third of its height when covers went square, which is a gift rather than a
- * problem — it was already the thing most often accused of taking up too much room.
- *
- * It is a trade: narrower keeps the panel out of the library's way, and wider gives the title room
- * before it ellipsises. At this width a title gets roughly a dozen characters.
- */
-private const val ListeningCoverFraction = 1.8f
-
-/**
  * One book on the listening shelf: cover, progress, title, time left.
  *
- * Single-line title and meta on purpose. At this width two lines would fit about six characters
- * each, so a wrapped title is less readable than an ellipsised one — and a fixed line count keeps
- * every item in the row exactly the same height, which is what stops the strip going ragged when one
- * title is long.
+ * Single-line title and meta on purpose. The panel is pinned, so every line an item adds is a line
+ * of library pushed out of view for as long as it stays open — and a fixed line count keeps every
+ * item in the row exactly the same height, which is what stops the strip going ragged when one title
+ * is long.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -248,9 +238,9 @@ private fun ListeningItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    // Same hairline the grid cards carry, so a cover reads as a cover everywhere.
-                    .border(1.dp, Line, RoundedCornerShape(8.dp)),
+                    // The grid cover's corner and hairline, now that it is the grid cover's size.
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, Line, RoundedCornerShape(10.dp)),
             )
             ProgressBar(
                 fraction = book.progress ?: 0f,

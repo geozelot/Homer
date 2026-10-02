@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.formatCompactDuration
-import com.geozelot.homer.ui.theme.ItemGround
+import com.geozelot.homer.ui.theme.CardGround
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
@@ -135,6 +135,7 @@ internal fun BookGridCard(
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                     lines = ctx.chipLines,
+                    fill = true,
                 )
             },
         )
@@ -152,7 +153,7 @@ internal fun BookGridCard(
  * than its bounding box.
  */
 private fun Modifier.gridCardGround(): Modifier =
-    this.clip(RoundedCornerShape(10.dp + GridCardInset)).background(ItemGround)
+    this.clip(RoundedCornerShape(10.dp + GridCardInset)).background(CardGround)
 
 /**
  * Title (2 reserved lines) + the genre chip's reserved row + meta (2 reserved lines) — a
@@ -618,6 +619,7 @@ internal fun SeriesGridCard(
                     ctx = ctx,
                     onFilter = { kind, value -> actions.onFilter(chipToken(kind, value)) },
                     lines = ctx.chipLines,
+                    fill = true,
                 )
             },
         )

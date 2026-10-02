@@ -771,6 +771,9 @@
 
     <string name="help_cover_shelf">Top left of a shelf: how many books are on it.</string>
     <string name="help_cover_index">Top left of a book: where it sits in the shelf it is on.</string>
+    <string name="help_section_row_marks">At the end of a row</string>
+    <string name="help_row_shelf">On a shelf: whether it is a series or a collection.</string>
+    <string name="help_row_index">On a book: where it sits in the shelf it is on.</string>
     <string name="help_cover_index_off">Where a book sits in its series — hidden while the arrangement is flat, because the shelf it counts against is not on screen.</string>
 
     <string name="help_do_open_shelf">Tap a shelf to open it; tap its header again to close.</string>

@@ -8,11 +8,14 @@ import androidx.compose.ui.graphics.Color
 
 val Ground = Color(0xFF15110E)      // app background
 val Studio = Color(0xFF0E0B09)      // deepest ground (gradient base, scrim)
-val ItemGround = Color(0xFF1C1713)  // a library item's card: a faint step below what the library
-                                    // actually sits on — Surface1, the root Surface's default, NOT Ground
+val CardGround = Color(0xFF1E1914)  // a grid card's ground: a faint step below the library's own —
+val RowGround = Color(0xFF1F1915)   // and a list row's, fainter still: a row is wider, so less tells
 val Surface0 = Color(0xFF1A1511)    // pinned chrome — a step off the ground, below a card
 val Surface1 = Color(0xFF211B16)    // cards, bars
 val Surface2 = Color(0xFF2C241D)    // raised surfaces, menus, track backgrounds
+val LibraryGround = Surface1        // what the library actually sits on: HomerApp's root Surface takes
+                                    // colorScheme.surface, NOT Ground. The two grounds above, and the wash
+                                    // an opened shelf fades out with, are all measured against this
 val Line = Color(0xFF3A2F26)        // hairline borders / dividers
 val LineShelf = Color(0xFF4C3E31)   // outlines that are an OBJECT, not a divider: a shelf's edge,
                                     // and every chip a reader can press. One step up from Line, so a stack of books

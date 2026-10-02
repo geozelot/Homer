@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.geozelot.homer.data.library.filedAuthor
 import com.geozelot.homer.data.metadata.BookGenre
 import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.theme.Faint
@@ -59,7 +61,6 @@ import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface1
 import com.geozelot.homer.ui.theme.Surface2
-import com.geozelot.homer.data.library.filedAuthor
 
 /**
  * The one fact under an item's title that the shelf it is standing on does not already say.
@@ -264,14 +265,27 @@ internal fun MetaChipSlot(
      * same space and the rows still line up — which is the whole reason this slot exists.
      */
     lines: Int = 1,
+    /**
+     * Run every chip out to the slot's right edge, whatever its label's length.
+     *
+     * For a grid card, where the chips sit under a cover of a fixed width: a pill as long as its
+     * word left each card ending at a different place, and a short genre looked like a scrap beside
+     * a long one. Not for a row, where the chip shares its line with whatever follows it.
+     */
+    fill: Boolean = false,
 ) {
+    val chipModifier = if (fill) Modifier.fillMaxWidth() else Modifier
     if (lines <= 1) {
         Row(
-            modifier = modifier.heightIn(min = MetaChipSlot.SlotHeight),
+            modifier = modifier
+                .heightIn(min = MetaChipSlot.SlotHeight)
+                .then(if (fill) Modifier.fillMaxWidth() else Modifier),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            chips.forEach { (kind, values) -> MetaChip(kind, values, ctx, onFilter) }
+            chips.forEach { (kind, values) ->
+                MetaChip(kind, values, ctx, onFilter, fill, if (fill) Modifier.weight(1f) else Modifier)
+            }
             if (trailing.isNullOrBlank()) return@Row
             Text(
                 // The separator belongs to the join, not to the caller: every one of these lines is
@@ -294,7 +308,7 @@ internal fun MetaChipSlot(
         // order [metaChipFor] returns them in and the order the details card lists them in.
         chips.take(lines).forEach { (kind, values) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MetaChip(kind, values, ctx, onFilter)
+                MetaChip(kind, values, ctx, onFilter, fill, chipModifier)
             }
         }
     }
@@ -306,6 +320,9 @@ private fun MetaChip(
     values: List<String>,
     ctx: RowContext,
     onFilter: (MetaChipKind, String) -> Unit,
+    /** Stretched to its slot — see [MetaChipSlot]'s `fill`. The "+N" then rides at the far end. */
+    fill: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     // Resolved here rather than by the caller: a chip's VALUE is what a filter needs — a genre key,
@@ -319,10 +336,11 @@ private fun MetaChip(
             MetaChipKind.AUTHOR -> if (ctx.filedNames) filedAuthor(value) else value
         }
     }
-    Box {
+    Box(modifier = modifier) {
         Row(
             modifier = Modifier
                 .height(MetaChipSlot.SlotHeight)
+                .then(if (fill) Modifier.fillMaxWidth() else Modifier)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Surface2)
                 // LineShelf, like the player's header chips and the details card's — one border
@@ -357,10 +375,11 @@ private fun MetaChip(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                // weight(1f, fill = false) so a long value gives way before the count does: on a
-                // ~100dp cell "Kurzgeschichten +2" does not fit, and the half worth keeping is the
-                // number — a truncated word still reads, a missing "+2" is a lie.
-                modifier = Modifier.weight(1f, fill = false),
+                // Weighted so a long value gives way before the count does: on a ~100dp cell
+                // "Kurzgeschichten +2" does not fit, and the half worth keeping is the number — a
+                // truncated word still reads, a missing "+2" is a lie. Filling when the pill is
+                // stretched, which carries the count to the pill's far end.
+                modifier = Modifier.weight(1f, fill = fill),
             )
             if (values.size > 1) {
                 Text(

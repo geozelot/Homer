@@ -209,10 +209,18 @@ fun LibraryHelpCard(
             )
         }
 
-        HelpSection(stringResource(R.string.help_section_covers)) {
-            HelpMark(HomerIcons.SeriesShelf, stringResource(R.string.help_cover_shelf))
+        // On the covers in the grid; at the end of each row in the list, whose covers are bare.
+        HelpSection(stringResource(if (gridView) R.string.help_section_covers else R.string.help_section_row_marks)) {
+            HelpMark(
+                HomerIcons.SeriesShelf,
+                stringResource(if (gridView) R.string.help_cover_shelf else R.string.help_row_shelf),
+            )
             if (numbered) {
-                HelpMark(icon = null, badge = "#3", text = stringResource(R.string.help_cover_index))
+                HelpMark(
+                    icon = null,
+                    badge = "#3",
+                    text = stringResource(if (gridView) R.string.help_cover_index else R.string.help_row_index),
+                )
             } else {
                 HelpMark(icon = null, badge = "#3", text = stringResource(R.string.help_cover_index_off))
             }

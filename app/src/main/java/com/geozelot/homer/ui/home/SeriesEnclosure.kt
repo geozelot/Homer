@@ -30,6 +30,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -43,7 +45,8 @@ import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.formatCompactDuration
 import com.geozelot.homer.ui.theme.Amber
-import com.geozelot.homer.ui.theme.ItemGround
+import com.geozelot.homer.ui.theme.CardGround
+import com.geozelot.homer.ui.theme.LibraryGround
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
@@ -69,12 +72,6 @@ private val SeriesEnclosurePad = 12.dp
  */
 internal val SeriesListEnclosurePad = 8.dp
 
-/** How far an episode row inside an opened list shelf stands in from the enclosure's own inset. */
-internal val EpisodeIndent = 2.dp
-
-/** An episode row's padding round its cover, in place of the card a top-level row draws. */
-internal val EpisodeRowPad = 6.dp
-
 /**
  * Half the grid's `verticalArrangement` spacing. Each slice paints this far into the gaps above
  * and below it, so the side rails meet across the gap instead of the enclosure looking like a
@@ -93,8 +90,16 @@ private val SeriesEnclosureBleed = LibraryGridSpacing / 2
  * Drawn rather than composed because a lazy grid gives no way to paint behind a run of items:
  * anything spanning them would have to be a single item, which is the composition cost this
  * replaced.
+ *
+ * ## Only the banner is filled
+ *
+ * [washFrom] is for the top slice: a vertical wash from that item ground down into the library's
+ * own, finishing exactly where the slice's bleed does so the next slice picks up on bare library.
+ * Everything below it is outline only. That is what lets the books inside an opened shelf sit on a
+ * ground of their own, as they do outside it — on a shelf filled with the same ground they vanished
+ * into it, and the open shelf was the one place a book had no card.
  */
-internal fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier = this.drawBehind {
+internal fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean, washFrom: Color? = null): Modifier = this.drawBehind {
     val radius = SeriesEnclosureRadius.toPx()
     val stroke = 1.dp.toPx()
     val bleed = SeriesEnclosureBleed.toPx()
@@ -115,8 +120,12 @@ internal fun Modifier.seriesEnclosure(top: Boolean, bottom: Boolean): Modifier =
         )
     }
     clipRect(top = clipTop, bottom = clipBottom) {
-        // The same ground a folded card sits on, so opening a shelf does not change what colour it is.
-        drawPath(path, ItemGround)
+        if (washFrom != null) {
+            drawPath(
+                path,
+                Brush.verticalGradient(listOf(washFrom, LibraryGround), startY = clipTop, endY = clipBottom),
+            )
+        }
         drawPath(path, Line, style = Stroke(stroke))
     }
 }
@@ -138,7 +147,9 @@ internal fun ExpandedSeriesHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .seriesEnclosure(top = true, bottom = false)
+            // Starting from the ground a FOLDED shelf card wears, so opening one keeps its colour
+            // where the reader was looking and lets it fade from there.
+            .seriesEnclosure(top = true, bottom = false, washFrom = CardGround)
             // Clip AFTER the enclosure so the ripple is bounded by the rounded top without also
             // clipping away the bleed the enclosure draws into the gap below.
             .clip(RoundedCornerShape(topStart = SeriesEnclosureRadius, topEnd = SeriesEnclosureRadius))
@@ -220,9 +231,10 @@ internal fun ExpandedSubHeader(label: String, last: Boolean, gridView: Boolean) 
             .fillMaxWidth()
             .seriesEnclosure(top = false, bottom = last)
             // On the left edge of the covers it labels: the grid's rows stand at the banner's own
-            // inset, the list's episodes a little further in (see BookListRow's `bordered`).
+            // inset, the list's episodes one row-padding further in (see BookListRow's `bordered`).
             .padding(
-                start = if (gridView) SeriesEnclosurePad else SeriesListEnclosurePad + EpisodeIndent + EpisodeRowPad,
+                // In the list: the enclosure's inset, then the episode row's own, to its cover.
+                start = if (gridView) SeriesEnclosurePad else SeriesListEnclosurePad * 2,
                 end = if (gridView) SeriesEnclosurePad else SeriesListEnclosurePad,
             )
             .padding(bottom = if (last) SeriesListEnclosurePad else 0.dp),

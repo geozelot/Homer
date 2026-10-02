@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,22 +34,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
+import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.theme.Faint
-import com.geozelot.homer.ui.theme.ItemGround
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
+import com.geozelot.homer.ui.theme.RowGround
 import com.geozelot.homer.ui.theme.Studio
+import com.geozelot.homer.ui.theme.TabularSmall
 
 // ── List rows ────────────────────────────────────────────────────────────────
 //
@@ -59,15 +63,14 @@ import com.geozelot.homer.ui.theme.Studio
 @Composable
 internal fun BookListRow(
     book: BookListItem,
-    startPadding: Dp,
     ctx: RowContext,
     onOpen: (String) -> Unit,
     actions: BookActions,
     /**
-     * Whether the row draws its own card. True for a top-level row, so every item in the list
-     * reads the same way a collapsed series shelf always did. False for an episode inside an
-     * opened series, where the enclosure already IS the card and a second border inside it would
-     * just be noise.
+     * Whether the row draws a border round its ground. True for a top-level row, so every item in
+     * the list reads the way a collapsed series shelf does. False for an episode inside an opened
+     * series: it keeps its ground, so a book reads as a card wherever it stands, but the enclosure's
+     * outline round it already says where the shelf ends, and a second one inside it is noise.
      */
     bordered: Boolean = true,
 ) {
@@ -75,17 +78,15 @@ internal fun BookListRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = startPadding)
+            .clip(RoundedCornerShape(SeriesEnclosureRadius))
             .then(
                 if (bordered) {
-                    Modifier
-                        .clip(RoundedCornerShape(SeriesEnclosureRadius))
-                        .border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(ItemGround)
+                    Modifier.border(1.dp, Line, RoundedCornerShape(SeriesEnclosureRadius))
                 } else {
                     Modifier
                 },
             )
+            .background(RowGround)
             // Long-press opens the menu, the same as the grid card and the series shelf. The 3-dot
             // button stays — this is the shortcut, not a replacement for it — but list view was the
             // one place where holding a row did nothing, so the gesture learned in grid view
@@ -94,42 +95,18 @@ internal fun BookListRow(
                 onClick = { onOpen(book.id) },
                 onLongClick = { menuOpen = true },
             )
-            .padding(if (bordered) SeriesListEnclosurePad else EpisodeRowPad)
+            .padding(SeriesListEnclosurePad)
             .alpha(if (book.hidden) 0.5f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The row's cover keeps the round badge rather than the grid's cut-to-the-edge areas: at
-        // 46dp a slanted quadrilateral with a glyph in it is mush, and the corner it would anchor
-        // to is a third of the cover.
+        // A bare cover. The grid's corner marks are beside the menu instead — see RowMarks.
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box {
-                CoverArt(
-                    model = book.coverModel,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-                // Compact, which is what fits a "#12" on a 46dp cover without the badge taking most
-                // of the artwork. The corners came off these covers once because a glyph at this
-                // size was a smudge; a two-character number is not a glyph, and it is the one fact
-                // about a book in a series that the row's single line of text keeps running out of
-                // room for.
-                VolumeIndexBadge(
-                    index = volumeIndexFor(book, ctx),
-                    modifier = Modifier.align(Alignment.TopStart),
-                    size = BadgeSize.SMALL,
-                )
-                // Back on the cover, because the meta line that used to carry the word is gone.
-                // The grid card has always said it here; the list row said it in text only because
-                // it had a line spare, and it does not any more.
-                if (book.isDownloaded) {
-                    OfflineBadge(
-                        CoverCorner.TOP_END,
-                        modifier = Modifier.align(Alignment.TopEnd),
-                        size = BadgeSize.SMALL,
-                    )
-                }
-            }
+            CoverArt(
+                model = book.coverModel,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
             // Same bar, same place, whatever view a book appears in.
             if (book.hasVisibleProgress()) {
                 ProgressBar(
@@ -171,6 +148,7 @@ internal fun BookListRow(
                 modifier = Modifier.padding(top = MetaChipSlot.TitleGap),
             )
         }
+        RowMarks(index = volumeIndexFor(book, ctx), downloaded = book.isDownloaded)
         Box {
             // Not an IconButton. Its 48dp minimum was what actually set a list row's height — the
             // 46dp cover beside it never got the chance — so every row in the library was as tall
@@ -196,6 +174,44 @@ internal fun BookListRow(
     }
 }
 
+/**
+ * What the grid writes in a cover's corners, written beside a list row's menu instead.
+ *
+ * A 46dp cover could not carry them. The round badges that fitted were most of a corner each, so
+ * two of them took a third of the artwork, and the row is the view where a cover is smallest and
+ * a reader most needs to recognise it. Out here they are read in passing as the row's last words:
+ * the volume number, then whether the book is on this device — the cover's own left-to-right.
+ *
+ * Quiet, like the corners were: one tone for all of them, so they read as one set of markings
+ * rather than a row of differently coloured signals.
+ */
+@Composable
+private fun RowMarks(
+    /** The volume number — see `volumeIndexFor`; null for none. */
+    index: Int? = null,
+    downloaded: Boolean = false,
+    /** A folded shelf's kind mark, which the book rows' number stands in for. */
+    shelf: ImageVector? = null,
+) {
+    // Nothing at all rather than an empty run with its gap, which would take width from the title
+    // for a row that has nothing to say here.
+    if (index == null && !downloaded && shelf == null) return
+    Row(
+        modifier = Modifier.padding(start = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        shelf?.let { RowMarkIcon(it, null) }
+        index?.let { Text("#$it", style = TabularSmall, color = Muted, fontWeight = FontWeight.SemiBold) }
+        if (downloaded) RowMarkIcon(Icons.Filled.Download, stringResource(R.string.details_offline))
+    }
+}
+
+@Composable
+private fun RowMarkIcon(icon: ImageVector, description: String?) {
+    Icon(icon, contentDescription = description, tint = Muted, modifier = Modifier.size(16.dp))
+}
+
 /** Line height of a list row's title; the reserved block is two of these. */
 internal val ListRowTitleLineHeight = 16.sp
 
@@ -218,11 +234,12 @@ internal fun SeriesShelfRow(
             .fillMaxWidth()
             .then(
                 if (expanded) {
-                    // Top slice of the enclosure that carries on down over the episodes. Clipped
-                    // after it, so the ripple is bounded by the rounded top without cutting off the
-                    // bleed the enclosure paints into the gap below.
+                    // Top slice of the enclosure that carries on down over the episodes, washing
+                    // out of the row ground it wore folded. Clipped after it, so the ripple is
+                    // bounded by the rounded top without cutting off the bleed the enclosure paints
+                    // into the gap below.
                     Modifier
-                        .seriesEnclosure(top = true, bottom = false)
+                        .seriesEnclosure(top = true, bottom = false, washFrom = RowGround)
                         .clip(
                             RoundedCornerShape(
                                 topStart = SeriesEnclosureRadius,
@@ -236,7 +253,7 @@ internal fun SeriesShelfRow(
                     Modifier
                         .clip(RoundedCornerShape(SeriesEnclosureRadius))
                         .border(1.dp, LineShelf, RoundedCornerShape(SeriesEnclosureRadius))
-                        .background(ItemGround)
+                        .background(RowGround)
                 },
             )
             .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true }),
@@ -269,15 +286,6 @@ internal fun SeriesShelfRow(
                             .border(RowStackEdge, Studio, RoundedCornerShape(6.dp)),
                     )
                 }
-                // On the ROW's cover space, like the grid's, so a shelf's corner is where a book's
-                // corner is. ONE corner, and it carries no number: the count is in the text beside
-                // the cover anyway ("8 books"), and the same number twice on one row two centimetres
-                // apart is not twice as clear.
-                ShelfBadge(
-                    isCollection = series.isCollection,
-                    modifier = Modifier.align(Alignment.TopStart),
-                    size = BadgeSize.SMALL,
-                )
             }
             Column(
                 modifier = Modifier
@@ -314,6 +322,11 @@ internal fun SeriesShelfRow(
             // yet a question the reader has asked.
             if (expanded && series.hasThreads()) {
                 CollectionOrderChip(flat = flat, onChange = onOrderChange)
+            }
+            // What kind of shelf, where a book row keeps its number — folded only: opened, the chip
+            // under the title says it in words.
+            if (!expanded) {
+                RowMarks(shelf = if (series.isCollection) HomerIcons.CollectionShelf else HomerIcons.SeriesShelf)
             }
             // Chevron immediately left of the overflow button, so the two sit together at the trailing
             // edge and the overflow still lines up with the one on every book row. Leading it instead
