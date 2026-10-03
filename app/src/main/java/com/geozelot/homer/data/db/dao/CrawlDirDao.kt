@@ -37,6 +37,10 @@ interface CrawlDirDao {
     @Query("DELETE FROM crawl_dirs WHERE lastScanned != :scannedAt")
     suspend fun deleteNotScannedAt(scannedAt: Long)
 
+    /**
+     * Every folder a crawl listed, at once — inside the scan's own transaction, so the ETags that
+     * let the next pass skip a subtree are never on disk before the books they vouch for.
+     */
     @Upsert
-    suspend fun upsert(dir: CrawlDirEntity)
+    suspend fun upsertAll(dirs: List<CrawlDirEntity>)
 }

@@ -195,7 +195,7 @@
     <string name="home_menu_retry_download">Download wiederholen</string>
 
     <!-- Home: empty / loading states -->
-    <string name="home_scanning_progress">Bibliothek wird gescannt… %1$d Ordner · %2$d Bücher</string>
+    <string name="home_scanning_progress">Bibliothek wird gescannt… %1$s</string>
     <string name="home_opening_library">Bibliothek wird geöffnet…</string>
     <string name="home_reading_index">Gemeinsame Bibliothek wird gelesen…</string>
     <string name="home_no_matches">Keine Treffer</string>
@@ -279,7 +279,7 @@
     <string name="sync_detail_private_progress"> · privater Fortschritt</string>
     <string name="sync_detail_owner"> · Eigentümer: %1$s</string>
     <string name="sync_use_as_library">Als Bibliotheksordner verwenden</string>
-    <string name="sync_scan_folders_books">%1$d Ordner · %2$d Bücher</string>
+    <string name="sync_scan_folders_books">%1$s · %2$s</string>
     <plurals name="sync_books_count">
         <item quantity="one">%1$d Buch</item>
         <item quantity="other">%1$d Bücher</item>
@@ -439,8 +439,6 @@
     <string name="player_time_unknown">--:--</string>
     <string name="player_cd_previous">Vorheriges Kapitel</string>
     <string name="player_cd_next">Nächstes Kapitel</string>
-    <string name="player_cd_skip_forward">%1$d Sekunden vorspringen</string>
-    <string name="player_cd_skip_back">%1$d Sekunden zurückspringen</string>
     <string name="player_chapters">Kapitel</string>
     <string name="player_series_volume">%1$s, Band %2$d</string>
     <string name="player_error_banner">Server nicht erreichbar — erneut versuchen</string>
@@ -757,4 +755,29 @@
     <string name="help_cover_booklet">Ein Beiheft, Libretto oder eine Karte neben dem Buch. Zum Lesen tippen — wischen für die nächste Seite, zum Zoomen aufziehen.</string>
     <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest.</string>
     <string name="help_player_swipe">Wische auf dem Cover nach unten, um den Player zu verlassen, ohne ihn zu stoppen.</string>
+    <!-- Background work: the two notification channels and what their notifications say. -->
+    <string name="library_channel_name">Bibliothek</string>
+    <string name="storage_channel_name">Speicher</string>
+    <string name="index_notification_scanning">Bibliothek wird durchsucht…</string>
+    <string name="index_notification_covers">Cover werden geholt…</string>
+    <string name="index_notification_lengths">Längen werden gemessen</string>
+    <string name="index_notification_publishing">Geteilte Bibliothek wird aktualisiert…</string>
+    <string name="migration_phase_downloads">Downloads werden verschoben</string>
+    <string name="migration_phase_covers">Cover werden verschoben</string>
+    <string name="migration_phase_finishing">Wird abgeschlossen…</string>
+    <plurals name="sync_folders_count">
+        <item quantity="one">%1$d Ordner</item>
+        <item quantity="other">%1$d Ordner</item>
+    </plurals>
+    <plurals name="player_cd_skip_forward">
+        <item quantity="one">%1$d Sekunde vorspringen</item>
+        <item quantity="other">%1$d Sekunden vorspringen</item>
+    </plurals>
+    <plurals name="player_cd_skip_back">
+        <item quantity="one">%1$d Sekunde zurückspringen</item>
+        <item quantity="other">%1$d Sekunden zurückspringen</item>
+    </plurals>
+    <string name="diag_read_failed">Logs konnten nicht gelesen werden: %1$s</string>
+    <string name="diag_empty">Keine Logzeilen erfasst. Problem reproduzieren, dann auf Aktualisieren tippen.</string>
+    <string name="settings_storage_selected_folder">gewählter Ordner</string>
 </resources>

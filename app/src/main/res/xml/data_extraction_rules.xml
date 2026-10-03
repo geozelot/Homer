@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Nothing of Homer's leaves the device through a backup or a device transfer, on Android 12 and
+    later as on earlier releases (`allowBackup="false"` covers those). The credential store is
+    bound to this device's Keystore and would not open anywhere else; everything else — the index,
+    the covers, the downloads — is rebuilt from the server by setup.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

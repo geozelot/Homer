@@ -60,7 +60,9 @@ internal object HeaderDurations {
      * and the difference between a reliable parse and an occasional nonsense duration.
      */
     fun findFrame(b: ByteArray, from: Int = 0, searchLimit: Int = Int.MAX_VALUE): MpegFrame? {
-        val last = minOf(b.size - MPEG_HEADER_BYTES, from + searchLimit)
+        // In Long: the default limit is Int.MAX_VALUE, and `from + searchLimit` wrapped negative for
+        // any non-zero `from` — so a search from an offset ran zero iterations and found nothing.
+        val last = minOf((b.size - MPEG_HEADER_BYTES).toLong(), from.toLong() + searchLimit).toInt()
         var i = maxOf(0, from)
         while (i <= last) {
             val candidate = parseFrame(b, i)
@@ -314,8 +316,12 @@ internal object HeaderDurations {
                     return size * 1000L / byteRate
                 }
             }
-            // Chunks are word-aligned: an odd size is followed by a pad byte.
-            i = payload + size.toInt() + (size.toInt() and 1)
+            // Chunks are word-aligned: an odd size is followed by a pad byte. Stepped in Long: a
+            // chunk size is a u32, and one past 2 GB truncated to a negative Int and walked the
+            // scan backwards.
+            val next = payload.toLong() + size + (size and 1L)
+            if (next > head.size) return null
+            i = next.toInt()
         }
         return null
     }

@@ -826,7 +826,7 @@ fun HomeScreen(
             book = book,
             bookmarks = marks,
             onOpenAt = { ms -> bookmarksId = null; onBookClickAt(book.id, ms) },
-            onDelete = viewModel::deleteBookmark,
+            onDelete = { viewModel.deleteBookmark(it, book.id) },
             onDismiss = { bookmarksId = null },
         )
     }

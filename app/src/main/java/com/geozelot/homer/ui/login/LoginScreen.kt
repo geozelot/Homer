@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
@@ -69,7 +70,7 @@ fun LoginScreen(
     // Open the Nextcloud login page in a Custom Tab when the flow is initiated.
     LaunchedEffect(Unit) {
         viewModel.openBrowser.collect { url ->
-            CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+            CustomTabsIntent.Builder().build().launchUrl(context, url.toUri())
         }
     }
 

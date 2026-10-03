@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -94,9 +95,9 @@ internal fun Transport(
 @Composable
 private fun SeekButton(seconds: Int, forward: Boolean, scale: Float, onClick: () -> Unit) {
     val label = if (forward) {
-        stringResource(R.string.player_cd_skip_forward, seconds)
+        pluralStringResource(R.plurals.player_cd_skip_forward, seconds, seconds)
     } else {
-        stringResource(R.string.player_cd_skip_back, seconds)
+        pluralStringResource(R.plurals.player_cd_skip_back, seconds, seconds)
     }
     Box(
         modifier = Modifier

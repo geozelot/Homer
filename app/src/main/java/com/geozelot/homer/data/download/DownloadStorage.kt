@@ -39,8 +39,18 @@ class DownloadStorage @Inject constructor(
      * than the sweep, because a cached path is only as true as the folder was when it was cached.
      */
     suspend fun presenceProbe(): suspend (String) -> Boolean {
+        val probe = uriProbe()
+        return { relativePath -> probe(relativePath) != null }
+    }
+
+    /**
+     * [uri], bound to one resolved area — the same bargain as [presenceProbe], for a caller that
+     * needs the Uri rather than a yes or no. Measuring a book and building its playlist both ask
+     * once per file, and a book can be a thousand files.
+     */
+    suspend fun uriProbe(): suspend (String) -> Uri? {
         val area = storageLocation.area()
-        return { relativePath -> area.uri(path(relativePath)) != null }
+        return { relativePath -> area.uri(path(relativePath)) }
     }
 
     /**

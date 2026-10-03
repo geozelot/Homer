@@ -3,6 +3,7 @@ package com.geozelot.homer.data.metadata
 import android.net.Uri
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ class Mp4ChapterParser @Inject constructor(
 
     /** Chapter marks in start order, or empty if none / unreadable. */
     suspend fun parse(mediaUri: String): List<DurationExtractor.ChapterMark> = withContext(Dispatchers.IO) {
-        runCatching { parseInternal(Uri.parse(mediaUri)) }
+        runCatching { parseInternal(mediaUri.toUri()) }
             .getOrElse {
                 Log.d(TAG, "mp4 chapter parse failed for $mediaUri", it)
                 emptyList()

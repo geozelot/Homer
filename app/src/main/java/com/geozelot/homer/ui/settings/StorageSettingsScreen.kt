@@ -97,7 +97,10 @@ fun StorageSettingsScreen(
             when {
                 customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath!!)
                 customStorageUri != null ->
-                    stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri!!))
+                    stringResource(
+                        R.string.settings_storage_custom_folder,
+                        storageFolderName(customStorageUri!!, stringResource(R.string.settings_storage_selected_folder)),
+                    )
                 else -> stringResource(R.string.settings_storage_default)
             },
             // Dimmed while it is unreachable: the folder is still what was chosen, but nothing is
@@ -194,6 +197,9 @@ fun StorageSettingsScreen(
     }
 }
 
-/** A readable folder name from a SAF tree Uri (e.g. …/tree/primary%3AAudiobooks → "Audiobooks"). */
-internal fun storageFolderName(treeUri: String): String =
-    Uri.decode(treeUri).substringAfterLast('/').substringAfterLast(':').ifBlank { "selected folder" }
+/**
+ * A readable folder name from a SAF tree Uri (e.g. …/tree/primary%3AAudiobooks → "Audiobooks"), or
+ * [fallback] where the Uri has none to give.
+ */
+internal fun storageFolderName(treeUri: String, fallback: String): String =
+    Uri.decode(treeUri).substringAfterLast('/').substringAfterLast(':').ifBlank { fallback }

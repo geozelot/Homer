@@ -62,19 +62,30 @@ class CoverEnricher @Inject constructor(
         // The shared cover folder's collection ETag changes when anything is added to it, so one
         // PROPFIND tells us whether a full sweep could possibly find anything new. No folder (or an
         // unchanged one) means there is nothing to gain, and we fall back to fresh books only.
+        //
+        // The ETag is RECORDED only once the sweep it authorises has run to the end. Written up
+        // front, a sweep stopped part-way — Stop, a dead process, a lost connection — left the new
+        // ETag behind and the unswept books with it: the next pass compared equal, fell back to
+        // fresh books only, and art published for the rest stayed unfetched until the folder
+        // changed again.
+        var sweepEtag: String? = null
         val sweepShared = if (sharedCatalog) {
             val etag = orNullUnlessCancelled {
                 webDavClient.propfind(sharedCoverDir(libraryRoot), depth = 0).firstOrNull()?.etag
             }
             val changed = etag != null && etag != librarySettings.lastCoverSweepEtag.first()
-            if (changed) librarySettings.setLastCoverSweepEtag(etag!!)
+            if (changed) sweepEtag = etag
             changed
         } else {
             false
         }
         val books = if (sweepShared) bookDao.booksWithoutArt() else bookDao.booksNeedingCover()
         val total = books.size
-        if (total == 0) return
+        if (total == 0) {
+            // Nothing to sweep is a sweep completed.
+            sweepEtag?.let { librarySettings.setLastCoverSweepEtag(it) }
+            return
+        }
         Log.i(TAG, "enriching covers for $total books")
         var found = 0
         // Consecutive lookups that could not reach openlibrary.org — see MAX_ONLINE_OUTAGES.
@@ -191,6 +202,7 @@ class CoverEnricher @Inject constructor(
             found++
         }
         onProgress(total, total)
+        sweepEtag?.let { librarySettings.setLastCoverSweepEtag(it) }
         Log.i(TAG, "cover enrichment done: $found/$total got art")
     }
 

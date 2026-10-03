@@ -124,6 +124,15 @@ class HeaderDurationsTest {
     }
 
     @Test
+    fun `a search from an offset with the default limit still finds the frame`() {
+        // `from + Int.MAX_VALUE` wrapped negative, so any non-zero offset ran zero iterations.
+        val buffer = ByteArray(100) + frame() + frame()
+        val f = HeaderDurations.findFrame(buffer, from = 50)
+        assertNotNull(f)
+        assertEquals(100, f!!.offset)
+    }
+
+    @Test
     fun `a lone sync word that is not followed by a frame is rejected`() {
         // This is the case that produces nonsense durations: audio data contains byte pairs that
         // look exactly like a header. Only the following frame distinguishes them.

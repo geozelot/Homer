@@ -120,7 +120,13 @@ class FileStorageArea(private val root: File, private val sanitize: Boolean = fa
             val f = file(rel)
             f.parentFile?.mkdirs()
             val part = File(f.parentFile, f.name + ".part")
-            part.outputStream().use(block)
+            try {
+                part.outputStream().use(block)
+            } catch (e: Throwable) {
+                // A write that died leaves no half-file behind to be mistaken for a download.
+                part.delete()
+                throw e
+            }
             if (f.exists()) f.delete()
             if (!part.renameTo(f)) finalizeByCopy(rel, part, f)
             Uri.fromFile(f)

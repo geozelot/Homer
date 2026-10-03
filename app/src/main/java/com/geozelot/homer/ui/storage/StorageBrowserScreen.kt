@@ -1,7 +1,6 @@
 package com.geozelot.homer.ui.storage
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
@@ -47,6 +46,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -117,7 +117,7 @@ fun StorageBrowserScreen(onPicked: (String) -> Unit, onBack: () -> Unit) {
                                 context.startActivity(
                                     Intent(
                                         Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                        Uri.parse("package:${context.packageName}"),
+                                        "package:${context.packageName}".toUri(),
                                     ),
                                 )
                             }.onFailure {

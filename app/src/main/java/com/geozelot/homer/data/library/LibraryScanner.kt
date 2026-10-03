@@ -13,15 +13,15 @@ import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookEntity
-import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.db.entity.CrawlDirEntity
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.download.DownloadStorage
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.webdav.DavResource
 import com.geozelot.homer.data.webdav.WebDavClient
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
-import com.geozelot.homer.data.runCatchingUnlessCancelled
 
 /**
  * A `LIKE` pattern matching everything beneath [path], with LIKE's own wildcards neutralised.
@@ -308,6 +308,8 @@ class LibraryScanner @Inject constructor(
         /** Every visited folder's PDFs, so a book can climb to the nearest one that has any. */
         val folderDocuments = HashMap<String, List<DavResource>>()
         val skippedRoots = mutableListOf<String>()
+        /** Every folder listed, with its ETag — written WITH the books below, never before them. */
+        val crawled = mutableListOf<CrawlDirEntity>()
         var directoriesVisited = 0
 
         val stack = ArrayDeque<Frame>()
@@ -357,7 +359,12 @@ class LibraryScanner @Inject constructor(
                 }
             }
 
-            crawlDirDao.upsert(CrawlDirEntity(dir, selfEtag, now))
+            // Collected, not written. Upserted per folder as the crawl went, a crawl that died
+            // part-way had recorded a fresh ETag for every folder it listed while the books it
+            // found in them went down with it — and the next incremental pass trusted those ETags,
+            // skipped the folders, and the books stayed missing until the server happened to
+            // change something under them. The rows land in the transaction with the books.
+            crawled += CrawlDirEntity(dir, selfEtag, now)
             onProgress(directoriesVisited, audioFolders.size)
         }
 
@@ -369,7 +376,8 @@ class LibraryScanner @Inject constructor(
         // moved-book re-links and the prune used to be independent writes, so a process death
         // between them could leave books re-linked but not pruned (duplicated) or pruned but not
         // re-linked (progress orphaned). The crawl above deliberately stays outside — it is network
-        // work and can take minutes.
+        // work and can take minutes — but its ETag bookkeeping comes in here: a folder's ETag is
+        // a claim that its books are in the index, and the claim must not outlive the books.
         // A full crawl saw the whole library, so anything unaccounted for is genuinely gone and
         // its leftovers can be swept. An incremental scan skips unchanged subtrees and can lose a
         // subtree to a transient server error, so it must never sweep — see applyScan.
@@ -380,6 +388,7 @@ class LibraryScanner @Inject constructor(
         // of being wrong is therefore not symmetric. Leftover rows are harmless; a lost title is
         // not. Do not "tidy" these into one condition.
         val orphanedDownloads = db.withTransaction {
+            crawlDirDao.upsertAll(crawled)
             applyScan(books, root, skippedRoots, sweepOrphans = !incremental)
         }
         // Outside the transaction: this is storage IO, and it must not hold a write lock. Files

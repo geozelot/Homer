@@ -56,9 +56,14 @@
         </intent>
     </queries>
 
+    <!-- tools:targetApi: the two Android 13 attributes below (back-invoked callback, per-app
+         locales) and the Android 12 backup rules are ignored on earlier releases by design. -->
     <application
         android:name=".HomerApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        tools:targetApi="tiramisu"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -84,7 +89,8 @@
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
+            android:foregroundServiceType="mediaPlayback"
+            tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />

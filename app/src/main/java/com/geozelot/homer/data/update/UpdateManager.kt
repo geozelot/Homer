@@ -3,6 +3,7 @@ package com.geozelot.homer.data.update
 import android.util.Log
 import com.geozelot.homer.BuildConfig
 import com.geozelot.homer.data.settings.UpdateSettings
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -28,7 +29,19 @@ class UpdateManager @Inject constructor(
     private val installer: UpdateInstaller,
     private val settings: UpdateSettings,
 ) {
-    private val scope = CoroutineScope(SupervisorJob())
+    // The handler is what stands between an unexpected exception and the process: a coroutine
+    // launched here with nothing to catch it takes the app down. The two expected failure types
+    // are caught where they happen; this is for the one nobody typed, and it leaves the updater
+    // in a state the screen can show and retry from.
+    private val scope = CoroutineScope(
+        SupervisorJob() + CoroutineExceptionHandler { _, e ->
+            Log.e(TAG, "unexpected failure in the updater", e)
+            _state.value = UpdateState.Failed(
+                if (pending != null) UpdateFailure.INSTALL_FAILED else UpdateFailure.NETWORK,
+                pending,
+            )
+        },
+    )
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 

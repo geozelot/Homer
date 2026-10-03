@@ -66,7 +66,12 @@ class DownloadWorker @AssistedInject constructor(
         // in a fresh worker process and abort a perfectly valid download.
         val credentials = credentialStore.awaitCredentials() ?: return Result.failure()
         val files = audioFileDao.findForBook(bookId)
-        if (files.isEmpty()) return Result.success()
+        if (files.isEmpty()) {
+            // Nothing to fetch, so nothing to show for it: the QUEUED row would otherwise spin
+            // until the next orphan sweep happened to drop it.
+            downloadDao.delete(bookId)
+            return Result.success()
+        }
         val libraryRoot = librarySettings.libraryRoot.first()
 
         val book = bookDao.findById(bookId)

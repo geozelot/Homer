@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Adaptive launcher icons have to live in a -v26 folder whatever minSdk says: moved to a bare
+         mipmap-anydpi, AAPT no longer finds them and the manifest's @mipmap/ic_launcher fails to
+         link. The ObsoleteSdkInt hint for this one folder is therefore wrong, and is silenced here
+         rather than by renaming the folder. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+    <!-- Homer ships as an APK (GitHub releases, F-Droid), never as a Play app bundle, so there are
+         no language splits for a per-app locale change to have to download. -->
+    <issue id="AppBundleLocaleChanges" severity="ignore" />
+</lint>

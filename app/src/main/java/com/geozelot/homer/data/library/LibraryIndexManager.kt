@@ -60,10 +60,10 @@ class LibraryIndexManager @Inject constructor(
         // pass resumed on launch cannot be enqueued before its value is known — the resumed pass is
         // the length sweep, the one where thousands of requests on mobile data actually matter.
         combine(passes.pending, work, playbackSettings.wifiOnlyDownloads) { pending, infos, wifiOnly ->
-            wifiOnly.takeIf { pending.isNotEmpty() && infos.none { info -> !info.state.isFinished } }
+            Triple(pending.isNotEmpty(), infos, wifiOnly)
         }
             .distinctUntilChanged()
-            .onEach { if (it != null) enqueue(it) }
+            .onEach { (requested, infos, wifiOnly) -> reconcile(requested, infos, wifiOnly) }
             .launchIn(scope)
     }
 
@@ -225,6 +225,32 @@ class LibraryIndexManager @Inject constructor(
     }
 
     /**
+     * Keeps exactly one drain queued while anything is requested, under the network rule in force.
+     *
+     * A drain still waiting for its network keeps the constraint it was queued with, and `KEEP`
+     * drops every later enqueue — so switching "Wi-Fi only" off while a pass sat waiting for Wi-Fi
+     * changed nothing until Wi-Fi came back. The waiting request is cancelled instead; the
+     * cancellation re-runs this through [work], and the drain is queued again under the new rule.
+     * The pass itself loses nothing: it had not started, and its token is still in the queue.
+     */
+    private fun reconcile(requested: Boolean, infos: List<WorkInfo>, wifiOnly: Boolean) {
+        val wanted = networkTypeFor(wifiOnly)
+        val stale = infos.filter {
+            it.state == WorkInfo.State.ENQUEUED && it.constraints.requiredNetworkType != wanted
+        }
+        if (stale.isNotEmpty()) {
+            Log.i(TAG, "re-queuing the waiting drain under ${wanted.name}")
+            stale.forEach { workManager.cancelWorkById(it.id) }
+            return
+        }
+        if (requested && infos.none { !it.state.isFinished }) enqueue(wifiOnly)
+    }
+
+    /** Follows the same preference as downloads — see [enqueue]. */
+    private fun networkTypeFor(wifiOnly: Boolean): NetworkType =
+        if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
+
+    /**
      * Enqueues a drain. Enqueuing twice for one request is deliberately harmless — the queue
      * absorbs a duplicate and `KEEP` leaves the run in flight alone — so nothing here has to guard
      * against a second tap.
@@ -236,7 +262,7 @@ class LibraryIndexManager @Inject constructor(
             // single book — this used to run on mobile data regardless of the setting.
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                    .setRequiredNetworkType(networkTypeFor(wifiOnly))
                     .build(),
             )
             .build()

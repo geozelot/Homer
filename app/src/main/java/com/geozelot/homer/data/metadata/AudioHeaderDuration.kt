@@ -3,6 +3,7 @@ package com.geozelot.homer.data.metadata
 import android.net.Uri
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import kotlinx.coroutines.CancellationException
@@ -46,7 +47,7 @@ class AudioHeaderDuration @Inject constructor(
      */
     suspend fun durationMs(mediaUri: String, sizeBytes: Long): Long? = withContext(Dispatchers.IO) {
         try {
-            read(Uri.parse(mediaUri), sizeBytes)
+            read(mediaUri.toUri(), sizeBytes)
         } catch (e: CancellationException) {
             // runCatching would swallow this: the sweep is cancellable and must stay that way.
             throw e

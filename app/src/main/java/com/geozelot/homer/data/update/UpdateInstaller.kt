@@ -4,10 +4,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import androidx.core.net.toUri
 import com.geozelot.homer.di.Bootstrap
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +48,7 @@ class UpdateInstaller @Inject constructor(
 
     /** The system screen where the user grants Homer permission to install apps. */
     fun unknownSourcesSettingsIntent(): Intent =
-        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri())
 
     /**
      * Fetches [release]'s APK into the cache and verifies its signature.

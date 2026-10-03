@@ -6,7 +6,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,14 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerTextButton
-import com.geozelot.homer.ui.theme.Amber
-import com.geozelot.homer.ui.theme.AmberSoft
-import com.geozelot.homer.ui.theme.Line
-import com.geozelot.homer.ui.theme.Line
-import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.components.pressFeedback
 import com.geozelot.homer.ui.components.rememberTapInteraction
 import com.geozelot.homer.ui.components.tapTarget
+import com.geozelot.homer.ui.theme.Amber
+import com.geozelot.homer.ui.theme.AmberSoft
+import com.geozelot.homer.ui.theme.Line
+import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Surface2
 
 /** A small selectable chip for the tri-state "on play" mode in the edit dialog. */

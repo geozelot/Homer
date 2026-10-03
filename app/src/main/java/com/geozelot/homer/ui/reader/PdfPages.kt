@@ -7,6 +7,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.graphics.createBitmap
 import java.io.Closeable
 import java.io.File
 import kotlin.math.roundToInt
@@ -73,7 +74,7 @@ class PdfPages private constructor(
                             width = (width * factor).roundToInt().coerceAtLeast(1)
                             height = (height * factor).roundToInt().coerceAtLeast(1)
                         }
-                        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
+                        createBitmap(width, height).also {
                             it.eraseColor(Color.WHITE)
                             page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                         }

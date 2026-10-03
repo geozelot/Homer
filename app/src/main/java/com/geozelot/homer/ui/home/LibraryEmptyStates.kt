@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.scanProgressLine
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Muted
@@ -49,8 +49,7 @@ internal fun LibraryLoading(
         val label = when {
             scanState is ScanState.Scanning -> stringResource(
                 R.string.home_scanning_progress,
-                scanState.directoriesVisited,
-                scanState.booksFound,
+                scanProgressLine(LocalContext.current.resources, scanState.directoriesVisited, scanState.booksFound),
             )
             indexActivity == IndexActivity.READING -> stringResource(R.string.home_reading_index)
             else -> stringResource(R.string.home_opening_library)

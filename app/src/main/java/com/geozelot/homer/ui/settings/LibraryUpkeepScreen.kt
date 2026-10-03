@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -31,10 +32,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryIndexManager
-import com.geozelot.homer.data.library.ScanState
-import com.geozelot.homer.data.sync.facet.CrawlSummary
 import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.Restriction
+import com.geozelot.homer.data.library.ScanState
+import com.geozelot.homer.data.library.scanProgressLine
+import com.geozelot.homer.data.sync.facet.CrawlSummary
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.ui.components.ConfirmDialog
 import com.geozelot.homer.ui.components.HomerTextButton
@@ -353,7 +355,7 @@ private fun ScanRow(
         label = stringResource(R.string.lib_row_books),
         summary = when {
             scanning != null ->
-                stringResource(R.string.sync_scan_folders_books, scanning.directoriesVisited, scanning.booksFound)
+                scanProgressLine(LocalContext.current.resources, scanning.directoriesVisited, scanning.booksFound)
             progress?.pass == IndexPass.ARTWORK && progress.total > 0 ->
                 stringResource(R.string.sync_fetching_covers, progress.done, progress.total)
             progress?.pass == IndexPass.LENGTHS && progress.total > 0 ->

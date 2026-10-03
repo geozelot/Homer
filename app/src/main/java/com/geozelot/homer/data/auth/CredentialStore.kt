@@ -2,6 +2,8 @@ package com.geozelot.homer.data.auth
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -115,8 +117,16 @@ class EncryptedCredentialStore @Inject constructor(
 
     init {
         scope.launch {
-            val storedLibrary = readLibrary()
-            val storedSync = readSyncAccount()
+            // A Keystore that cannot open the store — a key lost to a backup restore, a corrupt
+            // file, security hardware misbehaving after an update — used to throw out of this
+            // coroutine, and [scope] has nothing to catch it: the process died on every launch,
+            // with no way to sign in again. Signed out is the honest answer to an unreadable store.
+            val (storedLibrary, storedSync) = try {
+                readLibrary() to readSyncAccount()
+            } catch (e: Exception) {
+                Log.e(TAG, "credential store is unreadable; treating this device as signed out", e)
+                null to null
+            }
             // Don't clobber a save()/clear() that raced ahead of this initial read.
             if (!_loaded.value) {
                 _credentials.value = storedLibrary
@@ -131,19 +141,19 @@ class EncryptedCredentialStore @Inject constructor(
         _credentials.value = credentials
         _loaded.value = true
         scope.launch {
-            prefs.edit()
-                .putString(KEY_SERVER, credentials.serverUrl)
-                .putString(KEY_LOGIN, credentials.loginName)
-                .putString(KEY_PASSWORD, credentials.appPassword)
-                .putString(KEY_KIND, credentials.kind.name)
-                .apply()
+            persist("save") {
+                putString(KEY_SERVER, credentials.serverUrl)
+                putString(KEY_LOGIN, credentials.loginName)
+                putString(KEY_PASSWORD, credentials.appPassword)
+                putString(KEY_KIND, credentials.kind.name)
+            }
         }
     }
 
     override fun setSyncAccount(account: NextcloudCredentials?) {
         _separateSyncAccount.value = account
         scope.launch {
-            prefs.edit().apply {
+            persist("update the sync account in") {
                 if (account == null) {
                     remove(KEY_SYNC_SERVER); remove(KEY_SYNC_LOGIN); remove(KEY_SYNC_PASSWORD)
                 } else {
@@ -151,7 +161,7 @@ class EncryptedCredentialStore @Inject constructor(
                     putString(KEY_SYNC_LOGIN, account.loginName)
                     putString(KEY_SYNC_PASSWORD, account.appPassword)
                 }
-            }.apply()
+            }
         }
     }
 
@@ -159,7 +169,16 @@ class EncryptedCredentialStore @Inject constructor(
         _credentials.value = null
         _separateSyncAccount.value = null
         _loaded.value = true
-        scope.launch { prefs.edit().clear().apply() }
+        scope.launch { persist("clear") { clear() } }
+    }
+
+    /** One guarded write: a Keystore failure is logged rather than left to take the process down. */
+    private fun persist(what: String, block: SharedPreferences.Editor.() -> Unit) {
+        try {
+            prefs.edit(action = block)
+        } catch (e: Exception) {
+            Log.e(TAG, "could not $what the credential store", e)
+        }
     }
 
     private fun readLibrary(): NextcloudCredentials? {
@@ -182,6 +201,7 @@ class EncryptedCredentialStore @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "HomerAuth"
         const val PREFS_NAME = "homer_credentials"
         const val KEY_SERVER = "server_url"
         const val KEY_LOGIN = "login_name"

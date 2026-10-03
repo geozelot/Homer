@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
 import android.os.LocaleList
+import androidx.core.content.edit
 import java.util.Locale
 
 /**
@@ -70,9 +71,7 @@ enum class AppLanguage(val tag: String, val label: String) {
             }
             context.applicationContext
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .apply { if (language == SYSTEM) remove(KEY_TAG) else putString(KEY_TAG, language.tag) }
-                .apply()
+                .edit { if (language == SYSTEM) remove(KEY_TAG) else putString(KEY_TAG, language.tag) }
             // Only the activity is recreated. The application's base context was wrapped once at
             // startup and cannot be re-wrapped in place, so the chosen language reaches
             // notifications and workers on the next launch rather than this instant — which is why

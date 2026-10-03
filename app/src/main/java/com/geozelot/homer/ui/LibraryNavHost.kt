@@ -7,7 +7,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -16,8 +15,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.geozelot.homer.ui.reader.ARG_DOCUMENT_PATH
-import com.geozelot.homer.ui.reader.DocumentReaderScreen
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
@@ -28,6 +25,8 @@ import com.geozelot.homer.ui.home.HomeScreen
 import com.geozelot.homer.ui.home.HomeViewModel
 import com.geozelot.homer.ui.home.findBook
 import com.geozelot.homer.ui.player.PlayerScreen
+import com.geozelot.homer.ui.reader.ARG_DOCUMENT_PATH
+import com.geozelot.homer.ui.reader.DocumentReaderScreen
 import com.geozelot.homer.ui.settings.AboutSettingsScreen
 import com.geozelot.homer.ui.settings.BrowsingSettingsScreen
 import com.geozelot.homer.ui.settings.LibrarySyncScreen
@@ -283,9 +282,7 @@ private fun NavBackStackEntry.navigateOnce(navController: NavHostController, rou
  * changes, not on every recomposition.
  */
 @Composable
-private fun NavHostController.libraryViewModel(
-    entry: androidx.navigation.NavBackStackEntry,
-): HomeViewModel {
+private fun NavHostController.libraryViewModel(entry: NavBackStackEntry): HomeViewModel {
     val libraryEntry = remember(entry) { getBackStackEntry(ROUTE_LIBRARY) }
     return hiltViewModel(libraryEntry)
 }

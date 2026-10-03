@@ -320,11 +320,10 @@ class LibrarySettings @Inject constructor(
      * user can see and fix it. Dropping it at read time would make a typo look like the template
      * vanishing.
      *
-     * Scoped to the whole library rather than to a subtree. That is a deliberate simplification of
-     * the design: one ordered list, tried before the conventional defaults, covers "my library is
-     * laid out differently" and "my titles carry the sub-series in brackets", which are the cases
-     * that exist. Per-subtree scoping can be added without changing what is stored, since a scope
-     * would be a prefix on each line.
+     * Each line is either a bare pattern, which applies to the whole library, or `scope<TAB>pattern`,
+     * which applies under one folder — see `ScopedTemplate`. One ordered list, tried before the
+     * conventional defaults, covers "my library is laid out differently", "my titles carry the
+     * sub-series in brackets" and "this one author's folder is organised another way".
      */
     val pathTemplates: Flow<List<String>> =
         context.settingsDataStore.data.map { prefs ->
@@ -607,6 +606,13 @@ class LibrarySettings @Inject constructor(
  */
 const val SLEEP_EXTEND_OFF = "off"
 
+/**
+ * The fade-out's default, in seconds. Public for the same reason as [SLEEP_EXTEND_OFF]: the screen
+ * that shows the setting needs the same number before DataStore has answered, or the row flickers
+ * from "off" to five seconds on every open.
+ */
+const val SLEEP_FADE_DEFAULT_SECONDS = 5
+
 @Singleton
 class PlaybackSettings @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -764,7 +770,7 @@ class PlaybackSettings @Inject constructor(
         val KEY_PLAY_ON_SLEEP_TIMER = booleanPreferencesKey("play_on_sleep_timer")
         val KEY_SLEEP_NOTIFICATION = booleanPreferencesKey("sleep_timer_notification")
         val KEY_DOWNLOAD_ON_PLAY = booleanPreferencesKey("download_on_play")
-        const val DEFAULT_SLEEP_FADE = 5
+        const val DEFAULT_SLEEP_FADE = SLEEP_FADE_DEFAULT_SECONDS
         /**
          * Shake-to-extend, off by default.
          *

@@ -11,6 +11,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.geozelot.homer.R
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -33,9 +34,9 @@ class StorageMigrationWorker @AssistedInject constructor(
         val overwrite = inputData.getBoolean(KEY_OVERWRITE, false)
         ensureChannel()
         return try {
-            setForegroundSafely(foregroundInfo("Moving your library…", 0, 0))
+            setForegroundSafely(foregroundInfo(appContext.getString(R.string.home_migration_title), 0, 0))
             migrator.migrate(source, target, overwrite) { p ->
-                setForegroundSafely(foregroundInfo(p.label, p.done, p.total))
+                setForegroundSafely(foregroundInfo(appContext.getString(p.phase.label), p.done, p.total))
             }
             Result.success()
         } catch (e: CancellationException) {
@@ -60,7 +61,7 @@ class StorageMigrationWorker @AssistedInject constructor(
         val manager = appContext.getSystemService(NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Storage", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, appContext.getString(R.string.storage_channel_name), NotificationManager.IMPORTANCE_LOW),
             )
         }
     }
@@ -68,7 +69,7 @@ class StorageMigrationWorker @AssistedInject constructor(
     private fun foregroundInfo(text: String, done: Int, total: Int): ForegroundInfo {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Homer")
+            .setContentTitle(appContext.getString(R.string.app_name))
             .setContentText(if (total > 0) "$text $done/$total" else text)
             .setOngoing(true)
             .setProgress(total, done, total == 0)

@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.library
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.geozelot.homer.data.auth.NextcloudCredentials
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.webdav.WebDavClient
@@ -32,5 +33,5 @@ object BookCover {
      * they still load.
      */
     private fun cachedCover(value: String): Any =
-        if (value.startsWith("content://") || value.startsWith("file://")) Uri.parse(value) else File(value)
+        if (value.startsWith("content://") || value.startsWith("file://")) value.toUri() else File(value)
 }

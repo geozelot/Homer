@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import androidx.core.net.toUri
 import com.geozelot.homer.data.settings.LibrarySettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -83,7 +84,7 @@ class StorageLocation @Inject constructor(
      */
     fun areaFor(token: String?): StorageArea = when {
         token == null -> defaultArea
-        token.startsWith("content://") -> SafStorageArea(context, Uri.parse(token))
+        token.startsWith("content://") -> SafStorageArea(context, token.toUri())
         else -> FileStorageArea(File(token), sanitize = true) // a public path needs safe names
     }
 
@@ -93,12 +94,12 @@ class StorageLocation @Inject constructor(
 
     /** Takes a durable read/write grant on a SAF tree (idempotent). */
     fun takePersistable(uriString: String) {
-        context.contentResolver.takePersistableUriPermission(Uri.parse(uriString), RW_FLAGS)
+        context.contentResolver.takePersistableUriPermission(uriString.toUri(), RW_FLAGS)
     }
 
     /** Releases a previously-held SAF grant (best-effort). */
     fun releasePersistable(uriString: String) {
-        runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(uriString), RW_FLAGS) }
+        runCatching { context.contentResolver.releasePersistableUriPermission(uriString.toUri(), RW_FLAGS) }
     }
 
     /**
@@ -113,7 +114,7 @@ class StorageLocation @Inject constructor(
                 librarySettings.setCustomStorageUri(null)
             }
             token.startsWith("content://") -> {
-                context.contentResolver.takePersistableUriPermission(Uri.parse(token), RW_FLAGS)
+                context.contentResolver.takePersistableUriPermission(token.toUri(), RW_FLAGS)
                 librarySettings.setCustomStoragePath(null)
                 librarySettings.setCustomStorageUri(token)
             }

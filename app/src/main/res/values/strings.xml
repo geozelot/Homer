@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- A product name: the same in every language, so no translation is expected. -->
     <string name="app_name" translatable="false">Homer</string>
 
@@ -135,7 +135,9 @@
     <string name="home_storage_load">Load it</string>
     <string name="home_storage_replace">Replace</string>
     <string name="home_migration_title">Moving your library</string>
-    <string name="home_migration_files">%1$d / %2$d files</string>
+    <!-- tools:ignore="PluralsCandidate" marks a count that reads correctly for one as well: the noun
+         belongs to the total ("1 of 3 files"), or the number qualifies an adjective ("1 without art"). -->
+    <string name="home_migration_files" tools:ignore="PluralsCandidate">%1$d / %2$d files</string>
 
     <!-- Home: top bar / search -->
     <string name="home_cd_search">Search</string>
@@ -205,7 +207,7 @@
     <string name="home_menu_retry_download">Retry download</string>
 
     <!-- Home: empty / loading states -->
-    <string name="home_scanning_progress">Scanning your library… %1$d folders · %2$d books</string>
+    <string name="home_scanning_progress">Scanning your library… %1$s</string>
     <string name="home_opening_library">Opening your library…</string>
     <string name="home_reading_index">Reading the shared library\u2026</string>
     <string name="home_no_matches">No matches</string>
@@ -273,7 +275,7 @@
     <string name="sync_library_folder_placeholder">e.g. Audiobooks (blank = whole drive)</string>
     <string name="sync_scanned_never">never scanned</string>
     <string name="sync_status_line">%1$s · %2$s</string>
-    <string name="sync_measuring">Book %1$d of %2$d \u00b7 %3$d of %4$d files…</string>
+    <string name="sync_measuring" tools:ignore="PluralsCandidate">Book %1$d of %2$d \u00b7 %3$d of %4$d files…</string>
     <!-- A pass that has been asked for but has not started: passes queue behind each other now
          rather than cancelling one another, so a row has to be able to say "your turn is coming". -->
     <string name="sync_pass_queued">Waiting its turn\u2026</string>
@@ -294,7 +296,7 @@
     <string name="sync_detail_private_progress"> · private progress</string>
     <string name="sync_detail_owner"> · owner: %1$s</string>
     <string name="sync_use_as_library">Use as library folder</string>
-    <string name="sync_scan_folders_books">%1$d folders · %2$d books</string>
+    <string name="sync_scan_folders_books">%1$s · %2$s</string>
     <plurals name="sync_books_count">
         <item quantity="one">%1$d book</item>
         <item quantity="other">%1$d books</item>
@@ -307,7 +309,7 @@
     <string name="set_sync_title">Sync</string>
     <string name="set_upkeep_title">Upkeep</string>
     <string name="set_upkeep_summary_done">Everything has been read and measured</string>
-    <string name="set_upkeep_summary_todo">%1$d without artwork · %2$d unmeasured</string>
+    <string name="set_upkeep_summary_todo" tools:ignore="PluralsCandidate">%1$d without artwork · %2$d unmeasured</string>
     <string name="set_upkeep_reader_summary">Kept by whoever maintains this library</string>
     <string name="set_source_summary">Where your books come from</string>
     <!-- The book count is a plural; the caller formats it and passes it in as %2$s. -->
@@ -341,7 +343,7 @@
     <string name="lib_try_lengths">Try missing lengths</string>
     <!-- Shown instead of the Contents lead on a device that only reads the index. -->
     <string name="lib_contents_reader_lead">This device reads an index kept by whoever can write to that folder, so it runs no scans of its own. New and deleted books arrive when they next update it.</string>
-    <string name="lib_reader_unmeasured">%1$d without a length</string>
+    <string name="lib_reader_unmeasured" tools:ignore="PluralsCandidate">%1$d without a length</string>
     <string name="lib_contents_lead">Scan looks at the folder; Sync exchanges what has been worked out with your other devices. Asking for one while the other runs simply queues it.</string>
     <string name="lib_row_books">Books</string>
     <string name="lib_row_sync">Sync</string>
@@ -353,9 +355,9 @@
     <string name="lib_action_scan">Scan</string>
     <string name="lib_books_none">No books yet — scan to read the folder</string>
     <string name="lib_artwork_complete">Every book has art</string>
-    <string name="lib_artwork_missing">%1$d without art</string>
+    <string name="lib_artwork_missing" tools:ignore="PluralsCandidate">%1$d without art</string>
     <string name="lib_lengths_complete">Every book has a length</string>
-    <string name="lib_lengths_missing">%1$d without a length · thousands of small requests, best on Wi\u2011Fi</string>
+    <string name="lib_lengths_missing" tools:ignore="PluralsCandidate">%1$d without a length · thousands of small requests, best on Wi\u2011Fi</string>
     <string name="lib_corrections_none">Nothing corrected yet</string>
     <string name="lib_corrections_local">%1$s · kept on this device</string>
     <!-- The crawl marker, shown because it is what authorises deletion: a book only disappears on
@@ -468,8 +470,6 @@
     <string name="player_time_unknown">--:--</string>
     <string name="player_cd_previous">Previous chapter</string>
     <string name="player_cd_next">Next chapter</string>
-    <string name="player_cd_skip_forward">Skip forward %1$d seconds</string>
-    <string name="player_cd_skip_back">Skip back %1$d seconds</string>
     <string name="player_chapters">Chapters</string>
     <!-- A series or collection with the book's place in it, on the player's header chips. -->
     <string name="player_series_volume">%1$s, Volume %2$d</string>
@@ -553,12 +553,12 @@
     <string name="details_offline">Offline</string>
     <string name="details_offline_none">Not downloaded</string>
     <string name="details_offline_all">Downloaded</string>
-    <string name="details_offline_some">%1$d of %2$d downloaded</string>
+    <string name="details_offline_some" tools:ignore="PluralsCandidate">%1$d of %2$d downloaded</string>
     <string name="details_location">Folder</string>
     <string name="details_volumes">Volumes</string>
     <string name="details_started">Started</string>
     <string name="details_started_none">None started</string>
-    <string name="details_started_some">%1$d of %2$d started</string>
+    <string name="details_started_some" tools:ignore="PluralsCandidate">%1$d of %2$d started</string>
     <string name="details_kind_series">Series</string>
     <string name="details_kind_collection">Collection</string>
     <string name="menu_details">Details</string>
@@ -790,4 +790,29 @@
     <string name="help_cover_booklet">A booklet, libretto or map filed beside the book. Tap to read it — swipe for the next page, pinch to zoom.</string>
     <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
     <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
+    <!-- Background work: the two notification channels and what their notifications say. -->
+    <string name="library_channel_name">Library</string>
+    <string name="storage_channel_name">Storage</string>
+    <string name="index_notification_scanning">Scanning library…</string>
+    <string name="index_notification_covers">Fetching covers…</string>
+    <string name="index_notification_lengths">Measuring lengths</string>
+    <string name="index_notification_publishing">Updating shared library…</string>
+    <string name="migration_phase_downloads">Moving downloads</string>
+    <string name="migration_phase_covers">Moving covers</string>
+    <string name="migration_phase_finishing">Finishing…</string>
+    <plurals name="sync_folders_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="player_cd_skip_forward">
+        <item quantity="one">Skip forward %1$d second</item>
+        <item quantity="other">Skip forward %1$d seconds</item>
+    </plurals>
+    <plurals name="player_cd_skip_back">
+        <item quantity="one">Skip back %1$d second</item>
+        <item quantity="other">Skip back %1$d seconds</item>
+    </plurals>
+    <string name="diag_read_failed">Could not read logs: %1$s</string>
+    <string name="diag_empty">No log lines captured. Reproduce the problem, then tap Refresh.</string>
+    <string name="settings_storage_selected_folder">selected folder</string>
 </resources>

@@ -12,6 +12,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.geozelot.homer.R
 import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.metadata.CoverEnricher
 import com.geozelot.homer.data.metadata.DurationEnricher
@@ -94,7 +95,7 @@ class LibraryIndexWorker @AssistedInject constructor(
         when (request.pass) {
             IndexPass.BOOKS -> {
                 report(request.pass)
-                setForegroundSafely(foregroundInfo("Scanning library…", 0, 0))
+                setForegroundSafely(foregroundInfo(appContext.getString(R.string.index_notification_scanning), 0, 0))
                 // Re-posted as the crawl walks, on the same throttle as the other two passes.
                 //
                 // Not only for the progress, though a crawl of a large library sat on a static
@@ -114,10 +115,12 @@ class LibraryIndexWorker @AssistedInject constructor(
                             lastNotifyMs = now
                             setForegroundSafely(
                                 foregroundInfo(
-                                    text = "Scanning library…",
+                                    text = appContext.getString(R.string.index_notification_scanning),
                                     done = 0,
                                     total = 0,
-                                    detail = "${state.booksFound} book(s) in ${state.directoriesVisited} folder(s)",
+                                    detail = scanProgressLine(
+                                        appContext.resources, state.directoriesVisited, state.booksFound,
+                                    ),
                                 ),
                             )
                             report(request.pass, books = state.booksFound)
@@ -132,7 +135,7 @@ class LibraryIndexWorker @AssistedInject constructor(
                         progress.cancel()
                     }
                 }
-                publish("Updating shared library…")
+                publish(appContext.getString(R.string.index_notification_publishing))
             }
 
             IndexPass.ARTWORK -> {
@@ -177,13 +180,13 @@ class LibraryIndexWorker @AssistedInject constructor(
                     val now = System.currentTimeMillis()
                     if (done >= total || now - lastNotifyMs >= PROGRESS_NOTIFY_INTERVAL_MS) {
                         lastNotifyMs = now
-                        setForegroundSafely(foregroundInfo("Fetching covers…", done, total))
+                        setForegroundSafely(foregroundInfo(appContext.getString(R.string.index_notification_covers), done, total))
                         report(request.pass, done, total)
                     }
                 }
                 // Cover art lands in the shared cache, and `derived` records which books have one
                 // — neither of which a reader has anything to say about.
-                if (!readerOnly) publish("Updating shared library…")
+                if (!readerOnly) publish(appContext.getString(R.string.index_notification_publishing))
             }
 
             IndexPass.LENGTHS -> {
@@ -203,16 +206,18 @@ class LibraryIndexWorker @AssistedInject constructor(
                         // One 1020-file book makes either number alone misleading.
                         setForegroundSafely(
                             foregroundInfo(
-                                text = "Measuring lengths",
+                                text = appContext.getString(R.string.index_notification_lengths),
                                 done = p.files,
                                 total = p.fileTotal,
-                                detail = "Book ${p.books} of ${p.bookTotal} · ${p.files} of ${p.fileTotal} files",
+                                detail = appContext.getString(
+                                    R.string.sync_measuring, p.books, p.bookTotal, p.files, p.fileTotal,
+                                ),
                             ),
                         )
                         report(request.pass, p.files, p.fileTotal, p.books, p.bookTotal)
                     }
                 }
-                publish("Updating shared library…")
+                publish(appContext.getString(R.string.index_notification_publishing))
             }
         }
     }
@@ -270,7 +275,7 @@ class LibraryIndexWorker @AssistedInject constructor(
         val manager = appContext.getSystemService(NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Library", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, appContext.getString(R.string.library_channel_name), NotificationManager.IMPORTANCE_LOW),
             )
         }
     }
@@ -283,7 +288,7 @@ class LibraryIndexWorker @AssistedInject constructor(
     ): ForegroundInfo {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("Homer")
+            .setContentTitle(appContext.getString(R.string.app_name))
             .setContentText(detail ?: if (total > 0) "$text ${done}/$total" else text)
             .setOngoing(true)
             .setProgress(total, done, total == 0)

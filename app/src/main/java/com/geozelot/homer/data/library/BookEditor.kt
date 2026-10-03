@@ -242,6 +242,9 @@ class BookEditor @Inject constructor(
     /** Quick hide/show, preserving any existing metadata override. */
     suspend fun setHidden(bookId: String, hidden: Boolean) {
         val existing = bookOverrideDao.findById(bookId)
+        // Nothing to say: un-hiding a book that has no row, or setting what is already set, would
+        // write a correction the book never had — and stamp a time that shields a published one.
+        if ((existing?.hidden ?: false) == hidden) return
         bookOverrideDao.upsert(
             existing?.copy(hidden = hidden, updatedAt = System.currentTimeMillis())
                 ?: blank(bookId).copy(hidden = hidden),

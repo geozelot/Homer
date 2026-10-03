@@ -1,8 +1,11 @@
 package com.geozelot.homer.playback
 
+import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.geozelot.homer.R
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
@@ -14,11 +17,13 @@ import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 
 /** Resolves a book into an ordered playlist of streamable [MediaItem]s. */
 class PlaylistResolver @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val bookDao: BookDao,
     private val audioFileDao: AudioFileDao,
     private val credentialStore: CredentialStore,
@@ -49,7 +54,7 @@ class PlaylistResolver @Inject constructor(
         // notification shows it on every chapter (its loader can't authenticate remote WebDAV).
         val artworkUri = (book.customCoverPath ?: book.localCoverPath)?.let { value ->
             if (value.startsWith("content://") || value.startsWith("file://")) {
-                Uri.parse(value)
+                value.toUri()
             } else {
                 Uri.fromFile(java.io.File(value)) // legacy pre-relocation path
             }
@@ -67,11 +72,15 @@ class PlaylistResolver @Inject constructor(
         val allDownloaded = download?.status == DownloadStatus.DONE
         val completedFiles = if (allDownloaded) files.size else download?.downloadedFiles ?: 0
 
+        // One resolved storage area for the whole book — see DownloadStorage.uriProbe. Resolved per
+        // file, a SAF area was rebuilt, path cache and all, once per chapter.
+        val localUri = if (completedFiles > 0) downloadStorage.uriProbe() else null
+        val unknownAuthor = context.getString(R.string.unknown_author)
         val items = files.mapIndexed { index, file ->
             // Play the downloaded copy when present (file:// or content:// depending on the
-            // storage backend); otherwise stream. `map` is inline, so the suspend uri() is fine.
-            val localUri = if (index < completedFiles) downloadStorage.uri(file.relativePath) else null
-            val url = localUri?.toString()
+            // storage backend); otherwise stream. `map` is inline, so the suspend probe is fine.
+            val local = if (index < completedFiles) localUri?.invoke(file.relativePath) else null
+            val url = local?.toString()
                 ?: webDavClient.urlFor(credentials, libraryRoot, file.relativePath).toString()
             val chapterTitle = file.fileName.substringBeforeLast('.')
             MediaItem.Builder()
@@ -81,7 +90,7 @@ class PlaylistResolver @Inject constructor(
                     MediaMetadata.Builder()
                         .setTitle(chapterTitle)
                         .setAlbumTitle(book.title)
-                        .setArtist(book.author ?: "Unknown author")
+                        .setArtist(book.author ?: unknownAuthor)
                         .setArtworkUri(artworkUri)
                         .setIsBrowsable(false)
                         .setIsPlayable(true)

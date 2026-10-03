@@ -1,8 +1,8 @@
 package com.geozelot.homer.data.metadata
 
-import android.net.Uri
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import kotlinx.coroutines.CancellationException
@@ -39,7 +39,7 @@ class AudioHeaderTags @Inject constructor(
      */
     suspend fun read(mediaUri: String): DurationExtractor.Probe? = withContext(Dispatchers.IO) {
         try {
-            val uri = Uri.parse(mediaUri)
+            val uri = mediaUri.toUri()
             val head = reader.readAt(uri, 0, HEAD_BYTES) ?: return@withContext null
             val tags = Id3Tags.read(head) { position, length ->
                 reader.readAt(uri, position, length.toLong())

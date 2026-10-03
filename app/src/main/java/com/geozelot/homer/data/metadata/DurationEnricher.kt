@@ -4,15 +4,19 @@ import android.util.Log
 import com.geozelot.homer.data.auth.CredentialStore
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookDao
-import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.ChapterTier
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.net.NetworkMonitor
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.webdav.WebDavClient
-import kotlinx.coroutines.flow.first
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,16 +25,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import java.util.Collections
-import java.util.concurrent.atomic.AtomicInteger
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.coroutines.coroutineContext
 
 /**
  * Fills in per-file playback durations for a book the first time it is opened, then sums
@@ -138,7 +138,8 @@ class DurationEnricher @Inject constructor(
             // http one, only locally and with no round trip. Which makes a downloaded book the
             // cheapest thing there is to measure, and it is the case where measuring matters
             // most: offline is when a chapter list cannot fall back to asking the server.
-            val local = files.associate { it.relativePath to downloadStorage.uri(it.relativePath) }
+            val probeLocal = downloadStorage.uriProbe()
+            val local = files.associate { it.relativePath to probeLocal(it.relativePath) }
             // Offline, nothing that is not already here can be measured — and crucially nothing may
             // be RECORDED as unmeasurable: probe() returns null both for "this file has no
             // duration" and for "I couldn't reach it", so a single offline open would otherwise
@@ -275,7 +276,12 @@ class DurationEnricher @Inject constructor(
                 // `chpl` parser over the same authed source.
                 val first = files.firstOrNull()
                 if (marks.isEmpty() && first != null && first.relativePath.isMp4Family()) {
-                    val url = webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
+                    // The downloaded copy when there is one, like every other read in this pass.
+                    // Streaming here regardless meant the first OFFLINE open of a downloaded M4B
+                    // found no chapters and settled the tier as NONE — for good, since a settled
+                    // tier is never probed again.
+                    val url = local[first.relativePath]?.toString()
+                        ?: webDavClient.urlFor(credentials, libraryRoot, first.relativePath).toString()
                     marks = mp4ChapterParser.parse(url)
                     if (marks.isNotEmpty()) Log.i(TAG, "book $bookId: ${marks.size} chapters from mp4 chpl")
                 }

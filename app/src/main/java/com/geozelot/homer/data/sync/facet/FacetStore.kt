@@ -201,6 +201,6 @@ internal fun <T> FacetStore.Load<T>.ofCurrentSchema(file: String, versionOf: (T)
     if (this !is FacetStore.Load.Present) return this
     val version = versionOf(value)
     if (version == LibraryFacets.SCHEMA_VERSION) return this
-    Log.i("HomerSync", "$file is schema v$version, not v${LibraryFacets.SCHEMA_VERSION}; rebuilding it")
+    Log.i("HomerIndex", "$file is schema v$version, not v${LibraryFacets.SCHEMA_VERSION}; rebuilding it")
     return FacetStore.Load.Missing
 }

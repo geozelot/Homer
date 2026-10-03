@@ -171,7 +171,7 @@ class BookEditCoordinator @Inject constructor(
         val seeded = if (scope.isBlank()) shape else "$scope\t$shape"
         val existing = currentDraft()
         _templateDraft.value = if (seeded in existing) existing else listOf(seeded) + existing
-        Log.i(TAG_STORAGE, "seeded a template for '$scope' from '$shape'")
+        Log.i(TAG_TEMPLATE, "seeded a template for '$scope' from '$shape'")
     }
 
     /**
@@ -197,7 +197,7 @@ class BookEditCoordinator @Inject constructor(
     }
 
     private companion object {
-        const val TAG_STORAGE = "HomerStore"
+        const val TAG_TEMPLATE = "HomerTemplate"
 
         /** How long the template editor settles before the preview reads the library. */
         const val PREVIEW_DEBOUNCE_MS = 250L

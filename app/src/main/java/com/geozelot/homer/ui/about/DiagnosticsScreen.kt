@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.about
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -36,8 +37,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.components.ScreenInset
 import com.geozelot.homer.ui.components.HomerTextButton
+import com.geozelot.homer.ui.components.ScreenInset
 import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifTitle
@@ -56,7 +57,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     var reloadKey by remember { mutableStateOf(0) }
     val log by produceState(initialValue = stringResource(R.string.diag_reading_logs), reloadKey) {
-        value = captureLog()
+        value = captureLog(context)
     }
 
     Column(
@@ -115,7 +116,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
  * up in seconds and held ZERO Homer lines, which is exactly when the log is wanted. Silencing them
  * is what makes this screen usable during a scan or a length pass.
  */
-private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
+private suspend fun captureLog(context: Context): String = withContext(Dispatchers.IO) {
     // Later specs win, so the silences must follow the `*:W` default they override.
     val filterSpec = HOMER_TAGS.map { "$it:V" } + "*:W" + NOISY_TAGS.map { "$it:S" }
     runCatching {
@@ -123,8 +124,8 @@ private suspend fun captureLog(): String = withContext(Dispatchers.IO) {
             arrayOf("logcat", "-d", "-v", "time", "-t", "2000") + filterSpec.toTypedArray(),
         )
         redact(process.inputStream.bufferedReader().use { it.readText() })
-    }.getOrElse { "Could not read logs: ${it.message}" }
-        .ifBlank { "No log lines captured. Reproduce the problem, then tap Refresh." }
+    }.getOrElse { context.getString(R.string.diag_read_failed, it.message) }
+        .ifBlank { context.getString(R.string.diag_empty) }
 }
 
 /**
@@ -141,8 +142,13 @@ private fun redact(raw: String): String = raw
     .replace(Regex("""https?://[^/\s"']+"""), "https://<server>")
 
 private val HOMER_TAGS = listOf(
+    // Every tag a `Log.*` call in Homer uses. One missing here is a subsystem whose ordinary lines
+    // never reach this screen: the updater, setup and the shared index were all absent, and a
+    // report about any of them came back with nothing but warnings.
     "HomerAuth", "HomerScan", "HomerMeta", "HomerDownload",
     "HomerStore", "HomerSync", "HomerPlay", "HomerNet",
+    "HomerIndex", "HomerUpdate", "HomerSetup", "HomerUI",
+    "HomerDocs", "HomerTemplate", "HomerSettings", "HomerProgress", "HomerDav",
 )
 
 /**

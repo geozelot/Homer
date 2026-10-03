@@ -72,7 +72,7 @@ private fun MigrationDialog(progress: StorageMigrator.Progress) {
         title = { Text(stringResource(R.string.home_migration_title)) },
         text = {
             Column {
-                Text(progress.label, color = Muted, fontSize = 13.sp)
+                Text(stringResource(progress.phase.label), color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(12.dp))
                 if (progress.total > 0) {
                     LinearProgressIndicator(

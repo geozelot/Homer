@@ -13,6 +13,7 @@ import com.geozelot.homer.data.db.entity.AudioFileEntity
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.ChapterEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
+import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
@@ -41,7 +42,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.geozelot.homer.data.db.entity.bookTotalDurationMs
 
 /**
  * One entry in the player's chapter picker. Exactly one of [startMs] (embedded mark — seek within
@@ -159,7 +159,10 @@ class PlayerViewModel @Inject constructor(
                         // shows its chapter lengths while streaming and a multi-file one does not.
                         val end = embedded.getOrNull(i + 1)?.startMs ?: fileEnd
                         PlayerChapter(
-                            title = c.title?.ifBlank { null } ?: "Chapter ${i + 1}",
+                            // Blank for an untitled mark. The picker already says "Chapter n" in
+                            // the reader's language; a fallback typed here in English showed up
+                            // under that line as if it were a name somebody chose.
+                            title = c.title?.ifBlank { null }.orEmpty(),
                             mediaItemIndex = null,
                             startMs = c.startMs,
                             isCurrent = i == current,

@@ -430,11 +430,20 @@ class LibraryIndexRepository @Inject constructor(
         corrections: CorrectionsFacet,
     ) {
         val now = System.currentTimeMillis()
+        // Read in bulk, up front. Three queries per book made a pull of a 300-book index a
+        // thousand statements before a row was written; three queries per pull do the same job.
+        // The writes below stay per book, for the reason the KDoc gives.
+        val existingBooks = bookDao.getAll().associateBy { it.id }
+        val existingFilesByBook = structure.books.keys.toList()
+            .chunked(SQL_PARAM_CHUNK)
+            .flatMap { audioFileDao.findForBooks(it) }
+            .groupBy { it.bookId }
+        val existingOverrides = bookOverrideDao.getAll().associateBy { it.bookId }
         var applied = 0
         for ((id, book) in structure.books) {
-            val existing = bookDao.findById(id)
-            val existingFiles = if (existing == null) emptyList() else audioFileDao.findForBook(id)
-            val existingOverride = bookOverrideDao.findById(id)
+            val existing = existingBooks[id]
+            val existingFiles = if (existing == null) emptyList() else existingFilesByBook[id].orEmpty()
+            val existingOverride = existingOverrides[id]
             val d = derived.books[id]
             val entity = FacetMapping.bookEntity(id, book, d, existing, now)
             val files = FacetMapping.fileEntities(id, book, d, existingFiles)

@@ -228,6 +228,9 @@ private fun storageSummary(
     accessLost -> stringResource(R.string.settings_storage_lost_short)
     customStoragePath != null -> stringResource(R.string.settings_storage_folder, customStoragePath)
     customStorageUri != null ->
-        stringResource(R.string.settings_storage_custom_folder, storageFolderName(customStorageUri))
+        stringResource(
+            R.string.settings_storage_custom_folder,
+            storageFolderName(customStorageUri, stringResource(R.string.settings_storage_selected_folder)),
+        )
     else -> stringResource(R.string.settings_storage_default)
 }

@@ -162,8 +162,14 @@ class SafStorageArea(context: Context, private val treeUri: Uri) : StorageArea {
                 return@withContext direct
             }
 
-            (resolver.openOutputStream(part, "w") ?: throw IOException("SAF: open output $rel$PART_SUFFIX"))
-                .use(block)
+            try {
+                (resolver.openOutputStream(part, "w") ?: throw IOException("SAF: open output $rel$PART_SUFFIX"))
+                    .use(block)
+            } catch (e: Throwable) {
+                // A write that died leaves no half-file behind to be mistaken for a download.
+                runCatching { DocumentsContract.deleteDocument(resolver, part) }
+                throw e
+            }
             // Clear the destination first: renaming onto a name that already exists makes providers
             // disambiguate with a " (1)" suffix, leaving a file this area could never resolve again.
             resolveFile(rel)?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }

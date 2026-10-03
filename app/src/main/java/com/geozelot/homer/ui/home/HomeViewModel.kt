@@ -25,14 +25,17 @@ import com.geozelot.homer.data.library.BookEditor
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
-import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.LibraryRepository
+import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.settings.LEGACY_AUTHOR_LAST
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PinningBlock
 import com.geozelot.homer.data.settings.PlaybackSettings
+import com.geozelot.homer.data.settings.SLEEP_EXTEND_OFF
+import com.geozelot.homer.data.settings.SLEEP_FADE_DEFAULT_SECONDS
 import com.geozelot.homer.data.storage.LocalMirror
 import com.geozelot.homer.data.storage.StorageMigrator
 import com.geozelot.homer.data.sync.HomerSyncRepository
@@ -54,12 +57,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.geozelot.homer.data.settings.LEGACY_AUTHOR_LAST
 
 /**
  * A library row: enough to render without touching the DB entity in the UI.
@@ -968,11 +970,11 @@ class HomeViewModel @Inject constructor(
 
     /** What a shake does to a running sleep timer. */
     val sleepExtend: StateFlow<String> = playbackSettings.sleepExtend
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "previous")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SLEEP_EXTEND_OFF)
 
     /** How long the volume ramps down for when the sleep timer ends; 0 = stop outright. */
     val sleepFadeOutSeconds: StateFlow<Int> = playbackSettings.sleepFadeOutSeconds
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SLEEP_FADE_DEFAULT_SECONDS)
 
     fun setSleepExtend(mode: String) {
         viewModelScope.launch { playbackSettings.setSleepExtend(mode) }
@@ -1161,9 +1163,12 @@ class HomeViewModel @Inject constructor(
     fun bookmarksFor(bookId: String): Flow<List<BookmarkEntity>> = bookmarkDao.observeForBook(bookId)
 
     /** Removes a bookmark from the library-side list. */
-    fun deleteBookmark(id: Long) {
-        viewModelScope.launch { bookmarkDao.deleteById(id) }
-    }
+    /**
+     * Through the playback connection, like the player's own delete: that path also stamps the
+     * book's bookmark timestamp and pushes the manifest. Deleting the row alone left the server's
+     * copy the newer one, and the next pull put the bookmark straight back.
+     */
+    fun deleteBookmark(id: Long, bookId: String) = connection.deleteBookmark(id, bookId)
 
     // ── the two worklists Upkeep offers ──────────────────────────────────────────────────────
 
