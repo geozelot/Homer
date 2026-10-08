@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,8 +26,8 @@ import javax.inject.Singleton
  *    A bare share can't host per-user progress, so this is null unless the user also signs in;
  *    when the library itself is an account, that account *is* the sync account.
  *
- * Secrets live only in Keystore-backed [EncryptedSharedPreferences]; nothing sensitive is written
- * in plaintext.
+ * Secrets are sealed under a key that lives in the Android Keystore; nothing sensitive is written in
+ * plaintext. See [KeystoreCredentialStore].
  */
 interface CredentialStore {
     /** Current library backend (account or share), or `null` when logged out. Emits on save/clear. */
@@ -66,29 +64,48 @@ interface CredentialStore {
     fun clear()
 }
 
+/**
+ * [CredentialStore], sealed with AES-GCM under a key that never leaves the Android Keystore.
+ *
+ * ## Why not Jetpack Security any more
+ *
+ * Up to 2.2.0 this was `EncryptedSharedPreferences`. Jetpack Security is deprecated upstream: its
+ * last release marks every API deprecated and points at the Keystore directly, which is all it was
+ * ever doing underneath. Staying on it meant a dependency that will not follow AndroidX forward,
+ * holding the one thing in Homer that cannot be re-derived from the server. What it did is small
+ * enough to do here — [AesGcmCipher] with [keystoreKey], and [CredentialCodec] for the shape — and
+ * the old file is taken over once by [LegacyCredentialStore] and then deleted.
+ *
+ * ## One thread, in order
+ *
+ * Every read and write of the file runs on [scope], which runs one thing at a time in the order it
+ * was asked for. The initial load — including taking over the old store — is asked for first, in
+ * the constructor, so a save that races ahead of it in memory still lands on disk AFTER it rather
+ * than being overwritten by credentials the user has just replaced.
+ */
 @Singleton
-class EncryptedCredentialStore @Inject constructor(
-    @ApplicationContext context: Context,
+class KeystoreCredentialStore internal constructor(
+    private val context: Context,
+    private val names: Names,
 ) : CredentialStore {
 
-    // Building the master key + EncryptedSharedPreferences touches the Keystore and disk, which
-    // is too slow for the main thread (ANR/jank risk). It's confined to [scope] (IO) instead;
-    // callers read the flows reactively, and per-request readers (WebDAV, workers) already
-    // tolerate a transient null before the load lands.
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context, Names())
 
-    private val prefs: SharedPreferences by lazy {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
+    /** Where this store keeps things — fixed in the app, distinct in the tests. */
+    internal data class Names(
+        val prefs: String = PREFS_NAME,
+        val keyAlias: String = KEY_ALIAS,
+        val legacyPrefs: String = LegacyCredentialStore.NAME,
+    )
+
+    // Keystore and disk work, too slow for the main thread (ANR/jank risk), so confined here;
+    // callers read the flows reactively, and per-request readers (WebDAV, workers) already
+    // tolerate a transient null before the load lands. One at a time — see the class KDoc.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    private val prefs: SharedPreferences by lazy { context.getSharedPreferences(names.prefs, Context.MODE_PRIVATE) }
+    private val codec by lazy { CredentialCodec(AesGcmCipher { keystoreKey(names.keyAlias) }) }
 
     private val _credentials = MutableStateFlow<NextcloudCredentials?>(null)
     override val credentials: StateFlow<NextcloudCredentials?> = _credentials.asStateFlow()
@@ -117,12 +134,13 @@ class EncryptedCredentialStore @Inject constructor(
 
     init {
         scope.launch {
-            // A Keystore that cannot open the store — a key lost to a backup restore, a corrupt
-            // file, security hardware misbehaving after an update — used to throw out of this
-            // coroutine, and [scope] has nothing to catch it: the process died on every launch,
-            // with no way to sign in again. Signed out is the honest answer to an unreadable store.
+            // A store that cannot be opened — a key lost to a backup restore, a damaged file,
+            // security hardware misbehaving after an update — is signed out, not a crash: thrown
+            // out of this coroutine, nothing would catch it, and the process would die on every
+            // launch with no way back in.
             val (storedLibrary, storedSync) = try {
-                readLibrary() to readSyncAccount()
+                takeOverLegacyStore()
+                read(SLOT_LIBRARY) to read(SLOT_SYNC)?.copy(kind = WebDavKind.ACCOUNT)
             } catch (e: Exception) {
                 Log.e(TAG, "credential store is unreadable; treating this device as signed out", e)
                 null to null
@@ -140,27 +158,14 @@ class EncryptedCredentialStore @Inject constructor(
         // Update in-memory state immediately (drives navigation); persist off the main thread.
         _credentials.value = credentials
         _loaded.value = true
-        scope.launch {
-            persist("save") {
-                putString(KEY_SERVER, credentials.serverUrl)
-                putString(KEY_LOGIN, credentials.loginName)
-                putString(KEY_PASSWORD, credentials.appPassword)
-                putString(KEY_KIND, credentials.kind.name)
-            }
-        }
+        scope.launch { persist("save") { putString(SLOT_LIBRARY, codec.seal(SLOT_LIBRARY, credentials)) } }
     }
 
     override fun setSyncAccount(account: NextcloudCredentials?) {
         _separateSyncAccount.value = account
         scope.launch {
             persist("update the sync account in") {
-                if (account == null) {
-                    remove(KEY_SYNC_SERVER); remove(KEY_SYNC_LOGIN); remove(KEY_SYNC_PASSWORD)
-                } else {
-                    putString(KEY_SYNC_SERVER, account.serverUrl)
-                    putString(KEY_SYNC_LOGIN, account.loginName)
-                    putString(KEY_SYNC_PASSWORD, account.appPassword)
-                }
+                if (account == null) remove(SLOT_SYNC) else putString(SLOT_SYNC, codec.seal(SLOT_SYNC, account))
             }
         }
     }
@@ -169,7 +174,40 @@ class EncryptedCredentialStore @Inject constructor(
         _credentials.value = null
         _separateSyncAccount.value = null
         _loaded.value = true
-        scope.launch { persist("clear") { clear() } }
+        scope.launch {
+            persist("clear") {
+                remove(SLOT_LIBRARY)
+                remove(SLOT_SYNC)
+            }
+        }
+    }
+
+    /** Waits until every read and write asked for so far has run — for the tests, which cannot see [scope]. */
+    internal suspend fun idle() = scope.launch { }.join()
+
+    /** What is stored in [slot], or null for nothing. Throws when it is there and cannot be opened. */
+    private fun read(slot: String): NextcloudCredentials? = prefs.getString(slot, null)?.let { codec.open(slot, it) }
+
+    /**
+     * Moves the pre-2.2.0 store's contents into this one, then deletes it.
+     *
+     * Only into an EMPTY store: anything here was written by this build and is newer than the old
+     * file by definition, which is then simply removed. Written with `commit`, so the old file goes
+     * only once its contents are on disk here. A failure to READ it propagates — signed out for
+     * this launch, and the old file left in place for the next one to try again.
+     */
+    private fun takeOverLegacyStore() {
+        val legacy = LegacyCredentialStore(context, names.legacyPrefs)
+        if (!legacy.exists()) return
+        if (!prefs.contains(SLOT_LIBRARY) && !prefs.contains(SLOT_SYNC)) {
+            val (library, sync) = legacy.read()
+            prefs.edit(commit = true) {
+                library?.let { putString(SLOT_LIBRARY, codec.seal(SLOT_LIBRARY, it)) }
+                sync?.let { putString(SLOT_SYNC, codec.seal(SLOT_SYNC, it)) }
+            }
+            Log.i(TAG, "took over the old credential store (library: ${library != null}, sync: ${sync != null})")
+        }
+        legacy.delete()
     }
 
     /** One guarded write: a Keystore failure is logged rather than left to take the process down. */
@@ -181,34 +219,11 @@ class EncryptedCredentialStore @Inject constructor(
         }
     }
 
-    private fun readLibrary(): NextcloudCredentials? {
-        val server = prefs.getString(KEY_SERVER, null) ?: return null
-        val login = prefs.getString(KEY_LOGIN, null) ?: return null
-        val password = prefs.getString(KEY_PASSWORD, null) ?: return null
-        // Absent for accounts stored before share support — default to ACCOUNT.
-        val kind = prefs.getString(KEY_KIND, null)
-            ?.let { runCatching { WebDavKind.valueOf(it) }.getOrNull() }
-            ?: WebDavKind.ACCOUNT
-        return NextcloudCredentials(server, login, password, kind)
-    }
-
-    /** The separately-added sync account is always an ACCOUNT. */
-    private fun readSyncAccount(): NextcloudCredentials? {
-        val server = prefs.getString(KEY_SYNC_SERVER, null) ?: return null
-        val login = prefs.getString(KEY_SYNC_LOGIN, null) ?: return null
-        val password = prefs.getString(KEY_SYNC_PASSWORD, null) ?: return null
-        return NextcloudCredentials(server, login, password, WebDavKind.ACCOUNT)
-    }
-
     private companion object {
         const val TAG = "HomerAuth"
-        const val PREFS_NAME = "homer_credentials"
-        const val KEY_SERVER = "server_url"
-        const val KEY_LOGIN = "login_name"
-        const val KEY_PASSWORD = "app_password"
-        const val KEY_KIND = "webdav_kind"
-        const val KEY_SYNC_SERVER = "sync_server_url"
-        const val KEY_SYNC_LOGIN = "sync_login_name"
-        const val KEY_SYNC_PASSWORD = "sync_app_password"
+        const val PREFS_NAME = "homer_secrets"
+        const val KEY_ALIAS = "homer_credentials_key"
+        const val SLOT_LIBRARY = "library"
+        const val SLOT_SYNC = "sync"
     }
 }
