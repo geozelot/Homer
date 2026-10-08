@@ -51,9 +51,12 @@ skip Homer's updater entirely.
 - **A real library** — cover art (embedded, folder, or opt-in Open Library lookup),
   durations and time-left, search, custom covers, and per-book metadata overrides.
   Three independent controls arrange it: **shelve** by author or genre, show a **series**
-  stacked or flat, and **sort** within that.
-- **Candlelit UI** — a warm dark theme, a docked mini-player, and a focused Now Playing
-  screen.
+  stacked or flat, and **sort** within that — by surname if you like, with a jump-to-letter
+  lane down the edge. A book can credit several authors, the first one primary.
+- **Booklets** — PDFs filed beside a book (a booklet, a libretto, a map) open in Homer's own
+  reader, and go offline with the book.
+- **Candlelit UI** — a warm dark theme, a docked mini-player, a focused Now Playing screen,
+  and a display size of Homer's own, independent of the phone's.
 - **Private by design** — a scoped Nextcloud app password stored in the Keystore, backups
   disabled, optional biometric app lock, and optional trust-on-first-use certificate
   pinning.
@@ -97,10 +100,16 @@ with a folder picker for scoping a pattern to one part of the library, and a pre
 before anything is written. Books that no pattern could read are listed under *Upkeep → Books Homer
 could not read*.
 
+The same page can **ignore folders**: a scan does not go into them, so a folder of fresh additions
+that still need tidying stays out of the library until you say otherwise. Books the library already
+has from an ignored folder are hidden rather than removed, and come back with their progress when
+the folder is read again. The list travels with the shared library index, so every device reading
+the library honours it.
+
 A crawl reads names, sizes and ETags — one cheap request per folder. A book's *length* is
-different: it needs a ranged read of every audio file, so Homer measures a book the first
-time you open it rather than doing the whole library up front. If you want them all at
-once, *Settings → Upkeep → Measure lengths* does that deliberately, on request.
+different: it needs a ranged read of every audio file. *Settings → Upkeep → Scan* measures every
+book it finds that has no length yet, and *Try missing lengths* goes back for the files that could
+not be read; otherwise Homer measures a book the first time you open it.
 
 **Playback in the background is up to your phone, not to Homer.** Homer runs playback as a
 foreground service and holds a wake lock while a book is playing, which is everything
@@ -183,14 +192,56 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.1.2**. Betas run under a moving tag — `v2.1.2-BETA` was the last — replaced by each
+Homer is at **2.2.0**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
 build rather than added to, so there is one pre-release to follow; its title carries the actual
-build (`2.1.2-BETA.103`) while the APK keeps a stable name. In-app update checks only offer a
+build (`2.2.0-BETA.117`) while the APK keeps a stable name. In-app update checks only offer a
 pre-release to devices on the beta channel.
 
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
 `2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
+
+2.2 is about a library you can read at a glance, and books that come with more than audio.
+
+- **Booklets.** The PDFs filed beside a book — a booklet, a libretto, a map — are found by the scan,
+  open in Homer's own reader from the details card or from a pill on the player's cover, and go
+  offline with the book.
+- **Names.** A book can credit several authors, the first one primary, each its own chip; filing by
+  surname is a sort of its own, so Pratchett files under P while his name still reads the way it is
+  written; and a jump-to-letter lane down the edge of the library follows whatever it is sorted by
+  and shows where you are.
+- **Your own display size**, apart from the phone's, in *Settings → Browsing*. The *On this device*
+  settings are three pages now — Storage, Browsing and Playback — rather than one long one.
+- **Ignored folders**, in *Upkeep → Reading folder names*: new additions that still need tidying
+  stay out of the library until you say otherwise.
+- **A quieter library.** Every item sits on a faint ground of its own, an opened series washes into
+  the shelf around it, and list rows carry their marks at the end of the row instead of on a cover
+  too small for them.
+
+Underneath: your credentials moved off Jetpack Security, which is deprecated, onto a key of Homer's
+own in the Android Keystore. The first launch after updating carries them over, so you stay signed
+in. A book's corrections and your own hidden or finished flags now sync on separate clocks, so
+hiding a book no longer stops another device's fix to it from arriving. Every dependency is current,
+the database migrations are tested on a device, and a deep review fixed, among other things, a scan
+that could lose books when it was interrupted, chapters missing from a downloaded M4B first opened
+offline, and deleted bookmarks coming back.
+
+The review before release fixed more of the same kind:
+
+- *End of chapter* on the sleep timer works in a book that is one file with chapter marks; it used
+  to play on to the end of the book.
+- A bookmark tapped in the library opens the file it was made in, and only once — turning the phone
+  no longer jumps back to it.
+- Moving your downloads to another folder moves them, instead of losing track of them.
+- Turning the phone no longer locks the app again or restarts first-run setup.
+- Tapping the media notification opens Homer, and play on a headset resumes the last book even when
+  Homer was not running.
+- Undoing a correction, or removing a chapter cut, now reaches your other devices; chapter cuts no
+  longer turn into bookmarks when progress syncs.
+- Progress sync can no longer stop for good over a bookmark in a book this device has not scanned.
+
+If more than one of your devices maintains the same shared library, update them together: a 2.1
+device does not know about ignored folders and would read them back in.
 
 2.1.2 is mostly about a phone held sideways, and about settings that do what they say.
 
