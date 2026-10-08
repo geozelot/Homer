@@ -29,7 +29,7 @@ class AuthInterceptor @Inject constructor(
             return chain.proceed(request)
         }
         val authed = request.newBuilder()
-            .header("Authorization", Credentials.basic(credentials.loginName, credentials.appPassword))
+            .header("Authorization", Credentials.basic(credentials.loginName, credentials.appPassword, Charsets.UTF_8))
             .header("User-Agent", LoginFlowClient.USER_AGENT)
             .build()
         return chain.proceed(authed)

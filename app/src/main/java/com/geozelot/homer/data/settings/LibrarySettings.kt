@@ -509,6 +509,33 @@ class LibrarySettings @Inject constructor(
     }
 
     /**
+     * Trust on first use, and only first: stores [pins] when nothing is pinned yet, inside the one
+     * edit, so two connections racing at the first capture cannot leave the second one's chain over
+     * the first — and a capture can never replace a pin that is already there.
+     */
+    suspend fun capturePinnedServerCerts(pins: List<String>) {
+        context.settingsDataStore.edit {
+            if (it[KEY_PINNED_CERT].toPinList().isEmpty() && pins.isNotEmpty()) it[KEY_PINNED_CERT] = pins.joinToString(",")
+        }
+    }
+
+    /**
+     * Adds [pins] to what is pinned — what accepting a refused certificate does.
+     *
+     * Added, not substituted: the authenticated client also reaches a separately added sync account,
+     * which can sit on another server under another CA, and replacing the pin with that server's
+     * chain would block the library's, whose acceptance would then block the other — for ever, in
+     * turn. Each acceptance is the user's own decision about one chain, so keeping them all is what
+     * they have agreed to.
+     */
+    suspend fun addPinnedServerCerts(pins: List<String>) {
+        context.settingsDataStore.edit {
+            val merged = (it[KEY_PINNED_CERT].toPinList() + pins).distinct()
+            if (merged.isNotEmpty()) it[KEY_PINNED_CERT] = merged.joinToString(",")
+        }
+    }
+
+    /**
      * The host whose certificate was refused, and what it offered instead — or null when nothing is
      * being refused.
      *
@@ -574,6 +601,9 @@ class LibrarySettings @Inject constructor(
             // index hands them back if the same library is signed into again.
             it.remove(KEY_IGNORED_FOLDERS)
             it.remove(KEY_IGNORED_FOLDERS_AT)
+            // When this device last published the library's corrections. Kept, it dated the next
+            // library's first edits against the old one's clock and could call them shared.
+            it.remove(KEY_CORRECTIONS_PUBLISHED_AT)
             // Nothing writes this any more — the language filter became a filter token, which is
             // held for the process rather than stored. Cleared here so an install that HAD one
             // does not carry it around for ever as a preference nothing reads.

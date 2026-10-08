@@ -12,6 +12,14 @@ on:
 permissions:
   contents: write # create/update the Release and upload the APK asset
 
+# One run per tag at a time, the newest winning. A beta tag is MOVED rather than re-created, and two
+# quick moves used to race: whichever run finished last decided the release, so it could go back to
+# the older build — and between its title update and its asset upload, the updater saw a version
+# with no APK, or with the previous build's APK under the new name.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -65,6 +73,12 @@ jobs:
           keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
           EOF
             echo "Release signing configured."
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # A tag publishes. A release signed with this runner's throwaway debug key would be
+            # refused by every installed copy's updater, and could not be installed over the app by
+            # hand either — so a missing or renamed secret stops the run instead of shipping that.
+            echo "::error::Release signing secrets are missing; refusing to publish a debug-signed release."
+            exit 1
           else
             echo "No signing secrets set — building a debug-signed APK (see build.gradle.kts fallback)."
           fi

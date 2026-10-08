@@ -249,7 +249,7 @@ class WebDavClient @Inject constructor(
      * (which only knows the library host/identity). A null means "use the interceptor".
      */
     private fun Request.Builder.applyAuth(explicit: NextcloudCredentials?) {
-        if (explicit != null) header("Authorization", Credentials.basic(explicit.loginName, explicit.appPassword))
+        if (explicit != null) header("Authorization", Credentials.basic(explicit.loginName, explicit.appPassword, Charsets.UTF_8))
     }
 
     /**

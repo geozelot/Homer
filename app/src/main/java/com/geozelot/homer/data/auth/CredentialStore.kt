@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
+import java.security.InvalidKeyException
+import java.security.UnrecoverableKeyException
+import javax.crypto.BadPaddingException
+import javax.crypto.IllegalBlockSizeException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -139,7 +144,15 @@ class KeystoreCredentialStore internal constructor(
             // out of this coroutine, nothing would catch it, and the process would die on every
             // launch with no way back in.
             val (storedLibrary, storedSync) = try {
-                takeOverLegacyStore()
+                try {
+                    takeOverLegacyStore()
+                } catch (e: Exception) {
+                    // Left in place for the next launch to try again; what this store holds of its
+                    // own is still read below.
+                    Log.e(TAG, "could not take over the old credential store", e)
+                }
+                // Slot by slot. Read together, one value that would not open signed out BOTH, on
+                // every launch, because nothing ever removed it.
                 read(SLOT_LIBRARY) to read(SLOT_SYNC)?.copy(kind = WebDavKind.ACCOUNT)
             } catch (e: Exception) {
                 Log.e(TAG, "credential store is unreadable; treating this device as signed out", e)
@@ -185,8 +198,60 @@ class KeystoreCredentialStore internal constructor(
     /** Waits until every read and write asked for so far has run — for the tests, which cannot see [scope]. */
     internal suspend fun idle() = scope.launch { }.join()
 
-    /** What is stored in [slot], or null for nothing. Throws when it is there and cannot be opened. */
-    private fun read(slot: String): NextcloudCredentials? = prefs.getString(slot, null)?.let { codec.open(slot, it) }
+    /**
+     * What is stored in [slot], or null for nothing — repairing what can never open.
+     *
+     * Three kinds of failure, told apart because they need opposite answers:
+     *  - **The value is broken** — damaged, or sealed under a key that is gone. It will never open,
+     *    so it is removed; left, it signed the device out again on every launch, and signing in
+     *    afresh did not help because nothing ever overwrote it.
+     *  - **The key is broken** — the Keystore has it but cannot use it. Nothing it sealed can be
+     *    read, and nothing new can be sealed with it, so the key goes too and the next save makes
+     *    a fresh one.
+     *  - **Anything else** — a Keystore not ready this early after boot, say — is thrown: signed out
+     *    for this launch only, with everything kept for the next.
+     */
+    private fun read(slot: String): NextcloudCredentials? {
+        val value = prefs.getString(slot, null) ?: return null
+        return try {
+            codec.open(slot, value)
+        } catch (e: Exception) {
+            when {
+                keyIsBroken(e) -> {
+                    Log.e(TAG, "the credential key cannot be used; discarding it and what it sealed", e)
+                    discardKeyAndSlots()
+                    null
+                }
+                valueIsBroken(e) -> {
+                    Log.e(TAG, "the stored $slot credentials can never be opened; discarding them", e)
+                    prefs.edit(commit = true) { remove(slot) }
+                    null
+                }
+                else -> throw e
+            }
+        }
+    }
+
+    private fun keyIsBroken(e: Exception) = e is UnrecoverableKeyException || e is InvalidKeyException
+
+    /**
+     * Failures that say something about the stored BYTES. A bad tag ([javax.crypto.AEADBadTagException],
+     * a [BadPaddingException]) is the usual one, but a value cut short never reaches the tag check:
+     * the Keystore rejects its length first and says so as an [IllegalBlockSizeException] — which,
+     * unlisted, was thrown on as "anything else" and signed the device out on every launch.
+     */
+    private fun valueIsBroken(e: Exception) =
+        e is BadPaddingException || e is IllegalBlockSizeException ||
+            e is IllegalArgumentException || e is SerializationException
+
+    /** Drops an unusable key and everything sealed under it; the next save creates a fresh key. */
+    private fun discardKeyAndSlots() {
+        runCatching { deleteKeystoreKey(names.keyAlias) }
+        prefs.edit(commit = true) {
+            remove(SLOT_LIBRARY)
+            remove(SLOT_SYNC)
+        }
+    }
 
     /**
      * Moves the pre-2.2.0 store's contents into this one, then deletes it.
@@ -215,7 +280,19 @@ class KeystoreCredentialStore internal constructor(
         try {
             prefs.edit(action = block)
         } catch (e: Exception) {
-            Log.e(TAG, "could not $what the credential store", e)
+            if (!keyIsBroken(e)) {
+                Log.e(TAG, "could not $what the credential store", e)
+                return
+            }
+            // A key that cannot seal can never seal: without replacing it, signing in again
+            // would never be remembered. What it sealed before is unreadable either way.
+            Log.e(TAG, "the credential key cannot be used; replacing it to $what the store", e)
+            discardKeyAndSlots()
+            try {
+                prefs.edit(action = block)
+            } catch (retry: Exception) {
+                Log.e(TAG, "could not $what the credential store with a fresh key", retry)
+            }
         }
     }
 

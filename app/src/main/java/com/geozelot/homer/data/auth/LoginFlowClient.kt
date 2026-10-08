@@ -98,9 +98,10 @@ class LoginFlowClient @Inject constructor(
         /** Forces an https scheme (upgrading/adding it) and strips any trailing slash. */
         fun normalizeServerUrl(raw: String): String {
             val trimmed = raw.trim().trimEnd('/')
+            // Case-insensitive: a scheme pasted as `Https://` used to become `https://Https://…`.
             return when {
-                trimmed.startsWith("https://") -> trimmed
-                trimmed.startsWith("http://") -> "https://" + trimmed.removePrefix("http://")
+                trimmed.startsWith("https://", ignoreCase = true) -> "https://" + trimmed.substring("https://".length)
+                trimmed.startsWith("http://", ignoreCase = true) -> "https://" + trimmed.substring("http://".length)
                 else -> "https://$trimmed"
             }
         }

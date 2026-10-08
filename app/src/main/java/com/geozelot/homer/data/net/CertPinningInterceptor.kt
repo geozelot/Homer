@@ -5,7 +5,10 @@ import com.geozelot.homer.data.settings.LibrarySettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.CertificatePinner
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -31,10 +34,21 @@ import javax.net.ssl.SSLPeerUnverifiedException
  * stopped matching on renewal and every request failed from then on. Not degraded: refused, in
  * both directions, forever, and only in logcat.
  *
- * Accepting a match anywhere in the presented chain survives a renewal, because the issuing
- * intermediate does not change when the leaf does. What still blocks is a different issuer — a CA
- * rotating its intermediate, or somebody actually sitting in the middle — which is the case this
- * feature exists for, and it is now SHOWN rather than logged (see [LibrarySettings.pinningBlocked]).
+ * Accepting a match anywhere in the presented chain survives a renewal. And because OkHttp's
+ * handshake carries the CLEANED chain — up to and including the trusted root — what this pins in
+ * practice is the issuing CA. That is deliberate rather than a loss: Let's Encrypt now issues from
+ * several intermediates in rotation, and a pin on an intermediate broke on an ordinary renewal.
+ * What still blocks is a chain to a different root — an interception proxy with its own CA
+ * installed on the phone, or a server moved to another CA — which is the case this feature exists
+ * for, and it is SHOWN rather than logged (see [LibrarySettings.pinningBlocked]). A certificate
+ * mis-issued by the same CA is not caught; that is what the CA's own controls are for.
+ *
+ * ## One pin set for every host
+ *
+ * The authenticated client reaches the library's server and, for a share library with a separate
+ * sync account, that account's server too. They share the pins: accepting a refused chain ADDS it
+ * ([LibrarySettings.addPinnedServerCerts]), so two servers under two CAs settle after one
+ * acceptance each instead of taking turns to block each other.
  */
 /** What the pin says about a connection. */
 internal sealed interface PinVerdict {
@@ -71,8 +85,21 @@ class CertPinningInterceptor @Inject constructor(
 ) : Interceptor {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @Volatile private var enabled = false
-    @Volatile private var pins: List<String> = emptyList()
+    /** Whether pinning is on, and what is pinned — read together, or a request can see half of it. */
+    private data class PinState(val enabled: Boolean, val pins: List<String>)
+
+    private val pinStates = combine(librarySettings.certPinningEnabled, librarySettings.pinnedServerCerts, ::PinState)
+
+    /**
+     * The settings as last read, or null before the first read has landed.
+     *
+     * One value rather than two fields, and null rather than "off" to begin with. As two fields
+     * starting at false and empty, a request at a cold start — a worker firing as the process came
+     * up — went out unchecked while the settings were still loading; and a request that read the
+     * one field after the other had loaded saw pinning on with nothing pinned, and captured whatever
+     * it was shown over the pin that was there.
+     */
+    @Volatile private var state: PinState? = null
 
     /**
      * Whether a block is already recorded, so a refused connection writes once rather than on
@@ -82,13 +109,20 @@ class CertPinningInterceptor @Inject constructor(
     @Volatile private var blocked = false
 
     init {
-        scope.launch { librarySettings.certPinningEnabled.collect { enabled = it } }
-        scope.launch { librarySettings.pinnedServerCerts.collect { pins = it } }
+        scope.launch { pinStates.collect { state = it } }
         scope.launch { librarySettings.pinningBlocked.collect { blocked = it != null } }
     }
 
+    /**
+     * The settings, waiting for the first read when it has not landed yet. Blocking is acceptable
+     * here: this runs on an OkHttp thread, never on the main one, and only until DataStore answers
+     * once — after that it is a field read.
+     */
+    private fun currentState(): PinState = state ?: runBlocking { pinStates.first() }.also { state = it }
+
     override fun intercept(chain: Interceptor.Chain): Response {
-        if (!enabled) return chain.proceed(chain.request())
+        val current = currentState()
+        if (!current.enabled) return chain.proceed(chain.request())
 
         // The connection/handshake is already established for a network interceptor, so we can
         // check the pin here — before proceed() sends the request (and its credentials).
@@ -98,12 +132,12 @@ class CertPinningInterceptor @Inject constructor(
         if (presented.isEmpty()) return chain.proceed(chain.request())
 
         val offered = presented.map { CertificatePinner.pin(it) }
-        when (pinVerdict(pins, offered)) {
+        when (pinVerdict(current.pins, offered)) {
             PinVerdict.Capture -> {
-                // Trust on first use: remember the whole chain.
+                // Trust on first use: remember the whole chain — only if nothing got there first.
                 Log.i(TAG, "pinning server certificate chain (first use, ${offered.size} certs)")
-                pins = offered
-                scope.launch { librarySettings.setPinnedServerCerts(offered) }
+                state = current.copy(pins = offered)
+                scope.launch { librarySettings.capturePinnedServerCerts(offered) }
             }
             PinVerdict.Blocked -> {
                 val host = chain.request().url.host

@@ -50,4 +50,28 @@ class ShareLinkTest {
         assertNull(ShareLink.parse(""))
         assertNull(ShareLink.parse("not a url"))
     }
+
+    @Test
+    fun `keeps the path of a Nextcloud installed in a subdirectory`() {
+        val link = ShareLink.parse("https://example.org/nextcloud/index.php/s/AbC123")
+        assertEquals("https://example.org/nextcloud", link?.baseUrl)
+        assertEquals("AbC123", link?.token)
+    }
+
+    @Test
+    fun `a subdirectory without index_php is kept too`() {
+        assertEquals("https://example.org/cloud/nc", ShareLink.parse("example.org/cloud/nc/s/Tok")?.baseUrl)
+    }
+
+    @Test
+    fun `a scheme in any case is understood`() {
+        assertEquals(
+            "https://cloud.example.com",
+            com.geozelot.homer.data.auth.LoginFlowClient.normalizeServerUrl("Https://cloud.example.com/"),
+        )
+        assertEquals(
+            "https://cloud.example.com",
+            com.geozelot.homer.data.auth.LoginFlowClient.normalizeServerUrl("HTTP://cloud.example.com"),
+        )
+    }
 }

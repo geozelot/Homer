@@ -146,5 +146,40 @@ class KeystoreCredentialStoreTest {
             .putString("library", "AQIDBAUGBwgJCgsMDQ4P")
             .commit()
         assertNull(store().awaitCredentials())
+        // …and the value is gone, so the next launch is not signed out again by the same bytes.
+        assertFalse(context.getSharedPreferences(names.prefs, Context.MODE_PRIVATE).contains("library"))
+    }
+
+    @Test
+    fun oneDamagedSlotLeavesTheOtherSignedIn() = runBlocking {
+        val store = store()
+        store.awaitCredentials()
+        store.save(share)
+        store.setSyncAccount(syncAccount)
+        store.idle()
+        context.getSharedPreferences(names.prefs, Context.MODE_PRIVATE).edit()
+            .putString("sync", "AQIDBAUGBwgJCgsMDQ4P")
+            .commit()
+
+        val next = store()
+        assertEquals(share, next.awaitCredentials())
+        assertNull(next.awaitSyncAccount())
+    }
+
+    @Test
+    fun aLostKeyIsRecoveredFromBySigningInAgain() = runBlocking {
+        val store = store()
+        store.awaitCredentials()
+        store.save(account)
+        store.idle()
+        // The key goes, the file stays — a restore, a reset of the secure hardware.
+        deleteKeystoreKey(names.keyAlias)
+
+        val afterLoss = store()
+        assertNull(afterLoss.awaitCredentials())
+        afterLoss.save(share)
+        afterLoss.idle()
+
+        assertEquals(share, store().awaitCredentials())
     }
 }

@@ -36,9 +36,18 @@ class UpdateManager @Inject constructor(
     private val scope = CoroutineScope(
         SupervisorJob() + CoroutineExceptionHandler { _, e ->
             Log.e(TAG, "unexpected failure in the updater", e)
+            // Judged by what was under way when it failed, not by `pending`: that outlives the
+            // install it was set for, so a CHECK that failed after an earlier install attempt was
+            // reported as a failed install of a release nobody had just asked for.
+            val installing = when (val now = _state.value) {
+                is UpdateState.Downloading -> now.release
+                is UpdateState.ReadyToInstall -> now.release
+                is UpdateState.Installing -> now.release
+                else -> null
+            }
             _state.value = UpdateState.Failed(
-                if (pending != null) UpdateFailure.INSTALL_FAILED else UpdateFailure.NETWORK,
-                pending,
+                if (installing != null) UpdateFailure.INSTALL_FAILED else UpdateFailure.NETWORK,
+                installing,
             )
         },
     )

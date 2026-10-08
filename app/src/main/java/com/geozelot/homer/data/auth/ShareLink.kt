@@ -27,7 +27,12 @@ data class ShareLink(val baseUrl: String, val token: String) {
             if (sIdx < 0 || sIdx + 1 > segments.lastIndex) return null
             val token = segments[sIdx + 1].takeIf { it.isNotBlank() } ?: return null
             val port = if (uri.port != -1) ":${uri.port}" else ""
-            return ShareLink(baseUrl = "https://$host$port", token = token)
+            // A Nextcloud installed under a path — `https://host/nextcloud/index.php/s/TOKEN` —
+            // keeps that path: its WebDAV lives at `/nextcloud/public.php/…`, and dropping the
+            // prefix sent every request to a 404 that read as "share not found".
+            val prefix = segments.subList(0, sIdx).dropLastWhile { it == "index.php" }
+                .joinToString("") { "/$it" }
+            return ShareLink(baseUrl = "https://$host$port$prefix", token = token)
         }
     }
 }

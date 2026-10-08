@@ -46,9 +46,18 @@ internal object ApkSignatures {
         pm.getPackageInfo(pkg, signatureFlag())
     }.getOrNull()
 
+    /**
+     * The downloaded APK's package info, with its signer.
+     *
+     * Asked for BOTH signature flags. On Android 9 and 10 the archive parser fills
+     * `signingInfo` only when `GET_SIGNATURES` is set as well — with `GET_SIGNING_CERTIFICATES`
+     * alone it comes back null, every update read as "signed by another key", and the updater
+     * refused them all on those two versions. Fixed in the parser from Android 11; asking for both
+     * costs nothing there.
+     */
     @Suppress("DEPRECATION")
     private fun archiveInfo(pm: PackageManager, path: String): PackageInfo? = runCatching {
-        pm.getPackageArchiveInfo(path, signatureFlag())
+        pm.getPackageArchiveInfo(path, signatureFlag() or PackageManager.GET_SIGNATURES)
     }.getOrNull()
 
     private fun signatureFlag(): Int =
@@ -62,7 +71,7 @@ internal object ApkSignatures {
                 info.signingInfo?.let {
                     // The documented pairing: history is only meaningful for a single signer.
                     if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory
-                }
+                } ?: @Suppress("DEPRECATION") info.signatures // see archiveInfo: Android 9 and 10
             } else {
                 @Suppress("DEPRECATION") info.signatures
             }
