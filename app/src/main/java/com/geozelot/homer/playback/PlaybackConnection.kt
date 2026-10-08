@@ -16,12 +16,14 @@ import androidx.media3.session.SessionToken
 import com.geozelot.homer.data.db.dao.AudioFileDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.BookmarkMetaDao
+import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookmarkEntity
 import com.geozelot.homer.data.db.entity.BookmarkKind
 import com.geozelot.homer.data.db.entity.BookmarkMetaEntity
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import com.geozelot.homer.data.download.DownloadManager
@@ -128,6 +130,7 @@ class PlaybackConnection @Inject constructor(
     private val bookmarkMetaDao: BookmarkMetaDao,
     private val downloadDao: DownloadDao,
     private val bookOverrideDao: BookOverrideDao,
+    private val chapterDao: ChapterDao,
     private val downloadManager: DownloadManager,
     private val homerSync: HomerSyncRepository,
     private val libraryIndex: LibraryIndexRepository,
@@ -303,7 +306,14 @@ class PlaybackConnection @Inject constructor(
             if (visible) pushState()
             // Pausing is the natural checkpoint: persist and push it out. Forced, so the sync
             // throttle can never swallow the one update another device is waiting for.
-            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
+            //
+            // Keyed on the intent to play, not on whether audio is coming out. `isPlaying` also
+            // drops for every buffering stall, so a weak connection — the moment a round trip
+            // costs most — forced a full manifest sync each time the stream hiccuped. Reaching the
+            // end of the book still counts: playback stops there with the intent unchanged.
+            val paused = events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) && !player.playWhenReady
+            val ended = events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) && player.playbackState == Player.STATE_ENDED
+            if (paused || ended) {
                 positionSyncer.flush(force = true)
             }
         }
@@ -332,12 +342,17 @@ class PlaybackConnection @Inject constructor(
         ) {
             if (loading) return
             if (savesOnDiscontinuity(reason)) positionSyncer.save()
+            // "End of chapter" means the chapter the reader is in, so a jump re-reads which one.
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) inFileChapterEnd = null
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (loading) return
             val auto = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
-            sleepTimer.onChapterTransition(auto)
+            // A rebuilt playlist — the download finishing and the book reloading from local files —
+            // reports a transition too, and read as a manual skip it disarmed "end of chapter"
+            // mid-chapter with nobody having touched anything.
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) sleepTimer.onChapterTransition(auto)
             // Persist the boundary LOCALLY only. This used to push to the server on every chapter
             // change — with 5-minute chapters that was a full manifest round trip every few
             // minutes, and the radio ramp-up cost more battery than the bytes did. Pausing,
@@ -460,6 +475,7 @@ class PlaybackConnection @Inject constructor(
                 if (pendingPlay) { pendingPlay = false; startPlayback() }
                 // Per-file duration total (headless probe; reads headers, no main playback).
                 durationEnricher.enrich(bookId)
+                watchDurations(bookId)
                 // Watch for download-status flips only after the playlist is loaded, so the reload
                 // can't race the initial setMediaItems.
                 downloadReloadWatcher.watch(
@@ -541,6 +557,7 @@ class PlaybackConnection @Inject constructor(
                 currentOffline = false
                 currentDurations = emptyMap()
                 currentBookTotal = 0L
+                durationsWatch?.cancel()
                 loading = false
                 pendingPlay = false
                 pushState()
@@ -757,7 +774,68 @@ class PlaybackConnection @Inject constructor(
 
     fun startSleepTimerEndOfChapter() {
         sleepTimer.startEndOfChapter()
+        watchInFileChapterEnd()
         maybePlayForSleepTimer()
+    }
+
+    private var durationsWatch: Job? = null
+
+    /**
+     * Keeps the loaded book's per-file lengths current while it is open.
+     *
+     * They were read once, when the book loaded — and the probe that measures them is started right
+     * after, so on a first open the scrubber's book length, time left and chapter starts stayed at
+     * "unknown" for as long as the book stayed loaded, although the measurements had landed seconds
+     * later.
+     */
+    private fun watchDurations(bookId: String) {
+        durationsWatch?.cancel()
+        durationsWatch = scope.launch {
+            audioFileDao.observeForBook(bookId).collect { files ->
+                if (currentBookId != bookId || loading) return@collect
+                val fresh = files.associate { it.relativePath to (it.durationMs ?: 0L) }
+                if (fresh == currentDurations) return@collect
+                currentDurations = fresh
+                currentBookTotal = fresh.values.sum()
+                pushState()
+            }
+        }
+    }
+
+    /** Where the chapter being listened to ends inside the file; null = work it out on the next tick. */
+    private var inFileChapterEnd: Long? = null
+    private var inFileChapterWatch: Job? = null
+
+    /**
+     * "End of chapter" for a book whose chapters are marks inside ONE file.
+     *
+     * The timer otherwise waits for the player to move to the next media item, and in a single-file
+     * book that never happens until the book is over — so the option was offered, showed as armed,
+     * and played on to the last chapter. Embedded marks and hand-made cuts exist only for single-file
+     * books, so a book that has them is exactly the case the transition never covers; a multi-file
+     * book has none and keeps the transition.
+     */
+    private fun watchInFileChapterEnd() {
+        inFileChapterWatch?.cancel()
+        inFileChapterEnd = null
+        val bookId = currentBookId ?: return
+        inFileChapterWatch = scope.launch {
+            val marks = chapterDao.findForBook(bookId).map { it.startMs }.sorted()
+            if (marks.size < 2) return@launch
+            while (sleepTimer.endOfChapter && currentBookId == bookId) {
+                val c = controller ?: break
+                val position = c.currentPosition
+                // A small margin, so arming right on a boundary counts the chapter just begun.
+                val end = inFileChapterEnd
+                    ?: marks.firstOrNull { it > position + CHAPTER_EDGE_MS }?.also { inFileChapterEnd = it }
+                if (end != null && position >= end) {
+                    // Exactly what a rollover into the next file does: fade, pause, disarm.
+                    sleepTimer.onChapterTransition(auto = true)
+                    break
+                }
+                delay(CHAPTER_WATCH_TICK_MS)
+            }
+        }
     }
 
     /**
@@ -868,6 +946,7 @@ class PlaybackConnection @Inject constructor(
                 SLEEP_EXTEND_OFF -> Unit
                 "chapter" -> {
                     sleepTimer.startEndOfChapter()
+                    watchInFileChapterEnd()
                     resumeAfterSleep()
                 }
                 "previous" -> {
@@ -907,20 +986,38 @@ class PlaybackConnection @Inject constructor(
                     kind = kind,
                 ),
             )
-            bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
-            homerSync.sync(force = true)
-            // A cut changes the book's chapter list, so it belongs in the shared index. Coalesced
-            // the same way a title edit is — cutting a book is a burst of cuts, not one.
-            if (kind == BookmarkKind.CUT) libraryIndex.publishEdits()
+            if (kind == BookmarkKind.CUT) {
+                // A cut changes the book's chapter list, so it belongs in the shared index — and
+                // only there; the personal manifest carries notes. Coalesced the same way a title
+                // edit is: cutting a book is a burst of cuts, not one.
+                libraryIndex.publishEdits()
+            } else {
+                bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
+                homerSync.sync(force = true)
+            }
         }
     }
 
-    /** Deletes a bookmark and syncs the change out. */
+    /** Deletes a bookmark and syncs the change out, to wherever that kind of mark travels. */
     fun deleteBookmark(id: Long, bookId: String) {
         scope.launch {
+            val wasCut = bookmarkDao.kindOf(id) == BookmarkKind.CUT
             bookmarkDao.deleteById(id)
-            bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, System.currentTimeMillis()))
-            homerSync.sync(force = true)
+            val now = System.currentTimeMillis()
+            if (wasCut) {
+                // A published correction is stamped by its newest cut, so removing one never made
+                // it newer: the shared copy kept the cut, and every pull handed it back. Moving the
+                // correction clock is what makes the shorter chapter list the newer claim.
+                val existing = bookOverrideDao.findById(bookId)
+                bookOverrideDao.upsert(
+                    (existing ?: BookOverrideEntity(bookId, title = null, author = null, series = null, seriesIndex = null, hidden = false, updatedAt = 0L))
+                        .copy(correctedAt = now),
+                )
+                libraryIndex.publishEdits()
+            } else {
+                bookmarkMetaDao.upsert(BookmarkMetaEntity(bookId, now))
+                homerSync.sync(force = true)
+            }
         }
     }
 
@@ -1106,5 +1203,11 @@ class PlaybackConnection @Inject constructor(
         /** Persist the position locally about every 15s of playback. */
         const val SAVE_EVERY_TICKS = 15
         const val DEFAULT_EXTEND_MS = 15 * 60_000L
+
+        /** How often "end of chapter" looks at the position in a single-file book. */
+        const val CHAPTER_WATCH_TICK_MS = 250L
+
+        /** A mark this close ahead of the position is the chapter just begun, not the next one. */
+        const val CHAPTER_EDGE_MS = 500L
     }
 }

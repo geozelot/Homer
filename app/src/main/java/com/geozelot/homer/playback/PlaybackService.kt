@@ -1,5 +1,7 @@
 package com.geozelot.homer.playback
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.audiofx.LoudnessEnhancer
 import android.os.PowerManager
@@ -17,10 +19,13 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.settings.PlaybackSettings
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +49,12 @@ class PlaybackService : MediaLibraryService() {
 
     @Inject
     lateinit var playbackSettings: PlaybackSettings
+
+    @Inject
+    lateinit var playlistResolver: PlaylistResolver
+
+    @Inject
+    lateinit var playbackStateDao: PlaybackStateDao
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var player: ExoPlayer? = null
@@ -106,7 +117,11 @@ class PlaybackService : MediaLibraryService() {
             applyVolumeMode(playbackSettings.volumeMode.first())
         }
 
-        session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback()).build()
+        session = MediaLibrarySession.Builder(this, exoPlayer, LibraryCallback())
+            // What a tap on the media notification opens. Without one the notification was inert:
+            // tapping it — the most natural way back to the player — did nothing at all.
+            .apply { sessionActivity()?.let(::setSessionActivity) }
+            .build()
 
         // The two things that decide whether audio survives backgrounding, and neither is visible
         // from inside the app once it goes wrong. A wake lock the system declines to honour and a
@@ -213,7 +228,54 @@ class PlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
+    /** The app's launcher entry, brought to the front as it is rather than started again. */
+    private fun sessionActivity(): PendingIntent? {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        launch.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        return PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
     private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        /**
+         * Play pressed on a headset, a car or the system's media controls while Homer is not
+         * running: hands back the book listened to last, at its saved place.
+         *
+         * Media3 starts this service for that press and asks here what to play. Unanswered, the
+         * press did nothing, and the system's "resume" card had nothing behind it either.
+         */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            isForPlayback: Boolean,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val result = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            serviceScope.launch {
+                try {
+                    val last = playbackStateDao.mostRecent()
+                    val playlist = last?.let { playlistResolver.resolve(it.bookId) }
+                    if (last == null || playlist == null || playlist.items.isEmpty()) {
+                        result.setException(UnsupportedOperationException("nothing to resume"))
+                        return@launch
+                    }
+                    val index = playlist.items.indexOfFirst { it.mediaId == last.currentMediaId }
+                    result.set(
+                        MediaSession.MediaItemsWithStartPosition(
+                            playlist.items,
+                            index.coerceAtLeast(0),
+                            if (index >= 0) last.positionMs else 0L,
+                        ),
+                    )
+                } catch (e: CancellationException) {
+                    result.cancel(false)
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "could not resume the last book", e)
+                    result.setException(e)
+                }
+            }
+            return result
+        }
 
         override fun onConnect(
             session: MediaSession,
