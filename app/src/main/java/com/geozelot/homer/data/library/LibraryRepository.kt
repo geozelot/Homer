@@ -82,7 +82,8 @@ class LibraryRepository @Inject constructor(
             // re-derive below brings everything else into line with them.
             val templates = templateApplier.activeTemplates()
             val ignored = librarySettings.ignoredFolders.first()
-            val result = scanner.scan(root, incremental, System.currentTimeMillis(), templates, ignored) { dirs, books ->
+            val startedAt = System.currentTimeMillis()
+            val result = scanner.scan(root, incremental, startedAt, templates, ignored) { dirs, books ->
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
             // A scan is expected to leave the library as up to date as Homer can make it, and that
@@ -105,7 +106,12 @@ class LibraryRepository @Inject constructor(
             // flag meant "Rebuild the library" was the only thing that could ever stamp it, so a
             // user who only ever scanned had deletions that never propagated and a Library page
             // that said "no full crawl yet" for ever.
-            if (result.complete) librarySettings.setLastFullCrawlAt(System.currentTimeMillis())
+            //
+            // Stamped with when the crawl STARTED. The marker tells other devices "every book
+            // touched before this was seen", and a crawl of a large library runs for minutes: a
+            // book another device published in that window was not seen, and an end-time stamp
+            // made it look prunable.
+            if (result.complete) librarySettings.setLastFullCrawlAt(startedAt)
             _scanState.value = ScanState.Done(result.bookCount)
         } catch (e: CancellationException) {
             _scanState.value = ScanState.Idle

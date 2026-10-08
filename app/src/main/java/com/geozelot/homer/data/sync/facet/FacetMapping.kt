@@ -102,7 +102,15 @@ object FacetMapping {
         val nothingCorrected = override == null || !EditFields.corrected(override)
         // Cuts alone are worth publishing: a book can have a hand-made chapter list and no
         // corrected field anywhere, and it is the chapter list other readers most want.
-        if (nothingCorrected && cuts.isEmpty()) return null
+        //
+        // And so is a correction clock with nothing behind it: that is a RETRACTION — a reset, a
+        // field cleared back to what the folder says, the last cut removed. Leaving it out of the
+        // file kept the old correction there, newest-wins merged it straight back, and every other
+        // device went on showing what this one had undone. Published as an empty entry it is the
+        // newer claim, and the receiving side clears the same fields. A row nobody has corrected
+        // has a clock of zero and still says nothing.
+        val retracted = (override?.correctedAt ?: 0L) > 0L
+        if (nothingCorrected && cuts.isEmpty() && !retracted) return null
         return BookCorrection(
             title = override?.title,
             author = override?.author,

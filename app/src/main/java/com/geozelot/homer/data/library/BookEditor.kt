@@ -139,7 +139,11 @@ class BookEditor @Inject constructor(
         // than any incoming correction (`FacetMapping.overrideEntity`) and would shield the book from
         // other devices' fixes for ever — which is the pinning this method exists to stop.
         val retracting = existing?.hasMetadataEdit() == true
-        if (!row.hasMetadataEdit() && !retracting && !hidden && downloadOnPlay == null && finished == null) {
+        // The reader's half has the same problem from the other side. A row whose reader clock has
+        // moved has been in the manifest: deleting it to un-hide a book left no local claim at all,
+        // so the next progress sync took the manifest's "hidden" as the only word and hid it again.
+        val readerSpoke = (existing?.updatedAt ?: 0L) > 0L
+        if (!row.hasMetadataEdit() && !retracting && !readerSpoke && !hidden && downloadOnPlay == null && finished == null) {
             bookOverrideDao.deleteById(bookId)
         } else {
             bookOverrideDao.upsert(row)

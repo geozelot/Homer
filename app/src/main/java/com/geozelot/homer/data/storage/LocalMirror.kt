@@ -8,6 +8,7 @@ import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
+import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.download.DownloadStorage
 import com.geozelot.homer.data.sync.HomerBookState
 import com.geozelot.homer.data.sync.HomerIndex
@@ -36,6 +37,7 @@ class LocalMirror @Inject constructor(
     private val bookDao: BookDao,
     private val downloadDao: DownloadDao,
     private val downloadStorage: DownloadStorage,
+    private val downloadManager: DownloadManager,
     private val json: Json,
 ) {
     /** Writes the current resume positions to the visible `progress.json` in the active area. */
@@ -88,7 +90,14 @@ class LocalMirror @Inject constructor(
         val present = downloadStorage.presenceProbe()
         // What is on record, so the no-op case can be told from a real one below.
         val recorded = downloadDao.recordedBookIds().toHashSet()
+        // Left to the worker that owns them. This runs on every app open, and a book half-way
+        // through downloading has a leading run of present files like any paused one — so it was
+        // re-labelled PAUSED under a running worker, and the progress the user was watching jumped
+        // back and stalled until the next file landed. Asked of WorkManager, not of the row alone:
+        // a row a dead worker left saying "downloading" is exactly what this sweep should repair.
+        val active = downloadDao.activeBookIds().filterTo(HashSet()) { downloadManager.isRunning(it) }
         for (book in bookDao.getAll()) {
+            if (book.id in active) continue
             val files = audioFileDao.findForBook(book.id)
             // The worker downloads sequentially and resumes from downloadedFiles, so "downloaded"
             // means a contiguous leading run of present files.

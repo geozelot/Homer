@@ -312,11 +312,26 @@ class FacetStoreTest {
     }
 
     @Test
-    fun `a fresh write remembers the etag the server returned`() = runBlocking {
-        val t = FakeTransport(mutableListOf(DavRead.Absent, DavRead.NotModified)).apply { nextEtag = "etag-put" }
+    fun `a write leaves no etag behind, so the next read applies the merge`() = runBlocking {
+        // The upload is a merge the caller never applied. Remembering its ETag made the next read
+        // a 304, and the caller kept the copy from before the merge.
+        val merged = facet("a" to "A")
+        val t = FakeTransport(mutableListOf(DavRead.Absent, body(merged, "etag-put"))).apply { nextEtag = "etag-put" }
         val s = store(t)
-        s.save(file, serializer) { facet("a" to "A") }
-        assertTrue(s.load(file, serializer) is FacetStore.Load.Unchanged)
-        assertEquals("etag-put", t.ifNoneMatches.last())
+        s.save(file, serializer) { merged }
+        assertEquals(FacetStore.Load.Present(merged), s.load(file, serializer))
+        assertEquals(null, t.ifNoneMatches.last())
+    }
+
+    @Test
+    fun `a save that finds nothing to write still forgets what it read`() = runBlocking {
+        // The read inside the save may carry somebody else's correction; vouching for it with a
+        // remembered ETag would hide it from the next pull.
+        val theirs = facet("a" to "A", "b" to "B")
+        val t = FakeTransport(mutableListOf(body(theirs, "etag-2"), body(theirs, "etag-2")))
+        val s = store(t)
+        assertEquals(FacetStore.SaveResult.AlreadyCurrent, s.save(file, serializer) { theirs })
+        assertEquals(FacetStore.Load.Present(theirs), s.load(file, serializer))
+        assertEquals(listOf(null, null), t.ifNoneMatches)
     }
 }

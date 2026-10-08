@@ -68,6 +68,10 @@ interface PlaybackStateDao {
     @Query("SELECT * FROM playback_state")
     suspend fun getAll(): List<PlaybackStateEntity>
 
+    /** The position saved last — the book a "resume" from outside the app means. */
+    @Query("SELECT * FROM playback_state ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun mostRecent(): PlaybackStateEntity?
+
     /** Newest position write, for cheaply deciding whether anything needs pushing. */
     @Query("SELECT MAX(updatedAt) FROM playback_state")
     suspend fun maxUpdatedAt(): Long?

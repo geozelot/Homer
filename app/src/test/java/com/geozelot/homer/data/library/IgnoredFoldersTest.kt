@@ -27,6 +27,13 @@ class IgnoredFoldersTest {
     }
 
     @Test
+    fun `a folder inside a book is not honoured, since skipping it would shorten the book`() {
+        val books = listOf("Author/Book", "Other")
+        val ignored = listOf("Author/Book/CD2", "Author/Book", "Incoming", "Other/Sub")
+        assertEquals(listOf("Author/Book", "Incoming"), IgnoredFolders.outsideBooks(ignored, books))
+    }
+
+    @Test
     fun `a folder does not cover a sibling whose name only starts the same`() {
         // A plain prefix test would ignore `Author/Book 2` along with `Author/Book`.
         assertFalse(IgnoredFolders.covers(listOf("Author/Book"), "Author/Book 2"))

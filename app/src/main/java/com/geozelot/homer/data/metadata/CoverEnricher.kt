@@ -90,14 +90,24 @@ class CoverEnricher @Inject constructor(
         var found = 0
         // Consecutive lookups that could not reach openlibrary.org — see MAX_ONLINE_OUTAGES.
         var outages = 0
+        // Whether any shared-cache fetch failed rather than missed. A 404 is an answer; a dropped
+        // connection is not, and recording the sweep's ETag after one marked the shared folder as
+        // fully read while the books behind the failures never got their art — until somebody
+        // happened to add another cover to it.
+        var sharedFetchFailed = false
         for ((index, book) in books.withIndex()) {
             coroutineContext.ensureActive()
             onProgress(index, total)
             // Shared catalog: prefer the shared cover cache (a small download) over re-extracting
             // the art by streaming the first file.
             if (sharedCatalog) {
-                val cached = orNullUnlessCancelled {
+                val cached = try {
                     webDavClient.getBytes("${sharedCoverDir(libraryRoot)}/${coverCache.coverName(book.id)}")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    sharedFetchFailed = true
+                    null
                 }
                 if (cached != null) {
                     bookDao.updateLocalCover(book.id, coverCache.write(book.id, cached))
@@ -202,7 +212,11 @@ class CoverEnricher @Inject constructor(
             found++
         }
         onProgress(total, total)
-        sweepEtag?.let { librarySettings.setLastCoverSweepEtag(it) }
+        if (sharedFetchFailed) {
+            Log.w(TAG, "some shared covers could not be fetched; the next pass sweeps again")
+        } else {
+            sweepEtag?.let { librarySettings.setLastCoverSweepEtag(it) }
+        }
         Log.i(TAG, "cover enrichment done: $found/$total got art")
     }
 

@@ -56,8 +56,14 @@ interface BookOverrideDao {
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")
     fun observeById(bookId: String): Flow<BookOverrideEntity?>
 
-    /** Re-points a book's overrides onto a new id after its folder moved/renamed. */
-    @Query("UPDATE book_overrides SET bookId = :newId WHERE bookId = :oldId")
+    /**
+     * Re-points a book's overrides onto a new id after its folder moved/renamed. `OR REPLACE`
+     * because bookId is the primary key and the destination can already hold a row: one pulled
+     * from the manifest or the shared corrections for the new path before this device scanned it.
+     * A plain UPDATE throws there, aborts the scan, and does so again on every scan after it. The
+     * moved row wins; if the other one was newer, the next sync's newest-wins brings it back.
+     */
+    @Query("UPDATE OR REPLACE book_overrides SET bookId = :newId WHERE bookId = :oldId")
     suspend fun relink(oldId: String, newId: String)
 
     /** Drops one book's override, for when a correction is cleared and nothing personal remains. */

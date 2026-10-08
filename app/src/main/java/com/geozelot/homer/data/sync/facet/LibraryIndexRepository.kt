@@ -13,6 +13,8 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
+import com.geozelot.homer.data.db.dao.DownloadDao
+import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.IgnoredFolders
 import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.Restriction
@@ -74,6 +76,8 @@ class LibraryIndexRepository @Inject constructor(
     private val coverCache: CoverCache,
     private val json: Json,
     private val ignoredFolders: IgnoredFolders,
+    private val downloadDao: DownloadDao,
+    private val downloadManager: DownloadManager,
 ) {
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
@@ -386,6 +390,7 @@ class LibraryIndexRepository @Inject constructor(
             val structure = structureRead.resolve(lastStructure) ?: return false
             val derived = derivedRead.resolve(lastDerived) ?: DerivedFacet()
             val corrections = correctionsRead.resolve(lastCorrections) ?: CorrectionsFacet()
+            val previousCorrections = lastCorrections
             lastStructure = structure
             lastDerived = derived
             lastCorrections = corrections
@@ -393,15 +398,21 @@ class LibraryIndexRepository @Inject constructor(
 
             // Nothing moved anywhere: no point walking several hundred books to write back what
             // is already stored.
+            //
+            // Unless there is nothing here to be unchanged FROM. Signing out empties the database
+            // but not this process's cache, and a share whose root is the share itself sets the same
+            // root again on the way back in — so the watch on the root never fired, every facet
+            // answered 304, and the shelf stayed empty until something changed on the server.
             val anyChanged = structureRead is FacetStore.Load.Present ||
                 derivedRead is FacetStore.Load.Present ||
-                correctionsRead is FacetStore.Load.Present
+                correctionsRead is FacetStore.Load.Present ||
+                bookDao.count() == 0
             // Before applying: a template the index carries changes what the fields MEAN, so
             // adopting it after would parse this pull under the old rules and the next one under
             // the new.
             adoptTemplates(corrections)
             adoptIgnoredFolders(corrections)
-            if (anyChanged) apply(structure, derived, corrections)
+            if (anyChanged) apply(structure, derived, corrections, previousCorrections)
             true
         } catch (e: CancellationException) {
             throw e
@@ -432,6 +443,7 @@ class LibraryIndexRepository @Inject constructor(
         structure: StructureFacet,
         derived: DerivedFacet,
         corrections: CorrectionsFacet,
+        previousCorrections: CorrectionsFacet? = null,
     ) {
         val now = System.currentTimeMillis()
         // Read in bulk, up front. Three queries per book made a pull of a 300-book index a
@@ -453,33 +465,53 @@ class LibraryIndexRepository @Inject constructor(
             val files = FacetMapping.fileEntities(id, book, d, existingFiles)
             val override = FacetMapping.overrideEntity(id, corrections.books[id], existingOverride)
 
+            // Only rewrite chapters when the facet actually has some: an absent derived entry is
+            // silence, and silence must not erase what this device worked out itself. A
+            // correction's cuts count as having some, even where no tag ever did — that is the
+            // whole point of cutting a book nothing had chapters for.
+            val cut = corrections.books[id]?.chapters?.isNotEmpty() == true
+            // And when the cuts were taken back: the copy applied last had some, this one has none.
+            // Without it the withdrawn cuts stayed this device's chapter list for good, since "no
+            // cuts" otherwise reads as silence. Known only while the process holds the previous
+            // copy; a pull after a restart cannot tell the two apart.
+            val uncut = !cut && previousCorrections?.books?.get(id)?.chapters?.isNotEmpty() == true
+            // A changed cut list can arrive with nothing else about the book changed — the device
+            // that made the edit already holds the correction's stamp — so it is compared on its
+            // own. Only for books with cuts in play, which are few: a chapter read per book would
+            // cost what the bulk reads above exist to save.
+            val chapters = if (d?.chapterTier != null || cut || uncut) FacetMapping.chapterEntities(id, d, corrections.books[id]) else null
+            val cutsMoved = (cut || uncut) && chapters != null &&
+                chapters.map { it.title to it.startMs } != chapterDao.findForBook(id).map { it.title to it.startMs }
+
             // Most books are untouched by any given change, and rewriting them all meant hundreds
             // of transactions and tens of thousands of row writes for one edited title — taking
             // the write lock away from position saves during playback. Both reads are already in
             // hand, so the comparison is free.
-            if (entity == existing && files == existingFiles && override == existingOverride) continue
+            if (entity == existing && files == existingFiles && override == existingOverride && !cutsMoved) continue
 
             db.withTransaction {
-                bookDao.upsert(listOf(entity))
-                if (files != existingFiles) {
+                // Worked out again from the rows as they are NOW, for the books that are actually
+                // written. The bulk reads above are a snapshot taken before this loop began, and the
+                // enrichers and the reader write these rows meanwhile: a cover cached, a file
+                // measured, a book hidden or corrected a moment ago came back out of the snapshot
+                // and was written over. Few books reach this point, so the per-book reads are cheap.
+                val liveBook = bookDao.findById(id)
+                val liveFiles = if (liveBook == null) emptyList() else audioFileDao.findForBook(id)
+                val liveOverride = bookOverrideDao.findById(id)
+                val liveEntity = FacetMapping.bookEntity(id, book, d, liveBook, now)
+                val liveFileRows = FacetMapping.fileEntities(id, book, d, liveFiles)
+                val liveCorrection = FacetMapping.overrideEntity(id, corrections.books[id], liveOverride)
+
+                if (liveEntity != liveBook) bookDao.upsert(listOf(liveEntity))
+                if (liveFileRows != liveFiles) {
                     audioFileDao.deleteForBook(id)
-                    audioFileDao.upsert(files)
+                    audioFileDao.upsert(liveFileRows)
                 }
-                // Only rewrite chapters when the facet actually has some: an absent derived entry
-                // is silence, and silence must not erase what this device worked out itself. A
-                // correction's cuts count as having some, even where no tag ever did — that is the
-                // whole point of cutting a book nothing had chapters for.
-                val cut = corrections.books[id]?.chapters?.isNotEmpty() == true
-                if (d?.chapterTier != null || cut) {
-                    chapterDao.replaceForBook(
-                        id,
-                        FacetMapping.chapterEntities(id, d, corrections.books[id]),
-                    )
-                }
+                if (chapters != null) chapterDao.replaceForBook(id, chapters)
                 // Never deleted. An absent correction means the shared index has nothing to say
                 // about this book, NOT that a local one should go — deleting here destroyed an
                 // edit made offline before it had ever been published.
-                if (override != null && override != existingOverride) bookOverrideDao.upsert(override)
+                if (liveCorrection != null && liveCorrection != liveOverride) bookOverrideDao.upsert(liveCorrection)
             }
             applied++
         }
@@ -502,6 +534,13 @@ class LibraryIndexRepository @Inject constructor(
         if (stale.isEmpty()) return
         Log.i(TAG, "pruning ${stale.size} book(s) removed from the library")
         stale.chunked(SQL_PARAM_CHUNK).forEach { bookDao.deleteByIds(it) }
+        // Their downloads go with them. The download row has no foreign key, so pruning the book
+        // left the row and every file it pointed at — and a device that only ever READS the shared
+        // index never crawls, so no scan's orphan sweep would come along to collect them. Gigabytes
+        // of audio for books that no longer exist, with nothing in the app able to show or remove
+        // them. The manager cancels a download still running before it deletes.
+        val downloaded = downloadDao.recordedBookIds().toHashSet()
+        stale.filter { it in downloaded }.forEach { downloadManager.delete(it) }
     }
 
 
@@ -512,7 +551,8 @@ class LibraryIndexRepository @Inject constructor(
 
     /** [push] without the lock. */
     private suspend fun pushNow() {
-        if (!canPublish() || credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
+        val standing = maintenance.standingNow()
+        if (!standing.mayPublishIndex || credentialStore.awaitCredentials() == null || !networkMonitor.isOnline()) return
         _activity.value = IndexActivity.PUBLISHING
         try {
             val local = buildLocal()
@@ -538,13 +578,18 @@ class LibraryIndexRepository @Inject constructor(
                     FacetMerge.derived(local.derived, remoteDerived)
                 },
             )
-            report(
-                LibraryFacets.CORRECTIONS_FILE,
-                store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
-                    val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
-                    merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
-                },
-            )
+            // Asked separately from the index as a whole: an owner can keep edits where they are
+            // made while still sharing the crawl, and this publish used to write them anyway —
+            // the one path around the rule [pushCorrections] enforces.
+            if (standing.mayPublishEdits) {
+                report(
+                    LibraryFacets.CORRECTIONS_FILE,
+                    store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
+                        val merged = FacetMerge.corrections(local.corrections, remote.valueOr(CorrectionsFacet()))
+                        merged.takeIf { it.books.isNotEmpty() || remote is FacetStore.Load.Present }
+                    },
+                )
+            }
             uploadNewCovers(local.derived, remoteDerived)
         } catch (e: CancellationException) {
             throw e
@@ -695,9 +740,12 @@ class LibraryIndexRepository @Inject constructor(
         // server has never seen. Not a rare case — a read-only share user CANNOT publish, so their
         // own patterns are never up there, and the maintainer's next edit would silently wipe them.
         val localLines = librarySettings.pathTemplates.first()
+        // Only the scopes that are themselves newer. The gate above asks whether ANY scope is, and
+        // one fresh rule for one folder used to bring every older scope in the file along with it,
+        // over patterns this device had edited since.
         val lines = mergeTemplateLines(
             local = localLines,
-            remote = corrections.templates.mapValues { (_, rule) -> rule.patterns },
+            remote = corrections.templates.filterValues { it.editedAt > localAt }.mapValues { (_, rule) -> rule.patterns },
         )
 
         // A floor under the whole operation. `setPathTemplates` REMOVES the key for an empty list,

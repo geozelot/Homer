@@ -131,22 +131,6 @@ class DurationEnricher @Inject constructor(
             val credentials = credentialStore.awaitCredentials() ?: return
             val libraryRoot = librarySettings.libraryRoot.first()
             val files = audioFileDao.findForBook(bookId)
-            // Where each file can be read WITHOUT the network, when it has been downloaded.
-            //
-            // The reader underneath is a DefaultDataSource, which dispatches on the scheme — so a
-            // content:// or file:// URI is read by exactly the same header parser that reads an
-            // http one, only locally and with no round trip. Which makes a downloaded book the
-            // cheapest thing there is to measure, and it is the case where measuring matters
-            // most: offline is when a chapter list cannot fall back to asking the server.
-            val probeLocal = downloadStorage.uriProbe()
-            val local = files.associate { it.relativePath to probeLocal(it.relativePath) }
-            // Offline, nothing that is not already here can be measured — and crucially nothing may
-            // be RECORDED as unmeasurable: probe() returns null both for "this file has no
-            // duration" and for "I couldn't reach it", so a single offline open would otherwise
-            // mark every file and the book permanently attempted. A book that never becomes fully
-            // measured loses its time-left, progress ring and auto-finish until a full re-scan.
-            val offline = !networkMonitor.isOnline()
-            if (offline && files.none { local[it.relativePath] != null }) return
             val book = bookDao.findById(bookId)
             // A probe that came back empty is recorded, because nothing else ever settles these
             // questions: a book whose tags simply carry no genre, and a file whose duration
@@ -163,6 +147,26 @@ class DurationEnricher @Inject constructor(
                 (book?.chapterTier ?: ChapterTier.UNDETERMINED) == ChapterTier.UNDETERMINED
             val missing = files.filter { it.durationMs == null && !it.durationAttempted }
             if (missing.isEmpty() && !needsGenre && !needsLanguage && !needsChapters) return
+
+            // Where each file can be read WITHOUT the network, when it has been downloaded. Asked
+            // only now that there is something to measure: every open of an already-measured book
+            // used to resolve each of its files in the download folder first — on a SAF folder a
+            // directory query per file — and only then find it had nothing to do.
+            //
+            // The reader underneath is a DefaultDataSource, which dispatches on the scheme — so a
+            // content:// or file:// URI is read by exactly the same header parser that reads an
+            // http one, only locally and with no round trip. Which makes a downloaded book the
+            // cheapest thing there is to measure, and it is the case where measuring matters
+            // most: offline is when a chapter list cannot fall back to asking the server.
+            val probeLocal = downloadStorage.uriProbe()
+            val local = files.associate { it.relativePath to probeLocal(it.relativePath) }
+            // Offline, nothing that is not already here can be measured — and crucially nothing may
+            // be RECORDED as unmeasurable: probe() returns null both for "this file has no
+            // duration" and for "I couldn't reach it", so a single offline open would otherwise
+            // mark every file and the book permanently attempted. A book that never becomes fully
+            // measured loses its time-left, progress ring and auto-finish until a full re-scan.
+            val offline = !networkMonitor.isOnline()
+            if (offline && files.none { local[it.relativePath] != null }) return
             if (missing.isNotEmpty()) Log.i(TAG, "measuring ${missing.size}/${files.size} files for book $bookId")
 
             // Genre + embedded chapters live on the (first) file; captured from a probe if one

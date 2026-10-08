@@ -32,6 +32,7 @@ class PositionSyncerTest {
         val upserts = mutableListOf<PlaybackStateEntity>()
         override suspend fun findByBookId(bookId: String): PlaybackStateEntity? = null
         override suspend fun getAll(): List<PlaybackStateEntity> = emptyList()
+        override suspend fun mostRecent(): PlaybackStateEntity? = null
         override suspend fun maxUpdatedAt(): Long? = null
         override fun observeProgress(): Flow<List<BookProgress>> = emptyFlow()
         override suspend fun relink(oldId: String, newId: String) = Unit

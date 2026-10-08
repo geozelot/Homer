@@ -22,6 +22,10 @@ interface DownloadDao {
     @Query("SELECT bookId FROM downloads")
     suspend fun recordedBookIds(): List<String>
 
+    /** Books whose row says a download is queued or under way — which a dead worker can leave. */
+    @Query("SELECT bookId FROM downloads WHERE status IN ('queued', 'downloading')")
+    suspend fun activeBookIds(): List<String>
+
     @Upsert
     suspend fun upsert(download: DownloadEntity)
 

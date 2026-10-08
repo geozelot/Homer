@@ -125,6 +125,13 @@ class StorageMigrator @Inject constructor(
             // safe choice. copyThenDeleteSource already removed each file that landed at the target.
             if (failures == 0) {
                 source.delete("downloads"); source.delete("covers"); source.delete(".homer")
+                // The grant on the old folder was kept for exactly this read (see
+                // StorageCoordinator.commitLocation); with everything across it can go. Not when
+                // the user has since switched back to it, and not after a partial move — the
+                // originals are still the only copy of what failed, and reaching them needs it.
+                if (sourceUri?.startsWith("content://") == true && sourceUri != storageLocation.currentLocation()) {
+                    storageLocation.releasePersistable(sourceUri)
+                }
             } else {
                 Log.w(TAG, "left source data in place because $failures file(s) did not migrate")
             }
@@ -287,8 +294,13 @@ class StorageMigrator @Inject constructor(
             return sourceSize == null || targetSize == null || targetSize == sourceSize
         }
         if (overwrite || !landed()) {
-            val input = source.openInputStream(rel) ?: return true
-            target.writeStream(rel) { out -> input.use { it.copyTo(out) } }
+            // A file that exists but will not open is a failure, not "nothing to move". Counted as
+            // moved, it let the sweep afterwards delete the source folder with this file — the only
+            // copy — still in it.
+            val input = source.openInputStream(rel) ?: return false
+            // Closed whatever happens: a target that cannot be written throws before the block
+            // that would have closed it ever runs.
+            input.use { stream -> target.writeStream(rel) { out -> stream.copyTo(out) } }
         }
         val verified = landed()
         if (verified) source.delete(rel)

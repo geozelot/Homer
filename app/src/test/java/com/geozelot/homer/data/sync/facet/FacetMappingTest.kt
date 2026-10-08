@@ -197,7 +197,27 @@ class FacetMappingTest {
 
     @Test
     fun `a purely personal override publishes nothing at all`() {
-        assertNull(FacetMapping.correctionOf(override(finished = true, hidden = true), emptyList(), "phone"))
+        // A reader-only row: its correction clock never moved, which is what every local write
+        // through `stampedAgainst` guarantees.
+        assertNull(FacetMapping.correctionOf(override(finished = true, hidden = true, correctedAt = 0), emptyList(), "phone"))
+    }
+
+    @Test
+    fun `a retracted correction is published as an empty one`() {
+        // Cleared back to detection: no field left, but the clock says somebody decided. Left out of
+        // the file, the old correction stayed there and every other device kept showing it.
+        val c = FacetMapping.correctionOf(override(updatedAt = 0, correctedAt = 7_000), emptyList(), "phone")!!
+        assertNull(c.title)
+        assertTrue(c.chapters.isEmpty())
+        assertEquals(7_000, c.editedAt)
+    }
+
+    @Test
+    fun `an empty correction clears the fields it arrives on`() {
+        val retraction = FacetMapping.correctionOf(override(updatedAt = 0, correctedAt = 7_000), emptyList(), "phone")
+        val applied = FacetMapping.overrideEntity("Author/Book", retraction, override(title = "Old", correctedAt = 3_000))!!
+        assertNull(applied.title)
+        assertEquals(7_000, applied.correctedAt)
     }
 
     @Test
@@ -563,7 +583,7 @@ class FacetMappingTest {
     @Test
     fun `an empty override is still nothing to publish`() {
         // The guard has to stay a guard: a row that exists only to carry `hidden` is not an edit.
-        assertNull(FacetMapping.correctionOf(override(hidden = true), emptyList(), "dev"))
+        assertNull(FacetMapping.correctionOf(override(hidden = true, correctedAt = 0), emptyList(), "dev"))
     }
 
     // ── a locally newer correction survives a pull ───────────────────────────────────────────

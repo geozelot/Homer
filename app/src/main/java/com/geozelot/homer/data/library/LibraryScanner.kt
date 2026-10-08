@@ -298,6 +298,7 @@ class LibraryScanner @Inject constructor(
         ignored: List<String> = emptyList(),
         onProgress: (directoriesVisited: Int, audioFoldersFound: Int) -> Unit,
     ): Result {
+        val honoured = IgnoredFolders.outsideBooks(ignored, bookDao.allIds())
         val root = libraryRoot.trim('/')
         val storedEtags = if (incremental) {
             crawlDirDao.getAll().associate { it.path to it.etag }
@@ -350,7 +351,7 @@ class LibraryScanner @Inject constructor(
                 val childPath = childDir.path.trim('/')
                 // Not gone into at all. Its books already in the index are kept by applyScan, so
                 // this hides nothing that was there and adds nothing that was not.
-                if (IgnoredFolders.covers(ignored, childPath.removePrefix(root).trim('/'))) continue
+                if (IgnoredFolders.covers(honoured, childPath.removePrefix(root).trim('/'))) continue
                 // Skip an unchanged subtree only from a plain container folder — never while
                 // rebuilding a book (all its parts must be re-read). An unchanged collection
                 // ETag means the whole subtree is unchanged (Nextcloud propagates ETags up).
@@ -394,7 +395,7 @@ class LibraryScanner @Inject constructor(
         // not. Do not "tidy" these into one condition.
         val orphanedDownloads = db.withTransaction {
             crawlDirDao.upsertAll(crawled)
-            applyScan(books, root, skippedRoots, ignored, sweepOrphans = !incremental)
+            applyScan(books, root, skippedRoots, honoured, sweepOrphans = !incremental)
         }
         // Outside the transaction: this is storage IO, and it must not hold a write lock. Files
         // first, rows second — dropping the row first would leave the bytes with nothing pointing
@@ -480,20 +481,27 @@ class LibraryScanner @Inject constructor(
         // matches with SQL LIKE, which is ASCII-case-insensitive, and `startsWith` is not. Two
         // sibling folders differing only in case would drop out of keepIds and be pruned. There
         // are only a handful of skipped roots, so the queries are not what this is about.
-        val keepIds = buildSet {
+        val crawledIds = buildSet {
             books.forEach { add(it.book.id) }
             for (skipped in skippedRoots) {
                 val relative = skipped.removePrefix(root).trim('/')
                 addAll(bookDao.idsUnder(relative, likeDescendantsOf(relative)))
             }
-            // Books under an ignored folder were not crawled, which is not the same as gone: they
-            // are kept, hidden by every screen, and back unchanged when the folder is un-ignored.
+        }
+        // Books under an ignored folder were not crawled, which is not the same as gone: they are
+        // kept, hidden by every screen, and back unchanged when the folder is un-ignored. Kept apart
+        // from what the crawl accounted for, for two reasons. The empty-crawl guard below has to be
+        // decided by the crawl's own evidence; folded in, one ignored book made every empty crawl
+        // look like a real one. And a book the user moves OUT of an ignored folder is a move like
+        // any other, so these stay eligible as the source of one.
+        val ignoredIds = buildSet {
             for (folder in ignored) addAll(bookDao.idsUnder(folder, likeDescendantsOf(folder)))
         }
+        val keepIds = crawledIds + ignoredIds
 
         val existingBooks = bookDao.getAll()
         val existingById = existingBooks.associateBy { it.id }
-        val movedFrom = detectMoves(books, existingBooks, keepIds)
+        val movedFrom = detectMoves(books, existingBooks, crawledIds)
         if (movedFrom.isNotEmpty()) Log.i(TAG, "scan: re-linking ${movedFrom.size} moved book(s)")
 
         // Existing files for exactly the books being rewritten, plus the old rows of any moved
@@ -516,8 +524,8 @@ class LibraryScanner @Inject constructor(
         // upserts: everything those insert is in keepIds by construction, so it could never have
         // been pruned anyway.
         val pruneIds = idsToPrune(existingBooks.map { it.id }, keepIds)
-        // Likewise the guard's "how many are indexed" count. It is only *used* on the empty-keepIds
-        // branches, and an empty keep-set means no books were detected and the write phase inserts
+        // Likewise the guard's "how many are indexed" count. It is only *used* when the crawl
+        // accounted for nothing, and then no books were detected and the write phase inserts
         // nothing — so the pre-write count is the post-write count there.
         val indexedBefore = existingBooks.size
 
@@ -553,7 +561,7 @@ class LibraryScanner @Inject constructor(
             bookmarkDao.relink(oldId, newId)
         }
 
-        // Prune vanished books — but NEVER wipe a non-empty library on an empty keep-set. A
+        // Prune vanished books — but NEVER wipe a non-empty library on an empty crawl. A
         // crawl can complete "successfully" yet come back empty (a transient 207 with no usable
         // entries from a reverse proxy, a momentarily-unreachable-but-not-erroring server, or a
         // mis-set root), and blindly running deleteAll() there deletes the whole library. Offline
@@ -562,7 +570,7 @@ class LibraryScanner @Inject constructor(
         // real crawl finds books again.
         var orphanedDownloads = emptyList<String>()
         when {
-            keepIds.isNotEmpty() -> {
+            crawledIds.isNotEmpty() -> {
                 pruneIds.chunked(SQL_PARAM_CHUNK).forEach { bookDao.deleteByIds(it) }
                 // Rows keyed by bookId carry no foreign key on purpose, so a rescan can't cascade
                 // the user's data away — which also means a pruned book leaves them behind.

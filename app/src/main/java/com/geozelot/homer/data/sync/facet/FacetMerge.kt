@@ -126,6 +126,11 @@ object FacetMerge {
      * on the other side.
      */
     fun corrections(local: CorrectionsFacet, remote: CorrectionsFacet): CorrectionsFacet {
+        // A TIE GOES TO THE FILE, here and in both rules below. Equal stamps are the same decision —
+        // one device made it, the others adopted it with its stamp — but each device republishes
+        // it signed with its OWN id, so keeping the local side made the merge differ from the file
+        // by its signature alone. Two devices then rewrote corrections.json on every publish, each
+        // undoing the other's name, and every write sent the whole library back through a pull.
         val merged = LinkedHashMap<String, BookCorrection>(local.books.size + remote.books.size)
         for (id in local.books.keys + remote.books.keys) {
             val l = local.books[id]
@@ -133,7 +138,7 @@ object FacetMerge {
             merged[id] = when {
                 l == null -> r!!
                 r == null -> l
-                r.editedAt > l.editedAt -> r
+                r.editedAt >= l.editedAt -> r
                 else -> l
             }
         }
@@ -147,12 +152,13 @@ object FacetMerge {
             rules[scope] = when {
                 l == null -> r!!
                 r == null -> l
-                r.editedAt > l.editedAt -> r
+                r.editedAt >= l.editedAt -> r
                 else -> l
             }
         }
         // The ignore list is one decision about the whole tree, so the whole list goes newest-wins.
-        val ignored = listOfNotNull(local.ignoredFolders, remote.ignoredFolders).maxByOrNull { it.editedAt }
+        // Remote listed first: `maxByOrNull` keeps the first of equals.
+        val ignored = listOfNotNull(remote.ignoredFolders, local.ignoredFolders).maxByOrNull { it.editedAt }
         return CorrectionsFacet(books = merged, templates = rules, ignoredFolders = ignored)
     }
 }

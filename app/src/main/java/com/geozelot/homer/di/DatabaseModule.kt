@@ -17,7 +17,6 @@ import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
-import com.geozelot.homer.data.db.entity.EditFields
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -108,8 +107,15 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE book_overrides ADD COLUMN correctedAt INTEGER NOT NULL DEFAULT 0")
+        // The schema-5 column set written out rather than borrowed from `EditFields.CORRECTED`. A
+        // migration describes the database as it was at version 5 for ever; the live predicate
+        // follows the entity, and a field added in schema 6 would otherwise reach back into this
+        // step and name a column that does not exist yet.
         connection.execSQL(
-            "UPDATE book_overrides SET correctedAt = updatedAt WHERE " + EditFields.CORRECTED +
+            "UPDATE book_overrides SET correctedAt = updatedAt WHERE " +
+                "(title IS NOT NULL OR author IS NOT NULL OR series IS NOT NULL " +
+                "OR seriesIndex IS NOT NULL OR collection IS NOT NULL OR collectionIndex IS NOT NULL " +
+                "OR genre IS NOT NULL OR language IS NOT NULL OR tags IS NOT NULL)" +
                 " OR (hidden = 0 AND finished IS NULL AND downloadOnPlay IS NULL)",
         )
     }

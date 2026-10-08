@@ -39,8 +39,26 @@ interface BookmarkDao {
     @Query("DELETE FROM bookmarks WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("SELECT * FROM bookmarks WHERE id = :id")
+    suspend fun findById(id: Long): BookmarkEntity?
+
+    /** A mark's [com.geozelot.homer.data.db.entity.BookmarkKind], or null when it is gone. */
+    @Query("SELECT kind FROM bookmarks WHERE id = :id")
+    suspend fun kindOf(id: Long): String?
+
     @Query("DELETE FROM bookmarks WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+
+    /**
+     * Every mark in the library except the chapter cuts — the set the personal manifest carries.
+     * Cuts travel in the shared corrections instead, and replacing a book's notes must leave them be.
+     */
+    @Query("SELECT * FROM bookmarks WHERE kind != 'cut'")
+    suspend fun allNotes(): List<BookmarkEntity>
+
+    /** Removes a book's notes and keeps its cuts; see [allNotes]. */
+    @Query("DELETE FROM bookmarks WHERE bookId = :bookId AND kind != 'cut'")
+    suspend fun deleteNotesForBook(bookId: String)
 
     /**
      * Re-points a book's bookmarks onto a new id after its folder moved/renamed. Must run while

@@ -90,6 +90,14 @@ class DownloadManager @Inject constructor(
         }
     }
 
+    /**
+     * Whether WorkManager still has an unfinished download for [bookId]. The row's own status can
+     * say "downloading" after the worker is long gone — a crash, a force-stop — so the work is
+     * what answers who owns the book right now.
+     */
+    suspend fun isRunning(bookId: String): Boolean =
+        workManager.getWorkInfosForUniqueWorkFlow(workName(bookId)).first().any { !it.state.isFinished }
+
     /** Re-enqueues a paused/failed download; the worker resumes from the last completed file. */
     fun resume(bookId: String) = download(bookId)
 

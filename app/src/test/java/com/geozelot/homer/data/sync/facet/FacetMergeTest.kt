@@ -279,6 +279,24 @@ class FacetMergeTest {
         assertEquals("tablet", merged.books.getValue("a").editedBy)
     }
 
+    @Test
+    fun `an adopted decision republished under another name changes nothing`() {
+        // Same stamp = same decision, re-signed by the device that adopted it. Keeping the local
+        // side made the merge differ from the file by its signature alone, and two devices rewrote
+        // the file back and forth on every publish.
+        val remote = CorrectionsFacet(
+            books = mapOf("a" to BookCorrection(title = "A", editedAt = 100, editedBy = "tablet")),
+            templates = mapOf("" to TemplateRule(listOf("{author}/{title}"), editedAt = 50, by = "tablet")),
+            ignoredFolders = IgnoreRule(listOf("_incoming"), editedAt = 70, by = "tablet"),
+        )
+        val local = CorrectionsFacet(
+            books = mapOf("a" to BookCorrection(title = "A", editedAt = 100, editedBy = "phone")),
+            templates = mapOf("" to TemplateRule(listOf("{author}/{title}"), editedAt = 50, by = "phone")),
+            ignoredFolders = IgnoreRule(listOf("_incoming"), editedAt = 70, by = "phone"),
+        )
+        assertEquals(remote, FacetMerge.corrections(local, remote))
+    }
+
     // ── the facets are independent ───────────────────────────────────────────────────────────
 
     @Test

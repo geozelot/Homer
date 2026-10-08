@@ -134,15 +134,24 @@ class StorageCoordinator @Inject constructor(
         } else {
             // Empty target: switch the location NOW (synchronous + reliable, independent of the
             // worker), then move any existing local data across in the background.
-            commitLocation(source, target)
+            commitLocation(source, target, migrating = true)
             storageMigrationManager.migrate(source, target, overwrite = false)
         }
     }
 
-    /** Commits the active storage location immediately and releases the old SAF grant if any. */
-    private suspend fun commitLocation(source: String?, target: String?) {
+    /**
+     * Commits the active storage location immediately, and releases the old SAF grant if any —
+     * unless a move out of the old folder is about to run.
+     *
+     * [migrating] keeps the grant, and that is the whole difference between a move and a loss. The
+     * move runs in a background worker that READS the old folder, and releasing first left it
+     * reading a folder it could no longer open: every file looked absent, nothing was copied, and
+     * the books then read as not downloaded with their audio stranded where the app could not
+     * reach it. The migrator lets go of the grant itself, once everything has landed.
+     */
+    private suspend fun commitLocation(source: String?, target: String?, migrating: Boolean) {
         storageLocation.commit(target)
-        if (isSafToken(source) && source != target) storageLocation.releasePersistable(source!!)
+        if (!migrating && isSafToken(source) && source != target) storageLocation.releasePersistable(source!!)
         Log.d(TAG_STORAGE, "storage location committed to ${target ?: "default"}")
     }
 
@@ -154,7 +163,7 @@ class StorageCoordinator @Inject constructor(
         // unreadable. Hand-picked covers are the one part of the local cache that isn't
         // re-derivable, so they're carried across rather than dropped.
         storageMigrator.carryCustomCovers(p.source, p.target)
-        commitLocation(p.source, p.target)
+        commitLocation(p.source, p.target, migrating = false)
         adoptCurrentArea()
     }
 
@@ -162,7 +171,7 @@ class StorageCoordinator @Inject constructor(
     suspend fun replacePending() {
         val p = _pendingChange.value ?: return
         _pendingChange.value = null
-        commitLocation(p.source, p.target)
+        commitLocation(p.source, p.target, migrating = true)
         storageMigrationManager.migrate(p.source, p.target, overwrite = true)
     }
 

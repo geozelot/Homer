@@ -79,6 +79,20 @@ class IgnoredFolders @Inject constructor(
             return ignored.any { folder -> p == folder || p.startsWith("$folder/") }
         }
 
+        /**
+         * The entries that can be honoured without breaking a book: those NOT strictly inside one.
+         *
+         * A book can span folders — `Book/CD1`, `Book/CD2` — and skipping one of them does not hide
+         * the book, it shortens it: the next crawl rebuilds it from the parts it still sees, and the
+         * missing discs drop out of its playlist, its length and its saved position. Ignoring works
+         * on whole books, so a folder inside one is read regardless.
+         */
+        fun outsideBooks(ignored: List<String>, bookIds: Collection<String>): List<String> {
+            if (ignored.isEmpty()) return ignored
+            val books = bookIds.toHashSet()
+            return ignored.filterNot { folder -> ancestorsOf(folder).dropLast(1).any { it in books } }
+        }
+
         /** [folder] and every folder above it, outermost first: `A/B/C` → `A`, `A/B`, `A/B/C`. */
         fun ancestorsOf(folder: String): List<String> {
             val segments = normalise(folder).split('/').filter { it.isNotEmpty() }

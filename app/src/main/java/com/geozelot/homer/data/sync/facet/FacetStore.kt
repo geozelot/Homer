@@ -1,6 +1,7 @@
 package com.geozelot.homer.data.sync.facet
 
 import android.util.Log
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.webdav.DavRead
 import com.geozelot.homer.data.webdav.PreconditionFailedException
 import kotlinx.coroutines.CancellationException
@@ -94,8 +95,25 @@ class FacetStore @Inject constructor(
      * Concurrency is optimistic: the write carries If-Match, and a 412 means someone else got there
      * first, so the whole read-merge-write runs again against what is now there. The final attempt
      * drops the condition rather than losing the change outright.
+     *
+     * **A save never leaves an ETag behind**, whatever it returns. The read inside it remembers the
+     * ETag of a file that may hold other people's changes, and a successful write remembers the ETag
+     * of a merge the caller has not applied — either way the caller's own copy is older than what
+     * the ETag vouches for. Kept, the next [load] answered 304, the caller reused its stale copy, and
+     * a correction somebody else published was folded into our upload yet never applied here, until
+     * the file happened to change again. Forgetting it costs the next read one full download.
      */
     suspend fun <T> save(
+        file: String,
+        serializer: KSerializer<T>,
+        merge: (Load<T>) -> T?,
+    ): SaveResult = try {
+        readMergeWrite(file, serializer, merge)
+    } finally {
+        etags.remove(file)
+    }
+
+    private suspend fun <T> readMergeWrite(
         file: String,
         serializer: KSerializer<T>,
         merge: (Load<T>) -> T?,
@@ -154,7 +172,9 @@ class FacetStore @Inject constructor(
     }
 
     private suspend fun ensureDir() {
-        runCatching { transport.ensureDir(dirOf()) }
+        // Best effort — the write that follows reports the real failure — but never at the price
+        // of swallowing a cancellation, which plain runCatching does.
+        runCatchingUnlessCancelled { transport.ensureDir(dirOf()) }
     }
 
     private suspend fun dirOf(): String {
