@@ -22,6 +22,7 @@ import com.geozelot.homer.data.db.entity.DownloadStatus
 import com.geozelot.homer.data.download.DownloadManager
 import com.geozelot.homer.data.library.BookCover
 import com.geozelot.homer.data.library.BookEditor
+import com.geozelot.homer.data.library.IgnoredFolders
 import com.geozelot.homer.data.library.IndexPass
 import com.geozelot.homer.data.library.LibraryIndexManager
 import com.geozelot.homer.data.library.LibraryMaintenance
@@ -30,6 +31,7 @@ import com.geozelot.homer.data.library.LibraryStanding
 import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.TemplateApplier
 import com.geozelot.homer.data.library.applyOverride
+import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.data.settings.LEGACY_AUTHOR_LAST
 import com.geozelot.homer.data.settings.LibrarySettings
 import com.geozelot.homer.data.settings.PinningBlock
@@ -384,6 +386,7 @@ class HomeViewModel @Inject constructor(
     private val filterEngine: LibraryFilterEngine,
     private val storage: StorageCoordinator,
     private val bookEdit: BookEditCoordinator,
+    private val ignoredFolderStore: IgnoredFolders,
 ) : ViewModel() {
 
     val account: StateFlow<NextcloudCredentials?> = authRepository.credentials
@@ -465,8 +468,13 @@ class HomeViewModel @Inject constructor(
     /** Live playback snapshot for the docked mini-player. */
     val playback: StateFlow<PlaybackUiState> = connection.state
 
-    private val _showHidden = MutableStateFlow(false)
-    val showHidden: StateFlow<Boolean> = _showHidden.asStateFlow()
+    /** Stored, not held: in memory alone it reset itself on every restart and every update. */
+    val showHidden: StateFlow<Boolean> = librarySettings.showHidden
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Library folders Homer does not read — see [IgnoredFolders]. */
+    val ignoredFolders: StateFlow<List<String>> = ignoredFolderStore.folders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // Detection with user overrides applied (D2), hidden books filtered unless shown, plus the
     // resolved cover model. All the inputs here change rarely, so the per-book cover resolution
@@ -478,11 +486,11 @@ class HomeViewModel @Inject constructor(
         combine(
             libraryRepository.books,
             bookOverrideDao.observeAll(),
-            _showHidden,
+            combine(librarySettings.showHidden, ignoredFolderStore.folders, ::Pair),
             authRepository.credentials,
             libraryRepository.libraryRoot,
-        ) { books, overrides, showHidden, credentials, libraryRoot ->
-            filterEngine.effective(books, overrides, showHidden) { book ->
+        ) { books, overrides, (showHidden, ignored), credentials, libraryRoot ->
+            filterEngine.effective(books, overrides, showHidden, ignored) { book ->
                 BookCover.model(book, credentials, webDavClient, libraryRoot)
             }
         }
@@ -1040,7 +1048,44 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setShowHidden(value: Boolean) {
-        _showHidden.value = value
+        viewModelScope.launch { librarySettings.setShowHidden(value) }
+    }
+
+    /**
+     * Stops Homer reading [folder]. Shared like a template, so another device's crawl does not
+     * bring it straight back; takes effect on the shelf at once and in the index at the next scan.
+     */
+    fun ignoreFolder(folder: String) {
+        viewModelScope.launch {
+            ignoredFolderStore.add(folder)
+            libraryIndex.publishEdits()
+        }
+    }
+
+    /** Reads [folder] again from the next scan; its books already in the library reappear at once. */
+    fun stopIgnoringFolder(folder: String) {
+        viewModelScope.launch {
+            ignoredFolderStore.remove(folder)
+            libraryIndex.publishEdits()
+        }
+    }
+
+    /**
+     * The folders directly inside [folder] (library-relative; "" for the root), straight from the
+     * server, or null when it could not be reached.
+     *
+     * From the server rather than the index, because the folders worth ignoring are exactly the
+     * ones the index has never seen. Homer's own `.homer` and anything else hidden are left out.
+     */
+    suspend fun listLibraryFolders(folder: String): List<String>? {
+        val root = librarySettings.libraryRoot.first().trim('/')
+        val path = listOf(root, folder.trim('/')).filter { it.isNotEmpty() }.joinToString("/")
+        return runCatchingUnlessCancelled { webDavClient.propfind(path, depth = 1) }
+            .onFailure { Log.w(TAG_NET, "could not list '$folder'", it) }
+            .getOrNull()
+            ?.filter { it.isCollection && it.path.trim('/') != path && !it.name.startsWith(".") }
+            ?.map { it.name }
+            ?.sortedBy { it.lowercase() }
     }
 
     fun setSearchQuery(query: String) {

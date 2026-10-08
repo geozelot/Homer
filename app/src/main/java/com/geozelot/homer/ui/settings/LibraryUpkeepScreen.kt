@@ -94,6 +94,8 @@ fun LibraryUpkeepScreen(
     val unpublished by viewModel.unpublishedCorrections.collectAsStateWithLifecycle()
     val lastScannedAt by viewModel.lastScannedAt.collectAsStateWithLifecycle()
     val lastFullCrawl by viewModel.lastFullCrawl.collectAsStateWithLifecycle()
+    val onlineCovers by viewModel.onlineCoverLookup.collectAsStateWithLifecycle()
+    val maintains by viewModel.maintainsLibrary.collectAsStateWithLifecycle()
 
     val hidden by viewModel.hiddenBooks.collectAsStateWithLifecycle()
     val undetected by viewModel.undetectedBooks.collectAsStateWithLifecycle()
@@ -186,6 +188,24 @@ fun LibraryUpkeepScreen(
                 }
             }
         }
+
+        // ── cover art ────────────────────────────────────────────────────────
+        //
+        // Here, beside the passes that fetch covers, rather than on the Library page where it sat
+        // among facts about the library: it is a choice about how cover art gets MADE, which is
+        // upkeep, and it only does anything on a device that maintains the library. Disabled with
+        // the reason rather than hidden where it cannot act, as it was before the move.
+        SettingsDivider()
+        SettingsSectionHeader(stringResource(R.string.set_sync_covers_header))
+        SettingsSwitchRow(
+            label = stringResource(R.string.settings_online_covers),
+            checked = onlineCovers,
+            onCheckedChange = viewModel::setOnlineCoverLookup,
+            enabled = maintains,
+            description = stringResource(
+                if (maintains) R.string.settings_online_covers_desc else R.string.settings_online_covers_reader,
+            ),
+        )
 
         // Not a reader's to change: a pattern rewrites what the shared index says about every
         // book, which is the maintainer's half of the split.

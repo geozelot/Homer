@@ -71,7 +71,7 @@ fun PrivacySettingsScreen(
         // full — this page's job is to account for what leaves the device, and that does not stop
         // being true because the switch lives elsewhere.
         //
-        // The switch itself moved to the Library page: a reader's device takes cover art out of the
+        // The switch itself lives on the Upkeep page: a reader's device takes cover art out of the
         // shared cache and creates none (`CoverEnricher.enrich(sharedOnly = true)` marks the book
         // attempted and moves on, before any lookup), so on a device without maintenance access
         // this setting did nothing whatsoever. A control that cannot act is worse on a privacy page

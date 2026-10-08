@@ -294,6 +294,8 @@ class LibraryScanner @Inject constructor(
          * every new book as if no template had ever been written.
          */
         templates: List<ScopedTemplate>,
+        /** Library-relative folders not to go into — see [IgnoredFolders]. */
+        ignored: List<String> = emptyList(),
         onProgress: (directoriesVisited: Int, audioFoldersFound: Int) -> Unit,
     ): Result {
         val root = libraryRoot.trim('/')
@@ -346,6 +348,9 @@ class LibraryScanner @Inject constructor(
 
             for (childDir in childDirs) {
                 val childPath = childDir.path.trim('/')
+                // Not gone into at all. Its books already in the index are kept by applyScan, so
+                // this hides nothing that was there and adds nothing that was not.
+                if (IgnoredFolders.covers(ignored, childPath.removePrefix(root).trim('/'))) continue
                 // Skip an unchanged subtree only from a plain container folder — never while
                 // rebuilding a book (all its parts must be re-read). An unchanged collection
                 // ETag means the whole subtree is unchanged (Nextcloud propagates ETags up).
@@ -389,7 +394,7 @@ class LibraryScanner @Inject constructor(
         // not. Do not "tidy" these into one condition.
         val orphanedDownloads = db.withTransaction {
             crawlDirDao.upsertAll(crawled)
-            applyScan(books, root, skippedRoots, sweepOrphans = !incremental)
+            applyScan(books, root, skippedRoots, ignored, sweepOrphans = !incremental)
         }
         // Outside the transaction: this is storage IO, and it must not hold a write lock. Files
         // first, rows second — dropping the row first would leave the bytes with nothing pointing
@@ -462,6 +467,7 @@ class LibraryScanner @Inject constructor(
         books: List<BookDetector.Detected>,
         root: String,
         skippedRoots: List<String>,
+        ignored: List<String>,
         sweepOrphans: Boolean,
     ): List<String> {
         // ── Read phase — no write lock held ──────────────────────────────────────────────
@@ -480,6 +486,9 @@ class LibraryScanner @Inject constructor(
                 val relative = skipped.removePrefix(root).trim('/')
                 addAll(bookDao.idsUnder(relative, likeDescendantsOf(relative)))
             }
+            // Books under an ignored folder were not crawled, which is not the same as gone: they
+            // are kept, hidden by every screen, and back unchanged when the folder is un-ignored.
+            for (folder in ignored) addAll(bookDao.idsUnder(folder, likeDescendantsOf(folder)))
         }
 
         val existingBooks = bookDao.getAll()

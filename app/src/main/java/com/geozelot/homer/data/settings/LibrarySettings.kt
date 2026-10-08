@@ -91,6 +91,35 @@ class LibrarySettings @Inject constructor(
     val fastScroll: Flow<Boolean> =
         context.settingsDataStore.data.map { it[KEY_FAST_SCROLL] ?: true }
 
+    /**
+     * Whether hidden books are shown in the library anyway. A view preference of this device's, and
+     * stored like the others: it used to live only in the library screen's memory, so it switched
+     * itself off again every time the app was restarted or updated.
+     */
+    val showHidden: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[KEY_SHOW_HIDDEN] ?: false }
+
+    suspend fun setShowHidden(value: Boolean) {
+        context.settingsDataStore.edit { it[KEY_SHOW_HIDDEN] = value }
+    }
+
+    /** Library folders Homer does not read — see `IgnoredFolders`. Library-root-relative. */
+    val ignoredFolders: Flow<List<String>> =
+        context.settingsDataStore.data.map { prefs ->
+            prefs[KEY_IGNORED_FOLDERS]?.split('\n')?.filter { it.isNotEmpty() } ?: emptyList()
+        }
+
+    /** When [ignoredFolders] was last deliberately set; zero for never. */
+    val ignoredFoldersEditedAt: Flow<Long> =
+        context.settingsDataStore.data.map { it[KEY_IGNORED_FOLDERS_AT] ?: 0L }
+
+    suspend fun setIgnoredFolders(folders: List<String>, editedAt: Long) {
+        context.settingsDataStore.edit { prefs ->
+            if (folders.isEmpty()) prefs.remove(KEY_IGNORED_FOLDERS) else prefs[KEY_IGNORED_FOLDERS] = folders.joinToString("\n")
+            prefs[KEY_IGNORED_FOLDERS_AT] = editedAt
+        }
+    }
+
     suspend fun setFastScroll(value: Boolean) {
         context.settingsDataStore.edit { it[KEY_FAST_SCROLL] = value }
     }
@@ -541,6 +570,10 @@ class LibrarySettings @Inject constructor(
             it.remove(KEY_POLICY_AT)
             it.remove(KEY_POLICY_CHECKED_AT)
             it.remove(KEY_LIBRARY_OWNED)
+            // Folder paths inside the library being left; they mean nothing in another. The shared
+            // index hands them back if the same library is signed into again.
+            it.remove(KEY_IGNORED_FOLDERS)
+            it.remove(KEY_IGNORED_FOLDERS_AT)
             // Nothing writes this any more — the language filter became a filter token, which is
             // held for the process rather than stored. Cleared here so an install that HAD one
             // does not carry it around for ever as a preference nothing reads.
@@ -552,6 +585,9 @@ class LibrarySettings @Inject constructor(
         val KEY_LIBRARY_ROOT = stringPreferencesKey("library_root")
         val KEY_GRID_VIEW = booleanPreferencesKey("library_grid_view")
         val KEY_FAST_SCROLL = booleanPreferencesKey("library_fast_scroll")
+        val KEY_SHOW_HIDDEN = booleanPreferencesKey("library_show_hidden")
+        val KEY_IGNORED_FOLDERS = stringPreferencesKey("library_ignored_folders")
+        val KEY_IGNORED_FOLDERS_AT = longPreferencesKey("library_ignored_folders_at")
         val KEY_AUTHOR_BY_SURNAME = booleanPreferencesKey("library_author_by_surname")
         val KEY_AUTHOR_SHOW_FILED = booleanPreferencesKey("library_author_show_filed")
 

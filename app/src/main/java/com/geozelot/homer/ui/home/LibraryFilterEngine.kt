@@ -6,6 +6,7 @@ import com.geozelot.homer.data.db.dao.BookProgress
 import com.geozelot.homer.data.db.entity.BookEntity
 import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
+import com.geozelot.homer.data.library.IgnoredFolders
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.library.authorSortKey
 import com.geozelot.homer.data.library.decodeDocuments
@@ -46,15 +47,21 @@ internal data class EffectiveBook(
  */
 class LibraryFilterEngine @Inject constructor() {
 
-    /** Detection with user overrides applied (D2), hidden books filtered unless shown. */
+    /**
+     * Detection with user overrides applied (D2), hidden books filtered unless shown, and books
+     * under an [ignored] folder left out — always, whatever [showHidden] says: hidden is a choice
+     * about one book, ignoring a folder is a choice about what the library contains.
+     */
     internal fun effective(
         books: List<BookEntity>,
         overrides: List<BookOverrideEntity>,
         showHidden: Boolean,
+        ignored: List<String> = emptyList(),
         coverModel: (BookEntity) -> Any?,
     ): List<EffectiveBook> {
         val overrideByBook = overrides.associateBy { it.bookId }
         return books
+            .filterNot { IgnoredFolders.covers(ignored, it.id) }
             .map { book ->
                 val override = overrideByBook[book.id]
                 val effective = book.applyOverride(override)

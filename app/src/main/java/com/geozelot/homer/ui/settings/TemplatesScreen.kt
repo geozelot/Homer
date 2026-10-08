@@ -73,6 +73,7 @@ fun TemplatesScreen(
     val dirty by viewModel.templateDraftDirty.collectAsStateWithLifecycle()
     val preview by viewModel.templatePreview.collectAsStateWithLifecycle()
     val paths by viewModel.libraryPaths.collectAsStateWithLifecycle()
+    val ignored by viewModel.ignoredFolders.collectAsStateWithLifecycle()
 
     // Which row's folder is being picked, by index — null when the picker is closed.
     var picking by remember { mutableStateOf<Int?>(null) }
@@ -94,6 +95,15 @@ fun TemplatesScreen(
     }
 
     SettingsScaffold(stringResource(R.string.set_templates_title), onBack, modifier) {
+        IgnoredFoldersSection(
+            ignored = ignored,
+            listFolders = viewModel::listLibraryFolders,
+            onIgnore = viewModel::ignoreFolder,
+            onStopIgnoring = viewModel::stopIgnoringFolder,
+        )
+
+        SettingsDivider()
+
         SettingsSectionHeader(stringResource(R.string.set_templates_patterns_header))
         SettingsExplanation(stringResource(R.string.set_templates_lead))
 

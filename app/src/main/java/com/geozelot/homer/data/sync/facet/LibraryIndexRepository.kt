@@ -13,6 +13,7 @@ import com.geozelot.homer.data.db.dao.BookDao
 import com.geozelot.homer.data.db.dao.BookOverrideDao
 import com.geozelot.homer.data.db.dao.BookmarkDao
 import com.geozelot.homer.data.db.dao.ChapterDao
+import com.geozelot.homer.data.library.IgnoredFolders
 import com.geozelot.homer.data.library.LibraryMaintenance
 import com.geozelot.homer.data.library.Restriction
 import com.geozelot.homer.data.library.ScopedTemplate
@@ -72,6 +73,7 @@ class LibraryIndexRepository @Inject constructor(
     private val webDavClient: WebDavClient,
     private val coverCache: CoverCache,
     private val json: Json,
+    private val ignoredFolders: IgnoredFolders,
 ) {
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
@@ -297,6 +299,7 @@ class LibraryIndexRepository @Inject constructor(
                 FacetMapping.correctionOf(overrides[id], cuts[id].orEmpty(), deviceId)?.let { id to it }
             }.toMap(),
             templates = localTemplateRules(deviceId),
+            ignoredFolders = localIgnoreRule(deviceId),
         )
         val result = store.save(LibraryFacets.CORRECTIONS_FILE, CorrectionsFacet.serializer()) { remote ->
             FacetMerge.corrections(local, remote.valueOr(CorrectionsFacet()))
@@ -397,6 +400,7 @@ class LibraryIndexRepository @Inject constructor(
             // adopting it after would parse this pull under the old rules and the next one under
             // the new.
             adoptTemplates(corrections)
+            adoptIgnoredFolders(corrections)
             if (anyChanged) apply(structure, derived, corrections)
             true
         } catch (e: CancellationException) {
@@ -582,7 +586,11 @@ class LibraryIndexRepository @Inject constructor(
                 books = structure,
             ),
             derived = DerivedFacet(books = derived),
-            corrections = CorrectionsFacet(books = corrections, templates = localTemplateRules(deviceId)),
+            corrections = CorrectionsFacet(
+                books = corrections,
+                templates = localTemplateRules(deviceId),
+                ignoredFolders = localIgnoreRule(deviceId),
+            ),
         )
     }
 
@@ -703,6 +711,25 @@ class LibraryIndexRepository @Inject constructor(
         }
         librarySettings.setPathTemplates(lines, editedAt = newest)
         Log.i(TAG, "adopted templates: ${corrections.templates.size} shared scope(s), ${lines.size} pattern(s) in force")
+    }
+
+    /**
+     * This device's ignored folders as the shared index carries them, or null if nobody here has
+     * ever set them. Stamped with when they were stored, not "now", for the reason
+     * [localTemplateRules] gives.
+     */
+    private suspend fun localIgnoreRule(deviceId: String): IgnoreRule? {
+        val editedAt = ignoredFolders.editedAt.first()
+        if (editedAt == 0L) return null
+        return IgnoreRule(folders = ignoredFolders.folders.first(), editedAt = editedAt, by = deviceId)
+    }
+
+    /** Takes on the shared ignore list when it is newer than this device's. Whole list, newest wins. */
+    private suspend fun adoptIgnoredFolders(corrections: CorrectionsFacet) {
+        val rule = corrections.ignoredFolders ?: return
+        if (rule.editedAt <= ignoredFolders.editedAt.first()) return
+        ignoredFolders.set(rule.folders, editedAt = rule.editedAt)
+        Log.i(TAG, "adopted ${rule.folders.size} ignored folder(s)")
     }
 
     private fun <T> FacetStore.Load<T>.valueOr(empty: T): T = (this as? FacetStore.Load.Present)?.value ?: empty

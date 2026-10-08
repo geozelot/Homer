@@ -221,6 +221,21 @@ data class CorrectionsFacet(
      * Defaulted, so an index written by 2.0.0 reads back as "no templates" rather than failing.
      */
     val templates: Map<String, TemplateRule> = emptyMap(),
+    /**
+     * The folders nobody's crawl should read — see `IgnoredFolders`. One list, newest edit winning:
+     * it is one decision about the whole tree, not one per folder.
+     *
+     * Nullable and defaulted, so an index written before it existed reads back as "no opinion".
+     */
+    val ignoredFolders: IgnoreRule? = null,
+)
+
+/** The ignored-folder list, and when and where it was last set. */
+@Serializable
+data class IgnoreRule(
+    val folders: List<String> = emptyList(),
+    val editedAt: Long = 0,
+    val by: String? = null,
 )
 
 /**

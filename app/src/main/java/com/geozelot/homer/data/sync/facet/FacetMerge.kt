@@ -151,6 +151,8 @@ object FacetMerge {
                 else -> l
             }
         }
-        return CorrectionsFacet(books = merged, templates = rules)
+        // The ignore list is one decision about the whole tree, so the whole list goes newest-wins.
+        val ignored = listOfNotNull(local.ignoredFolders, remote.ignoredFolders).maxByOrNull { it.editedAt }
+        return CorrectionsFacet(books = merged, templates = rules, ignoredFolders = ignored)
     }
 }

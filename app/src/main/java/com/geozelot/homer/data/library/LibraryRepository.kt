@@ -81,7 +81,8 @@ class LibraryRepository @Inject constructor(
             // Read once and used twice: the crawl parses what it discovers through them, and the
             // re-derive below brings everything else into line with them.
             val templates = templateApplier.activeTemplates()
-            val result = scanner.scan(root, incremental, System.currentTimeMillis(), templates) { dirs, books ->
+            val ignored = librarySettings.ignoredFolders.first()
+            val result = scanner.scan(root, incremental, System.currentTimeMillis(), templates, ignored) { dirs, books ->
                 _scanState.value = ScanState.Scanning(dirs, books)
             }
             // A scan is expected to leave the library as up to date as Homer can make it, and that

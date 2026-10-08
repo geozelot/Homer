@@ -43,4 +43,11 @@ interface CrawlDirDao {
      */
     @Upsert
     suspend fun upsertAll(dirs: List<CrawlDirEntity>)
+
+    /**
+     * Forgets the stored ETags of [paths], so the next scan lists them instead of skipping them as
+     * unchanged. A handful at a time — the folders above one that was ignored or un-ignored.
+     */
+    @Query("DELETE FROM crawl_dirs WHERE path IN (:paths)")
+    suspend fun deleteByPaths(paths: List<String>)
 }

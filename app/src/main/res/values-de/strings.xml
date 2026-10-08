@@ -421,7 +421,7 @@
     <string name="set_privacy_device_header">DIESES GERÄT</string>
     <string name="set_privacy_server_header">DEIN SERVER</string>
     <string name="set_privacy_online_header">ONLINE-ABFRAGEN</string>
-    <string name="set_privacy_online_note">Homer kann Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — nach einem Cover fragen, wenn ein Buch keines hat. Standardmäßig aus. Der Schalter liegt auf der Bibliotheksseite, denn er bewirkt nur etwas auf dem Gerät, das die Bibliothek pflegt.</string>
+    <string name="set_privacy_online_note">Homer kann Open Library (openlibrary.org, betrieben vom Internet Archive) — einen Dritten — nach einem Cover fragen, wenn ein Buch keines hat. Standardmäßig aus. Der Schalter liegt auf der Pflege-Seite, denn er bewirkt nur etwas auf dem Gerät, das die Bibliothek pflegt.</string>
     <string name="set_privacy_statement_summary">Was Homer speichert und was er nie sendet</string>
 
     <!-- Settings: about -->
@@ -780,4 +780,17 @@
     <string name="diag_read_failed">Logs konnten nicht gelesen werden: %1$s</string>
     <string name="diag_empty">Keine Logzeilen erfasst. Problem reproduzieren, dann auf Aktualisieren tippen.</string>
     <string name="settings_storage_selected_folder">gewählter Ordner</string>
+    <!-- Ignored folders, on the Reading folder names page. -->
+    <string name="set_ignore_header">IGNORIERTE ORDNER</string>
+    <string name="set_ignore_lead">Homer liest diese Ordner beim Durchsuchen nicht, also gelangt nichts daraus in die Bibliothek — praktisch für Neuzugänge, die noch aufgeräumt werden müssen. Bücher, die die Bibliothek aus einem ignorierten Ordner schon hat, werden ausgeblendet, nicht gelöscht, und kommen mit ihrem Fortschritt zurück, sobald der Ordner wieder gelesen wird.</string>
+    <string name="set_ignore_none">Kein Ordner wird ignoriert.</string>
+    <string name="set_ignore_add">Ordner ignorieren…</string>
+    <string name="set_ignore_remove_cd">%1$s wieder lesen</string>
+    <string name="set_ignore_next_scan">Gilt für jedes Gerät dieser Bibliothek. Das Regal folgt sofort, der Index beim nächsten Durchsuchen.</string>
+    <string name="ignore_picker_title">Ordner ignorieren</string>
+    <string name="ignore_picker_loading">Ordner wird gelesen…</string>
+    <string name="ignore_picker_failed">Der Server ist nicht erreichbar.</string>
+    <string name="ignore_picker_empty">Hier sind keine Ordner.</string>
+    <string name="ignore_picker_ignored">ignoriert</string>
+    <string name="ignore_picker_use">Diesen Ordner ignorieren</string>
 </resources>

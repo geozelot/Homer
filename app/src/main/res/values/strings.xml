@@ -449,7 +449,7 @@
     <string name="set_privacy_device_header">THIS DEVICE</string>
     <string name="set_privacy_server_header">YOUR SERVER</string>
     <string name="set_privacy_online_header">ONLINE LOOKUPS</string>
-    <string name="set_privacy_online_note">Homer can ask Open Library (openlibrary.org, run by the Internet Archive) — a third party — for a cover when a book has none. Off by default. The switch is on the Library page, because it only does anything on the device that maintains the library.</string>
+    <string name="set_privacy_online_note">Homer can ask Open Library (openlibrary.org, run by the Internet Archive) — a third party — for a cover when a book has none. Off by default. The switch is on the Upkeep page, because it only does anything on the device that maintains the library.</string>
     <string name="set_privacy_statement_summary">What Homer stores, and what it never sends</string>
 
     <!-- Settings: about -->
@@ -815,4 +815,17 @@
     <string name="diag_read_failed">Could not read logs: %1$s</string>
     <string name="diag_empty">No log lines captured. Reproduce the problem, then tap Refresh.</string>
     <string name="settings_storage_selected_folder">selected folder</string>
+    <!-- Ignored folders, on the Reading folder names page. -->
+    <string name="set_ignore_header">IGNORED FOLDERS</string>
+    <string name="set_ignore_lead">Homer does not read these folders when it scans, so nothing in them reaches the library — useful for new additions that still need tidying. Books the library already has from an ignored folder are hidden, not deleted, and come back with their progress when the folder is read again.</string>
+    <string name="set_ignore_none">No folder is ignored.</string>
+    <string name="set_ignore_add">Ignore a folder…</string>
+    <string name="set_ignore_remove_cd">Read %1$s again</string>
+    <string name="set_ignore_next_scan">Shared with every device on this library. The shelf follows at once; the index at the next scan.</string>
+    <string name="ignore_picker_title">Ignore a folder</string>
+    <string name="ignore_picker_loading">Reading the folder…</string>
+    <string name="ignore_picker_failed">Could not reach the server.</string>
+    <string name="ignore_picker_empty">No folders in here.</string>
+    <string name="ignore_picker_ignored">ignored</string>
+    <string name="ignore_picker_use">Ignore this folder</string>
 </resources>
