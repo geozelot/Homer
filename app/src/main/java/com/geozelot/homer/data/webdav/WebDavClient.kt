@@ -50,7 +50,7 @@ class WebDavClient @Inject constructor(
             client.newCall(request).execute().use { response ->
                 if (response.code == 401) throw IOException("Unauthorized (401) — app password may be revoked")
                 if (response.code != 207) throw IOException("PROPFIND failed: HTTP ${response.code}")
-                val stream = response.body?.byteStream() ?: throw IOException("Empty PROPFIND response")
+                val stream = response.body.byteStream()
                 parseMultistatus(stream, credentials)
             }
         }
@@ -93,7 +93,7 @@ class WebDavClient @Inject constructor(
             when {
                 response.code == 304 -> DavRead.NotModified
                 response.code == 404 -> DavRead.Absent
-                response.isSuccessful -> DavRead.Body(response.body?.string().orEmpty(), response.header("ETag"))
+                response.isSuccessful -> DavRead.Body(response.body.string(), response.header("ETag"))
                 else -> throw IOException("GET failed: HTTP ${response.code}")
             }
         }
@@ -159,7 +159,7 @@ class WebDavClient @Inject constructor(
                     android.util.Log.d(TAG, "owner probe '$relativePath': HTTP ${response.code}")
                     return@use null
                 }
-                val text = response.body?.string().orEmpty()
+                val text = response.body.string()
                 // Match any namespace prefix: <oc:owner-id>login</oc:owner-id>.
                 val owner = Regex("owner-id[^>]*>([^<]+)<").find(text)
                     ?.groupValues?.getOrNull(1)?.trim()?.ifBlank { null }
@@ -185,7 +185,7 @@ class WebDavClient @Inject constructor(
         client.newCall(request).execute().use { response ->
             when {
                 response.code == 404 -> null
-                response.isSuccessful -> response.body?.bytes()
+                response.isSuccessful -> response.body.bytes()
                 else -> throw IOException("GET failed: HTTP ${response.code}")
             }
         }

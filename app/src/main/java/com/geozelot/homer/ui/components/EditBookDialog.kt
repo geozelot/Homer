@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Rule
+import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -274,7 +274,7 @@ fun EditBookDialog(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Line)
                     HomerTextButton(onClick = open, contentPadding = SettingsActionPadding) {
                         Icon(
-                            Icons.Filled.Rule,
+                            Icons.AutoMirrored.Filled.Rule,
                             contentDescription = null,
                             tint = Amber,
                             modifier = Modifier.size(15.dp),

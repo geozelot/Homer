@@ -235,9 +235,13 @@ class PlaybackService : MediaLibraryService() {
                         }
                     }
                     .build()
-            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                .setAvailableSessionCommands(sessionCommands)
-                .build()
+            // Every player command, exactly as the session builder used to default to. Its
+            // replacement takes the controller and narrows the defaults for an untrusted one —
+            // a watch app, say — which is a change of behaviour nobody asked for.
+            return MediaSession.ConnectionResult.accept(
+                sessionCommands,
+                MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS,
+            )
         }
 
         override fun onCustomCommand(

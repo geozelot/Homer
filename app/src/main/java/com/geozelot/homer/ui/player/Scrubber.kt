@@ -29,7 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -292,21 +292,21 @@ internal fun PositionLine(
     timeLeftMs: () -> Long?,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val line = buildString {
         if (chapterCount > 0) {
             // The number as a string, unpadded: the picker pads its numbers so twenty rows line
             // up in columns, and this is one line under a title where "Chapter 07" would just
             // look like a typo.
-            append(context.getString(R.string.player_chapter_of, "$chapterNumber", chapterCount))
+            append(resources.getString(R.string.player_chapter_of, "$chapterNumber", chapterCount))
         }
         timeLeftMs()?.let {
             if (isNotEmpty()) append(" · ")
             append(
                 if (it <= 0) {
-                    context.getString(R.string.status_finished)
+                    resources.getString(R.string.status_finished)
                 } else {
-                    context.getString(R.string.time_left, formatCompactDuration(it))
+                    resources.getString(R.string.time_left, formatCompactDuration(it))
                 },
             )
         }

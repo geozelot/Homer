@@ -117,7 +117,7 @@ class DownloadWorker @AssistedInject constructor(
                 withContext(Dispatchers.IO) {
                     client.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.relativePath}")
-                        val body = response.body ?: throw IOException("empty body for ${file.relativePath}")
+                        val body = response.body
                         storage.writeStream(file.relativePath) { output -> body.byteStream().use { it.copyTo(output) } }
                     }
                 }

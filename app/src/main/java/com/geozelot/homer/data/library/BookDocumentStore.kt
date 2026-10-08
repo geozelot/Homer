@@ -68,7 +68,7 @@ class BookDocumentStore @Inject constructor(
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code} for $path")
-                    val body = response.body ?: throw IOException("empty body for $path")
+                    val body = response.body
                     // Streamed into place by the storage area, which writes a `.part` sibling and
                     // moves it — so a connection dropped halfway can never leave a truncated file
                     // that looks downloaded and then fails to open for ever.

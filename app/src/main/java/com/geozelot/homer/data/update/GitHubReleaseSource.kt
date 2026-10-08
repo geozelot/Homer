@@ -106,7 +106,8 @@ class GitHubReleaseSource @Inject constructor(
         val body = try {
             client.newCall(request).execute().use { response ->
                 when {
-                    response.isSuccessful -> response.body?.string()
+                    response.isSuccessful -> response.body.string()
+                        .ifEmpty { throw UpdateCheckException(UpdateFailure.NETWORK, "empty response") }
                     // GitHub reports the hourly cap as 403 (older) or 429 (newer).
                     response.code == 403 || response.code == 429 ->
                         throw UpdateCheckException(UpdateFailure.RATE_LIMITED, "HTTP ${response.code}")
@@ -118,7 +119,7 @@ class GitHubReleaseSource @Inject constructor(
             throw e
         } catch (e: IOException) {
             throw UpdateCheckException(UpdateFailure.NETWORK, e.message ?: "network failure")
-        } ?: throw UpdateCheckException(UpdateFailure.NETWORK, "empty response")
+        }
 
         val releases = try {
             json.decodeFromString<List<ApiRelease>>(body)

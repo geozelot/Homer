@@ -2,6 +2,7 @@ package com.geozelot.homer.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Resources
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -59,7 +61,7 @@ fun PlaybackSettingsScreen(
     val sleepExtend by viewModel.sleepExtend.collectAsStateWithLifecycle()
     val sleepFade by viewModel.sleepFadeOutSeconds.collectAsStateWithLifecycle()
     val downloadOnPlay by viewModel.downloadOnPlay.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val resources = LocalResources.current
 
     var customSeek by remember { mutableStateOf(false) }
     var customRewind by remember { mutableStateOf(false) }
@@ -75,7 +77,7 @@ fun PlaybackSettingsScreen(
             chipLabel = stringResource(R.string.settings_seconds, seekSeconds),
             options = SEEK_OPTIONS,
             selected = seekSeconds,
-            labelOf = { context.getString(R.string.settings_seconds, it) },
+            labelOf = { resources.getString(R.string.settings_seconds, it) },
             onSelect = viewModel::setSeekSeconds,
             description = stringResource(R.string.set_playback_skip_desc),
             onCustom = { customSeek = true },
@@ -91,9 +93,9 @@ fun PlaybackSettingsScreen(
             selected = autoRewind,
             labelOf = {
                 if (it == 0) {
-                    context.getString(R.string.settings_off)
+                    resources.getString(R.string.settings_off)
                 } else {
-                    context.getString(R.string.settings_seconds, it)
+                    resources.getString(R.string.settings_seconds, it)
                 }
             },
             onSelect = viewModel::setAutoRewindSeconds,
@@ -111,9 +113,9 @@ fun PlaybackSettingsScreen(
             selected = rewindOnReturn,
             labelOf = {
                 if (it == 0) {
-                    context.getString(R.string.settings_off)
+                    resources.getString(R.string.settings_off)
                 } else {
-                    context.getString(R.string.settings_seconds, it)
+                    resources.getString(R.string.settings_seconds, it)
                 }
             },
             onSelect = viewModel::setRewindOnReturnSeconds,
@@ -144,16 +146,16 @@ fun PlaybackSettingsScreen(
             chipLabel = stringResource(sleepExtendLabel(sleepExtend)),
             options = SLEEP_EXTEND_OPTIONS,
             selected = sleepExtend,
-            labelOf = { context.getString(sleepExtendLabel(it)) },
+            labelOf = { resources.getString(sleepExtendLabel(it)) },
             onSelect = viewModel::setSleepExtend,
             description = stringResource(R.string.set_playback_shake_desc),
         )
         SettingsDropdownRow(
             label = stringResource(R.string.player_fade_out),
-            chipLabel = secondsOrOff(context, sleepFade),
+            chipLabel = secondsOrOff(resources, sleepFade),
             options = SLEEP_FADE_OPTIONS,
             selected = sleepFade,
-            labelOf = { secondsOrOff(context, it) },
+            labelOf = { secondsOrOff(resources, it) },
             onSelect = viewModel::setSleepFadeOutSeconds,
             description = stringResource(R.string.set_playback_fade_desc),
             onCustom = { customFade = true },
@@ -224,11 +226,11 @@ fun PlaybackSettingsScreen(
 }
 
 /** "off" for zero, "%ds" otherwise — the same phrasing wherever a duration can be nothing. */
-private fun secondsOrOff(context: Context, seconds: Int): String =
+private fun secondsOrOff(resources: Resources, seconds: Int): String =
     if (seconds == 0) {
-        context.getString(R.string.settings_off)
+        resources.getString(R.string.settings_off)
     } else {
-        context.getString(R.string.settings_seconds, seconds)
+        resources.getString(R.string.settings_seconds, seconds)
     }
 
 private fun sleepExtendLabel(mode: String): Int = when (mode) {

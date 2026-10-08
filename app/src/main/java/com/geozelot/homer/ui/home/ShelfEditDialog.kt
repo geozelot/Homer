@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -158,7 +158,7 @@ internal fun ShelfEditDialog(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Line)
                     HomerTextButton(onClick = open, contentPadding = SettingsActionPadding) {
                         Icon(
-                            Icons.Filled.Rule,
+                            Icons.AutoMirrored.Filled.Rule,
                             contentDescription = null,
                             tint = Amber,
                             modifier = Modifier.size(15.dp),

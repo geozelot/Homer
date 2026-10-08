@@ -257,8 +257,8 @@ class DurationEnricher @Inject constructor(
                     }
                 }
             }
-            if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre!!)
-            if (needsLanguage && language != null) bookDao.updateLanguage(bookId, language!!)
+            if (needsGenre && genre != null) bookDao.updateGenre(bookId, genre)
+            if (needsLanguage && language != null) bookDao.updateLanguage(bookId, language)
             // No genre in the tags, or the probe itself failed: settle it so the next open
             // doesn't stream this book's first file all over again for the same answer.
             if (((needsGenre && genre == null) || (needsLanguage && language == null) ||
@@ -271,7 +271,7 @@ class DurationEnricher @Inject constructor(
             // Persist embedded chapters (empty = none found) and settle the tier so we don't
             // re-probe on every open.
             if (needsChapters && firstProbe != null) {
-                var marks = firstProbe!!.chapters
+                var marks = firstProbe.chapters
                 // ID3 CHAP covers MP3; for MP4/M4B (no ID3 chapters) fall back to the Nero
                 // `chpl` parser over the same authed source.
                 val first = files.firstOrNull()

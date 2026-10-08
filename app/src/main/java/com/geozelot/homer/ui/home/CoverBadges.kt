@@ -214,8 +214,8 @@ internal fun BadgeText(text: String, size: BadgeSize, color: Color = Parchment) 
 @Composable
 internal fun OfflineBadge(
     corner: CoverCorner,
-    count: String? = null,
     modifier: Modifier = Modifier,
+    count: String? = null,
     size: BadgeSize = BadgeSize.LARGE,
 ) {
     CoverBadge(corner, modifier, size) {
@@ -250,9 +250,9 @@ internal fun OfflineBadge(
 @Composable
 internal fun ShelfBadge(
     isCollection: Boolean,
+    modifier: Modifier = Modifier,
     count: Int? = null,
     corner: CoverCorner = CoverCorner.TOP_START,
-    modifier: Modifier = Modifier,
     size: BadgeSize = BadgeSize.LARGE,
 ) {
     CoverBadge(corner, modifier, size) {
@@ -276,8 +276,8 @@ internal fun ShelfBadge(
 internal fun VolumeIndexBadge(
     /** Which number to show, or null to draw nothing — see `volumeIndexFor`. */
     index: Int?,
-    corner: CoverCorner = CoverCorner.TOP_START,
     modifier: Modifier = Modifier,
+    corner: CoverCorner = CoverCorner.TOP_START,
     size: BadgeSize = BadgeSize.LARGE,
 ) {
     if (index == null) return
@@ -347,8 +347,8 @@ private val CoverMenuDisc = 28.dp
 @Composable
 internal fun DurationBadge(
     text: String,
-    corner: CoverCorner = CoverCorner.BOTTOM_END,
     modifier: Modifier = Modifier,
+    corner: CoverCorner = CoverCorner.BOTTOM_END,
     size: BadgeSize = BadgeSize.MEDIUM,
 ) {
     CoverBadge(corner, modifier, size) { BadgeText(text, size) }

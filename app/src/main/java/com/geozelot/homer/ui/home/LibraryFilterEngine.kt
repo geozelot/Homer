@@ -8,7 +8,6 @@ import com.geozelot.homer.data.db.entity.BookOverrideEntity
 import com.geozelot.homer.data.db.entity.DownloadEntity
 import com.geozelot.homer.data.library.applyOverride
 import com.geozelot.homer.data.library.authorSortKey
-import com.geozelot.homer.data.library.decodeAuthors
 import com.geozelot.homer.data.library.decodeDocuments
 import com.geozelot.homer.data.library.decodeGenres
 import com.geozelot.homer.data.library.displayAuthors
@@ -114,8 +113,8 @@ class LibraryFilterEngine @Inject constructor() {
                 documents = decodeDocuments(book.documentFilePaths),
                 hasEdits = eff.hasEdits,
                 totalDurationMs = total,
-                timeLeftMs = if (measured) (total!! - elapsed!!).coerceAtLeast(0) else null,
-                progress = if (measured) (elapsed!!.toFloat() / total!!).coerceIn(0f, 1f) else null,
+                timeLeftMs = if (measured) (total - elapsed).coerceAtLeast(0) else null,
+                progress = if (measured) (elapsed.toFloat() / total).coerceIn(0f, 1f) else null,
                 lastPlayedAt = bookProgress?.updatedAt,
                 started = bookProgress?.started == true,
                 finishedOverride = eff.finishedOverride,

@@ -19,12 +19,12 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.BaseRenderer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.MetadataRetriever
 import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.id3.ChapterFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.inspector.MetadataRetriever
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -276,10 +276,12 @@ class DurationExtractor @Inject constructor(
      */
     suspend fun probeTags(mediaUri: String): Probe? = withContext(Dispatchers.IO) {
         try {
-            val future = MetadataRetriever.retrieveMetadata(
-                DefaultMediaSourceFactory(dataSourceFactory),
-                MediaItem.fromUri(mediaUri),
-            )
+            // One retriever per file: since Media3 1.8 it is an object that owns its internal player
+            // and has to be closed, where it used to be a static call.
+            val retriever = MetadataRetriever.Builder(context, MediaItem.fromUri(mediaUri))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .build()
+            val future = retriever.retrieveTrackGroups()
             try {
                 val groups = future.get(TAG_PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 // No track groups means the container never parsed — a structural failure, not an
@@ -310,6 +312,7 @@ class DurationExtractor @Inject constructor(
                 // Release the retriever's internal player, looper and open data source instead of
                 // letting an abandoned read linger until the OkHttp timeout.
                 future.cancel(true)
+                retriever.close()
             }
         } catch (e: Exception) {
             // Log.d (stripped from release by R8): the URL carries the account + book path.

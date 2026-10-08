@@ -16,12 +16,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -103,7 +104,7 @@ fun LibraryUpkeepScreen(
     var confirmRecheck by remember { mutableStateOf(false) }
 
     // Re-reads the clock so "scanned 12 minutes ago" keeps counting while the screen stays open.
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000)
@@ -355,7 +356,7 @@ private fun ScanRow(
         label = stringResource(R.string.lib_row_books),
         summary = when {
             scanning != null ->
-                scanProgressLine(LocalContext.current.resources, scanning.directoriesVisited, scanning.booksFound)
+                scanProgressLine(LocalResources.current, scanning.directoriesVisited, scanning.booksFound)
             progress?.pass == IndexPass.ARTWORK && progress.total > 0 ->
                 stringResource(R.string.sync_fetching_covers, progress.done, progress.total)
             progress?.pass == IndexPass.LENGTHS && progress.total > 0 ->
@@ -471,7 +472,7 @@ private fun ReaderContents(
         label = stringResource(R.string.lib_reader_refresh),
         summary = stringResource(R.string.lib_reader_refresh_summary),
     ) {
-        Box(modifier = Modifier.width(PassActionWidth()), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.width(passActionWidth()), contentAlignment = Alignment.Center) {
             if (reading) {
                 RowSpinner()
             } else {
@@ -486,7 +487,7 @@ private fun ReaderContents(
 /**
  * One job in the queue: what it knows, and the one thing that would close the gap.
  *
- * The action is drawn to [PassActionWidth] — one width shared by all four passes — with its label
+ * The action is drawn to [passActionWidth] — one width shared by all four passes — with its label
  * CENTRED in it. Sized to its own word, each button was a different width at the trailing edge of
  * its row, so the four of them made a ragged column that had to be read one row at a time. Equal
  * width settles the box edges, which was the whole problem; left-anchoring the label as well made
@@ -504,7 +505,7 @@ private fun PassRow(
     busy: Boolean,
     onAction: () -> Unit,
 ) {
-    val width = PassActionWidth()
+    val width = passActionWidth()
     SettingsRow(label = label, summary = summary) {
         Box(modifier = Modifier.width(width), contentAlignment = Alignment.Center) {
             if (busy) {
@@ -531,7 +532,7 @@ private fun PassRow(
  * does not line up.
  */
 @Composable
-private fun PassActionWidth(): Dp = rememberActionWidth(
+private fun passActionWidth(): Dp = rememberActionWidth(
     listOf(
         stringResource(R.string.lib_action_scan),
         stringResource(R.string.lib_action_sync),

@@ -59,7 +59,7 @@ class LoginFlowClient @Inject constructor(
             if (!response.isSuccessful) {
                 throw IOException("Login init failed: HTTP ${response.code}")
             }
-            val body = response.body?.string() ?: throw IOException("Empty login init response")
+            val body = response.body.string().ifEmpty { throw IOException("Empty login init response") }
             val init = json.decodeFromString(LoginV2Init.serializer(), body)
             Log.d(TAG, "initiate OK: login=${init.login} pollEndpoint=${init.poll.endpoint}")
             init
@@ -81,8 +81,8 @@ class LoginFlowClient @Inject constructor(
             when {
                 response.code == 404 -> null // still waiting for the user
                 response.isSuccessful -> {
-                    val body = response.body?.string()
-                        ?: throw IOException("Empty login poll response")
+                    val body = response.body.string()
+                        .ifEmpty { throw IOException("Empty login poll response") }
                     Log.i(TAG, "poll OK: credentials received")
                     json.decodeFromString(LoginV2Poll.serializer(), body)
                 }

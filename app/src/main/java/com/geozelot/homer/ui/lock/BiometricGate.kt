@@ -30,12 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -63,6 +64,7 @@ fun BiometricGate(content: @Composable () -> Unit) {
     val viewModel: LockViewModel = hiltViewModel()
     val enabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val activity = remember(context) { context.findFragmentActivity() }
 
     var unlocked by rememberSaveable { mutableStateOf(false) }
@@ -102,8 +104,8 @@ fun BiometricGate(content: @Composable () -> Unit) {
         prompting = true
         authError = null
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(context.getString(R.string.lock_prompt_title))
-            .setSubtitle(context.getString(R.string.lock_prompt_subtitle))
+            .setTitle(resources.getString(R.string.lock_prompt_title))
+            .setSubtitle(resources.getString(R.string.lock_prompt_subtitle))
             .setAllowedAuthenticators(AUTHENTICATORS)
             .build()
         BiometricPrompt(

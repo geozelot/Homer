@@ -19,7 +19,10 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.geozelot.homer"
-    compileSdk = 36
+    // 37 to compile against: the current AndroidX (navigation, hilt, compose) will not build against
+    // less. targetSdk stays 36 below — compiling against newer APIs changes nothing at runtime, and
+    // opting into Android 17's behaviour is a separate decision with its own testing.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.geozelot.homer"
@@ -101,10 +104,8 @@ android.sourceSets.getByName("androidTest").assets.directories.add("$projectDir/
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-        // Adopt the future default (KT-73255): annotations without an explicit use-site target
-        // apply to the parameter AND the property/field. Silences the warnings on qualifier/DI
-        // annotations on constructor `val` params; harmless for Hilt (it reads the parameter).
-        freeCompilerArgs.add("-Xannotation-default-target=param-property")
+        // No -Xannotation-default-target any more: param-property is the default from Kotlin 2.4,
+        // and the compiler now warns that the flag is redundant.
     }
 }
 
@@ -128,7 +129,7 @@ dependencies {
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.work.runtime.ktx)
@@ -149,6 +150,9 @@ dependencies {
     implementation(libs.androidx.media3.extractor)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource.okhttp)
+    // MetadataRetriever left the exoplayer module for its own in Media3 1.8: the decoder-free reads of
+    // cover art and tags (MetadataExtractor, DurationExtractor.probeTags) come from here now.
+    implementation(libs.androidx.media3.inspector)
 
     implementation(libs.okhttp)
 

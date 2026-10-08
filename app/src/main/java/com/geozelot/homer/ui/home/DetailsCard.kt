@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -430,6 +431,7 @@ fun SeriesDetailsCard(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val locale = LocalConfiguration.current.locales[0]
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -529,9 +531,9 @@ fun SeriesDetailsCard(
                     stringResource(R.string.details_offline),
                     series.books.count { it.isDownloaded }.let { done ->
                         when (done) {
-                            0 -> context.getString(R.string.details_offline_none)
-                            series.books.size -> context.getString(R.string.details_offline_all)
-                            else -> context.getString(R.string.details_offline_some, done, series.books.size)
+                            0 -> resources.getString(R.string.details_offline_none)
+                            series.books.size -> resources.getString(R.string.details_offline_all)
+                            else -> resources.getString(R.string.details_offline_some, done, series.books.size)
                         }
                     },
                 )
@@ -539,9 +541,9 @@ fun SeriesDetailsCard(
                     stringResource(R.string.details_started),
                     series.books.count { it.started }.let { started ->
                         if (started == 0) {
-                            context.getString(R.string.details_started_none)
+                            resources.getString(R.string.details_started_none)
                         } else {
-                            context.getString(R.string.details_started_some, started, series.books.size)
+                            resources.getString(R.string.details_started_some, started, series.books.size)
                         }
                     },
                 )

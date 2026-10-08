@@ -36,7 +36,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +48,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -398,6 +398,7 @@ private fun ArrangeField(
 ) {
     // Resolved through the context because `labelOf` is a plain lambda, not a composable.
     val context = LocalContext.current
+    val resources = LocalResources.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -431,7 +432,7 @@ private fun ArrangeField(
             label = stringResource(shelving.label),
             options = LibraryShelving.entries.toList(),
             selected = shelving,
-            labelOf = { context.getString(it.label) },
+            labelOf = { resources.getString(it.label) },
             onSelect = onShelfChange,
             modifier = Modifier.weight(1f),
             icon = Icons.Filled.Category,
@@ -443,7 +444,7 @@ private fun ArrangeField(
             label = stringResource(series.label),
             options = LibraryDepth.entries.toList(),
             selected = series,
-            labelOf = { context.getString(it.label) },
+            labelOf = { resources.getString(it.label) },
             onSelect = onSeriesChange,
             modifier = Modifier.weight(1f),
             icon = Icons.Filled.Layers,
@@ -456,7 +457,7 @@ private fun ArrangeField(
             label = stringResource(sort.label),
             options = LibrarySort.offeredFor(shelving),
             selected = sort,
-            labelOf = { context.getString(it.label) },
+            labelOf = { resources.getString(it.label) },
             onSelect = onSortChange,
             modifier = Modifier.weight(1f),
             icon = Icons.AutoMirrored.Filled.Sort,

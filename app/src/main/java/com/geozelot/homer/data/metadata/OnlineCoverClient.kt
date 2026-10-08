@@ -65,8 +65,10 @@ class OnlineCoverClient @Inject constructor(
                 // A refusal from the server IS an answer — it was reached. Only never reaching it
                 // leaves the question open.
                 if (!resp.isSuccessful) return@withContext Result.NotFound
-                resp.body?.string()
-            } ?: return@withContext Result.NotFound
+                // An empty answer is still "no such cover", as a missing body was before OkHttp 5
+                // made bodies non-null — not a parse failure to be counted as an outage.
+                resp.body.string().ifEmpty { return@withContext Result.NotFound }
+            }
 
             val coverId = json.decodeFromString<SearchResult>(body).docs.firstOrNull()?.cover_i
                 ?: return@withContext Result.NotFound
@@ -75,7 +77,7 @@ class OnlineCoverClient @Inject constructor(
             // ids, so request ?default=false to get a 404 instead and treat it as "no cover".
             val coverUrl = "https://covers.openlibrary.org/b/id/$coverId-L.jpg?default=false"
             shortFused.newCall(Request.Builder().url(coverUrl).build()).execute().use { resp ->
-                val bytes = if (resp.isSuccessful) resp.body?.bytes() else null
+                val bytes = if (resp.isSuccessful) resp.body.bytes() else null
                 if (bytes == null || bytes.isEmpty()) Result.NotFound else Result.Found(bytes)
             }
         } catch (e: CancellationException) {

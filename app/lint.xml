@@ -10,4 +10,10 @@
     <!-- Homer ships as an APK (GitHub releases, F-Droid), never as a Play app bundle, so there are
          no language splits for a per-app locale change to have to download. -->
     <issue id="AppBundleLocaleChanges" severity="ignore" />
+    <!-- Compose's newer rule prefers LocalWindowInfo.containerSize to Configuration's screen size.
+         Homer's own display-size setting (ui/settings/DisplayScale.kt) rescales exactly these
+         Configuration fields alongside its density override, and the cards, sheets and dialogs that
+         size themselves from them were laid out and checked against that. Moving them is a layout
+         change to make with a device in hand, not a lint fix. -->
+    <issue id="ConfigurationScreenWidthHeight" severity="ignore" />
 </lint>

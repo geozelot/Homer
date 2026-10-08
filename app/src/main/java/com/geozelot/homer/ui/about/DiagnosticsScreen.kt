@@ -1,5 +1,6 @@
 package com.geozelot.homer.ui.about
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
@@ -22,17 +23,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +47,7 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface1
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -54,8 +58,10 @@ import kotlinx.coroutines.withContext
 @Composable
 fun DiagnosticsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    var reloadKey by remember { mutableStateOf(0) }
+    val resources = LocalResources.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    var reloadKey by remember { mutableIntStateOf(0) }
     val log by produceState(initialValue = stringResource(R.string.diag_reading_logs), reloadKey) {
         value = captureLog(context)
     }
@@ -77,10 +83,14 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             Text(stringResource(R.string.diag_title), style = SerifTitle.copy(fontSize = 22.sp), color = Parchment, modifier = Modifier.padding(start = 4.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            HomerTextButton(onClick = { clipboard.setText(AnnotatedString(log)) }) { Text(stringResource(R.string.action_copy)) }
+            HomerTextButton(onClick = {
+                scope.launch {
+                    clipboard.setClipEntry(ClipData.newPlainText(resources.getString(R.string.diag_title), log).toClipEntry())
+                }
+            }) { Text(stringResource(R.string.action_copy)) }
             HomerTextButton(onClick = {
                 val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, log)
-                context.startActivity(Intent.createChooser(intent, context.getString(R.string.diag_share_chooser)))
+                context.startActivity(Intent.createChooser(intent, resources.getString(R.string.diag_share_chooser)))
             }) { Text(stringResource(R.string.action_share)) }
             HomerTextButton(onClick = { reloadKey++ }) { Text(stringResource(R.string.action_refresh)) }
         }

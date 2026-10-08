@@ -82,7 +82,7 @@ class UpdateInstaller @Inject constructor(
                     if (!response.isSuccessful) {
                         throw UpdateInstallException(UpdateFailure.DOWNLOAD, "HTTP ${response.code}")
                     }
-                    val body = response.body ?: throw UpdateInstallException(UpdateFailure.DOWNLOAD, "empty body")
+                    val body = response.body
                     // Content-Length beats the API's asset size when both are present: it is what
                     // this particular response will actually deliver.
                     val total = body.contentLength().takeIf { it > 0 } ?: release.apkSizeBytes

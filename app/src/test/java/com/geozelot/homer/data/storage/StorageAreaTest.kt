@@ -127,7 +127,7 @@ class FinalizeByCopyTest {
         assertTrue(
             "the message should describe what it found: ${thrown?.message}",
             thrown?.message?.contains("target=a directory") == true &&
-                thrown?.message?.contains("part=3 bytes") == true,
+                thrown.message?.contains("part=3 bytes") == true,
         )
     }
 }

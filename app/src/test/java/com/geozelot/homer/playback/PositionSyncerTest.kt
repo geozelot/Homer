@@ -4,6 +4,7 @@ import com.geozelot.homer.data.db.dao.BookProgress
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
 import com.geozelot.homer.data.db.entity.PlaybackStateEntity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
  * important of all" was silently dropped whenever the freeze won that race. Forced flushes now
  * skip the debounce; everything else here guards the coalescing that ordinary flushes rely on.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PositionSyncerTest {
 
     private class RecordingDao(private val writeDelayMs: Long = 0) : PlaybackStateDao {

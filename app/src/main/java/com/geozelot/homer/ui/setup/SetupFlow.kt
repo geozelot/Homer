@@ -40,7 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geozelot.homer.R
 import com.geozelot.homer.data.library.SetupAction
@@ -116,7 +116,7 @@ fun SetupFlow(
     // Null only on the first screen of a first run, where there is genuinely nowhere to go and the
     // arrow should not be drawn at all.
     val goBack: (() -> Unit)? = when {
-        state.canGoBack -> ({ viewModel.back(); Unit })
+        state.canGoBack -> ({ viewModel.back() })
         firstRun && state.step == SetupStep.WHERE -> null
         else -> onDone
     }

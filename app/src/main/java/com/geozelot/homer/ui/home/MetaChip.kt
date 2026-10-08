@@ -284,7 +284,7 @@ internal fun MetaChipSlot(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             chips.forEach { (kind, values) ->
-                MetaChip(kind, values, ctx, onFilter, fill, if (fill) Modifier.weight(1f) else Modifier)
+                MetaChip(kind, values, ctx, onFilter, if (fill) Modifier.weight(1f) else Modifier, fill = fill)
             }
             if (trailing.isNullOrBlank()) return@Row
             Text(
@@ -308,7 +308,7 @@ internal fun MetaChipSlot(
         // order [metaChipFor] returns them in and the order the details card lists them in.
         chips.take(lines).forEach { (kind, values) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MetaChip(kind, values, ctx, onFilter, fill, chipModifier)
+                MetaChip(kind, values, ctx, onFilter, chipModifier, fill = fill)
             }
         }
     }
@@ -320,9 +320,9 @@ private fun MetaChip(
     values: List<String>,
     ctx: RowContext,
     onFilter: (MetaChipKind, String) -> Unit,
+    modifier: Modifier = Modifier,
     /** Stretched to its slot — see [MetaChipSlot]'s `fill`. The "+N" then rides at the far end. */
     fill: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     // Resolved here rather than by the caller: a chip's VALUE is what a filter needs — a genre key,
