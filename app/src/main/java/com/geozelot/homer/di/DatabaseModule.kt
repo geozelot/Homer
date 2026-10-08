@@ -16,6 +16,8 @@ import com.geozelot.homer.data.db.dao.ChapterDao
 import com.geozelot.homer.data.db.dao.CrawlDirDao
 import com.geozelot.homer.data.db.dao.DownloadDao
 import com.geozelot.homer.data.db.dao.PlaybackStateDao
+import com.geozelot.homer.data.db.entity.BookOverrideEntity
+import com.geozelot.homer.data.db.entity.EditFields
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -88,6 +90,34 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * Gives an override's correction its own clock, apart from the reader's — see [BookOverrideEntity].
+ *
+ * The existing stamp becomes the correction's too wherever the row is, or plausibly was, about the
+ * book: every row that carries a correction, and every row that carries nothing at all, which is
+ * what a cleared correction leaves behind and must go on shielding the book from the correction it
+ * cleared.
+ *
+ * A row that carries no correction but does say something about the reader — hidden, finished, a
+ * play mode — starts its correction clock at zero. That is the row the bug lived in: its stamp came
+ * from hiding the book, and carried over it would go on outranking every correction made before
+ * the hide. The cost of guessing wrong here is a cleared correction that also had a hide on it
+ * coming back once from another device, where it can be cleared again; the cost of the other guess
+ * is a book that never receives a fix, with nothing on screen to say so.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE book_overrides ADD COLUMN correctedAt INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL(
+            "UPDATE book_overrides SET correctedAt = updatedAt WHERE " + EditFields.CORRECTED +
+                " OR (hidden = 0 AND finished IS NULL AND downloadOnPlay IS NULL)",
+        )
+    }
+}
+
+/** Every step from schema 1, in order — one list, so the builder and the migration test agree. */
+val ALL_MIGRATIONS = listOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -100,7 +130,7 @@ object DatabaseModule {
             // were deleted with the rest of the v1 path, because 1.x was withdrawn when 2.0 landed.
             // From 2.0.0 onwards every step carries a real migration — the released version is
             // somebody's actual library now, and losing it is not a thing a version bump may do.
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(*ALL_MIGRATIONS.toTypedArray())
             .apply {
                 // Destructive fallback for a MISSING FORWARD MIGRATION stays a DEBUG-ONLY
                 // convenience. In a release build that case must fail loudly instead of silently

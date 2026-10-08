@@ -110,7 +110,8 @@ class EditFieldsTest {
         // ADDING A FIELD TO BookOverrideEntity BREAKS THIS until it is declared as one or the other.
         // That is the single question that kept getting answered by accident.
         val unaccounted = declaredFields(BookOverrideEntity::class.java) -
-            EditFields.CORRECTION_COLUMNS.toSet() - EditFields.READER_COLUMNS.toSet()
+            EditFields.CORRECTION_COLUMNS.toSet() - EditFields.READER_COLUMNS.toSet() -
+            EditFields.BOOKKEEPING_COLUMNS.toSet()
         assertEquals("unaccounted field(s) on BookOverrideEntity", emptyList<String>(), unaccounted)
     }
 
@@ -131,9 +132,11 @@ class EditFieldsTest {
     }
 
     @Test
-    fun `no column is claimed by both halves`() {
-        val both = EditFields.CORRECTION_COLUMNS.intersect(EditFields.READER_COLUMNS.toSet())
-        assertEquals(emptySet<String>(), both)
+    fun `no column is claimed by two sets`() {
+        val sets = listOf(EditFields.CORRECTION_COLUMNS, EditFields.READER_COLUMNS, EditFields.BOOKKEEPING_COLUMNS)
+        for ((i, a) in sets.withIndex()) {
+            for (b in sets.drop(i + 1)) assertEquals(emptySet<String>(), a.intersect(b.toSet()))
+        }
     }
 
     // ── the SQL says the same thing as the Kotlin ────────────────────────────────────────────
@@ -174,7 +177,51 @@ class EditFieldsTest {
     @Test
     fun `there is one accessor per named column`() {
         assertEquals(EditFields.CORRECTION_COLUMNS.size, EditFields.correctionArity)
+        assertEquals(EditFields.READER_COLUMNS.size, EditFields.readerArity)
         assertEquals(EditFields.DETECTED_COLUMNS.size, EditFields.detectedArity)
+    }
+
+    // ── the two halves are compared apart ────────────────────────────────────────────────────
+
+    /** One way to set each reader column — the independent witness, as [setCorrection] is. */
+    private val setReader: Map<String, (BookOverrideEntity) -> BookOverrideEntity> = mapOf(
+        "finished" to { it.copy(finished = true) },
+        "downloadOnPlay" to { it.copy(downloadOnPlay = false) },
+        "hidden" to { it.copy(hidden = true) },
+    )
+
+    @Test
+    fun `the reader map covers every reader column`() {
+        assertEquals(EditFields.READER_COLUMNS.toSet(), setReader.keys)
+    }
+
+    @Test
+    fun `each correction column changes the correction and nothing else`() {
+        for ((column, set) in setCorrection) {
+            assertFalse("$column was not seen as a correction", EditFields.sameCorrection(blank, set(blank)))
+            assertTrue("$column was seen as reader state", EditFields.sameReaderState(blank, set(blank)))
+        }
+    }
+
+    @Test
+    fun `each reader column changes the reader state and nothing else`() {
+        for ((column, set) in setReader) {
+            assertFalse("$column was not seen as reader state", EditFields.sameReaderState(blank, set(blank)))
+            assertTrue("$column was seen as a correction", EditFields.sameCorrection(blank, set(blank)))
+        }
+    }
+
+    @Test
+    fun `no row says the same as an empty one`() {
+        assertTrue(EditFields.sameCorrection(null, blank))
+        assertTrue(EditFields.sameReaderState(null, blank))
+    }
+
+    @Test
+    fun `the clocks belong to neither half`() {
+        val stamped = blank.copy(updatedAt = 5, correctedAt = 6)
+        assertTrue(EditFields.sameCorrection(blank, stamped))
+        assertTrue(EditFields.sameReaderState(blank, stamped))
     }
 
     // ── what must NOT count ─────────────────────────────────────────────────────────────────

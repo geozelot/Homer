@@ -54,12 +54,16 @@ object EditFields {
     )
 
     /**
-     * The rest of the override row: claims about the READER, never published to a shared folder.
+     * Claims about the READER, never published to a shared folder: they would say who has read what.
      *
-     * Listed rather than derived so the reflection guard has something to check against. `bookId` and
-     * `updatedAt` are bookkeeping; the other three are the ones that would say who has read what.
+     * Listed rather than derived so the reflection guard has something to check against.
      */
-    val READER_COLUMNS = listOf("bookId", "finished", "downloadOnPlay", "hidden", "updatedAt")
+    val READER_COLUMNS = listOf("finished", "downloadOnPlay", "hidden")
+
+    /**
+     * The rest of the override row: the key, and one clock per half — see [BookOverrideEntity].
+     */
+    val BOOKKEEPING_COLUMNS = listOf("bookId", "updatedAt", "correctedAt")
 
     /**
      * What a path template may write on the detected layer — the correction set minus `tags`.
@@ -118,6 +122,24 @@ object EditFields {
         { it.tags },
     )
 
+    /** One accessor per reader field, in [READER_COLUMNS] order. */
+    private val onReader: List<(BookOverrideEntity) -> Any?> = listOf(
+        { it.finished },
+        { it.downloadOnPlay },
+        { it.hidden },
+    )
+
+    /** What "no row" means for each half: nothing corrected, nothing claimed about the reader. */
+    private val NO_ROW = BookOverrideEntity(
+        bookId = "",
+        title = null,
+        author = null,
+        series = null,
+        seriesIndex = null,
+        hidden = false,
+        updatedAt = 0,
+    )
+
     /** One reader per template-writable field, in [DETECTED_COLUMNS] order. */
     private val onBook: List<(BookEntity) -> Any?> = listOf(
         { it.title },
@@ -139,10 +161,19 @@ object EditFields {
      */
     fun corrected(override: BookOverrideEntity): Boolean = onOverride.any { it(override) != null }
 
+    /** Whether two rows correct the book identically. Null is no row, which corrects nothing. */
+    fun sameCorrection(a: BookOverrideEntity?, b: BookOverrideEntity?): Boolean =
+        onOverride.all { it(a ?: NO_ROW) == it(b ?: NO_ROW) }
+
+    /** Whether two rows say the same about the reader. Null is no row: nothing forced, not hidden. */
+    fun sameReaderState(a: BookOverrideEntity?, b: BookOverrideEntity?): Boolean =
+        onReader.all { it(a ?: NO_ROW) == it(b ?: NO_ROW) }
+
     /** Whether the fields a template can write are identical — the test for "this changed nothing". */
     fun sameDetected(a: BookEntity, b: BookEntity): Boolean = onBook.all { it(a) == it(b) }
 
     /** Sanity, for the tests: the accessor lists and the name lists are the same length. */
     internal val correctionArity: Int get() = onOverride.size
+    internal val readerArity: Int get() = onReader.size
     internal val detectedArity: Int get() = onBook.size
 }

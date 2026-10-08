@@ -115,7 +115,10 @@ object FacetMapping {
             tags = override?.tags,
             chapters = cuts.map { DerivedChapter(startMs = it.positionMs, title = it.label) },
             // The later of the two, because either can be the reason to republish.
-            editedAt = maxOf(override?.updatedAt ?: 0L, cuts.maxOfOrNull { it.createdAt } ?: 0L),
+            // The correction's own clock, never the row's other one: hiding a book is not an edit
+            // to it, and stamping the publish with it made a stale correction look newer than the
+            // fix it should have lost to.
+            editedAt = maxOf(override?.correctedAt ?: 0L, cuts.maxOfOrNull { it.createdAt } ?: 0L),
             editedBy = deviceId,
         )
     }
@@ -303,7 +306,11 @@ object FacetMapping {
         // pull, for ever.
         //
         // Equal stamps go to the correction, so republishing the same state is not a conflict.
-        if (existing != null && existing.updatedAt > correction.editedAt) return existing
+        //
+        // Compared on the CORRECTION clock. On the shared one, hiding a book or changing its play
+        // mode moved the stamp, and that stamp then outranked every correction made before it —
+        // so a book somebody had hidden once could never receive another device's fix.
+        if (existing != null && existing.correctedAt > correction.editedAt) return existing
         return BookOverrideEntity(
             bookId = bookId,
             title = correction.title,
@@ -320,7 +327,11 @@ object FacetMapping {
             finished = existing?.finished,
             downloadOnPlay = existing?.downloadOnPlay,
             hidden = existing?.hidden ?: false,
-            updatedAt = correction.editedAt,
+            // The reader's half is carried through, and so is its clock. Setting it to the
+            // correction's moved the stamp the personal manifest compares, so a hide made later on
+            // another device could lose to a correction it had nothing to do with.
+            updatedAt = existing?.updatedAt ?: 0L,
+            correctedAt = correction.editedAt,
         )
     }
 

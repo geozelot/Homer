@@ -16,7 +16,10 @@ interface BookOverrideDao {
     @Query("SELECT * FROM book_overrides")
     suspend fun getAll(): List<BookOverrideEntity>
 
-    /** Newest override change, for cheaply deciding whether anything needs pushing. */
+    /**
+     * Newest change to the READER's half, for cheaply deciding whether the personal manifest has
+     * anything to push. Corrections do not travel there, so their clock is not asked.
+     */
     @Query("SELECT MAX(updatedAt) FROM book_overrides")
     suspend fun maxUpdatedAt(): Long?
 
@@ -44,7 +47,7 @@ interface BookOverrideDao {
      * so it counts, but a row DELETED outright would not — nothing deletes them, which is why the
      * tombstone exists.
      */
-    @Query("SELECT COUNT(*) FROM book_overrides WHERE updatedAt > :since AND " + EditFields.CORRECTED)
+    @Query("SELECT COUNT(*) FROM book_overrides WHERE correctedAt > :since AND " + EditFields.CORRECTED)
     fun observeUnpublishedCount(since: Long): Flow<Int>
 
     @Query("SELECT * FROM book_overrides WHERE bookId = :bookId")

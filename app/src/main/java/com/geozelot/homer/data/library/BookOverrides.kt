@@ -74,3 +74,18 @@ internal fun BookOverrideEntity.withoutRedundantCollection(): BookOverrideEntity
  * AND in four other places, and the five drifted — see that class for what it cost.
  */
 fun BookOverrideEntity.hasMetadataEdit(): Boolean = EditFields.corrected(this)
+
+/**
+ * [this] row as it should be stored over [existing]: each half's clock moved to [now] only if that
+ * half says something different from what is already there.
+ *
+ * The one rule every local write goes through, because the bug it closes was a write to one half
+ * stamping the other. A stamp is a claim that this device decided something at that moment, and
+ * each channel believes the newest claim — so a stamp moved for no reason is a decision invented
+ * out of nothing, and it outranks the real one somebody made elsewhere.
+ */
+internal fun BookOverrideEntity.stampedAgainst(existing: BookOverrideEntity?, now: Long): BookOverrideEntity =
+    copy(
+        correctedAt = if (EditFields.sameCorrection(this, existing)) existing?.correctedAt ?: 0L else now,
+        updatedAt = if (EditFields.sameReaderState(this, existing)) existing?.updatedAt ?: 0L else now,
+    )

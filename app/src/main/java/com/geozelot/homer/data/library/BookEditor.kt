@@ -20,8 +20,8 @@ import kotlinx.coroutines.withContext
 /**
  * The single owner of user metadata corrections (the override layer) and custom covers, so the
  * library screen and the player screen edit books through the same path instead of each
- * re-implementing the override upsert. Every metadata write bumps `updatedAt` and syncs the
- * change out via [HomerSyncRepository]. Corrections to the fields the shared library index
+ * re-implementing the override upsert. Every write moves the clock of the half it changed and no
+ * other — see [stampedAgainst] — and syncs the change out via [HomerSyncRepository]. Corrections to the fields the shared library index
  * carries (title, author, series, index, genre) are also published to the library root via
  * [LibraryIndexRepository.publishEdits], so a household reading the same folder sees the fix
  * instead of each member re-typing it — when the shared index is on and this device may write
@@ -122,7 +122,7 @@ class BookEditor @Inject constructor(
             finished = finished,
             downloadOnPlay = downloadOnPlay,
             hidden = hidden,
-            updatedAt = System.currentTimeMillis(),
+            updatedAt = 0,
         ).let { candidate ->
             // Against the EFFECTIVE series, not the correction's own: a book can be corrected into a
             // collection while its series still comes from the folder tree, and comparing only the
@@ -132,7 +132,7 @@ class BookEditor @Inject constructor(
             } else {
                 candidate
             }
-        }
+        }.stampedAgainst(existing, System.currentTimeMillis())
 
         // Nothing corrected, nothing personal, and nothing to retract: drop the row instead of
         // leaving a freshly-stamped tombstone. A tombstone here would be read as a local edit newer
@@ -150,11 +150,15 @@ class BookEditor @Inject constructor(
 
     /**
      * Reverts a book to pure detection. Stored as an all-null "cleared" override (not a row
-     * delete) with a fresh timestamp, so the reset propagates via last-write-wins instead of
+     * delete) with a fresh correction stamp, so the reset propagates via last-write-wins instead of
      * being resurrected on the next pull.
+     *
+     * Nothing to clear is nothing to write: an empty row stamped now would be a "cleared" claim
+     * about a book nobody had corrected, and it would shield it from the first real correction.
      */
     suspend fun clearOverride(bookId: String) {
-        bookOverrideDao.upsert(blank(bookId))
+        val existing = bookOverrideDao.findById(bookId) ?: return
+        bookOverrideDao.upsert(blank(bookId).stampedAgainst(existing, System.currentTimeMillis()))
         homerSync.sync(force = true)
         libraryIndex.publishEdits()
     }
@@ -223,17 +227,19 @@ class BookEditor @Inject constructor(
             val collectionFor = c
                 ?.takeUnless { redundantCollection(effectiveSeries, it) }
                 ?.takeUnless { it == detected?.collection }
-            bookOverrideDao.upsert(
-                base.copy(
-                    series = series,
-                    author = author,
-                    genre = genre,
-                    collection = collectionFor,
-                    // A position in a collection that was just dropped is a number about nothing.
-                    collectionIndex = if (collectionFor == null) null else base.collectionIndex,
-                    updatedAt = now,
-                ),
+            val candidate = base.copy(
+                series = series,
+                author = author,
+                genre = genre,
+                collection = collectionFor,
+                // A position in a collection that was just dropped is a number about nothing.
+                collectionIndex = if (collectionFor == null) null else base.collectionIndex,
             )
+            // A book the edit says nothing new about gets no row. Writing one anyway left a fresh
+            // empty override on every member that already matched — a stamped claim that shielded
+            // each of them from the next real correction to arrive.
+            if (existing == null && !candidate.hasMetadataEdit()) continue
+            bookOverrideDao.upsert(candidate.stampedAgainst(existing, now))
         }
         homerSync.sync(force = true)
         libraryIndex.publishEdits()
@@ -246,8 +252,7 @@ class BookEditor @Inject constructor(
         // write a correction the book never had — and stamp a time that shields a published one.
         if ((existing?.hidden ?: false) == hidden) return
         bookOverrideDao.upsert(
-            existing?.copy(hidden = hidden, updatedAt = System.currentTimeMillis())
-                ?: blank(bookId).copy(hidden = hidden),
+            (existing ?: blank(bookId)).copy(hidden = hidden).stampedAgainst(existing, System.currentTimeMillis()),
         )
         homerSync.sync(force = true)
     }
@@ -264,7 +269,10 @@ class BookEditor @Inject constructor(
     /** Clears a custom cover, reverting to detected/extracted/online art. */
     suspend fun clearCustomCover(bookId: String) = bookDao.updateCustomCover(bookId, null)
 
-    /** An empty override row (a "cleared" tombstone) with a fresh timestamp. */
+    /**
+     * An empty override row, with both clocks at zero — a write gives it the stamps it has earned
+     * through [stampedAgainst], and no others.
+     */
     private fun blank(bookId: String) = BookOverrideEntity(
         bookId = bookId,
         title = null,
@@ -272,6 +280,6 @@ class BookEditor @Inject constructor(
         series = null,
         seriesIndex = null,
         hidden = false,
-        updatedAt = System.currentTimeMillis(),
+        updatedAt = 0,
     )
 }

@@ -243,7 +243,10 @@ class HomerSyncRepository @Inject constructor(
                         overridePulls += remoteOv.mergeInto(id, localOv)
                         remoteOv
                     }
-                    localOv != null -> localOv.toHomer()
+                    // Only a row that has said something about the reader. One that exists for its
+                    // correction alone has a reader clock of zero, and publishing it would put an
+                    // empty claim in the manifest for every corrected book.
+                    localOv != null && localOv.updatedAt > 0 -> localOv.toHomer()
                     else -> null
                 }
 

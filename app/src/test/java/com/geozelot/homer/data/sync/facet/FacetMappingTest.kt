@@ -76,6 +76,7 @@ class FacetMappingTest {
         hidden: Boolean = false,
         downloadOnPlay: Boolean? = null,
         updatedAt: Long = 500,
+        correctedAt: Long = updatedAt,
     ) = BookOverrideEntity(
         bookId = "Author/Book",
         title = title,
@@ -90,6 +91,7 @@ class FacetMappingTest {
         downloadOnPlay = downloadOnPlay,
         hidden = hidden,
         updatedAt = updatedAt,
+        correctedAt = correctedAt,
     )
 
     // ── publishing ───────────────────────────────────────────────────────────────────────────
@@ -378,7 +380,8 @@ class FacetMappingTest {
         assertEquals(true, e.finished)
         assertTrue(e.hidden)
         assertEquals(false, e.downloadOnPlay)
-        assertEquals(900L, e.updatedAt)
+        assertEquals(900L, e.correctedAt)
+        assertEquals("and the reader's clock stays where it was", 500L, e.updatedAt)
     }
 
     @Test
@@ -572,31 +575,31 @@ class FacetMappingTest {
 
     @Test
     fun `a locally newer override is kept over an older correction`() {
-        val local = override(title = "Mine", updatedAt = 900)
+        val local = override(title = "Mine", correctedAt = 900)
         val e = FacetMapping.overrideEntity(
             "Author/Book",
             BookCorrection(title = "Theirs", editedAt = 500),
             existing = local,
         )
         assertEquals("Mine", e!!.title)
-        assertEquals("and it keeps its own stamp", 900, e.updatedAt)
+        assertEquals("and it keeps its own stamp", 900, e.correctedAt)
     }
 
     @Test
     fun `a newer correction still wins`() {
-        val local = override(title = "Mine", updatedAt = 500)
+        val local = override(title = "Mine", correctedAt = 500)
         val e = FacetMapping.overrideEntity(
             "Author/Book",
             BookCorrection(title = "Theirs", editedAt = 900),
             existing = local,
         )
         assertEquals("Theirs", e!!.title)
-        assertEquals(900, e.updatedAt)
+        assertEquals(900, e.correctedAt)
     }
 
     @Test
     fun `equal stamps go to the correction, so a republish is not a conflict`() {
-        val local = override(title = "Mine", updatedAt = 700)
+        val local = override(title = "Mine", correctedAt = 700)
         val e = FacetMapping.overrideEntity(
             "Author/Book",
             BookCorrection(title = "Theirs", editedAt = 700),
@@ -608,7 +611,7 @@ class FacetMappingTest {
     @Test
     fun `a locally newer override keeps this device's private flags`() {
         // Returning `existing` wholesale must not lose what was never publishable anyway.
-        val local = override(title = "Mine", finished = true, hidden = true, updatedAt = 900)
+        val local = override(title = "Mine", finished = true, hidden = true, correctedAt = 900)
         val e = FacetMapping.overrideEntity(
             "Author/Book",
             BookCorrection(title = "Theirs", editedAt = 500),
@@ -616,5 +619,52 @@ class FacetMappingTest {
         )
         assertEquals(true, e!!.finished)
         assertEquals(true, e.hidden)
+    }
+
+    // ── two halves, two clocks ───────────────────────────────────────────────────────────────
+    //
+    // Until schema 5 the row had one stamp for two channels. Hiding a book moved it, and the moved
+    // stamp then outranked every correction made before the hide — so the book never received
+    // another device's fix. And a pull moved it the other way, under the personal manifest's feet.
+
+    @Test
+    fun `hiding a book later does not shield it from an earlier correction`() {
+        val hiddenLater = override(hidden = true, updatedAt = 900, correctedAt = 0)
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "Fixed", editedAt = 500),
+            existing = hiddenLater,
+        )
+        assertEquals("Fixed", e!!.title)
+        assertTrue(e.hidden)
+        assertEquals(900L, e.updatedAt)
+        assertEquals(500L, e.correctedAt)
+    }
+
+    @Test
+    fun `an arriving correction leaves the reader's clock where it was`() {
+        val e = FacetMapping.overrideEntity(
+            "Author/Book",
+            BookCorrection(title = "T", editedAt = 900),
+            existing = override(hidden = true, updatedAt = 300, correctedAt = 100),
+        )
+        assertEquals(300L, e!!.updatedAt)
+    }
+
+    @Test
+    fun `a correction on a book with no row claims nothing about the reader`() {
+        val e = FacetMapping.overrideEntity("Author/Book", BookCorrection(title = "T", editedAt = 900), null)
+        assertEquals(0L, e!!.updatedAt)
+        assertEquals(900L, e.correctedAt)
+    }
+
+    @Test
+    fun `a publish is stamped with the correction's clock, not the reader's`() {
+        val c = FacetMapping.correctionOf(
+            override(title = "T", hidden = true, updatedAt = 9_000, correctedAt = 500),
+            emptyList(),
+            "phone",
+        )
+        assertEquals(500L, c!!.editedAt)
     }
 }

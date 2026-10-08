@@ -131,4 +131,13 @@ class HomerOverrideTest {
         )
         assertEquals(row, row.toHomer().mergeInto(row.bookId, row))
     }
+
+    @Test
+    fun `an incoming reader override leaves the correction's clock alone`() {
+        // The two halves have two clocks; a manifest pull may only move its own.
+        val merged = HomerOverride(hidden = true, updatedAt = 900)
+            .mergeInto("b", local(title = "Wyrd Sisters", updatedAt = 100).copy(correctedAt = 300))
+        assertEquals(900, merged.updatedAt)
+        assertEquals(300, merged.correctedAt)
+    }
 }
