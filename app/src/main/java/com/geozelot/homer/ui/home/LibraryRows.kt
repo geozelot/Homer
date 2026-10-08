@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
@@ -44,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerIcons
-import com.geozelot.homer.ui.theme.Faint
+import com.geozelot.homer.ui.theme.Amber
 import com.geozelot.homer.ui.theme.Line
 import com.geozelot.homer.ui.theme.LineShelf
 import com.geozelot.homer.ui.theme.Muted
@@ -256,7 +255,13 @@ internal fun SeriesShelfRow(
                         .background(RowGround)
                 },
             )
-            .combinedClickable(onClick = onToggle, onLongClick = { menuOpen = true }),
+            .combinedClickable(
+                // Said here now that a folded shelf draws no arrowhead: the whole row is the
+                // control, and this is what a screen reader announces for tapping it.
+                onClickLabel = stringResource(if (expanded) R.string.action_collapse else R.string.action_expand),
+                onClick = onToggle,
+                onLongClick = { menuOpen = true },
+            ),
     ) {
         Row(
             modifier = Modifier.padding(SeriesListEnclosurePad),
@@ -323,22 +328,26 @@ internal fun SeriesShelfRow(
             if (expanded && series.hasThreads()) {
                 CollectionOrderChip(flat = flat, onChange = onOrderChange)
             }
-            // What kind of shelf, where a book row keeps its number — folded only: opened, the chip
-            // under the title says it in words.
-            if (!expanded) {
+            // One mark in the slot beside the menu, saying the one thing that changes.
+            //
+            // Folded: what KIND of shelf this is, where a book row keeps its number. No arrowhead
+            // beside it — a folded shelf is recognisably a shelf by its stack and its mark, and an
+            // arrow on every one of them was a column of controls saying "this opens" twenty times.
+            //
+            // Opened: the grid's own amber arrowhead in place of the mark, pointing down at the
+            // books it opened onto — the same glyph in the same colour, so an open shelf looks open
+            // in both views. The kind is said in words by the chip under the title by then.
+            if (expanded) {
+                Icon(
+                    Icons.Filled.ArrowDropDown,
+                    contentDescription = stringResource(R.string.action_collapse),
+                    tint = Amber,
+                    // Held off whatever sits before it, as the folded mark is.
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            } else {
                 RowMarks(shelf = if (series.isCollection) HomerIcons.CollectionShelf else HomerIcons.SeriesShelf)
             }
-            // Chevron immediately left of the overflow button, so the two sit together at the trailing
-            // edge and the overflow still lines up with the one on every book row. Leading it instead
-            // pushed the covers out of line with the book rows above and below.
-            Icon(
-                // Filled triangles rather than the thin chevrons. At this size a stroked chevron
-                // reads as a decoration next to the solid 3-dot button beside it; a filled arrowhead
-                // reads as a control, which is what it is.
-                imageVector = if (expanded) Icons.Filled.ArrowDropDown else Icons.AutoMirrored.Filled.ArrowRight,
-                contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
-                tint = Faint,
-            )
             Box {
                 // The same 40dp target a book row uses, for the same reason — see BookListRow.
                 Box(
