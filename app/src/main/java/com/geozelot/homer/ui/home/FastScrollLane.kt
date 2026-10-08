@@ -43,7 +43,7 @@ import com.geozelot.homer.ui.theme.Muted
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.Surface2
-import kotlin.math.roundToInt
+import kotlin.math.floor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -197,7 +197,9 @@ internal fun FastScrollLane(
 
     fun jumpTo(y: Float) {
         if (laneHeight <= 0) return
-        val slot = (y / laneHeight * letters.size).roundToInt().coerceIn(0, letters.lastIndex)
+        // Each letter owns an equal band of the lane, so the band is the FLOOR. Rounding put the
+        // lower half of every letter's band on the letter below it — a tap on "M" landed on "N".
+        val slot = floor(y / laneHeight * letters.size).toInt().coerceIn(0, letters.lastIndex)
         scope.launch { gridState.scrollToItem(letters[slot].index) }
     }
 

@@ -21,11 +21,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geozelot.homer.R
 import com.geozelot.homer.ui.components.HomerIcons
 import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.Studio
@@ -325,7 +327,9 @@ internal fun CoverMenuButton(modifier: Modifier = Modifier, onClick: () -> Unit)
         ) {
             Icon(
                 Icons.Filled.MoreVert,
-                contentDescription = null,
+                // Named like every other ⋮ in the app. Silent, a screen reader announced the grid's
+                // only per-book menu as an unlabelled button on every cover.
+                contentDescription = stringResource(R.string.action_more),
                 tint = Parchment,
                 modifier = Modifier.size(18.dp),
             )

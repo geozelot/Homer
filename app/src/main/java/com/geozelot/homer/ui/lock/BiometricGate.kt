@@ -77,11 +77,16 @@ fun BiometricGate(content: @Composable () -> Unit) {
     var resumeTick by remember { mutableIntStateOf(0) }
 
     // Re-lock when the app is backgrounded, so the next resume prompts again.
+    //
+    // Not when the activity is only being rebuilt. A rotation, a font-size or dark-mode change, or
+    // a window resize stops the activity too, and the state saved right after that stop is what
+    // the new one starts from — so turning the phone locked the app and asked to unlock it again.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, enabled) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> if (enabled) unlocked = false
+                Lifecycle.Event.ON_STOP ->
+                    if (enabled && activity?.isChangingConfigurations != true) unlocked = false
                 Lifecycle.Event.ON_RESUME -> resumeTick++
                 else -> Unit
             }

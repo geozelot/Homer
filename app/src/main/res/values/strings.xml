@@ -772,13 +772,16 @@
     <string name="help_cover_shelf">Top left of a shelf: how many books are on it.</string>
     <string name="help_cover_index">Top left of a book: where it sits in the shelf it is on.</string>
     <string name="help_section_row_marks">At the end of a row</string>
-    <string name="help_row_shelf">On a shelf: whether it is a series or a collection.</string>
+    <string name="help_row_shelf">On a shelf: whether it is a series or a collection. Opened, it shows the arrow that closes it instead.</string>
     <string name="help_row_index">On a book: where it sits in the shelf it is on.</string>
+    <string name="help_cover_offline">Top right: downloaded, so it plays without a connection — on a shelf, with how many of its books are, when not all of them.</string>
+    <string name="help_row_offline">Downloaded: it plays without a connection.</string>
+    <string name="help_cover_length">Bottom left: how long it runs — for a shelf, all of it together.</string>
     <string name="help_cover_index_off">Where a book sits in its series — hidden while the arrangement is flat, because the shelf it counts against is not on screen.</string>
 
     <string name="help_do_open_shelf">Tap a shelf to open it; tap its header again to close.</string>
     <string name="help_do_chip_filter">Tap any chip to narrow the library to it. Tap a genre chip carrying a count to see the rest.</string>
-    <string name="help_do_long_press">Long-press a book for details, bookmarks, and offline.</string>
+    <string name="help_do_long_press">Long-press a book, or tap its ⋮, for details, bookmarks and offline.</string>
     <string name="help_do_search">Search filters as you type, and its suggestions become filters you can stack.</string>
     <string name="help_do_fast_scroll">Tap or drag the letters down the edge to jump. They are whatever the library is sorted by, so sorting by surname files under P for Pratchett.</string>
     <string name="help_do_arrange">Arrange changes what the library is broken into and how it is sorted.</string>
@@ -788,7 +791,7 @@
     <string name="help_player_settings">Speed, volume and cut-silence sit together in the middle of the bottom row.</string>
     <string name="help_player_sleep">A running sleep timer, counting down. It also has a notification of its own if you want one; shake to carry on once it has run out.</string>
     <string name="help_cover_booklet">A booklet, libretto or map filed beside the book. Tap to read it — swipe for the next page, pinch to zoom.</string>
-    <string name="help_player_mark">Mark saves your place so you can come back to it.</string>
+    <string name="help_player_mark">Mark saves your place so you can come back to it. In a book that is one long file it can also cut a chapter there, for everyone reading the folder.</string>
     <string name="help_player_swipe">Swipe down on the cover to leave the player without stopping it.</string>
     <!-- Background work: the two notification channels and what their notifications say. -->
     <string name="library_channel_name">Library</string>

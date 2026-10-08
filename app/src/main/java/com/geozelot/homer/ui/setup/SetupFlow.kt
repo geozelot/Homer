@@ -32,6 +32,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,7 +97,17 @@ fun SetupFlow(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(firstRun) { if (firstRun) viewModel.beginFirstRun() }
+    // Once per showing of the flow, not once per composition. Turning the phone recreates the
+    // activity and runs every effect here again, and beginning again STARTS OVER — the user was
+    // thrown back to the first screen with whatever they had typed gone. Saved with the screen, so
+    // a rotation remembers it was begun; a fresh showing after signing out does not, and resets.
+    var begun by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(firstRun) {
+        if (firstRun && !begun) {
+            viewModel.beginFirstRun()
+            begun = true
+        }
+    }
     LaunchedEffect(entry) { viewModel.enter(entry) }
     LaunchedEffect(state.done) { if (state.done) onDone() }
 

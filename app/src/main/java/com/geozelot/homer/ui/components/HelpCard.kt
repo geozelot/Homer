@@ -43,6 +43,7 @@ import com.geozelot.homer.ui.theme.Parchment
 import com.geozelot.homer.ui.theme.SectionLabel
 import com.geozelot.homer.ui.theme.SerifTitle
 import com.geozelot.homer.ui.theme.Surface2
+import androidx.compose.material.icons.filled.Download
 
 /**
  * What this screen is, what its marks mean, and what can be done with it.
@@ -224,6 +225,13 @@ fun LibraryHelpCard(
             } else {
                 HelpMark(icon = null, badge = "#3", text = stringResource(R.string.help_cover_index_off))
             }
+            // Both views draw it: a cover corner in the grid, the last mark in a list row.
+            HelpMark(
+                Icons.Filled.Download,
+                stringResource(if (gridView) R.string.help_cover_offline else R.string.help_row_offline),
+            )
+            // The grid alone carries a length on the cover; a list row says it in its meta line.
+            if (gridView) HelpMark(icon = null, badge = "5h", text = stringResource(R.string.help_cover_length))
         }
 
         HelpSection(stringResource(R.string.help_section_doing)) {

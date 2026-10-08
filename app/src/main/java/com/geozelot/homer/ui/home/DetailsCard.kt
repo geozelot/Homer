@@ -611,7 +611,8 @@ private fun BookListItem.offlineLine(context: android.content.Context): String =
 fun LibraryBookmarksDialog(
     book: BookListItem,
     bookmarks: List<BookmarkEntity>,
-    onOpenAt: (Long) -> Unit,
+    /** Opens the book at a bookmark, by the bookmark's id. */
+    onOpen: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -629,7 +630,7 @@ fun LibraryBookmarksDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onOpenAt(mark.positionMs) }
+                                .clickable { onOpen(mark.id) }
                                 .padding(vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

@@ -90,6 +90,16 @@ class LibraryFilterTest {
     }
 
     @Test
+    fun `a genre token made from a book's own tag finds that book`() {
+        // The details card builds its chips from the book's tags as written; the shelf compares
+        // canonical keys. A tag spelt the way a tagger spells it filtered the library to nothing.
+        val tagged = book("4", "Mort", genre = "Fantasy")
+        val f = LibraryFilter().plus(FilterToken(FilterFacet.GENRE, "Fantasy"))
+        assertTrue(f.matches(tagged))
+        assertTrue(LibraryFilter().plus(FilterToken(FilterFacet.GENRE, "fantasy")).matches(tagged))
+    }
+
+    @Test
     fun `free text narrows what the tokens left, rather than replacing it`() {
         val f = LibraryFilter()
             .plus(FilterToken(FilterFacet.GENRE, "Fantasy"))

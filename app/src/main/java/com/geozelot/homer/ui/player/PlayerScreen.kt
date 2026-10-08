@@ -93,10 +93,10 @@ fun PlayerScreen(
     /** Seeds the template editor for this book's folder; null where patterns are somebody else's. */
     onReadFolderDifferently: (() -> Unit)? = null,
     /**
-     * Where to start, in ms — or -1 to resume wherever the book was left, which is every arrival
-     * but one. Set when the library opens a book AT a bookmark.
+     * The bookmark to start at, by id — or -1 to resume wherever the book was left, which is every
+     * arrival but one. Set when the library opens a book AT a bookmark.
      */
-    startAtMs: Long = -1L,
+    startAtBookmark: Long = -1L,
     onBack: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
@@ -165,12 +165,18 @@ fun PlayerScreen(
     //
     // The timeout is a floor rather than a deadline: if readiness never reports, seek anyway and
     // let the player do what it can with it, rather than silently abandoning the request.
-    LaunchedEffect(bookId, startAtMs) {
-        if (startAtMs < 0) return@LaunchedEffect
+    //
+    // ONCE. The effect runs again whenever this screen re-enters composition — turning the phone,
+    // coming back from a booklet — and each run jumped back to the bookmark, throwing away
+    // everything listened to since. Saved with the screen, so it holds across both.
+    var bookmarkTaken by rememberSaveable(bookId, startAtBookmark) { mutableStateOf(false) }
+    LaunchedEffect(bookId, startAtBookmark) {
+        if (startAtBookmark < 0 || bookmarkTaken) return@LaunchedEffect
         withTimeoutOrNull(SEEK_READY_TIMEOUT_MS) {
             viewModel.state.first { it.bookId == bookId && it.durationMs > 0 }
         }
-        viewModel.seekTo(startAtMs)
+        viewModel.jumpToBookmark(startAtBookmark)
+        bookmarkTaken = true
     }
 
     // The screen's three parts as slots, so the tall and short layouts below can arrange the very

@@ -284,6 +284,13 @@ class PlayerViewModel @Inject constructor(
     fun addBookmark(kind: String) = connection.addBookmark(kind)
     fun jumpToBookmark(bookmark: BookmarkEntity) =
         connection.jumpToBookmark(bookmark.mediaId, bookmark.positionMs)
+
+    /** [jumpToBookmark] by id, for a bookmark chosen outside the player. */
+    fun jumpToBookmark(bookmarkId: Long) {
+        viewModelScope.launch {
+            bookmarkDao.findById(bookmarkId)?.let { jumpToBookmark(it) }
+        }
+    }
     fun deleteBookmark(bookmark: BookmarkEntity) =
         connection.deleteBookmark(bookmark.id, bookmark.bookId)
     /** "Mark as completed": resets the current book's progress so it drops off the listening shelf. */

@@ -31,7 +31,11 @@ fun HomerApp() {
         // Once, as soon as there is anything to notify about — and hoisted above the branch so that
         // handing over from setup to the library does not unmount it and ask again. A scan and a
         // download both post a progress notification, and setup ends by starting a scan.
-        if (authState != AuthState.Unknown) NotificationPermissionRequest()
+        //
+        // Signed in, not merely "known": signed OUT is known too, and the dialog then landed in
+        // front of the very first setup screen — the question about a feature not yet reached that
+        // the request's own documentation says it waits to avoid.
+        if (authState is AuthState.LoggedIn) NotificationPermissionRequest()
 
         when {
             // Still reading the Keystore, or setup has not answered yet. Neither branch may be

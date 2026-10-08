@@ -50,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -93,6 +94,7 @@ import com.geozelot.homer.data.library.ScanState
 import com.geozelot.homer.data.library.authorsToInput
 import com.geozelot.homer.data.sync.facet.IndexActivity
 import com.geozelot.homer.data.update.pendingRelease
+import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.components.EditBookDialog
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.LibraryHelpCard
@@ -219,7 +221,8 @@ internal fun libraryLayoutFor(width: Dp, height: Dp, smallestWidth: Dp): Library
 @Composable
 fun HomeScreen(
     onBookClick: (String) -> Unit,
-    onBookClickAt: (String, Long) -> Unit,
+    /** Opens a book at one of its bookmarks: the book's id, then the bookmark's. */
+    onBookmarkClick: (String, Long) -> Unit,
     /** Opens a book's supplementary PDF, by its library-root-relative path. */
     onOpenDocument: (String) -> Unit,
     onOpenTemplates: () -> Unit,
@@ -228,8 +231,11 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     updateViewModel: UpdateViewModel = hiltViewModel(),
 ) {
-    val entries by viewModel.entries.collectAsStateWithLifecycle()
-    val libraryLoaded by viewModel.libraryLoaded.collectAsStateWithLifecycle()
+    val shelf by viewModel.shelf.collectAsStateWithLifecycle()
+    val entries = shelf.orEmpty()
+    val books by viewModel.books.collectAsStateWithLifecycle()
+    // Not arranged yet is still opening, never "empty" — see [HomeViewModel.shelf].
+    val libraryLoaded = shelf != null
     val listeningShelf by viewModel.listeningShelf.collectAsStateWithLifecycle()
     val bookCount by viewModel.bookCount.collectAsStateWithLifecycle()
     val gridView by viewModel.gridView.collectAsStateWithLifecycle()
@@ -751,9 +757,9 @@ fun HomeScreen(
         // nothing playing it emits nothing at all, so the space has to be reserved here or the last
         // row of books ends up under the navigation bar.
         if (playingBookId != null) {
-            MiniPlayer(
-                // The ticking value reaches the one composable built to tick, and no further.
-                state = playbackHolder.value,
+            LiveMiniPlayer(
+                // The State OBJECT, read inside — see [LiveMiniPlayer].
+                playback = playbackHolder,
                 onOpenPlayer = onBookClick,
                 onPlayPause = viewModel::playPause,
                 onPrevChapter = viewModel::previousChapter,
@@ -773,7 +779,7 @@ fun HomeScreen(
 
     // Both dialogs re-derive their subject from the live list every recomposition, so edits made
     // inside them (a cover pick) are reflected at once and a rotation doesn't lose the dialog.
-    entries.findBook(editingId)?.let { book ->
+    books.byId(editingId)?.let { book ->
         EditBookDialog(
             book = book.toEditable(),
             onSave = { title, author, series, index, collection, collectionIndex, genres, language, tags, hidden, downloadOnPlay ->
@@ -803,7 +809,7 @@ fun HomeScreen(
 
     // Details re-derives from the live list like the edit dialogs, so an edit made from inside it
     // is reflected the moment it lands rather than on the next open.
-    entries.findBook(detailsId)?.let { book ->
+    books.byId(detailsId)?.let { book ->
         BookDetailsCard(
             book = book,
             onEdit = { detailsId = null; editingId = book.id },
@@ -820,12 +826,15 @@ fun HomeScreen(
             onDismiss = { detailsSeriesKey = null },
         )
     }
-    entries.findBook(bookmarksId)?.let { book ->
-        val marks by viewModel.bookmarksFor(book.id).collectAsStateWithLifecycle(emptyList())
+    books.byId(bookmarksId)?.let { book ->
+        // Remembered per book: built inline, every recomposition of the screen made a new Room
+        // flow, and collecting it dropped the list back to empty and re-queried each time.
+        val marksFlow = remember(book.id) { viewModel.bookmarksFor(book.id) }
+        val marks by marksFlow.collectAsStateWithLifecycle(emptyList())
         LibraryBookmarksDialog(
             book = book,
             bookmarks = marks,
-            onOpenAt = { ms -> bookmarksId = null; onBookClickAt(book.id, ms) },
+            onOpen = { mark -> bookmarksId = null; onBookmarkClick(book.id, mark) },
             onDelete = { viewModel.deleteBookmark(it, book.id) },
             onDismiss = { bookmarksId = null },
         )
@@ -895,17 +904,40 @@ fun HomeScreen(
 internal val LibraryEntry.Series.expandKey: String
     get() = "series:${books.minOf { it.id }}"
 
-/** The live row for an open edit dialog, or null when there's no target (or it's gone). */
-internal fun List<LibraryEntry>.findBook(id: String?): BookListItem? {
-    if (id == null) return null
-    return firstNotNullOfOrNull { entry ->
-        when (entry) {
-            is LibraryEntry.Header -> null
-            is LibraryEntry.Standalone -> entry.book.takeIf { it.id == id }
-            is LibraryEntry.Series -> entry.books.firstOrNull { it.id == id }
-        }
-    }
-}
+/**
+ * The mini-player, with the ticking playback state read in a scope of its own.
+ *
+ * Read at the call site, `.value` subscribed the whole library screen: the position advances every
+ * second, so the screen's entire body ran once a second for as long as anything played — with the
+ * shelf, the filter bar and every dialog host in it. Here only this function and the mini-player
+ * below it re-run.
+ */
+@Composable
+private fun LiveMiniPlayer(
+    playback: State<PlaybackUiState>,
+    onOpenPlayer: (String) -> Unit,
+    onPlayPause: () -> Unit,
+    onPrevChapter: () -> Unit,
+    onNextChapter: () -> Unit,
+    onRetry: () -> Unit,
+    liveCover: Any?,
+    liveTitle: String?,
+) = MiniPlayer(
+    state = playback.value,
+    onOpenPlayer = onOpenPlayer,
+    onPlayPause = onPlayPause,
+    onPrevChapter = onPrevChapter,
+    onNextChapter = onNextChapter,
+    onRetry = onRetry,
+    liveCover = liveCover,
+    liveTitle = liveTitle,
+)
+
+/**
+ * The live row for an open card or dialog, from the unfiltered shelf (see [HomeViewModel.books]),
+ * or null when there's no target or the book is gone.
+ */
+internal fun List<BookListItem>.byId(id: String?): BookListItem? = id?.let { wanted -> firstOrNull { it.id == wanted } }
 
 /** The live series for an open series-edit dialog, matched on its stable [expandKey]. */
 internal fun List<LibraryEntry>.findSeries(key: String?): LibraryEntry.Series? {

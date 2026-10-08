@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
@@ -507,7 +508,8 @@ class HomeViewModel @Inject constructor(
             AuthorFiling(bySurname = bySurname, showFiled = filed && bySurname)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AuthorFiling())
 
-    private val books: StateFlow<List<BookListItem>> =
+    /** Every book, or null until Room has delivered — the seeded empty list is not an empty library. */
+    private val loadedBooks: StateFlow<List<BookListItem>?> =
         combine(
             effectiveBooks,
             playbackStateDao.observeProgress(),
@@ -515,8 +517,17 @@ class HomeViewModel @Inject constructor(
             authorFiling,
         ) { effective, progress, downloads, filing ->
             filterEngine.rows(effective, progress, downloads, filedNames = filing.showFiled)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /**
+     * Every book on the shelf, before any filter. What a card or dialog about ONE book looks it up
+     * in: the filtered [entries] lost the book the moment a filter stopped matching it — an edit,
+     * a hide, a filter applied from the library — and the open card vanished, or the player's
+     * Details button went dead for a book being listened to.
+     */
+    val books: StateFlow<List<BookListItem>> = loadedBooks
+        .map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The active sort, clamped to what the current shelving actually offers.
@@ -611,8 +622,16 @@ class HomeViewModel @Inject constructor(
     private val arrangement: Flow<Arrangement> =
         combine(sortMode, shelfMode, seriesMode, authorFiling, ::Arrangement)
 
-    val entries: StateFlow<List<LibraryEntry>> =
-        combine(books, filter, arrangement) { list, filter, a ->
+    /**
+     * The arranged shelf, or null until it has been arranged from real data at least once.
+     *
+     * Null rather than empty is what keeps the empty-shelf panel from flashing on every launch.
+     * "Has Room delivered" was its own flag, and it turned true one hop ahead of the arrangement it
+     * fed: for that hop the shelf read as delivered AND empty, which is precisely the panel that
+     * tells somebody to choose a different folder. One value now answers both questions together.
+     */
+    val shelf: StateFlow<List<LibraryEntry>?> =
+        combine(loadedBooks.filterNotNull(), filter, arrangement) { list, filter, a ->
             filterEngine.arrange(
                 list, filter, a.sort, a.shelving, a.depth,
                 bySurname = a.filing.bySurname,
@@ -623,7 +642,12 @@ class HomeViewModel @Inject constructor(
             // Main.immediate. Both are pure functions of their inputs and the result is a plain
             // list, so there is nothing here that wants the main thread — see `suggestions`.
             .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** [shelf], with "not arranged yet" read as nothing to show. */
+    val entries: StateFlow<List<LibraryEntry>> = shelf
+        .map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * How many books the filter leaves, and how many there are — the "41 of 313" line.
@@ -758,7 +782,7 @@ class HomeViewModel @Inject constructor(
     fun trustPresentedCertificate() {
         viewModelScope.launch {
             val block = librarySettings.pinningBlocked.first() ?: return@launch
-            librarySettings.setPinnedServerCerts(block.offered)
+            librarySettings.addPinnedServerCerts(block.offered)
             librarySettings.setPinningBlocked(null)
             Log.i(TAG_NET, "adopted the certificate presented by '${block.host}'")
         }
@@ -772,16 +796,6 @@ class HomeViewModel @Inject constructor(
 
     val bookCount: StateFlow<Int> = libraryRepository.bookCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
-    /**
-     * False until Room has delivered the book list at least once. Derived from the raw Room flow
-     * (not the seeded [books] StateFlow, whose initial empty value is indistinguishable from a
-     * genuinely empty library), so the UI can show a brief "opening library" phase instead of
-     * flashing the empty-shelf screen on every launch.
-     */
-    val libraryLoaded: StateFlow<Boolean> = libraryRepository.books
-        .map { true }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val scanState: StateFlow<ScanState> = libraryRepository.scanState
 

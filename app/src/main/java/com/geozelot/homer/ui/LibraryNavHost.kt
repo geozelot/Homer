@@ -23,7 +23,7 @@ import com.geozelot.homer.ui.about.LicensesScreen
 import com.geozelot.homer.ui.about.PrivacyScreen
 import com.geozelot.homer.ui.home.HomeScreen
 import com.geozelot.homer.ui.home.HomeViewModel
-import com.geozelot.homer.ui.home.findBook
+import com.geozelot.homer.ui.home.byId
 import com.geozelot.homer.ui.player.PlayerScreen
 import com.geozelot.homer.ui.reader.ARG_DOCUMENT_PATH
 import com.geozelot.homer.ui.reader.DocumentReaderScreen
@@ -48,7 +48,7 @@ private const val ROUTE_DIAGNOSTICS = "diagnostics"
 private const val ROUTE_SETUP = "setup"
 private const val ARG_SETUP_ENTRY = "entry"
 private const val ROUTE_STORAGE_BROWSER = "storage_browser"
-private const val ARG_AT_MS = "at"
+private const val ARG_BOOKMARK = "mark"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_LIBRARY = "settings/library"
 private const val ROUTE_SETTINGS_UPKEEP = "settings/upkeep"
@@ -88,11 +88,15 @@ fun LibraryNavHost() {
                 onBookClick = { bookId ->
                     entry.navigateOnce(navController, "player/${Uri.encode(bookId)}")
                 },
-                // Opening a book AT a position, which is what tapping a bookmark in the library
-                // does. A query argument rather than a second route: it is the same destination,
-                // and a player reached with no position is the overwhelmingly common case.
-                onBookClickAt = { bookId, atMs ->
-                    entry.navigateOnce(navController, "player/${Uri.encode(bookId)}?at=$atMs")
+                // Opening a book AT a bookmark, which is what tapping one in the library does. A
+                // query argument rather than a second route: it is the same destination, and a
+                // player reached with no bookmark is the overwhelmingly common case.
+                //
+                // The bookmark itself, not its offset. An offset is into ONE file, and a book of
+                // many files read it as an offset into whichever file was loaded — so a bookmark in
+                // chapter nine opened chapter three at the same minute.
+                onBookmarkClick = { bookId, bookmarkId ->
+                    entry.navigateOnce(navController, "player/${Uri.encode(bookId)}?$ARG_BOOKMARK=$bookmarkId")
                 },
                 onOpenDocument = { path ->
                     entry.navigateOnce(navController, "$ROUTE_READER/${Uri.encode(path)}")
@@ -102,11 +106,11 @@ fun LibraryNavHost() {
             )
         }
         composable(
-            route = "player/{$ARG_BOOK_ID}?at={$ARG_AT_MS}",
+            route = "player/{$ARG_BOOK_ID}?$ARG_BOOKMARK={$ARG_BOOKMARK}",
             arguments = listOf(
                 navArgument(ARG_BOOK_ID) { type = NavType.StringType },
                 // -1 means "wherever the book was left", which is every arrival but a bookmark's.
-                navArgument(ARG_AT_MS) { type = NavType.LongType; defaultValue = -1L },
+                navArgument(ARG_BOOKMARK) { type = NavType.LongType; defaultValue = -1L },
             ),
             // The player slides up from the bottom (like expanding the mini-player) and back down.
             enterTransition = { slideInVertically(tween(300)) { it } },
@@ -118,19 +122,19 @@ fun LibraryNavHost() {
             // sync. It is here so the player's Details card shows the book the library shows,
             // computed once.
             val library = navController.libraryViewModel(entry)
-            val entries by library.entries.collectAsStateWithLifecycle()
+            val books by library.books.collectAsStateWithLifecycle()
             val maintains by library.maintainsLibrary.collectAsStateWithLifecycle()
             PlayerScreen(
                 bookId = bookId,
-                startAtMs = entry.arguments?.getLong(ARG_AT_MS) ?: -1L,
-                details = entries.findBook(bookId),
+                startAtBookmark = entry.arguments?.getLong(ARG_BOOKMARK) ?: -1L,
+                details = books.byId(bookId),
                 onOpenDocument = { path ->
                     entry.navigateOnce(navController, "$ROUTE_READER/${Uri.encode(path)}")
                 },
                 // A filter only means something on the library, so applying one leaves for it.
                 onFilter = { token ->
                     library.addFilterToken(token)
-                    navController.popBackStack()
+                    navController.popOnce()
                 },
                 onReadFolderDifferently = if (maintains) {
                     {
@@ -140,7 +144,7 @@ fun LibraryNavHost() {
                 } else {
                     null
                 },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
 
@@ -151,7 +155,7 @@ fun LibraryNavHost() {
             route = "$ROUTE_READER/{$ARG_DOCUMENT_PATH}",
             arguments = listOf(navArgument(ARG_DOCUMENT_PATH) { type = NavType.StringType }),
         ) {
-            DocumentReaderScreen(onBack = { navController.popBackStack() })
+            DocumentReaderScreen(onBack = { navController.popOnce() })
         }
 
         // ── Settings ─────────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ fun LibraryNavHost() {
         composable(ROUTE_SETTINGS) { entry ->
             SettingsHubScreen(
                 viewModel = navController.libraryViewModel(entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
                 onOpenLibrary = { navController.navigate(ROUTE_SETTINGS_LIBRARY) },
                 onOpenUpkeep = { navController.navigate(ROUTE_SETTINGS_UPKEEP) },
                 onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
@@ -178,7 +182,7 @@ fun LibraryNavHost() {
                 // Every change to the library is the setup flow, opened at the step that answers
                 // the row — which is also what makes the migrations free.
                 onChange = { navController.navigate("$ROUTE_SETUP/${it.name}") },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(
@@ -192,53 +196,56 @@ fun LibraryNavHost() {
                 entry = runCatching {
                     SetupEntry.valueOf(entry.arguments?.getString(ARG_SETUP_ENTRY).orEmpty())
                 }.getOrDefault(SetupEntry.BOOKS),
-                onDone = { navController.popBackStack() },
+                // Not [popOnce]: this is the flow finishing, not a tap, and it can land while the
+                // screen is not the resumed one — dropping it would strand the user on a finished
+                // setup. Only the start destination is guarded.
+                onDone = { if (navController.previousBackStackEntry != null) navController.popBackStack() },
             )
         }
         composable(ROUTE_SETTINGS_UPKEEP) { entry ->
             LibraryUpkeepScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onOpenTemplates = { navController.navigate(ROUTE_SETTINGS_TEMPLATES) },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_TEMPLATES) { entry ->
             TemplatesScreen(
                 viewModel = navController.libraryViewModel(entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_STORAGE) { entry ->
             StorageSettingsScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onOpenStorageBrowser = { navController.navigate(ROUTE_STORAGE_BROWSER) },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_BROWSING) { entry ->
             BrowsingSettingsScreen(
                 viewModel = navController.libraryViewModel(entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_PLAYBACK) { entry ->
             PlaybackSettingsScreen(
                 viewModel = navController.libraryViewModel(entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_PRIVACY) { entry ->
             PrivacySettingsScreen(
                 viewModel = navController.libraryViewModel(entry),
                 onOpenPrivacyStatement = { navController.navigate(ROUTE_PRIVACY) },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_SETTINGS_ABOUT) {
             AboutSettingsScreen(
                 onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) },
                 onOpenLicenses = { navController.navigate(ROUTE_LICENSES) },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
         composable(ROUTE_STORAGE_BROWSER) { entry ->
@@ -248,22 +255,37 @@ fun LibraryNavHost() {
             StorageBrowserScreen(
                 onPicked = { path ->
                     viewModel.setCustomStoragePath(path)
-                    navController.popBackStack()
+                    navController.popOnce()
                 },
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce() },
             )
         }
 
         composable(ROUTE_LICENSES) {
-            LicensesScreen(onBack = { navController.popBackStack() })
+            LicensesScreen(onBack = { navController.popOnce() })
         }
         composable(ROUTE_PRIVACY) {
-            PrivacyScreen(onBack = { navController.popBackStack() })
+            PrivacyScreen(onBack = { navController.popOnce() })
         }
         composable(ROUTE_DIAGNOSTICS) {
-            DiagnosticsScreen(onBack = { navController.popBackStack() })
+            DiagnosticsScreen(onBack = { navController.popOnce() })
         }
     }
+}
+
+/**
+ * Goes back one destination — once, and never off the bottom of the stack.
+ *
+ * A second tap on a back arrow while the first is still animating popped AGAIN: from a settings
+ * page that was one level too far, and from the player it popped the library itself, leaving an
+ * empty screen with nothing to go back to. The destination being left is no longer resumed once
+ * the first pop is under way, which is what drops the second; the start destination is never
+ * popped from here at all — leaving the app is the system back gesture's job.
+ */
+private fun NavHostController.popOnce() {
+    if (previousBackStackEntry == null) return
+    if (currentBackStackEntry?.lifecycle?.currentState != Lifecycle.State.RESUMED) return
+    popBackStack()
 }
 
 /**

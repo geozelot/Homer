@@ -598,7 +598,7 @@
     <string name="folder_picker_use">Diesen Ordner verwenden</string>
     <string name="set_templates_preview_scoped">Bücher unter „%1$s“, für die das bearbeitete Muster gilt. Bis zum Anwenden wird nichts geschrieben.</string>
     <string name="lib_corrections_all_shared">%1$s · alles geteilt</string>
-    <string name="lib_corrections_pending">%1$s warten auf das Teilen</string>
+    <string name="lib_corrections_pending">%1$s noch nicht geteilt</string>
     <string name="filter_facet_text">Text</string>
     <string name="filter_facet_state">Ist</string>
     <string name="filter_state_downloaded">Heruntergeladen</string>
@@ -737,13 +737,16 @@
     <string name="help_cover_shelf">Oben links auf einem Regal: wie viele Bücher darin stehen.</string>
     <string name="help_cover_index">Oben links auf einem Buch: wo es im Regal steht, auf dem es liegt.</string>
     <string name="help_section_row_marks">Am Ende einer Zeile</string>
-    <string name="help_row_shelf">Bei einem Regal: ob es eine Serie oder eine Sammlung ist.</string>
+    <string name="help_row_shelf">Bei einem Regal: ob es eine Serie oder eine Sammlung ist. Geöffnet zeigt es stattdessen den Pfeil, der es schließt.</string>
     <string name="help_row_index">Bei einem Buch: wo es im Regal steht, auf dem es liegt.</string>
+    <string name="help_cover_offline">Oben rechts: heruntergeladen, spielt also ohne Verbindung — bei einem Regal mit der Zahl seiner Bücher, wenn es nicht alle sind.</string>
+    <string name="help_row_offline">Heruntergeladen: spielt ohne Verbindung.</string>
+    <string name="help_cover_length">Unten links: wie lange es läuft — bei einem Regal alles zusammen.</string>
     <string name="help_cover_index_off">Wo ein Buch in seiner Serie steht — bei einzelner Anordnung ausgeblendet, weil das zugehörige Regal gar nicht zu sehen ist.</string>
 
     <string name="help_do_open_shelf">Tippe ein Regal an, um es zu öffnen; tippe die Kopfzeile erneut an, um es zu schließen.</string>
     <string name="help_do_chip_filter">Tippe einen Chip an, um die Bibliothek darauf einzugrenzen. Ein Genre-Chip mit Anzahl zeigt angetippt die übrigen.</string>
-    <string name="help_do_long_press">Halte ein Buch gedrückt für Details, Lesezeichen und Offline.</string>
+    <string name="help_do_long_press">Halte ein Buch gedrückt oder tippe auf sein ⋮ für Details, Lesezeichen und Offline.</string>
     <string name="help_do_search">Die Suche filtert beim Tippen, und ihre Vorschläge werden zu Filtern, die sich kombinieren lassen.</string>
     <string name="help_do_fast_scroll">Tippe oder ziehe die Buchstaben am Rand, um zu springen. Sie zeigen, wonach die Bibliothek sortiert ist — nach Nachname steht Pratchett also unter P.</string>
     <string name="help_do_arrange">Anordnen bestimmt, wonach die Bibliothek aufgeteilt und wie sie sortiert wird.</string>
@@ -753,7 +756,7 @@
     <string name="help_player_settings">Tempo, Lautstärke und Stille kürzen stehen zusammen in der Mitte der unteren Reihe.</string>
     <string name="help_player_sleep">Ein laufender Schlummer-Timer, der herunterzählt. Auf Wunsch auch als eigene Benachrichtigung; schütteln, um nach Ablauf weiterzuhören.</string>
     <string name="help_cover_booklet">Ein Beiheft, Libretto oder eine Karte neben dem Buch. Zum Lesen tippen — wischen für die nächste Seite, zum Zoomen aufziehen.</string>
-    <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest.</string>
+    <string name="help_player_mark">Merken sichert deine Stelle, damit du zurückfindest. In einem Buch aus einer einzigen Datei schneidet es dort auf Wunsch auch ein Kapitel, für alle, die den Ordner lesen.</string>
     <string name="help_player_swipe">Wische auf dem Cover nach unten, um den Player zu verlassen, ohne ihn zu stoppen.</string>
     <!-- Background work: the two notification channels and what their notifications say. -->
     <string name="library_channel_name">Bibliothek</string>

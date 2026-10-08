@@ -239,7 +239,12 @@ data class LibraryFilter(
                 // question as the word still in the box, only kept.
                 book.matchesText(token.value)
             } else {
-                book.valuesFor(token.facet).any { it.equals(token.value, ignoreCase = true) }
+                // A genre is compared as the shelf files it — canonically — on BOTH sides. The
+                // book's side always was; a token made from a book's own tag ("Fantasy & SciFi" off
+                // the details card) was not, so pressing a genre a book visibly had filtered the
+                // library down to nothing.
+                val wanted = if (token.facet == FilterFacet.GENRE) BookGenre.canonical(token.value) else token.value
+                book.valuesFor(token.facet).any { it.equals(wanted, ignoreCase = true) }
             }
             if (!holds) return false
         }

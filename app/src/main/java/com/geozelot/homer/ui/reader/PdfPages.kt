@@ -49,6 +49,11 @@ class PdfPages private constructor(
 
     private val lock = Mutex()
 
+    /** Set by [close]; the renderer itself is released by whoever holds [lock] at that moment. */
+    @Volatile
+    private var closed = false
+    private var released = false
+
     val pageCount: Int = renderer.pageCount
 
     /**
@@ -62,37 +67,67 @@ class PdfPages private constructor(
     suspend fun render(index: Int, widthPx: Int): Bitmap? {
         if (index !in 0 until pageCount || widthPx <= 0) return null
         return lock.withLock {
-            withContext(Dispatchers.IO) {
-                try {
-                    renderer.openPage(index).use { page ->
-                        var width = widthPx
-                        var height = (widthPx.toFloat() * page.height / page.width)
-                            .roundToInt().coerceAtLeast(1)
-                        val pixels = width.toLong() * height
-                        if (pixels > MaxPixels) {
-                            val factor = sqrt(MaxPixels.toDouble() / pixels)
-                            width = (width * factor).roundToInt().coerceAtLeast(1)
-                            height = (height * factor).roundToInt().coerceAtLeast(1)
-                        }
-                        createBitmap(width, height).also {
-                            it.eraseColor(Color.WHITE)
-                            page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        }
-                    }
-                } catch (e: OutOfMemoryError) {
-                    // Reachable despite the cap: the cap bounds ONE page, and the pager may hold a
-                    // neighbour's bitmap while this one is allocated. A missing page beats a crash.
-                    Log.w(TAG, "out of memory rendering page $index", e)
-                    null
-                } catch (e: Exception) {
-                    Log.w(TAG, "could not render page $index", e)
-                    null
-                }
+            if (closed) return@withLock null
+            try {
+                renderUnlocked(index, widthPx)
+            } finally {
+                // The screen closed while this page was being drawn — see [close].
+                if (closed) release()
             }
         }
     }
 
+    private suspend fun renderUnlocked(index: Int, widthPx: Int): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                renderer.openPage(index).use { page ->
+                    var width = widthPx
+                    var height = (widthPx.toFloat() * page.height / page.width)
+                        .roundToInt().coerceAtLeast(1)
+                    val pixels = width.toLong() * height
+                    if (pixels > MaxPixels) {
+                        val factor = sqrt(MaxPixels.toDouble() / pixels)
+                        width = (width * factor).roundToInt().coerceAtLeast(1)
+                        height = (height * factor).roundToInt().coerceAtLeast(1)
+                    }
+                    createBitmap(width, height).also {
+                        it.eraseColor(Color.WHITE)
+                        page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    }
+                }
+            } catch (e: OutOfMemoryError) {
+                // Reachable despite the cap: the cap bounds ONE page, and the pager may hold a
+                // neighbour's bitmap while this one is allocated. A missing page beats a crash.
+                Log.w(TAG, "out of memory rendering page $index", e)
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "could not render page $index", e)
+                null
+            }
+        }
+
+    /**
+     * Closes the document — now if nothing is drawing, otherwise as soon as the drawing finishes.
+     *
+     * Closing a `PdfRenderer` with a page open throws, and the reader's screen leaves while the
+     * pager is still rendering a neighbour as a matter of course. Closing under it failed, left the
+     * renderer open, and closed the file descriptor out from under the page still reading it.
+     */
     override fun close() {
+        closed = true
+        if (lock.tryLock()) {
+            try {
+                release()
+            } finally {
+                lock.unlock()
+            }
+        }
+    }
+
+    /** Only ever called holding [lock], so it runs once and never under a page. */
+    private fun release() {
+        if (released) return
+        released = true
         runCatching { renderer.close() }
         runCatching { descriptor.close() }
     }

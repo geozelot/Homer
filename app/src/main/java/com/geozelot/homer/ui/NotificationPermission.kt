@@ -11,6 +11,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -36,7 +40,13 @@ import androidx.core.content.ContextCompat
 fun NotificationPermissionRequest() {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    // Once per showing, saved with the screen. The effect runs again whenever the activity is
+    // rebuilt, so turning the phone after saying no put the same question straight back — Android
+    // allows a second ask, and this spent it on a rotation.
+    var asked by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        if (asked) return@LaunchedEffect
+        asked = true
         if (!context.mayPostNotifications()) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
