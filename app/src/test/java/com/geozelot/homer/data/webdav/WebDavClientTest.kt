@@ -73,4 +73,30 @@ class WebDavClientTest {
         // The account marker must NOT match a share href.
         assertNull(WebDavClient.relativePathFromHref(href, creds))
     }
+
+    // ── getlastmodified ──────────────────────────────────────────────────────────────────────
+
+    private fun epoch(iso: String) = java.time.Instant.parse(iso).toEpochMilli()
+
+    @Test
+    fun `an RFC 1123 date is read as the instant it names`() {
+        assertEquals(epoch("2026-10-06T10:00:00Z"), WebDavClient.parseHttpDate("Tue, 06 Oct 2026 10:00:00 GMT"))
+    }
+
+    @Test
+    fun `a single-digit day and a numeric offset are both RFC 1123`() {
+        assertEquals(epoch("2026-10-06T08:00:00Z"), WebDavClient.parseHttpDate("Tue, 6 Oct 2026 10:00:00 +0200"))
+    }
+
+    @Test
+    fun `a server that writes UTC is read the same as GMT`() {
+        assertEquals(epoch("2026-10-06T10:00:00Z"), WebDavClient.parseHttpDate("Tue, 06 Oct 2026 10:00:00 UTC"))
+    }
+
+    @Test
+    fun `anything that is not a date is no date rather than an error`() {
+        assertNull(WebDavClient.parseHttpDate(""))
+        assertNull(WebDavClient.parseHttpDate("yesterday"))
+        assertNull(WebDavClient.parseHttpDate("2026-10-06T10:00:00Z"))
+    }
 }

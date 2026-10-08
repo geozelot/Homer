@@ -8,9 +8,9 @@ import com.geozelot.homer.data.runCatchingUnlessCancelled
 import com.geozelot.homer.di.Authed
 import java.io.IOException
 import java.net.URI
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -411,10 +411,24 @@ class WebDavClient @Inject constructor(
         private fun parseStatusCode(status: String): Int =
             status.trim().split(' ').getOrNull(1)?.toIntOrNull() ?: 0
 
-        private fun parseHttpDate(value: String): Long? = runCatching {
-            val format = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
-            format.timeZone = TimeZone.getTimeZone("GMT")
-            format.parse(value)?.time
-        }.getOrNull()
+        /**
+         * A `getlastmodified` value as epoch milliseconds, or null when it is not a date.
+         *
+         * RFC 1123 — "Mon, 06 Oct 2026 10:00:00 GMT" — which is what Nextcloud and every other
+         * WebDAV server sends here. One formatter for the whole process: `DateTimeFormatter` is
+         * immutable and thread-safe, where the `SimpleDateFormat` this replaces is neither and was
+         * therefore built afresh for every resource of every listing, which on a crawl of a large
+         * library is tens of thousands of them.
+         *
+         * "UTC" is accepted as well as "GMT". The RFC says GMT and the formatter holds it to that;
+         * the old parser took any zone name, and a server that ever wrote UTC would otherwise lose
+         * every modification time it reports.
+         */
+        internal fun parseHttpDate(value: String): Long? = try {
+            val normalised = if (value.endsWith(" UTC")) value.dropLast(3) + "GMT" else value
+            ZonedDateTime.parse(normalised, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()
+        } catch (_: DateTimeParseException) {
+            null
+        }
     }
 }
