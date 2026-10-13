@@ -1,6 +1,7 @@
 package com.geozelot.homer
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,6 +34,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The volume keys belong to the book while Homer is on screen. Android only routes them to
+        // media on its own while audio is actually coming out; paused, loading or between books, the
+        // keys changed the RINGER from inside an audiobook player — the volume panel showed the
+        // ring slider, and the book was just as loud when play was pressed again.
+        volumeControlStream = AudioManager.STREAM_MUSIC
         enableEdgeToEdge()
         setContent {
             HomerTheme {
