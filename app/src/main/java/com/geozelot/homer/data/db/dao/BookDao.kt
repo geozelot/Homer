@@ -142,12 +142,22 @@ interface BookDao {
      * It costs no extra work on a settled library. A genre found puts a book out of this set, and
      * so does a probe that came back empty — that is what `metadataAttempted` records — so the set
      * empties exactly as it did before.
+     *
+     * The first kind is asked of the FILES, not of the book's missing total. A book whose files were
+     * all tried and none could be read keeps a null total for good, so it was handed to every pass,
+     * which then had nothing to do with it — and the progress line counted it anyway, one book more
+     * than there were files to measure. Re-arming those files is the deep pass's job, and a re-armed
+     * file is probe-able again, so the book comes back here exactly when there is work for it.
      */
     @Query(
         """
-        SELECT id FROM books
-        WHERE totalDurationMs IS NULL OR (genre IS NULL AND metadataAttempted = 0)
-        ORDER BY id
+        SELECT b.id FROM books b
+        WHERE EXISTS (
+            SELECT 1 FROM audio_files af
+            WHERE af.bookId = b.id AND af.durationMs IS NULL AND af.durationAttempted = 0
+        )
+        OR (b.genre IS NULL AND b.metadataAttempted = 0)
+        ORDER BY b.id
         """,
     )
     suspend fun idsWithPendingProbe(): List<String>

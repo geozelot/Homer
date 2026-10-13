@@ -279,7 +279,9 @@
     <!-- A pass that has been asked for but has not started: passes queue behind each other now
          rather than cancelling one another, so a row has to be able to say "your turn is coming". -->
     <string name="sync_pass_queued">Waiting its turn\u2026</string>
-    <string name="sync_fetching_covers">Fetching art %1$d of %2$d…</string>
+    <string name="lib_scan_now_crawling">Scanning · %1$s</string>
+    <string name="lib_scan_now_covers">Fetching covers · %1$d of %2$d</string>
+    <string name="lib_scan_now_lengths" tools:ignore="PluralsCandidate">Measuring · book %1$d of %2$d · %3$d of %4$d files</string>
     <string name="sync_show_hidden">Show hidden books</string>
     <string name="sync_rediscover">Rediscover</string>
     <string name="sync_discovering">Scanning your server…</string>

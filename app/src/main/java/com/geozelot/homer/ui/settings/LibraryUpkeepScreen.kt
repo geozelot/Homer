@@ -374,16 +374,29 @@ private fun ScanRow(
     val busy = queued.any { it == IndexPass.BOOKS || it == IndexPass.ARTWORK || it == IndexPass.LENGTHS }
     PassRow(
         label = stringResource(R.string.lib_row_books),
+        // Each line opens with what is happening. The row is called "Books" whatever runs, and a
+        // bare "Book 3 of 120 · 5 of 6 files" under it read as more of the crawl rather than as a
+        // length sweep. A pass that has started but has nothing to count yet names itself too —
+        // it used to fall through to "Waiting its turn", which is what a pass NOT running says.
         summary = when {
-            scanning != null ->
-                scanProgressLine(LocalResources.current, scanning.directoriesVisited, scanning.booksFound)
-            progress?.pass == IndexPass.ARTWORK && progress.total > 0 ->
-                stringResource(R.string.sync_fetching_covers, progress.done, progress.total)
-            progress?.pass == IndexPass.LENGTHS && progress.total > 0 ->
+            scanning != null -> stringResource(
+                R.string.lib_scan_now_crawling,
+                scanProgressLine(LocalResources.current, scanning.directoriesVisited, scanning.booksFound),
+            )
+            progress?.pass == IndexPass.BOOKS -> stringResource(R.string.index_notification_scanning)
+            progress?.pass == IndexPass.ARTWORK -> if (progress.total > 0) {
+                stringResource(R.string.lib_scan_now_covers, progress.done, progress.total)
+            } else {
+                stringResource(R.string.index_notification_covers)
+            }
+            progress?.pass == IndexPass.LENGTHS -> if (progress.total > 0) {
                 stringResource(
-                    R.string.sync_measuring,
+                    R.string.lib_scan_now_lengths,
                     progress.books, progress.bookTotal, progress.done, progress.total,
                 )
+            } else {
+                stringResource(R.string.index_notification_lengths)
+            }
             busy -> stringResource(R.string.sync_pass_queued)
             bookCount == 0 -> stringResource(R.string.lib_books_none)
             else -> statusLine(bookCount, lastScannedAt, now)

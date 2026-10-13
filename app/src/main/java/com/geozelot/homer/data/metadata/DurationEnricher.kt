@@ -115,6 +115,10 @@ class DurationEnricher @Inject constructor(
                 Log.i(TAG, "measureAll: offline after $index/${bookIds.size} books, stopping")
                 return
             }
+            // Counted as it STARTS. Advanced only by a finished file, the counter skipped every
+            // book that needed just a tag read, and sat on the previous book while the first file
+            // of the next one was still being read.
+            publish(index + 1)
             measure(bookId) {
                 filesDone.incrementAndGet()
                 publish(index + 1)

@@ -262,7 +262,9 @@
     <string name="sync_status_line">%1$s · %2$s</string>
     <string name="sync_measuring">Buch %1$d von %2$d · %3$d von %4$d Dateien…</string>
     <string name="sync_pass_queued">Wartet auf seinen Zug…</string>
-    <string name="sync_fetching_covers">Bild %1$d von %2$d wird geholt…</string>
+    <string name="lib_scan_now_crawling">Durchsucht · %1$s</string>
+    <string name="lib_scan_now_covers">Holt Cover · %1$d von %2$d</string>
+    <string name="lib_scan_now_lengths">Misst · Buch %1$d von %2$d · %3$d von %4$d Dateien</string>
     <string name="sync_show_hidden">Ausgeblendete Bücher zeigen</string>
     <string name="sync_rediscover">Neu suchen</string>
     <string name="sync_discovering">Server wird durchsucht…</string>
