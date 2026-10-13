@@ -192,7 +192,7 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.2.0**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
+Homer is at **2.2.1**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
 build rather than added to, so there is one pre-release to follow; its title carries the actual
 build (`2.2.0-BETA.117`) while the APK keeps a stable name. In-app update checks only offer a
 pre-release to devices on the beta channel.
@@ -200,6 +200,11 @@ pre-release to devices on the beta channel.
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
 `2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
+
+2.2.1 is a small follow-up. The volume keys control the book whenever Homer is on screen, playing
+or not; before, a paused book left them on the ringer. And the Books row under *Upkeep* says what a
+scan is doing while it does it — scanning, fetching covers or measuring — with a measuring count
+that only includes books there is something left to measure in.
 
 2.2 is about a library you can read at a glance, and books that come with more than audio.
 
