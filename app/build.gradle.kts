@@ -90,6 +90,28 @@ android {
 // threading a logger abstraction through code whose logging is purely diagnostic.
 android.testOptions.unitTests.isReturnDefaultValues = true
 
+// The store screenshots are drawn on the JVM by Robolectric (see src/test/.../screenshots), which needs
+// the app's resources — fonts, strings, drawables — merged into the unit-test classpath.
+android.testOptions.unitTests.isIncludeAndroidResources = true
+
+// Robolectric's Android runtime, as an ordinary Gradle dependency. Left to itself Robolectric fetches it
+// from Maven Central while the tests run, outside Gradle's cache and its offline mode; resolved here it is
+// cached like everything else, and Robolectric is pointed at it and told not to download anything.
+val robolectricAndroidAll: Configuration = configurations.create("robolectricAndroidAll")
+dependencies { add(robolectricAndroidAll.name, libs.robolectric.android.all) }
+tasks.withType<Test>().configureEach {
+    val androidAll: FileCollection = robolectricAndroidAll
+    inputs.files(androidAll)
+    systemProperty("robolectric.offline", "true")
+    jvmArgumentProviders.add(
+        CommandLineArgumentProvider { listOf("-Drobolectric.dependency.dir=${androidAll.singleFile.parentFile}") },
+    )
+    // Opt-in: the store screenshots are left out of an ordinary run — they boot an Android runtime
+    // per image — and asked for, they write where they are told to.
+    val screenshots = providers.gradleProperty("screenshots").orNull
+    if (screenshots == null) exclude("**/screenshots/**") else systemProperty("homer.screenshots.dir", screenshots)
+}
+
 // Export Room schemas to a committed directory so migrations have a versioned record and can be
 // covered by MigrationTestHelper tests. Requires exportSchema = true on @Database.
 ksp {
@@ -158,6 +180,15 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.ui.test.junit4)
+    // Pinned to what ui-test-junit4's own floor resolves up to anyway; named so the floor is not fetched.
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.junit)
+    testImplementation(libs.androidx.test.espresso.core)
+    // The empty activity the Compose test rule hosts its content in; debug builds only.
+    debugImplementation(libs.androidx.ui.test.manifest)
 
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)

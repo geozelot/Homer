@@ -515,7 +515,7 @@ private const val TRANSPORT_NATURAL_DP = 348f
  * the screen and take the cover and the transport with it. What is left over is the cover's, which
  * at this cap is always something rather than nothing.
  */
-private const val CLUSTER_MAX_FRACTION = 0.74f
+internal const val CLUSTER_MAX_FRACTION = 0.74f
 
 /**
  * One number the whole cluster is drawn at, between 0.7 and 1.

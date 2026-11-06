@@ -985,7 +985,7 @@ internal class BookActions(
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(updateWaiting: Boolean, onHelp: () -> Unit, onSettings: () -> Unit) {
+internal fun TopBar(updateWaiting: Boolean, onHelp: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
