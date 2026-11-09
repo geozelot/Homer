@@ -63,7 +63,8 @@ fun AboutSettingsScreen(
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
 
-        UpdateSection()
+        // F-Droid updates its own build of Homer, so that build has no updater to show.
+        if (BuildConfig.SELF_UPDATE) UpdateSection()
 
         SettingsDivider()
         SettingsSectionHeader(stringResource(R.string.set_about_more_header))

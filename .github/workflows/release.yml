@@ -38,22 +38,47 @@ jobs:
       - name: Derive version from tag
         id: version
         run: |
-          # v1.2.0 -> 1.2.0 (manual runs fall back to a dev name); versionCode is monotonic.
+          # The version lives in app/build.gradle.kts as two literals, because F-Droid builds from
+          # the same tag and reads them from that file. A release tag has to agree with them —
+          # otherwise this APK and F-Droid's would carry different versions of the same commit.
+          FILE=app/build.gradle.kts
+          LITERAL_NAME=$(sed -nE 's/^ *versionName = "([^"]+)".*/\1/p' "$FILE" | head -n1)
+          LITERAL_CODE=$(sed -nE 's/^ *versionCode = ([0-9]+).*/\1/p' "$FILE" | head -n1)
+          # v1.2.0 -> 1.2.0 (manual runs fall back to a dev name).
           NAME="${GITHUB_REF_NAME#v}"
           case "$GITHUB_REF" in refs/tags/*) : ;; *) NAME="0.0.0-dev${GITHUB_RUN_NUMBER}" ;; esac
-          # A beta tag is MOVED rather than re-cut, so the tag name alone never changes and every
-          # build would call itself the same version — leaving the in-app updater with nothing
-          # newer to offer. Appending the run number gives a name that still rises: AppVersion
-          # compares the trailing digits numerically, so BETA.9 < BETA.10, and plain 2.0.0 beats
-          # every BETA.n because a release outranks its own pre-releases.
           # The ASSET name stays stable per tag so a rebuild REPLACES the APK on the release
           # instead of adding a second one beside it; the rising version rides on the release
           # title, which is what the updater reads.
           ASSET="$NAME"
-          case "$NAME" in *-BETA) NAME="${NAME}.${GITHUB_RUN_NUMBER}" ;; esac
+          OVERRIDE=""
+          case "$NAME" in
+            *-*)
+              # A pre-release or a manual run. A beta tag is MOVED rather than re-cut, so the tag
+              # name alone never changes and every build would call itself the same version —
+              # leaving the in-app updater with nothing newer to offer. Appending the run number
+              # gives a name that still rises: AppVersion compares the trailing digits numerically,
+              # so BETA.9 < BETA.10, and plain 2.0.0 beats every BETA.n because a release outranks
+              # its own pre-releases. The version code stays the literal.
+              case "$NAME" in *-BETA) NAME="${NAME}.${GITHUB_RUN_NUMBER}" ;; esac
+              OVERRIDE="-PversionName=$NAME"
+              ;;
+            *)
+              if [ "$NAME" != "$LITERAL_NAME" ]; then
+                echo "::error::Tag v$NAME, but $FILE says versionName \"$LITERAL_NAME\". Bump it in the release commit."
+                exit 1
+              fi
+              IFS=. read -r MAJOR MINOR PATCH <<< "$NAME"
+              CODE=$(( MAJOR * 10000 + MINOR * 100 + ${PATCH:-0} ))
+              if [ "$CODE" != "$LITERAL_CODE" ]; then
+                echo "::error::versionName $NAME should have versionCode $CODE, but $FILE says $LITERAL_CODE."
+                exit 1
+              fi
+              ;;
+          esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
-          echo "code=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "override=$OVERRIDE" >> "$GITHUB_OUTPUT"
 
       - name: Configure signing
         env:
@@ -84,7 +109,7 @@ jobs:
           fi
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease -PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }} --no-daemon
+        run: ./gradlew :app:assembleRelease ${{ steps.version.outputs.override }} --no-daemon
 
       - name: Collect APK
         id: apk

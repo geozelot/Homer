@@ -115,8 +115,8 @@ class UpdateCheckWorker @AssistedInject constructor(
         private const val WORK_NAME = "update-check"
 
         /**
-         * Enqueues the daily check. Called unconditionally at startup with KEEP: the worker itself
-         * honours the preference, so this never needs to be cancelled and re-enqueued.
+         * Enqueues the daily check. Called at every startup of a build with the updater, with KEEP:
+         * the worker itself honours the preference, so turning it off never needs a re-enqueue.
          */
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(1, TimeUnit.DAYS)
@@ -129,6 +129,11 @@ class UpdateCheckWorker @AssistedInject constructor(
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        }
+
+        /** Drops the daily check, for a build that leaves the updater out. */
+        fun cancel(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
     }
 }

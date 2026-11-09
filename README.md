@@ -23,7 +23,8 @@ system installer, which still asks you to confirm.
 
 Prefer to keep updates outside the app? [Obtainium](https://github.com/ImranR98/Obtainium)
 tracks this repository's releases and installs them for you — point it at the repo URL and
-skip Homer's updater entirely.
+skip Homer's updater entirely. Homer's F-Droid build has no updater at all: F-Droid keeps it up
+to date.
 
 > A copy you built yourself is signed with your own debug key, so a CI-signed release APK
 > can't replace it — Android refuses the install. Homer detects this and says so rather than
@@ -131,7 +132,8 @@ permission at all:
 - **`REQUEST_INSTALL_PACKAGES`** — lets the in-app updater hand a downloaded release APK to the
   system installer. Android gates this behind a per-app *install unknown apps* toggle that only you
   can grant, and the installer still asks you to confirm every install. Nothing installs silently,
-  and the scheduled check that would find an update is off unless you turn it on.
+  and the scheduled check that would find an update is off unless you turn it on. The F-Droid build
+  does not have this permission: F-Droid updates it.
 - **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
   at install or first run. Homer only sends you to the system grant screen if you explicitly choose
   to keep downloads in a folder you pick yourself (Settings → *Storage* → *Browse device*).
@@ -175,12 +177,17 @@ debug key (not for distribution).
 
 ### Releases via CI
 
-Pushing a version tag builds a versioned APK and attaches it to the matching GitHub
-Release:
+The version is two literals in `app/build.gradle.kts`, `versionName` and `versionCode`
+(`major * 10000 + minor * 100 + patch`), bumped in the release commit. Pushing a matching tag
+builds the APK and attaches it to the GitHub Release; CI refuses a release tag that disagrees with
+either literal:
 
 ```bash
-git tag v0.9.0 && git push origin v0.9.0
+git tag v2.2.2 && git push origin v2.2.2
 ```
+
+F-Droid builds from the same source, and only the releases you send it — see
+[docs/F-DROID.md](docs/F-DROID.md).
 
 CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
 `KEY_PASSWORD` repository secrets are set; otherwise it falls back to a debug-signed APK.

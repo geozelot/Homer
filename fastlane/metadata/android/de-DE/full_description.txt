@@ -1,0 +1,32 @@
+Homer spielt die Hörbücher ab, die du in deiner eigenen Nextcloud aufbewahrst. Melde dich an, wähle deinen Hörbuch-Ordner, und deine Bibliothek ist da: direkt von deinem Server gestreamt oder heruntergeladen zum Hören ohne Netz. Kein zusätzlicher Server, kein Konto bei irgendwem sonst, kein Tracking und keine Google-Dienste.
+
+<b>Deine Bibliothek</b>
+<ul>
+<li>Jeder Ordner in deiner Nextcloud, oder ein öffentlicher Freigabe-Link</li>
+<li>Cover, Längen und Restzeit auf einen Blick</li>
+<li>Nach Autor oder Genre ins Regal stellen, Serien und Kollektionen stapeln, nach Titel, Autor, Länge oder zuletzt Gehörtem sortieren</li>
+<li>Eine Suche, die Autoren, Serien, Genres und angefangene oder beendete Bücher vorschlägt</li>
+<li>Booklets: PDFs neben einem Buch öffnen sich in Homers eigenem Reader</li>
+<li>Titel, Autor oder Serie in der App korrigieren, ohne deine Dateien anzufassen</li>
+</ul>
+
+<b>Hören</b>
+<ul>
+<li>Variable Geschwindigkeit, Stille überspringen, Lautstärke-Boost und Sprungtasten in der Länge deiner Wahl</li>
+<li>Beim Fortsetzen ein Stück zurückspulen, und ein größeres, wenn du nach dem Schließen der App zu einem Buch zurückkehrst</li>
+<li>Sleep-Timer mit Ausblenden und Schütteln zum Verlängern</li>
+<li>Kapitel aus Büchern, die aus vielen Dateien bestehen, und aus den Kapitelmarken in MP3- und M4B-Dateien</li>
+<li>Lesezeichen sowie Steuerung auf dem Sperrbildschirm, in der Benachrichtigung und über Bluetooth-Kopfhörer</li>
+<li>Downloads zum Hören ohne Netz, auf Wunsch nur über WLAN</li>
+</ul>
+
+<b>Auf jedem Gerät</b>
+Deine Stelle in jedem Buch und die Bücher, die du beendet hast, liegen in einer kleinen Datei in deiner eigenen Nextcloud, nur für dein Konto, damit du auf einem anderen Handy weiterhören kannst. Andere Geräte, die dieselbe Bibliothek lesen, können ihren Index teilen und sich das Einlesen sparen.
+
+<b>Privat von Grund auf</b>
+Homer meldet sich über den Login Flow von Nextcloud an und bekommt so ein App-Passwort, das du widerrufen kannst, niemals dein echtes. Eine App-Sperre mit Fingerabdruck und das Anpinnen des Serverzertifikats gibt es, wenn du sie möchtest. Der einzige Dienst außer deiner Nextcloud, den Homer erreichen kann, ist Open Library, für Cover, und das erst, wenn du es einschaltest. Auch der Zugriff auf alle Dateien ist freiwillig: Homer fragt nur danach, wenn du Downloads in einem eigenen Ordner ablegen möchtest.
+
+<b>Wie deine Bibliothek gelesen wird</b>
+Homer liest Autor, Serie und Titel aus deinen Ordnernamen, in der Form Autor/Serie/Buch, Autor/Buch oder einfach Buch. Ist deine Bibliothek anders geordnet, beschreibst du ihren Aufbau mit einem Ordnernamen-Muster in den Einstellungen, statt sie umzuräumen.
+
+Homer gibt es auf Deutsch und Englisch.

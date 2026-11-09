@@ -41,9 +41,11 @@ class HomerApplication : Application(), ImageLoaderFactory, Configuration.Provid
 
     override fun onCreate() {
         super.onCreate()
-        // Enqueued unconditionally: the worker reads the opt-in preference itself and returns
-        // immediately when it is off, so there is no schedule to keep in step with the setting.
-        UpdateCheckWorker.schedule(this)
+        // Enqueued regardless of the setting: the worker reads the opt-in preference itself and
+        // returns immediately when it is off, so there is no schedule to keep in step with it. A build
+        // without the updater cancels instead — one installed over a build that had it inherits the
+        // old schedule, and must not go on asking GitHub about releases it cannot install.
+        if (BuildConfig.SELF_UPDATE) UpdateCheckWorker.schedule(this) else UpdateCheckWorker.cancel(this)
     }
 
     override fun newImageLoader(): ImageLoader = imageLoader

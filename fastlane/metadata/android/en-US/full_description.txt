@@ -1,0 +1,32 @@
+Homer plays the audiobooks you keep in your own Nextcloud. Sign in, choose your audiobook folder, and your library is there: streamed straight from your server, or downloaded for listening offline. There is no extra server to install, no account with anyone else, no tracking and no Google services.
+
+<b>Your library</b>
+<ul>
+<li>Any folder in your Nextcloud, or a public share link</li>
+<li>Covers, lengths and time left at a glance</li>
+<li>Shelve by author or genre, stack series and collections, sort by title, author, length or what you played last</li>
+<li>Search that suggests authors, series, genres and books you have started or finished</li>
+<li>Booklets: PDFs filed next to a book open in Homer's own reader</li>
+<li>Correct a title, author or series in the app, without touching your files</li>
+</ul>
+
+<b>Listening</b>
+<ul>
+<li>Variable speed, skip silence, volume boost and skip buttons of the length you choose</li>
+<li>Rewind a little when you resume, and further when you return to a book after closing the app</li>
+<li>Sleep timer with fade-out and shake to extend</li>
+<li>Chapters from books made of many files, and from the chapter marks in MP3 and M4B files</li>
+<li>Bookmarks, and controls on the lock screen, in the notification and on Bluetooth headsets</li>
+<li>Downloads for offline listening, on Wi-Fi only if you like</li>
+</ul>
+
+<b>On every device</b>
+Your place in each book and the books you have finished are kept in a small file in your own Nextcloud, private to your account, so you can carry on from another phone. Other devices reading the same library can share its index and skip the scan.
+
+<b>Private by design</b>
+Homer signs in with Nextcloud's Login Flow, so it holds an app password you can revoke, never your real one. An app lock with fingerprint and server certificate pinning are there if you want them. The only service besides your Nextcloud that Homer can reach is Open Library, for cover art, and only once you turn that on. Access to all files is optional too: Homer asks for it only if you choose to keep downloads in a folder of your own.
+
+<b>How your library is read</b>
+Homer takes author, series and title from your folder names, in the form Author/Series/Book, Author/Book or just Book. If your library is organised differently, describe its layout with a folder-name pattern in the settings instead of reorganising it.
+
+Homer is in English and German.

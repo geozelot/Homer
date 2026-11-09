@@ -17,6 +17,12 @@ val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) load(keystorePropsFile.inputStream())
 }
 
+// F-Droid builds Homer from source — its recipe passes -Pfdroid — and then signs and updates the app
+// itself. So that build leaves the in-app updater out entirely (no update check, no permission to
+// install packages, see src/selfUpdate) and stays unsigned for F-Droid's key instead of falling back
+// to the debug key below.
+val fdroid = providers.gradleProperty("fdroid").isPresent
+
 android {
     namespace = "com.geozelot.homer"
     // 37 to compile against: the current AndroidX (navigation, hilt, compose) will not build against
@@ -28,14 +34,20 @@ android {
         applicationId = "com.geozelot.homer"
         minSdk = 26
         targetSdk = 36
-        // CI passes -PversionCode / -PversionName (derived from the release tag); the literals
-        // are the fallback for local builds.
-        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
-        versionName = (project.findProperty("versionName") as String?) ?: "2.2.1"
+        // Literals, bumped together in each release commit: F-Droid reads them from this file with a
+        // regex and never runs it, so they cannot be computed. The code is major * 10000 + minor * 100
+        // + patch, which always rises and sits above the CI run numbers that versioned 2.2.1 and
+        // earlier. The release workflow refuses a tag that disagrees with either.
+        versionCode = 20201
+        versionName = "2.2.1"
+        // A moving beta tag names its builds apart by appending the CI run number — see release.yml.
+        // Only the name: the code stays the literal, and equal codes install over each other.
+        providers.gradleProperty("versionName").orNull?.let { versionName = it }
 
         // Where the in-app updater looks for releases. A fork changes this one line and its own
         // builds start tracking its own releases instead of upstream's.
         buildConfigField("String", "UPDATE_REPO", "\"geozelot/Homer\"")
+        buildConfigField("boolean", "SELF_UPDATE", "${!fdroid}")
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -62,13 +74,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = if (keystorePropsFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                // No keystore configured yet — allow the build to complete unsigned.
-                signingConfigs.getByName("debug")
+            signingConfig = when {
+                fdroid -> null
+                keystorePropsFile.exists() -> signingConfigs.getByName("release")
+                // No keystore configured yet — sign with the debug key so the APK still installs.
+                else -> signingConfigs.getByName("debug")
             }
         }
+    }
+
+    // AGP otherwise writes a list of the app's dependencies into the APK signing block, encrypted so
+    // that only Google Play can read it. Nobody else can check what it says, and F-Droid asks for it
+    // to be left out.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     compileOptions {
@@ -81,6 +101,14 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+}
+
+// The updater's manifest entries live in a manifest of their own, merged into every build but
+// F-Droid's — so its APK never declares the permission to install packages.
+androidComponents {
+    onVariants { variant ->
+        if (!fdroid) variant.sources.manifests.addStaticManifestFile("src/selfUpdate/AndroidManifest.xml")
     }
 }
 
