@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,20 +55,23 @@ import com.geozelot.homer.playback.PlaybackUiState
 import com.geozelot.homer.ui.components.EditableBook
 import com.geozelot.homer.ui.components.MiniPlayer
 import com.geozelot.homer.ui.home.BookActions
-import com.geozelot.homer.ui.home.BookListItem
 import com.geozelot.homer.ui.home.LibraryControlBar
 import com.geozelot.homer.ui.home.LibraryDepth
 import com.geozelot.homer.ui.home.LibraryFilter
 import com.geozelot.homer.ui.home.LibraryFilterEngine
 import com.geozelot.homer.ui.home.LibraryGridPadding
 import com.geozelot.homer.ui.home.LibraryGridSpacing
+import com.geozelot.homer.ui.home.GridSlot
 import com.geozelot.homer.ui.home.LibraryShelving
 import com.geozelot.homer.ui.home.LibrarySort
 import com.geozelot.homer.ui.home.ListeningShelf
 import com.geozelot.homer.ui.home.RowContext
 import com.geozelot.homer.ui.home.TopBar
+import com.geozelot.homer.ui.home.bookCount
 import com.geozelot.homer.ui.home.gridColumnsFor
 import com.geozelot.homer.ui.home.libraryContent
+import com.geozelot.homer.ui.home.librarySlots
+import com.geozelot.homer.ui.home.suggest
 import com.geozelot.homer.ui.player.BookHeader
 import com.geozelot.homer.ui.player.CLUSTER_MAX_FRACTION
 import com.geozelot.homer.ui.player.ChapterButton
@@ -87,7 +91,8 @@ import com.geozelot.homer.ui.theme.Surface0
 import com.geozelot.homer.ui.theme.Surface1
 
 /**
- * The two screens the store shows, assembled from the very composables the app draws them with.
+ * The library and the player as the store shows them, assembled from the very composables the app
+ * draws them with. (The settings pages need no assembling: they are drawn whole — see [DemoSettings].)
  *
  * Laid out the way [com.geozelot.homer.ui.home.HomeScreen] and
  * [com.geozelot.homer.ui.player.PlayerScreen] lay them out, minus the ViewModels: those reach a
@@ -130,25 +135,40 @@ internal object Scenes {
         )
     }
 
-    /** What [com.geozelot.homer.ui.home.HomeScreen] draws for a library with something playing. */
+    /**
+     * What [com.geozelot.homer.ui.home.HomeScreen] draws for a library with something playing.
+     *
+     * [query] is what is typed into an open search box, and filters the shelf the way the app does
+     * while it is typed. [open] names shelves to draw opened: the grid starts scrolled to the first,
+     * with the listening panel folded, which is how the screen stands once somebody has scrolled down
+     * to it. Search folds the panel too, as it does in the app.
+     */
     @Composable
     fun Library(
         gridView: Boolean,
-        shelving: LibraryShelving = LibraryShelving.ITEM,
-        series: LibraryDepth = LibraryDepth.SERIES,
-        sort: LibrarySort = LibrarySort.AUTHOR,
+        shelving: LibraryShelving = LibraryShelving.AUTHOR,
+        depth: LibraryDepth = LibraryDepth.COLLECTION,
+        // Title, because shelved by author the author sort is not offered — see LibrarySort.offeredFor.
+        sort: LibrarySort = LibrarySort.TITLE,
+        searchOpen: Boolean = false,
+        query: String = "",
+        arrangeOpen: Boolean = false,
+        open: List<String> = emptyList(),
     ) {
         val books = DemoLibrary.books
-        val entries = remember(gridView, shelving, series, sort) {
-            LibraryFilterEngine().arrange(books, LibraryFilter(), sort, shelving, series, bySurname = true)
+        val filter = LibraryFilter(text = query)
+        val entries = remember(filter, shelving, depth, sort) {
+            LibraryFilterEngine().arrange(books, filter, sort, shelving, depth, bySurname = true)
         }
+        val filtering = !filter.isEmpty
+        val anchors = books.filter { it.collection in open || it.series in open }.map { it.id }
         val playingBook = DemoLibrary.book(DemoLibrary.PLAYING)
         Column(modifier = Modifier.fillMaxSize()) {
             TopBar(updateWaiting = false, onHelp = {}, onSettings = {})
             HorizontalDivider(color = Line.copy(alpha = 0.45f))
             ListeningShelf(
                 books = DemoLibrary.listening,
-                expanded = true,
+                expanded = !searchOpen && open.isEmpty(),
                 onExpand = {},
                 rowState = rememberLazyListState(),
                 onOpen = {},
@@ -162,18 +182,18 @@ internal object Scenes {
                 ) {
                     HorizontalDivider(color = Line.copy(alpha = 0.45f))
                     LibraryControlBar(
-                        count = books.size,
-                        searching = false,
+                        count = if (filtering) entries.bookCount() else books.size,
+                        searching = filtering,
                         sort = sort,
                         shelving = shelving,
-                        series = series,
+                        series = depth,
                         gridView = gridView,
-                        tokens = emptyList(),
-                        shown = books.size,
+                        tokens = filter.tokens,
+                        shown = entries.bookCount(),
                         total = books.size,
-                        query = "",
-                        searchOpen = false,
-                        arrangeOpen = false,
+                        query = query,
+                        searchOpen = searchOpen,
+                        arrangeOpen = arrangeOpen,
                         onQueryChange = {},
                         onOpenSearch = {},
                         onToggleArrange = {},
@@ -181,7 +201,7 @@ internal object Scenes {
                         onRemoveToken = {},
                         onClearFilter = {},
                         onCommitQuery = {},
-                        suggestions = emptyList(),
+                        suggestions = if (searchOpen) suggest(books, query, filter.tokens) else emptyList(),
                         onPickSuggestion = {},
                         onSortChange = {},
                         onShelfChange = {},
@@ -195,9 +215,14 @@ internal object Scenes {
                 BoxWithConstraints(modifier = Modifier.weight(1f)) {
                     val columns = if (gridView) gridColumnsFor(maxWidth) else 1
                     val locale = LocalConfiguration.current.locales[0]
-                    val expanded = remember { mutableStateListOf<String>() }
+                    val expanded = remember { mutableStateListOf<String>().apply { addAll(anchors) } }
+                    // The heading above the first opened shelf, so its author is on screen with it.
+                    val firstOpen = librarySlots(entries, gridView, columns, emptySet()) { shelf ->
+                        shelf.books.any { it.id in anchors }
+                    }.indexOfFirst { it is GridSlot.ShelfBanner || (it is GridSlot.Shelf && it.open) }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(columns),
+                        state = rememberLazyGridState(initialFirstVisibleItemIndex = (firstOpen - 1).coerceAtLeast(0)),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = LibraryGridPadding, end = LibraryGridPadding, top = 4.dp, bottom = 20.dp,
@@ -213,7 +238,7 @@ internal object Scenes {
                             onCollectionOrder = { _, _ -> },
                             ctx = RowContext(
                                 shelving = shelving,
-                                series = series,
+                                series = depth,
                                 gridView = gridView,
                                 locale = locale,
                             ),

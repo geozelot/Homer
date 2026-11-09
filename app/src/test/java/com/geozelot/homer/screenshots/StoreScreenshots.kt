@@ -3,19 +3,16 @@ package com.geozelot.homer.screenshots
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Path
 import android.graphics.RectF
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.Insets
-import androidx.core.view.drawToBitmap
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -23,9 +20,9 @@ import androidx.compose.ui.unit.dp
 import coil.Coil
 import coil.ImageLoader
 import com.geozelot.homer.R
-import com.geozelot.homer.ui.home.BookDetailsCard
-import com.geozelot.homer.ui.home.LibraryShelving
-import com.geozelot.homer.ui.player.ChapterPickerDialog
+import com.geozelot.homer.ui.settings.LibrarySyncScreen
+import com.geozelot.homer.ui.settings.PlaybackSettingsScreen
+import com.geozelot.homer.ui.settings.SettingsHubScreen
 import com.geozelot.homer.ui.theme.HomerTheme
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assume.assumeTrue
@@ -48,13 +45,16 @@ import java.io.File
  * ./gradlew :app:testDebugUnitTest --tests '*StoreScreenshots*' -Pscreenshots=$PWD/fastlane/metadata/android
  * ```
  *
- * The window is a 411×914dp phone at 420dpi — 1080×2400 pixels, the shape of most current phones —
- * with a status bar and a gesture bar handed to it as real insets, so every component pads itself
- * exactly as it does on a device.
+ * The window is 1080×2400 pixels, the shape of most current phones, at 360dpi — Android's "Small"
+ * display size on such a phone, a 480×1067dp window. That is one step below the default, and the
+ * step where the grid fits a fourth column. A status bar and a gesture bar are handed to it as real
+ * insets, so every component pads itself exactly as it does on a device.
+ *
+ * The settings pages are the real screens over stand-in ViewModels — see [DemoSettings].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], application = Application::class, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = [35], application = Application::class, qualifiers = "w480dp-h1067dp-360dpi")
 class StoreScreenshots {
 
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
@@ -77,41 +77,60 @@ class StoreScreenshots {
         rule.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(rule.activity.window, false) }
     }
 
+    // Shelved by author and stacked by collection: the arrangement that shows the most of what the
+    // shelf can do in one screen.
     @Test
-    fun library() = shoot("1_library") { Scenes.Library(gridView = true) }
+    fun libraryGrid() = shoot("1_library_grid") { Scenes.Library(gridView = true) }
 
     @Test
-    fun player() = shoot("2_player") { Scenes.Player() }
+    fun libraryList() = shoot("2_library_list") { Scenes.Library(gridView = false) }
 
+    /** Verne's collection opened: its two series under their own headings, then the novels in neither. */
     @Test
-    fun libraryList() = shoot("3_library_list") {
-        Scenes.Library(gridView = false, shelving = LibraryShelving.AUTHOR)
+    fun collection() = shoot("3_collection") {
+        Scenes.Library(gridView = true, open = listOf(DemoLibrary.VOYAGES))
     }
 
     @Test
-    fun chapters() = shoot("4_chapters") {
-        // Moby-Dick, not the Odyssey: one file with its chapters marked inside, which is the kind of
-        // book the picker lists by name.
-        val moby = DemoLibrary.mobyDick
-        Scenes.Player(moby, sleepRemainingMs = null)
-        ChapterPickerDialog(
-            chapters = moby.chapters,
-            bookTotalMs = moby.totalMs,
-            onJump = {},
-            onDismiss = {},
-        )
+    fun arrange() = shoot("4_arrange") { Scenes.Library(gridView = true, arrangeOpen = true) }
+
+    /** Two letters typed: the shelf already filtered, and a genre, an author and two series on offer. */
+    @Test
+    fun search() = shoot("5_search") { Scenes.Library(gridView = true, searchOpen = true, query = "ho") }
+
+    @Test
+    fun player() = shoot("6_player") { Scenes.Player() }
+
+    @Test
+    fun settings() {
+        val viewModel = DemoSettings.homeViewModel()
+        val updates = DemoSettings.updateViewModel()
+        shoot("7_settings") {
+            SettingsHubScreen(
+                viewModel = viewModel,
+                onBack = {},
+                onOpenLibrary = {},
+                onOpenUpkeep = {},
+                onOpenStorage = {},
+                onOpenBrowsing = {},
+                onOpenPlayback = {},
+                onOpenPrivacy = {},
+                onOpenAbout = {},
+                updateViewModel = updates,
+            )
+        }
     }
 
     @Test
-    fun details() = shoot("5_details") {
-        Scenes.Library(gridView = true)
-        BookDetailsCard(
-            book = DemoLibrary.book(DemoLibrary.DETAILED),
-            onEdit = {},
-            onFilter = {},
-            onOpenDocument = {},
-            onDismiss = {},
-        )
+    fun settingsSync() {
+        val viewModel = DemoSettings.homeViewModel()
+        shoot("8_settings_sync") { LibrarySyncScreen(viewModel = viewModel, onChange = {}, onBack = {}) }
+    }
+
+    @Test
+    fun settingsPlayback() {
+        val viewModel = DemoSettings.homeViewModel()
+        shoot("9_settings_playback") { PlaybackSettingsScreen(viewModel = viewModel, onBack = {}) }
     }
 
     // ── store graphics ───────────────────────────────────────────────────────────────────────
@@ -156,30 +175,7 @@ class StoreScreenshots {
         }
         applyInsets()
         settle()
-
-        val windows = rule.onAllNodes(isRoot()).fetchSemanticsNodes().size
-        val screen = rule.onAllNodes(isRoot())[0].captureToImage().asAndroidBitmap()
-        val image = if (windows == 1) {
-            screen
-        } else {
-            // A dialog is a window of its own, so it is drawn on its own and laid over the screen
-            // the way the system shows it: centred, over a dimmed backdrop. Drawn from its view
-            // rather than captured — the capture reads pixels back from the ACTIVITY's window here,
-            // which gave the screen a second time in the dialog's frame.
-            val dialogView = (rule.onAllNodes(isRoot())[1].fetchSemanticsNode().root as ViewRootForTest).view.rootView
-            val dialog = dialogView.drawToBitmap()
-            screen.copy(Bitmap.Config.ARGB_8888, true).also { out ->
-                val canvas = Canvas(out)
-                canvas.drawColor(Color.argb(SCRIM_ALPHA, 0, 0, 0))
-                canvas.drawBitmap(
-                    dialog,
-                    (out.width - dialog.width) / 2f,
-                    (out.height - dialog.height) / 2f,
-                    null,
-                )
-            }
-        }
-        save(image, "phoneScreenshots/$name.png")
+        save(rule.onAllNodes(isRoot())[0].captureToImage().asAndroidBitmap(), "phoneScreenshots/$name.png")
     }
 
     /** Writes [image] under the listing's image folder, at [path]. */
@@ -215,7 +211,6 @@ class StoreScreenshots {
     private companion object {
         val STATUS_BAR = 32.dp
         val NAVIGATION_BAR = 24.dp
-        const val SCRIM_ALPHA = 153 // the platform's default dialog dim, 0.6
         const val SETTLE_ROUNDS = 8
     }
 }

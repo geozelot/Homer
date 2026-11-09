@@ -26,6 +26,9 @@ androidxTestRunner = "1.7.0"
 robolectric = "4.17"
 androidxTestCore = "1.7.0"
 espresso = "3.7.0"
+mockk = "1.14.11"
+# The agent MockK attaches, loaded up front instead (see app/build.gradle.kts); the version MockK depends on.
+byteBuddy = "1.18.2"
 # The Android runtime Robolectric renders against (SDK 35), resolved by Gradle rather than at test time.
 robolectricAndroidAll = "15-robolectric-13954326-i7"
 
@@ -81,6 +84,8 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+byte-buddy-agent = { group = "net.bytebuddy", name = "byte-buddy-agent", version.ref = "byteBuddy" }
 robolectric-android-all = { group = "org.robolectric", name = "android-all-instrumented", version.ref = "robolectricAndroidAll" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }

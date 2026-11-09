@@ -99,12 +99,21 @@ android.testOptions.unitTests.isIncludeAndroidResources = true
 // cached like everything else, and Robolectric is pointed at it and told not to download anything.
 val robolectricAndroidAll: Configuration = configurations.create("robolectricAndroidAll")
 dependencies { add(robolectricAndroidAll.name, libs.robolectric.android.all) }
+
+// MockK mocks a final class through an instrumentation agent. Attached at runtime, the agent needs a
+// writable /tmp and a JDK that still allows self-attach; loaded as the test JVM starts, it needs neither.
+val mockAgent: Configuration = configurations.create("mockAgent")
+dependencies { add(mockAgent.name, libs.byte.buddy.agent) }
+
 tasks.withType<Test>().configureEach {
     val androidAll: FileCollection = robolectricAndroidAll
-    inputs.files(androidAll)
+    val agent: FileCollection = mockAgent
+    inputs.files(androidAll, agent)
     systemProperty("robolectric.offline", "true")
     jvmArgumentProviders.add(
-        CommandLineArgumentProvider { listOf("-Drobolectric.dependency.dir=${androidAll.singleFile.parentFile}") },
+        CommandLineArgumentProvider {
+            listOf("-Drobolectric.dependency.dir=${androidAll.singleFile.parentFile}", "-javaagent:${agent.singleFile}")
+        },
     )
     // Opt-in: the store screenshots are left out of an ordinary run — they boot an Android runtime
     // per image — and asked for, they write where they are told to.
@@ -187,6 +196,8 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.junit)
     testImplementation(libs.androidx.test.espresso.core)
+    // Stands in for the ViewModels the settings screenshots need; the screens themselves are real.
+    testImplementation(libs.mockk)
     // The empty activity the Compose test rule hosts its content in; debug builds only.
     debugImplementation(libs.androidx.ui.test.manifest)
 

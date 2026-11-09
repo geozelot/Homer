@@ -35,7 +35,7 @@ internal object DemoLibrary {
 
     const val PLAYING = "Homer/Homeric Epics/02 The Odyssey"
     const val MOBY_DICK = "Herman Melville/Moby-Dick"
-    const val DETAILED = "Arthur Conan Doyle/Sherlock Holmes/03 The Hound of the Baskervilles"
+    const val VOYAGES = "Extraordinary Voyages"
 
     /** Background top, background bottom, ink — and the motif drawn behind the title. */
     private data class Look(val top: Int, val bottom: Int, val ink: Int, val motif: Motif)
@@ -51,6 +51,8 @@ internal object DemoLibrary {
         val look: Look,
         val series: String? = null,
         val index: Int? = null,
+        val collection: String? = null,
+        val collectionIndex: Int? = null,
         val files: Int = 1,
         val progress: Float? = null,
         val playedDaysAgo: Double? = null,
@@ -87,7 +89,8 @@ internal object DemoLibrary {
                 series = "Sherlock Holmes", index = 2, files = 12, finished = true, playedDaysAgo = 21.0,
             ),
             Spec(
-                DETAILED, "The Hound of the Baskervilles", "Arthur Conan Doyle", 6.5,
+                "Arthur Conan Doyle/Sherlock Holmes/03 The Hound of the Baskervilles", "The Hound of the Baskervilles",
+                "Arthur Conan Doyle", 6.5,
                 listOf("mystery", "horror", "classics"),
                 Look(0xFF3B3355.toInt(), 0xFF17132A.toInt(), 0xFFD9C5F2.toInt(), Motif.MOON),
                 series = "Sherlock Holmes", index = 3, files = 15, progress = 0.64f, playedDaysAgo = 1.2,
@@ -98,6 +101,18 @@ internal object DemoLibrary {
                 "Arthur Conan Doyle", 7.1, listOf("mystery", "classics"),
                 Look(0xFF5B4A2E.toInt(), 0xFF261E11.toInt(), 0xFFF0DDB4.toInt(), Motif.LAMP),
                 series = "Sherlock Holmes", index = 4, files = 15,
+            ),
+            Spec(
+                "Arthur Conan Doyle/The Lost World", "The Lost World", "Arthur Conan Doyle", 7.6,
+                listOf("adventure", "scifi"),
+                Look(0xFF3F6B2A.toInt(), 0xFF17290F.toInt(), 0xFFF0E6A8.toInt(), Motif.SUN),
+                files = 16,
+            ),
+            Spec(
+                "Arthur Conan Doyle/The White Company", "The White Company", "Arthur Conan Doyle", 14.2,
+                listOf("adventure", "classics"),
+                Look(0xFFB9B4A6.toInt(), 0xFF5C574B.toInt(), 0xFF1E1B15.toInt(), Motif.KEY),
+                files = 38,
             ),
             Spec(
                 "L. Frank Baum/Oz/01 The Wonderful Wizard of Oz", "The Wonderful Wizard of Oz",
@@ -118,10 +133,37 @@ internal object DemoLibrary {
                 series = "Oz", index = 3, files = 21,
             ),
             Spec(
+                "L. Frank Baum/Queen Zixi of Ix", "Queen Zixi of Ix", "L. Frank Baum", 5.2,
+                listOf("fantasy", "childrens"),
+                Look(0xFF9C3D5E.toInt(), 0xFF431628.toInt(), 0xFFF9DDA4.toInt(), Motif.KEY),
+                files = 23,
+            ),
+            Spec(
+                "L. Frank Baum/The Master Key", "The Master Key", "L. Frank Baum", 4.1, listOf("scifi", "childrens"),
+                Look(0xFF2F4858.toInt(), 0xFF121D24.toInt(), 0xFF9FE2D0.toInt(), Motif.GEAR),
+                files = 22,
+            ),
+            Spec(
                 "Jane Austen/Pride and Prejudice", "Pride and Prejudice", "Jane Austen", 11.6,
                 listOf("romance", "classics"),
                 Look(0xFFB98A8A.toInt(), 0xFF5E3B3E.toInt(), 0xFFFBF2E6.toInt(), Motif.ROSE),
                 files = 61,
+            ),
+            Spec(
+                "Jane Austen/Emma", "Emma", "Jane Austen", 16.4, listOf("romance", "classics"),
+                Look(0xFF7D8F6A.toInt(), 0xFF3A4430.toInt(), 0xFFF6F0DC.toInt(), Motif.ROSE),
+                files = 55, finished = true, playedDaysAgo = 150.0,
+            ),
+            Spec(
+                "Jane Austen/Sense and Sensibility", "Sense and Sensibility", "Jane Austen", 11.8,
+                listOf("romance", "classics"),
+                Look(0xFF6E7FA3.toInt(), 0xFF2E3650.toInt(), 0xFFF3EEE2.toInt(), Motif.STAR),
+                files = 50,
+            ),
+            Spec(
+                "Jane Austen/Persuasion", "Persuasion", "Jane Austen", 8.4, listOf("romance", "classics"),
+                Look(0xFFC4A36A.toInt(), 0xFF6B5126.toInt(), 0xFF2B1D0B.toInt(), Motif.WAVES),
+                files = 24,
             ),
             Spec(
                 "Mary Shelley/Frankenstein", "Frankenstein", "Mary Shelley", 8.5,
@@ -151,16 +193,73 @@ internal object DemoLibrary {
                 progress = mobyDick.progress, playedDaysAgo = 8.0,
             ),
             Spec(
-                "Lewis Carroll/Alice's Adventures in Wonderland", "Alice's Adventures in Wonderland",
+                "Lewis Carroll/Alice/01 Alice's Adventures in Wonderland", "Alice's Adventures in Wonderland",
                 "Lewis Carroll", 2.8, listOf("fantasy", "childrens"),
                 Look(0xFF4F7CAC.toInt(), 0xFF203752.toInt(), 0xFFFFF3C7.toInt(), Motif.KEY),
-                files = 12,
+                series = "Alice", index = 1, files = 12, finished = true, playedDaysAgo = 200.0,
             ),
             Spec(
-                "Jules Verne/Twenty Thousand Leagues Under the Seas", "Twenty Thousand Leagues Under the Seas",
-                "Jules Verne", 12.7, listOf("adventure", "scifi"),
+                "Lewis Carroll/Alice/02 Through the Looking-Glass", "Through the Looking-Glass",
+                "Lewis Carroll", 3.4, listOf("fantasy", "childrens"),
+                Look(0xFFB0413E.toInt(), 0xFF4D1715.toInt(), 0xFFFFF0D6.toInt(), Motif.STAR),
+                series = "Alice", index = 2, files = 12,
+            ),
+            Spec(
+                "Lewis Carroll/Sylvie and Bruno", "Sylvie and Bruno", "Lewis Carroll", 9.3,
+                listOf("fantasy", "childrens"),
+                Look(0xFF8A6FB0.toInt(), 0xFF392A52.toInt(), 0xFFFFF4DF.toInt(), Motif.ROSE),
+                files = 25,
+            ),
+            Spec(
+                "Lewis Carroll/The Hunting of the Snark", "The Hunting of the Snark", "Lewis Carroll", 0.6,
+                listOf("poetry", "childrens"),
+                Look(0xFF3C6E71.toInt(), 0xFF173032.toInt(), 0xFFF2E5BE.toInt(), Motif.WAVES),
+                files = 8,
+            ),
+            // A collection with two series inside it and novels that belong to neither — the shape
+            // the collection shelf exists for. Numbered in the order Hetzel published them.
+            verne(
+                "01 Five Weeks in a Balloon", "Five Weeks in a Balloon", 7.9, 1, null, null,
+                Look(0xFF3E7CA6.toInt(), 0xFF173247.toInt(), 0xFFF7E6B5.toInt(), Motif.SUN),
+                files = 44, finished = true, playedDaysAgo = 120.0,
+            ),
+            verne(
+                "03 A Journey to the Centre of the Earth", "A Journey to the Centre of the Earth", 8.6, 3, null, null,
+                Look(0xFF7E3B1E.toInt(), 0xFF2B1209.toInt(), 0xFFF4C98A.toInt(), Motif.LAMP),
+                files = 45, finished = true, playedDaysAgo = 75.0,
+            ),
+            verne(
+                "Baltimore Gun Club/01 From the Earth to the Moon", "From the Earth to the Moon", 6.3, 4,
+                "Baltimore Gun Club", 1,
+                Look(0xFF1D2547.toInt(), 0xFF0A0E1F.toInt(), 0xFFE8E1C4.toInt(), Motif.MOON),
+                files = 28, finished = true, playedDaysAgo = 30.0,
+            ),
+            verne(
+                "Captain Nemo/01 In Search of the Castaways", "In Search of the Castaways", 21.0, 5,
+                "Captain Nemo", 1,
+                Look(0xFF5A6B2E.toInt(), 0xFF222A10.toInt(), 0xFFF2E8B8.toInt(), Motif.STAR),
+                files = 64,
+            ),
+            verne(
+                "Captain Nemo/02 Twenty Thousand Leagues Under the Seas", "Twenty Thousand Leagues Under the Seas",
+                12.7, 6, "Captain Nemo", 2,
                 Look(0xFF0F4C5C.toInt(), 0xFF041C22.toInt(), 0xFFB8E1DD.toInt(), Motif.WAVES),
                 files = 47,
+            ),
+            verne(
+                "Baltimore Gun Club/02 Around the Moon", "Around the Moon", 6.0, 7, "Baltimore Gun Club", 2,
+                Look(0xFF4B3A6B.toInt(), 0xFF1B142B.toInt(), 0xFFEADDF7.toInt(), Motif.MOON),
+                files = 23,
+            ),
+            verne(
+                "11 Around the World in Eighty Days", "Around the World in Eighty Days", 6.9, 11, null, null,
+                Look(0xFFA8452B.toInt(), 0xFF45190D.toInt(), 0xFFFBE7C6.toInt(), Motif.GEAR),
+                files = 37, downloaded = true,
+            ),
+            verne(
+                "Captain Nemo/03 The Mysterious Island", "The Mysterious Island", 19.6, 12, "Captain Nemo", 3,
+                Look(0xFF2F5E4C.toInt(), 0xFF0F241C.toInt(), 0xFFD9F0D0.toInt(), Motif.KEY),
+                files = 62,
             ),
             Spec(
                 "Robert Louis Stevenson/Treasure Island", "Treasure Island", "Robert Louis Stevenson", 7.1,
@@ -176,6 +275,25 @@ internal object DemoLibrary {
             ),
         )
     }
+
+    /** One of Verne's novels, filed under [VOYAGES] at [number] and in [series] where it has one. */
+    private fun verne(
+        folder: String,
+        title: String,
+        hours: Double,
+        number: Int,
+        series: String?,
+        index: Int?,
+        look: Look,
+        files: Int,
+        finished: Boolean = false,
+        playedDaysAgo: Double? = null,
+        downloaded: Boolean = false,
+    ) = Spec(
+        "Jules Verne/$VOYAGES/$folder", title, "Jules Verne", hours, listOf("adventure", "scifi"), look,
+        series = series, index = index, collection = VOYAGES, collectionIndex = number, files = files,
+        finished = finished, playedDaysAgo = playedDaysAgo, downloaded = downloaded,
+    )
 
     val books: List<BookListItem> by lazy { specs.map(::item) }
 
@@ -199,6 +317,8 @@ internal object DemoLibrary {
             hasCustomCover = false,
             series = s.series,
             seriesIndex = s.index,
+            collection = s.collection,
+            collectionIndex = s.collectionIndex,
             genres = s.genres,
             language = "en",
             tags = emptyList(),
@@ -305,6 +425,12 @@ internal object DemoLibrary {
 
     private const val SIZE = 600
 
+    /** Where the short rule over the author's name sits. */
+    private const val RULE_Y = SIZE - 118f
+
+    /** How tall the largest motif is drawn at full size — the sun, rays and all. */
+    private const val MOTIF_EXTENT = 250f
+
     private fun cover(s: Spec): Bitmap {
         val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -315,8 +441,6 @@ internal object DemoLibrary {
             0f, 0f, size, size,
             Paint().apply { shader = LinearGradient(0f, 0f, 0f, size, look.top, look.bottom, Shader.TileMode.CLAMP) },
         )
-        motif(canvas, look)
-
         // A ruled frame, the one ornament every cover shares, so they read as one edition.
         val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -344,8 +468,16 @@ internal object DemoLibrary {
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setLineSpacing(0f, 1.05f)
             .build()
+        // Hung from a quarter of the way down, whatever its length. The shelf prints a series number
+        // over a cover's top corner, and a title set any higher lost its first letters under it.
+        val titleTop = size * 0.26f
+        val titleBottom = titleTop + layout.height
+        // The motif takes whatever is left between the title and the rule above the author, shrunk
+        // to fit — so a long title gets a small ornament rather than one drawn through its words.
+        val gap = RULE_Y - titleBottom
+        motif(canvas, look, cy = titleBottom + gap / 2f, scale = ((gap - 24f) / MOTIF_EXTENT).coerceIn(0.3f, 1f))
         canvas.save()
-        canvas.translate((size - width) / 2f, size * 0.30f - layout.height / 2f)
+        canvas.translate((size - width) / 2f, titleTop)
         layout.draw(canvas)
         canvas.restore()
 
@@ -358,14 +490,15 @@ internal object DemoLibrary {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText(s.author.uppercase(), size / 2f, size - 76f, byline)
-        canvas.drawLine(size / 2f - 40f, size - 118f, size / 2f + 40f, size - 118f, rule.apply { alpha = 160; strokeWidth = 2f })
+        canvas.drawLine(size / 2f - 40f, RULE_Y, size / 2f + 40f, RULE_Y, rule.apply { alpha = 160; strokeWidth = 2f })
         return bitmap
     }
 
-    private fun motif(canvas: Canvas, look: Look) {
+    private fun motif(canvas: Canvas, look: Look, cy: Float, scale: Float) {
         val size = SIZE.toFloat()
         val cx = size / 2f
-        val cy = size * 0.64f
+        canvas.save()
+        canvas.scale(scale, scale, cx, cy)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = look.ink; alpha = 46 }
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = look.ink
@@ -440,5 +573,6 @@ internal object DemoLibrary {
                 canvas.drawLine(cx + 92f, cy, cx + 92f, cy + 22f, stroke)
             }
         }
+        canvas.restore()
     }
 }
