@@ -199,7 +199,7 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.2.1**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
+Homer is at **2.2.2**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
 build rather than added to, so there is one pre-release to follow; its title carries the actual
 build (`2.2.0-BETA.117`) while the APK keeps a stable name. In-app update checks only offer a
 pre-release to devices on the beta channel.
@@ -207,6 +207,12 @@ pre-release to devices on the beta channel.
 A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
 `2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
+
+2.2.2 is the release Homer goes to F-Droid with, and changes nothing in the app you have. F-Droid
+builds Homer from this source and signs it itself; its build is the same app without the built-in
+updater, because F-Droid keeps it up to date. The version code now follows the version — 2.2.2 is
+20202 — instead of counting CI runs, and still rises above every earlier release, so this one
+installs over them like any other.
 
 2.2.1 is a small follow-up. The volume keys control the book whenever Homer is on screen, playing
 or not; before, a paused book left them on the ringer. And the Books row under *Upkeep* says what a

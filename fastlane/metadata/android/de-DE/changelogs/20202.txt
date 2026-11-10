@@ -1,0 +1,5 @@
+Homers erste Version auf F-Droid.
+
+Es ist dieselbe App wie Homer 2.2.2 auf GitHub, ohne den eingebauten Updater: F-Droid hält sie aktuell.
+
+Du kommst von der GitHub-Version? F-Droid signiert Homer mit eigenem Schlüssel, deinstalliere sie also zuerst. Wenn du deinen Fortschritt synchronisierst, kommt er nach der erneuten Anmeldung aus deiner Nextcloud zurück; Downloads musst du neu laden.

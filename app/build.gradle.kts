@@ -38,8 +38,8 @@ android {
         // regex and never runs it, so they cannot be computed. The code is major * 10000 + minor * 100
         // + patch, which always rises and sits above the CI run numbers that versioned 2.2.1 and
         // earlier. The release workflow refuses a tag that disagrees with either.
-        versionCode = 20201
-        versionName = "2.2.1"
+        versionCode = 20202
+        versionName = "2.2.2"
         // A moving beta tag names its builds apart by appending the CI run number — see release.yml.
         // Only the name: the code stays the literal, and equal codes install over each other.
         providers.gradleProperty("versionName").orNull?.let { versionName = it }
