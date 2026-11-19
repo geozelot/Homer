@@ -203,7 +203,7 @@ field in `app/build.gradle.kts`.
 
 ## Status
 
-Homer is at **2.2.2**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
+Homer is at **2.2.3**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
 build rather than added to, so there is one pre-release to follow; its title carries the actual
 build (`2.2.0-BETA.117`) while the APK keeps a stable name. In-app update checks only offer a
 pre-release to devices on the beta channel.

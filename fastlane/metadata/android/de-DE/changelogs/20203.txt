@@ -1,0 +1,5 @@
+Homers erste Version auf F-Droid.
+
+Es ist genau dieselbe APK wie Homer 2.2.3 auf GitHub, mit demselben Schlüssel signiert. Du kannst also zwischen beiden wechseln, ohne neu zu installieren.
+
+Der eingebaute Updater unter Einstellungen → Über → Updates von GitHub tut nichts, bis du ihn benutzt. F-Droid hält Homer so oder so aktuell.
