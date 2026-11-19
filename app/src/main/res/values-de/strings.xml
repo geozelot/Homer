@@ -482,8 +482,8 @@
     <string name="update_channel_name">Updates</string>
     <string name="update_notif_title">Homer %1$s ist verfügbar</string>
     <string name="update_notif_text">Öffne Homer, um es zu installieren.</string>
-    <string name="set_update_header">UPDATES</string>
-    <string name="set_update_check">Nach Updates suchen</string>
+    <string name="set_update_header">UPDATES VON GITHUB</string>
+    <string name="set_update_check">Auf GitHub nach Updates suchen</string>
     <string name="set_update_checking">Suche…</string>
     <string name="set_update_uptodate">Homer ist aktuell.</string>
     <string name="set_update_available">Version %1$s ist verfügbar.</string>

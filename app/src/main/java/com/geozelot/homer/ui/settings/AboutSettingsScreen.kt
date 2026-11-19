@@ -63,8 +63,7 @@ fun AboutSettingsScreen(
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
 
-        // F-Droid updates its own build of Homer, so that build has no updater to show.
-        if (BuildConfig.SELF_UPDATE) UpdateSection()
+        UpdateSection()
 
         SettingsDivider()
         SettingsSectionHeader(stringResource(R.string.set_about_more_header))
@@ -173,7 +172,7 @@ private fun UpdateSection(viewModel: UpdateViewModel = hiltViewModel()) {
     )
 }
 
-/** The one line under "Check for updates": where the updater is, or when it last looked. */
+/** The one line under "Check GitHub for updates": where the updater is, or when it last looked. */
 @Composable
 private fun statusSummary(state: UpdateState, lastCheckedAtMs: Long): String = when (state) {
     is UpdateState.Checking -> stringResource(R.string.set_update_checking)

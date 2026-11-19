@@ -10,18 +10,13 @@ plugins {
 }
 
 // Release signing is driven by a gitignored keystore.properties at the repo root.
-// See the "Signed release APK" section of README.md. If absent, the release build falls back to
-// the debug key, so the project still configures and builds on a fresh checkout.
+// See the "Signed release APK" section of README.md. If absent, the release APK is left unsigned.
+// That is what F-Droid builds: it compares its unsigned build with the signed GitHub release, and
+// ships the release when the two match byte for byte (see docs/F-DROID.md).
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) load(keystorePropsFile.inputStream())
 }
-
-// F-Droid builds Homer from source — its recipe passes -Pfdroid — and then signs and updates the app
-// itself. So that build leaves the in-app updater out entirely (no update check, no permission to
-// install packages, see src/selfUpdate) and stays unsigned for F-Droid's key instead of falling back
-// to the debug key below.
-val fdroid = providers.gradleProperty("fdroid").isPresent
 
 android {
     namespace = "com.geozelot.homer"
@@ -47,7 +42,6 @@ android {
         // Where the in-app updater looks for releases. A fork changes this one line and its own
         // builds start tracking its own releases instead of upstream's.
         buildConfigField("String", "UPDATE_REPO", "\"geozelot/Homer\"")
-        buildConfigField("boolean", "SELF_UPDATE", "${!fdroid}")
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -74,12 +68,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = when {
-                fdroid -> null
-                keystorePropsFile.exists() -> signingConfigs.getByName("release")
-                // No keystore configured yet — sign with the debug key so the APK still installs.
-                else -> signingConfigs.getByName("debug")
-            }
+            // Null without a keystore, so the APK stays unsigned. Never the debug key: F-Droid's build
+            // would come out signed with a key of its build server and could not match the release.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
@@ -101,14 +92,6 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-    }
-}
-
-// The updater's manifest entries live in a manifest of their own, merged into every build but
-// F-Droid's — so its APK never declares the permission to install packages.
-androidComponents {
-    onVariants { variant ->
-        if (!fdroid) variant.sources.manifests.addStaticManifestFile("src/selfUpdate/AndroidManifest.xml")
     }
 }
 

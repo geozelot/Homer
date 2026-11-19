@@ -15,7 +15,7 @@ server, and an Audible-class listening experience.
 
 ### Staying up to date
 
-Homer can update itself: **Settings → About → Updates**. *Check now* is always available;
+Homer can update itself: **Settings → About → Updates from GitHub**. *Check now* is always available;
 the once-a-day automatic check is **off by default**, because it reaches a third party on a
 schedule you didn't ask for. Nothing about you or your library is sent — only the question.
 Choose **Stable** or **Betas too**, and Homer downloads the release APK and hands it to the
@@ -23,8 +23,10 @@ system installer, which still asks you to confirm.
 
 Prefer to keep updates outside the app? [Obtainium](https://github.com/ImranR98/Obtainium)
 tracks this repository's releases and installs them for you — point it at the repo URL and
-skip Homer's updater entirely. Homer's F-Droid build has no updater at all: F-Droid keeps it up
-to date.
+skip Homer's updater entirely. Homer on F-Droid, once it is listed there, is the very same APK:
+F-Droid builds it from this source, checks that its build matches the release here byte for byte,
+and ships the release, signed with the same key. So you can move between this page, Obtainium and
+F-Droid without reinstalling.
 
 > A copy you built yourself is signed with your own debug key, so a CI-signed release APK
 > can't replace it — Android refuses the install. Homer detects this and says so rather than
@@ -132,8 +134,7 @@ permission at all:
 - **`REQUEST_INSTALL_PACKAGES`** — lets the in-app updater hand a downloaded release APK to the
   system installer. Android gates this behind a per-app *install unknown apps* toggle that only you
   can grant, and the installer still asks you to confirm every install. Nothing installs silently,
-  and the scheduled check that would find an update is off unless you turn it on. The F-Droid build
-  does not have this permission: F-Droid updates it.
+  and the scheduled check that would find an update is off unless you turn it on.
 - **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
   at install or first run. Homer only sends you to the system grant screen if you explicitly choose
   to keep downloads in a folder you pick yourself (Settings → *Storage* → *Browse device*).
@@ -157,8 +158,10 @@ Gradle comes from the committed wrapper — don't install it globally.
 ### Signed release APK
 
 Release signing reads a **gitignored** `keystore.properties` at the repo root, so no
-secrets land in git. Without it, `assembleRelease` still completes but is signed with the
-debug key (not for distribution).
+secrets land in git. Without it, `assembleRelease` still completes but leaves the APK unsigned
+(`app-release-unsigned.apk`), which Android will not install. That is on purpose: it is the build
+F-Droid compares with the signed release (see [docs/F-DROID.md](docs/F-DROID.md)). To try a build
+on a phone, use the debug build above.
 
 1. Generate a keystore once (back it up — losing it means you can't update the app):
 
@@ -186,11 +189,12 @@ either literal:
 git tag v2.2.2 && git push origin v2.2.2
 ```
 
-F-Droid builds from the same source, and only the releases you send it — see
-[docs/F-DROID.md](docs/F-DROID.md).
+A release reaches F-Droid when it gets a second tag, `v2.2.3-fdroid` on the same commit; CI
+ignores those. See [docs/F-DROID.md](docs/F-DROID.md).
 
 CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
-`KEY_PASSWORD` repository secrets are set; otherwise it falls back to a debug-signed APK.
+`KEY_PASSWORD` repository secrets are set. Without them a manual run builds an unsigned APK, and a
+tag refuses to publish anything.
 
 A tag with a pre-release suffix (`v1.1.0-BETA18`, `v1.2.0-rc1`) is marked as a pre-release, so
 `/releases/latest` keeps pointing at the last finished release and the in-app updater's Stable
@@ -208,11 +212,15 @@ A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BE
 `2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
 working towards.
 
-2.2.2 is the release Homer goes to F-Droid with, and changes nothing in the app you have. F-Droid
-builds Homer from this source and signs it itself; its build is the same app without the built-in
-updater, because F-Droid keeps it up to date. The version code now follows the version — 2.2.2 is
-20202 — instead of counting CI runs, and still rises above every earlier release, so this one
-installs over them like any other.
+2.2.3 is the release Homer goes to F-Droid with. F-Droid builds it from this source, checks that
+the result is identical to the APK published here, and ships that APK, signed with the same key: the
+F-Droid copy and this one are the same app, and you can move between them without reinstalling.
+The built-in updater is in both and still does nothing until you use it; its section in *About* now
+says that it fetches updates from GitHub.
+
+2.2.2 changed nothing in the app. The version code now follows the version — 2.2.2 is 20202 —
+instead of counting CI runs, and still rises above every earlier release, so it installs over them
+like any other.
 
 2.2.1 is a small follow-up. The volume keys control the book whenever Homer is on screen, playing
 or not; before, a paused book left them on the ringer. And the Books row under *Upkeep* says what a

@@ -3,10 +3,15 @@ name: Release APK
 # Build a versioned release APK when a version tag is pushed (e.g. `git tag v1.2.0 &&
 # git push origin v1.2.0`), and attach it to the matching GitHub Release. Also runnable
 # manually from the Actions tab (produces an artifact, no release).
+#
+# A `-fdroid` tag (v1.2.0-fdroid) sits on a release that is already published here, and only tells
+# F-Droid to build it (see docs/F-DROID.md). It must not build anything: as a tag with a suffix it
+# would otherwise come out as an extra pre-release, offered to everyone on the beta channel.
 on:
   push:
     tags:
       - 'v*'
+      - '!v*-fdroid'
   workflow_dispatch:
 
 permissions:
@@ -99,13 +104,12 @@ jobs:
           EOF
             echo "Release signing configured."
           elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # A tag publishes. A release signed with this runner's throwaway debug key would be
-            # refused by every installed copy's updater, and could not be installed over the app by
-            # hand either — so a missing or renamed secret stops the run instead of shipping that.
-            echo "::error::Release signing secrets are missing; refusing to publish a debug-signed release."
+            # A tag publishes, and an unsigned APK cannot be installed at all — so a missing or renamed
+            # secret stops the run instead of shipping one.
+            echo "::error::Release signing secrets are missing; refusing to publish an unsigned release."
             exit 1
           else
-            echo "No signing secrets set — building a debug-signed APK (see build.gradle.kts fallback)."
+            echo "No signing secrets set — building an unsigned APK (see build.gradle.kts)."
           fi
 
       - name: Build release APK
