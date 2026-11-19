@@ -1,80 +1,59 @@
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/featureGraphic.png" alt="Homer" width="720">
+</p>
+
 # Homer
 
-A **Nextcloud-first Android audiobook player**. Homer streams and manages a private
-audiobook library straight from your own Nextcloud over WebDAV — no extra server to
-install, no accounts, no Google Play Services, no tracking. Just your books, your
-server, and an Audible-class listening experience.
+**An audiobook player for the audiobooks you keep in your own Nextcloud.**
 
-> Homer is built to be self-hosted and standalone. It talks to exactly one thing:
-> the Nextcloud you sign in to.
+Sign in, choose your audiobook folder, and your library is there: streamed straight from your
+server, or downloaded for listening offline. There is no extra server to install, no account with
+anyone else, no tracking and no Google services. Homer talks to the Nextcloud you point it at, and
+to nothing else unless you ask it to.
 
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_library_grid.png" width="200" alt="The library, shelved by author">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_collection.png" width="200" alt="A collection, opened">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_player.png" width="200" alt="The player">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8_settings_sync.png" width="200" alt="Where the books and your progress live">
+</p>
 
-### Pre-build APK
+Homer runs on Android 8.0 or newer, in English and German.
 
-[Go to Releases](https://github.com/geozelot/Homer/releases)
+## Get Homer
 
-### Staying up to date
+- **From GitHub:** download `homer-<version>.apk` from the
+  [latest release](https://github.com/geozelot/Homer/releases/latest) and open it on your phone.
+  Android asks you once to allow installs from your browser or file manager.
+- **With [Obtainium](https://github.com/ImranR98/Obtainium):** add
+  `https://github.com/geozelot/Homer`, and it installs new releases as they come out.
+- **From F-Droid:** Homer has been submitted and is waiting for review.
 
-Homer can update itself: **Settings → About → Updates from GitHub**. *Check now* is always available;
-the once-a-day automatic check is **off by default**, because it reaches a third party on a
-schedule you didn't ask for. Nothing about you or your library is sent — only the question.
-Choose **Stable** or **Betas too**, and Homer downloads the release APK and hands it to the
-system installer, which still asks you to confirm.
+All three give you the very same APK, signed with the same key, so you can switch between them later
+without reinstalling. F-Droid builds Homer from this source and checks that its build matches the
+release here before it ships it.
 
-Prefer to keep updates outside the app? [Obtainium](https://github.com/ImranR98/Obtainium)
-tracks this repository's releases and installs them for you — point it at the repo URL and
-skip Homer's updater entirely. Homer on F-Droid, once it is listed there, is the very same APK:
-F-Droid builds it from this source, checks that its build matches the release here byte for byte,
-and ships the release, signed with the same key. So you can move between this page, Obtainium and
-F-Droid without reinstalling.
+## Getting started
 
-> A copy you built yourself is signed with your own debug key, so a CI-signed release APK
-> can't replace it — Android refuses the install. Homer detects this and says so rather than
-> failing cryptically. Uninstall the local build first, or keep building it yourself.
+The first time you open Homer, a short setup asks three things.
 
+1. **Where do your books live?**
+   - **My own account:** sign in to your Nextcloud in the browser. Homer gets an app password that
+     you can revoke at any time in your Nextcloud's security settings — never your real password.
+     The books can be your own files or a folder another user shared with you.
+   - **A shared link:** paste a Nextcloud share link (`https://…/s/…`) somebody sent you. No
+     account needed; the link can be read-only or let you write.
+2. **Which folder?** Your audiobook folder, or nothing to use the whole account. Homer looks at the
+   folder and tells you what it found: a Homer library that is already there, ready to use, or the
+   offer to create one (see [Sharing a library](#sharing-a-library)).
+3. **Where should your place in each book be saved?** In your account, so every phone of yours
+   carries on where you left off — or on this phone only.
 
-## Features
+Every answer can be changed later under *Settings → Sync*.
 
-- **Any Nextcloud folder — or a share link** — point Homer at your own account, or open a
-  public share link (`…/s/<token>`) as a read-only or read-write library. Where the books
-  come from is independent of where your progress is saved.
-- **Stream or download** — listen on demand, or take books offline (pause / resume /
-  abort downloads, Wi-Fi-only option).
-- **Cross-device resume** — your position, bookmarks and finished flags sync through a
-  `.homer` file in your own storage, controlled by two independent switches: *sync my
-  progress* (private to your account, or off and device-local) and *share the library
-  index* (a shared catalogue of titles, authors, series and cover art so other devices
-  reading the same folder skip scanning — and so a title you correct stays corrected
-  everywhere). Your listening position is never written to a shared folder.
-- **Rich playback** — variable speed, skip-silence, a configurable skip interval,
-  optional auto-rewind on resume, a volume boost, a sleep timer with shake-to-extend,
-  and bookmarks.
-- **Chapters** — multi-file books, embedded MP3 (ID3 CHAP) and MP4/M4B (`chpl`)
-  chapters, with a chapter picker.
-- **A real library** — cover art (embedded, folder, or opt-in Open Library lookup),
-  durations and time-left, search, custom covers, and per-book metadata overrides.
-  Three independent controls arrange it: **shelve** by author or genre, show a **series**
-  stacked or flat, and **sort** within that — by surname if you like, with a jump-to-letter
-  lane down the edge. A book can credit several authors, the first one primary.
-- **Booklets** — PDFs filed beside a book (a booklet, a libretto, a map) open in Homer's own
-  reader, and go offline with the book.
-- **Candlelit UI** — a warm dark theme, a docked mini-player, a focused Now Playing screen,
-  and a display size of Homer's own, independent of the phone's.
-- **Private by design** — a scoped Nextcloud app password stored in the Keystore, backups
-  disabled, optional biometric app lock, and optional trust-on-first-use certificate
-  pinning.
+## Laying out your books
 
-## How it works
-
-Homer authenticates with **Nextcloud Login Flow v2** to obtain a scoped, revocable app
-password (never your real password), stored only in Keystore-backed encrypted storage.
-It crawls your library folder over **WebDAV** into a local **Room** index, streams audio
-with **Media3/ExoPlayer** over an authenticated OkHttp data source, and keeps cross-device
-state in a small `.homer` JSON file in your own Nextcloud storage.
-
-### How your library should be laid out
-
-Homer reads a book's author, series and title out of its **folder path**. It expects, in order:
+Homer reads the author, series and title of a book from its folders. It understands:
 
 ```
 Author/Series/Book Title/…audio files
@@ -82,16 +61,15 @@ Author/Book Title/…audio files
 Book Title/…audio files
 ```
 
-Anything between the author and the series folder is ignored, so `Author/Audiobooks/Series/Book`
-works too. A book is any folder that directly contains audio; folders named for a disc — `CD 2`,
-`Teil 3`, or just `02` — fold into the book above them. Files inside a book are ordered
-numerically, so `Chapter 2` precedes `Chapter 10`.
+- A book is any folder with audio files directly inside it. Folders named for a disc — `CD 2`,
+  `Teil 3`, or just `02` — count as part of the book above them.
+- Files play in number order, so `Chapter 2` comes before `Chapter 10`.
+- Folders between the author and the series are skipped, so `Author/Audiobooks/Series/Book` works
+  too.
+- A book's number in its series comes from the file tags or from a pattern you write. A
+  *collection* — Discworld above its Rincewind series, say — is only ever something you set yourself.
 
-**Nothing else is inferred from where a book sits.** A series *index* comes from a tag or from a
-pattern you write; a **collection** — a parent grouping like Discworld over Rincewind — is never
-guessed from folder depth and is only ever something you state.
-
-If your library is laid out some other way, say so rather than reorganising it: *Settings → Upkeep →
+**Organised differently?** Describe your layout instead of moving files. *Settings → Upkeep →
 Reading folder names* takes patterns like
 
 ```
@@ -99,231 +77,139 @@ Reading folder names* takes patterns like
 {author}/{**}/{series}/{title}
 ```
 
-with a folder picker for scoping a pattern to one part of the library, and a preview over real books
-before anything is written. Books that no pattern could read are listed under *Upkeep → Books Homer
-could not read*.
+and shows the result on your real books before anything changes. Books no pattern could read are
+listed under *Upkeep → Books Homer could not read*. The same page can **ignore folders**, so a folder
+of new additions that still need tidying stays out of the library until you are ready.
 
-The same page can **ignore folders**: a scan does not go into them, so a folder of fresh additions
-that still need tidying stays out of the library until you say otherwise. Books the library already
-has from an ignored folder are hidden rather than removed, and come back with their progress when
-the folder is read again. The list travels with the shared library index, so every device reading
-the library honours it.
+A single book can be corrected too — title, authors, series, genre — with *Edit book*, without
+touching your files.
 
-A crawl reads names, sizes and ETags — one cheap request per folder. A book's *length* is
-different: it needs a ranged read of every audio file. *Settings → Upkeep → Scan* measures every
-book it finds that has no length yet, and *Try missing lengths* goes back for the files that could
-not be read; otherwise Homer measures a book the first time you open it.
+## What syncs, and where
 
-**Playback in the background is up to your phone, not to Homer.** Homer runs playback as a
-foreground service and holds a wake lock while a book is playing, which is everything
-Android asks for — but many devices still freeze backgrounded apps to save battery, which
-stops the audio until you reopen it. *Settings → Playback → Playing in the background*
-shows whether yours is doing that, and opens the system screen to allow it.
+Homer keeps two things apart.
 
-Tech: Kotlin, Jetpack Compose, Hilt, Room, Media3, OkHttp, DataStore, WorkManager.
-`minSdk 26`.
+- **Your listening:** where you are in each book, your bookmarks, and the books you finished or
+  hid. If you chose *My account* in setup, these are saved in a small file in your own Nextcloud,
+  private to you, so you can carry on from another phone. Otherwise they stay on the phone. They are
+  never written into a shared folder. On a share link they stay on the phone, unless you also sign in
+  to an account of your own.
+- **The library:** titles, authors, series, cover art, lengths, corrections, folder-name patterns
+  and ignored folders. Homer can keep these as a *library index* in the library folder itself, so
+  your other devices — and anybody else reading the same folder — open the library without scanning
+  it again, and a title corrected on one device is corrected on all of them.
+
+### Sharing a library
+
+A family or a group of friends can listen from one audiobook folder, shared in Nextcloud or by link.
+The first device creates the library index there; every other device then reads it instead of
+working through the whole folder itself. Each person's progress stays in their own account.
+
+The folder's owner can set two rules for everybody else, under *Settings → Sync*:
+
+- **Require shared use:** devices read the library index rather than scanning the folder, so a big
+  shared folder is not read once per listener.
+- **Allow edits:** whether other devices may publish their corrections. When it is off, anyone can
+  still correct a title for their own shelf.
+
+## Features
+
+- **Stream or download** — listen straight from the server, or take books offline; pause, resume or
+  cancel downloads, on Wi-Fi only if you like.
+- **Playback** — variable speed, skip silence, skip buttons of the length you choose, a little
+  rewind when you come back to a book, a volume boost, and a sleep timer with fade-out and shake to
+  extend.
+- **Chapters** — from books made of many files and from the chapter marks in MP3 and M4B files, with
+  a chapter list that shows each chapter's length.
+- **Bookmarks**, and controls on the lock screen, in the notification and on Bluetooth headsets.
+- **A library to browse** — covers, lengths and time left at a glance. Shelve by author or genre,
+  stack series and collections, and sort by title, author (by surname, if you like), length or what
+  you played last, with a jump-to-letter lane down the edge. Search suggests authors, series, genres
+  and books you have started.
+- **Covers** from the files, from an image in the book's folder, or — once you turn it on — from
+  Open Library.
+- **Booklets** — PDFs filed next to a book, like a booklet, a libretto or a map, open in Homer's own
+  reader and go offline with the book.
+- **Your own display size**, separate from the phone's, and a layout made for holding the phone
+  sideways.
+
+## Updates
+
+Homer can update itself from GitHub, under *Settings → About → Updates from GitHub*. Nothing happens
+until you use it:
+
+- **Check now** asks GitHub once, when you tap it.
+- **Check automatically** asks once a day. It is **off by default**, because it contacts a third
+  party on a schedule you did not ask for. Nothing about you or your library is sent — only the
+  question.
+- **Release channel:** *Stable*, or *Betas too* if you want to try what is coming. Betas are cut
+  often and meant for testing.
+
+When there is a new version, Homer downloads it and hands it to Android's installer, which asks you
+to confirm. Obtainium or F-Droid keep Homer up to date just as well, if you prefer.
+
+If several of your devices keep the same shared library, update them together: an older version
+may not understand what a newer one wrote there.
+
+## Privacy and security
+
+- Homer talks to your Nextcloud, and otherwise only to **GitHub** when you check for updates and to
+  **Open Library** for cover art if you turn that on (*Settings → Upkeep*).
+- Signing in uses Nextcloud's Login Flow: Homer holds an app password you can revoke, never your
+  real password, and keeps it encrypted with a key in the Android Keystore. Android's backups are
+  switched off for Homer, so it does not leave the phone that way either.
+- *Settings → Privacy & security* has an **app lock** (fingerprint, face or screen lock) and
+  **certificate pinning**: Homer remembers your server's certificate and refuses to connect if it
+  ever changes unexpectedly. The full privacy statement is on the same page.
 
 ## Permissions
 
-Homer requests only what it needs, and runs fully on its own app-private storage with no storage
-permission at all:
+Homer works in its own app storage and needs no storage permission. What it asks for, and why:
 
-- **`INTERNET`, `ACCESS_NETWORK_STATE`** — reach your Nextcloud, and fail fast when offline.
-- **`FOREGROUND_SERVICE` / `…_MEDIA_PLAYBACK` / `…_DATA_SYNC`, `POST_NOTIFICATIONS`** — background
-  audio playback and offline downloads that survive the app being closed, each with a notification.
-- **`REQUEST_INSTALL_PACKAGES`** — lets the in-app updater hand a downloaded release APK to the
-  system installer. Android gates this behind a per-app *install unknown apps* toggle that only you
-  can grant, and the installer still asks you to confirm every install. Nothing installs silently,
-  and the scheduled check that would find an update is off unless you turn it on.
-- **`MANAGE_EXTERNAL_STORAGE`** (all-files access) — **optional and opt-in.** It is *never* requested
-  at install or first run. Homer only sends you to the system grant screen if you explicitly choose
-  to keep downloads in a folder you pick yourself (Settings → *Storage* → *Browse device*).
-  It exists
-  because the Android document picker (SAF) is refused on some ROMs — certain LineageOS builds
-  return no folder at all — which otherwise leaves no way to use a user-visible, uninstall-surviving
-  library folder. Skip that option and the permission stays ungranted. Because of this permission
-  Homer is distributed by sideloading / F-Droid rather than Google Play.
+- **Network access** (`INTERNET`, `ACCESS_NETWORK_STATE`) — to reach your Nextcloud, and to know
+  when you are offline.
+- **Playing and downloading in the background** (`FOREGROUND_SERVICE`, `…_MEDIA_PLAYBACK`,
+  `…_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`) — so a book keeps playing with the screen off and
+  downloads keep going after you leave the app, each with a notification.
+- **Audio settings** (`MODIFY_AUDIO_SETTINGS`) — for the volume boost.
+- **Installing updates** (`REQUEST_INSTALL_PACKAGES`) — used only by the built-in updater. Android
+  still makes you allow it for Homer, and asks you to confirm every install. Nothing installs
+  silently.
+- **All-files access** (`MANAGE_EXTERNAL_STORAGE`) — **optional, and never asked for up front.** Only
+  if you choose to keep downloads in a folder of your own with *Settings → Storage → Browse device…*,
+  for phones where Android's folder chooser does not work, such as some LineageOS builds. Skip that,
+  and it is never granted. This permission is also why Homer is not on Google Play.
 
-## Building
+## Tips and troubleshooting
 
-Requires **JDK 17** and the Android SDK. Android Studio (Ladybug or newer) bundles both;
-for command-line builds, point `local.properties` at your SDK (`sdk.dir=/path/to/Android/Sdk`).
-Gradle comes from the committed wrapper — don't install it globally.
+- **Playback stops when the screen goes off.** Many phones freeze apps in the background to save
+  battery, whatever the app does. *Settings → Playback → Playing in the background* shows whether
+  yours does, and opens the system screen to let Homer run.
+- **A book shows no length.** Homer measures a book the first time you open it. *Settings → Upkeep
+  → Scan* measures every book at once — it reads a little of every file, so on a big library that
+  takes a while — and *Try missing lengths* goes back for the files that could not be read.
+- **A book has the wrong author or title.** Fix it with *Edit book*, or describe your folder layout
+  (see [Laying out your books](#laying-out-your-books)).
+- **An update says the release is "signed with a different key".** You are running a copy you built
+  yourself. Uninstall it and install the release, or keep building your own.
+- **Something else?** *Settings → About → Diagnostics* shows Homer's recent log and lets you share
+  it; attach it to an [issue](https://github.com/geozelot/Homer/issues). Your server address and
+  account name are masked, but book titles may appear.
 
-```bash
-./gradlew :app:assembleDebug      # build a debug APK
-./gradlew :app:installDebug       # install to a connected device / emulator
-```
+## What's new
 
-### Signed release APK
+**2.2.3** brings Homer to F-Droid as the very same APK you get here, and the updater now says
+plainly that it fetches updates from GitHub. **2.2** added booklets, several authors per book,
+sorting by surname with a jump-to-letter lane, a display size of Homer's own and ignored folders.
 
-Release signing reads a **gitignored** `keystore.properties` at the repo root, so no
-secrets land in git. Without it, `assembleRelease` still completes but leaves the APK unsigned
-(`app-release-unsigned.apk`), which Android will not install. That is on purpose: it is the build
-F-Droid compares with the signed release (see [docs/F-DROID.md](docs/F-DROID.md)). To try a build
-on a phone, use the debug build above.
+Every release is described in [CHANGELOG.md](CHANGELOG.md) and listed on the
+[releases page](https://github.com/geozelot/Homer/releases).
 
-1. Generate a keystore once (back it up — losing it means you can't update the app):
+## Contributing
 
-   ```bash
-   keytool -genkeypair -v -keystore homer-release.jks \
-     -alias homer -keyalg RSA -keysize 2048 -validity 10000
-   ```
-
-2. Copy `keystore.properties.template` to `keystore.properties` and fill in real values.
-
-3. Build:
-
-   ```bash
-   ./gradlew :app:assembleRelease   # → app/build/outputs/apk/release/app-release.apk
-   ```
-
-### Releases via CI
-
-The version is two literals in `app/build.gradle.kts`, `versionName` and `versionCode`
-(`major * 10000 + minor * 100 + patch`), bumped in the release commit. Pushing a matching tag
-builds the APK and attaches it to the GitHub Release; CI refuses a release tag that disagrees with
-either literal:
-
-```bash
-git tag v2.2.2 && git push origin v2.2.2
-```
-
-A release reaches F-Droid when it gets a second tag, `v2.2.3-fdroid` on the same commit; CI
-ignores those. See [docs/F-DROID.md](docs/F-DROID.md).
-
-CI signs the build if the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
-`KEY_PASSWORD` repository secrets are set. Without them a manual run builds an unsigned APK, and a
-tag refuses to publish anything.
-
-A tag with a pre-release suffix (`v1.1.0-BETA18`, `v1.2.0-rc1`) is marked as a pre-release, so
-`/releases/latest` keeps pointing at the last finished release and the in-app updater's Stable
-channel doesn't offer betas. Forks: the repository the updater watches is the `UPDATE_REPO`
-field in `app/build.gradle.kts`.
-
-## Status
-
-Homer is at **2.2.3**. Betas run under a moving tag — `v2.2.0-BETA` was the last — replaced by each
-build rather than added to, so there is one pre-release to follow; its title carries the actual
-build (`2.2.0-BETA.117`) while the APK keeps a stable name. In-app update checks only offer a
-pre-release to devices on the beta channel.
-
-A beta belongs to the release it leads UP to, never the one behind it: `2.1.0-BETA.90` ranks below
-`2.1.0`, so once 2.1 shipped its beta tag was spent and the next one had to name the release it was
-working towards.
-
-2.2.3 is the release Homer goes to F-Droid with. F-Droid builds it from this source, checks that
-the result is identical to the APK published here, and ships that APK, signed with the same key: the
-F-Droid copy and this one are the same app, and you can move between them without reinstalling.
-The built-in updater is in both and still does nothing until you use it; its section in *About* now
-says that it fetches updates from GitHub.
-
-2.2.2 changed nothing in the app. The version code now follows the version — 2.2.2 is 20202 —
-instead of counting CI runs, and still rises above every earlier release, so it installs over them
-like any other.
-
-2.2.1 is a small follow-up. The volume keys control the book whenever Homer is on screen, playing
-or not; before, a paused book left them on the ringer. And the Books row under *Upkeep* says what a
-scan is doing while it does it — scanning, fetching covers or measuring — with a measuring count
-that only includes books there is something left to measure in.
-
-2.2 is about a library you can read at a glance, and books that come with more than audio.
-
-- **Booklets.** The PDFs filed beside a book — a booklet, a libretto, a map — are found by the scan,
-  open in Homer's own reader from the details card or from a pill on the player's cover, and go
-  offline with the book.
-- **Names.** A book can credit several authors, the first one primary, each its own chip; filing by
-  surname is a sort of its own, so Pratchett files under P while his name still reads the way it is
-  written; and a jump-to-letter lane down the edge of the library follows whatever it is sorted by
-  and shows where you are.
-- **Your own display size**, apart from the phone's, in *Settings → Browsing*. The *On this device*
-  settings are three pages now — Storage, Browsing and Playback — rather than one long one.
-- **Ignored folders**, in *Upkeep → Reading folder names*: new additions that still need tidying
-  stay out of the library until you say otherwise.
-- **A quieter library.** Every item sits on a faint ground of its own, an opened series washes into
-  the shelf around it, and list rows carry their marks at the end of the row instead of on a cover
-  too small for them.
-
-Underneath: your credentials moved off Jetpack Security, which is deprecated, onto a key of Homer's
-own in the Android Keystore. The first launch after updating carries them over, so you stay signed
-in. A book's corrections and your own hidden or finished flags now sync on separate clocks, so
-hiding a book no longer stops another device's fix to it from arriving. Every dependency is current,
-the database migrations are tested on a device, and a deep review fixed, among other things, a scan
-that could lose books when it was interrupted, chapters missing from a downloaded M4B first opened
-offline, and deleted bookmarks coming back.
-
-The review before release fixed more of the same kind:
-
-- *End of chapter* on the sleep timer works in a book that is one file with chapter marks; it used
-  to play on to the end of the book.
-- A bookmark tapped in the library opens the file it was made in, and only once — turning the phone
-  no longer jumps back to it.
-- Moving your downloads to another folder moves them, instead of losing track of them.
-- Turning the phone no longer locks the app again or restarts first-run setup.
-- Tapping the media notification opens Homer, and play on a headset resumes the last book even when
-  Homer was not running.
-- Undoing a correction, or removing a chapter cut, now reaches your other devices; chapter cuts no
-  longer turn into bookmarks when progress syncs.
-- Progress sync can no longer stop for good over a bookmark in a book this device has not scanned.
-
-If more than one of your devices maintains the same shared library, update them together: a 2.1
-device does not know about ignored folders and would read them back in.
-
-2.1.2 is mostly about a phone held sideways, and about settings that do what they say.
-
-Landscape stops being a portrait screen squeezed: the Currently-listening panel turns ninety degrees
-into a rail down one side, and the top bar turns with it — buttons at the head, the wordmark running
-up from the foot the way a spine does — so the library gets the height back instead of a sliver of
-it. Which layout a window gets is decided by the one measurement that does not move between
-orientations, because a large phone at a smaller display size had been reporting tablet numbers and
-getting a tablet's layout.
-
-The volume override works. Reduced and boosted both did nothing: every press of play reset the
-volume to full, and the loudness boost had never once been applied, because the permission an audio
-effect needs was not declared. A seek and a manual chapter skip are now saved when they happen
-rather than up to fifteen seconds later, so a process death cannot resume you in the previous
-chapter. Chapter steps sit on the mini-player, and dragging away from the scrubber scrubs at half
-and then a quarter speed, for finding a sentence in an hour-long chapter.
-
-A waiting update says so — a gold dot on the settings button, a pill on the About row — until it is
-actually installed. Actions are drawn as buttons rather than as coloured words, and a press lands on
-the control rather than on the invisible target around it.
-
-Underneath: the two largest files became packages, the library's view model handed its work to three
-collaborators, and a cancelled request is no longer mistaken for an answer from the server.
-
-2.1 is about finding your way around a library and setting one up.
-
-- **Setup is a wizard.** Where the books live, a look at the folder, what was found there and one
-  recommendation, then where your listening position is saved. Re-run from settings at whichever
-  step answers the question you have — which is what makes moving a private library to a server,
-  or adopting a shared one instead of your own, cost nothing beyond onboarding.
-- **A shared library can carry rules.** Its owner can require that devices use the shared index
-  rather than each crawling the server for themselves, and can keep published edits to themselves.
-  Everyone else is told what applies and why, and a read-only reader still keeps their own edits
-  locally.
-- **The library reorganises**: collections above series, a search box that also filters, path
-  templates for folders not laid out `Author / Series / Book`, a details card behind every book and
-  shelf, genre chips on items, and a grid whose column count follows the screen.
-- **The player states where you are**: the book, what it belongs to, and a chapter list carrying
-  each chapter's length and its place in the book — measured off the device itself once a book is
-  downloaded, so it holds up offline.
-
-2.0 reworks how the library is indexed and synced. Two things to know before updating from 1.x:
-
-- **The shared index format changed incompatibly.** A 2.0 device and a 1.x device cannot share
-  a library, and nothing converts the old catalogue — a 2.0 device rebuilds it from the library
-  itself. Update every device that shares a library at roughly the same time.
-- **The local database is rebuilt from scratch.** 2.0 resets the schema baseline and carries no
-  migrations from the 1.x line, so updating discards the on-device database. Almost everything in
-  it is restored on the next sync — resume positions, metadata edits, chapter cuts, the shelf
-  itself — and already-downloaded files are re-adopted from disk rather than fetched again.
-  **Bookmarks are device-local and are not restored.** Note them down first if you want to keep
-  them.
-
-It's a personal, self-hosted project; a few advanced features (share-link libraries, the
-shared library index, M4B chapter text-tracks, certificate pinning) are best-effort and
-still evolving. Issues and patches welcome.
+Homer is a personal, self-hosted project. A few advanced features — share-link libraries, the
+shared library index, chapter text tracks in M4B files, certificate pinning — are best-effort and
+still evolving. Issues and patches are welcome. Building, testing and releasing are described in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## A note on how this was built
 
